@@ -1,0 +1,16 @@
+{
+  "name": "ckb-learning",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Weekly TypeScript replicas of CKB fundamentals while learning Nervos CKB",
+  "scripts": {
+    "build": "tsc",
+    "week1": "ts-node src/week1/cell-model/demo.ts",
+    "test:week1": "ts-node src/week1/cell-model/demo.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}
