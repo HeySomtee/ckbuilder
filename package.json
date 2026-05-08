@@ -6,7 +6,11 @@
   "scripts": {
     "build": "tsc",
     "week1": "ts-node src/week1/cell-model/demo.ts",
-    "test:week1": "ts-node src/week1/cell-model/demo.ts"
+    "test:week1": "ts-node src/week1/cell-model/demo.ts",
+    "wallet": "ts-node src/week2/wallet/cli.ts"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
