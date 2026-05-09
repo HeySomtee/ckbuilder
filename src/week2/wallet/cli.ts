@@ -4,6 +4,7 @@
  *
  * Usage:
  *   npm run wallet -- init
+ *   npm run wallet -- import <private-key>
  *   npm run wallet -- address
  *   npm run wallet -- balance [address]
  *   npm run wallet -- send <to-address> <amount-ckb>
@@ -13,7 +14,7 @@
  * Explorer: https://pudge.explorer.nervos.org/
  */
 
-import { createPrivateKey, KEY_FILE } from "./client";
+import { createPrivateKey, importPrivateKey, KEY_FILE } from "./client";
 import {
   getBalanceOf,
   getMyAddress,
@@ -33,6 +34,8 @@ async function main() {
   switch (cmd) {
     case "init":
       return cmdInit();
+    case "import":
+      return cmdImport(args[0]);
     case "address":
       return cmdAddress();
     case "balance":
@@ -56,6 +59,7 @@ function printHelp() {
 
 ${c.bold("Commands:")}
   ${c.cyan("init")}                          Generate a new private key (one-time setup)
+  ${c.cyan("import")} ${c.dim("<private-key>")}         Restore a wallet from an existing private key
   ${c.cyan("address")}                       Show your testnet address
   ${c.cyan("balance")} ${c.dim("[address]")}             Show balance for an address (defaults to yours)
   ${c.cyan("send")} ${c.dim("<to-address> <amount>")}    Send CKB (amount in CKB, e.g. 100 or 12.5)
@@ -75,6 +79,19 @@ async function cmdInit() {
   const address = await getMyAddress();
   console.log(`${c.bold("Your testnet address:")}\n  ${style.address(address)}\n`);
   console.log(`Fund it from the faucet:\n  ${style.url("https://faucet.nervos.org/")}`);
+}
+
+async function cmdImport(rawKey?: string) {
+  if (!rawKey) {
+    console.error(`${style.err("Usage:")} import <private-key>`);
+    console.error(c.dim(`Example: npm run wallet -- import 0xabc123...`));
+    process.exit(1);
+  }
+  const key = importPrivateKey(rawKey);
+  console.log(`${style.ok("✓")} Imported private key and saved to:\n  ${style.label(KEY_FILE)}\n`);
+  const address = await getMyAddress();
+  console.log(`${c.bold("Your testnet address:")}\n  ${style.address(address)}\n`);
+  console.log(c.dim(`(key fingerprint: ${style.hash(key.slice(0, 10) + "…" + key.slice(-6))})`));
 }
 
 async function cmdAddress() {

@@ -39,18 +39,48 @@ export function createPrivateKey(): string {
     );
   }
   const key = generatePrivateKeyHex();
-  writeFileSync(KEY_FILE, key + "\n", { mode: 0o600 });
-  try {
-    chmodSync(KEY_FILE, 0o600);
-  } catch {
-    // best-effort on Windows
+  writeKey(key);
+  return key;
+}
+
+/** Persist an externally-supplied private key. Refuses to overwrite. */
+export function importPrivateKey(rawKey: string): string {
+  if (existsSync(KEY_FILE)) {
+    throw new Error(
+      `Refusing to overwrite existing key at ${KEY_FILE}. ` +
+        `Delete it manually if you really mean to replace it.`,
+    );
   }
+  const key = normalizePrivateKey(rawKey);
+  writeKey(key);
   return key;
 }
 
 /** Build a CCC signer bound to the testnet client. */
 export function getSigner(): ccc.SignerCkbPrivateKey {
   return new ccc.SignerCkbPrivateKey(getClient(), loadPrivateKey());
+}
+
+function normalizePrivateKey(raw: string): string {
+  const trimmed = raw.trim();
+  const withPrefix = trimmed.startsWith("0x") || trimmed.startsWith("0X")
+    ? "0x" + trimmed.slice(2)
+    : "0x" + trimmed;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(withPrefix)) {
+    throw new Error(
+      `Invalid private key: expected 64 hex characters (with or without 0x prefix).`,
+    );
+  }
+  return withPrefix.toLowerCase();
+}
+
+function writeKey(key: string): void {
+  writeFileSync(KEY_FILE, key + "\n", { mode: 0o600 });
+  try {
+    chmodSync(KEY_FILE, 0o600);
+  } catch {
+    // best-effort on Windows
+  }
 }
 
 function generatePrivateKeyHex(): string {

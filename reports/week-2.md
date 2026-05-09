@@ -36,6 +36,7 @@ A four-command CLI:
 
 ```
 npm run wallet -- init                        # generate + persist a testnet key
+npm run wallet -- import <private-key>        # restore a wallet from an existing key
 npm run wallet -- address                     # show my address
 npm run wallet -- balance [address]           # mine, or anyone else's
 npm run wallet -- send <to-address> <amount>  # transfer native CKB
@@ -50,8 +51,10 @@ src/week2/wallet/
 ```
 
 The key file is gitignored, never leaves disk, and the CLI refuses to
-overwrite an existing key — so a second `init` cannot accidentally nuke a
-funded wallet.
+overwrite an existing key — so a second `init` (or `import`) cannot
+accidentally nuke a funded wallet. `import` accepts a key with or without
+the `0x` prefix and only echoes a short fingerprint of it back, so it's
+safer than `init` to run with someone watching the screen.
 
 ## What CCC actually does for you
 
@@ -143,6 +146,11 @@ Explorer links:
   From:        https://pudge.explorer.nervos.org/address/ckt1q…me…
   To:          https://pudge.explorer.nervos.org/address/ckt1q…recipient…
 ```
+
+Here is the full `balance → balance <recipient> → send` flow against the
+Pudge testnet:
+
+![Wallet CLI: balance, balance <recipient>, send](./assets/week-2-cli.png)
 
 The first link confirms the tx was accepted by the network and gives me
 the block it landed in. The second and third let me eyeball both sides

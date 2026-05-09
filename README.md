@@ -46,8 +46,11 @@ replica.
 ### Week 2 — Testnet wallet CLI
 
 ```bash
-# 1. Generate a new testnet key (one-time)
+# 1a. Generate a new testnet key (one-time)
 npm run wallet -- init
+
+# 1b. ...or restore a wallet from an existing private key
+npm run wallet -- import 0xabc123...
 
 # 2. Fund the printed address from https://faucet.nervos.org/
 
