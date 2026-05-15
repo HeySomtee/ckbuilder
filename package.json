@@ -8,7 +8,11 @@
     "week1": "ts-node src/week1/cell-model/demo.ts",
     "test:week1": "ts-node src/week1/cell-model/demo.ts",
     "wallet": "ts-node src/week2/wallet/cli.ts",
-    "week3": "ts-node src/week3/nft-faucet/server.ts"
+    "week3": "ts-node src/week3/nft-faucet/server.ts",
+    "start": "ts-node src/week3/nft-faucet/server.ts"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "@ckb-ccc/core": "^1.12.5",

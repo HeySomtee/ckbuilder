@@ -15,12 +15,22 @@ export function getClient(): ccc.Client {
   return new ccc.ClientPublicTestnet();
 }
 
-/** Load the saved private key, or throw with a helpful message. */
+/** Load the saved private key, or throw with a helpful message.
+ *
+ * Resolution order:
+ *   1. `CKB_PRIVATE_KEY` env var — preferred for hosted environments
+ *      (Render, Fly, etc.) where there is no persistent disk.
+ *   2. The local `.ckb-wallet.key` file — for CLI/dev use.
+ */
 export function loadPrivateKey(): string {
+  const fromEnv = process.env.CKB_PRIVATE_KEY?.trim();
+  if (fromEnv) {
+    return normalizePrivateKey(fromEnv);
+  }
   if (!existsSync(KEY_FILE)) {
     throw new Error(
-      `No wallet key found at ${KEY_FILE}.\n` +
-        `Run \`npm run wallet -- init\` to create one.`,
+      `No wallet key found.\n` +
+        `Set the CKB_PRIVATE_KEY env var, or run \`npm run wallet -- init\` to create ${KEY_FILE}.`,
     );
   }
   const raw = readFileSync(KEY_FILE, "utf8").trim();
