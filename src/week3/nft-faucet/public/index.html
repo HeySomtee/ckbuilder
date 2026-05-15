@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CKB NFT Faucet — week 3</title>
+    <style>
+      :root {
+        --bg: #0e1116;
+        --panel: #161b22;
+        --border: #30363d;
+        --fg: #e6edf3;
+        --muted: #8b949e;
+        --accent: #4cc2ff;
+        --ok: #3fb950;
+        --err: #f85149;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 14px/1.5 system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        padding: 32px 16px;
+      }
+      main { max-width: 880px; margin: 0 auto; }
+      h1 { margin: 0 0 4px; font-size: 22px; }
+      .sub { color: var(--muted); margin: 0 0 28px; }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+      .panel h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; }
+      input[type="text"] {
+        flex: 1;
+        min-width: 260px;
+        background: #0d1117;
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        font-family: ui-monospace, monospace;
+      }
+      input[type="text"]:focus { outline: none; border-color: var(--accent); }
+      button {
+        background: var(--accent);
+        color: #0e1116;
+        border: 0;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover { filter: brightness(1.1); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+      .status { margin-top: 10px; min-height: 1.4em; font-family: ui-monospace, monospace; font-size: 12px; }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--err); }
+      .status a { color: var(--accent); }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .nft {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #0d1117;
+      }
+      .nft .art { aspect-ratio: 1/1; display: block; background: #fff; }
+      .nft .meta { padding: 8px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); word-break: break-all; }
+      .empty { color: var(--muted); padding: 12px 0; }
+      .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>CKB NFT Faucet</h1>
+      <p class="sub">Mint a Spore NFT to any testnet address &mdash; week 3 of the CKB learning journey.</p>
+
+      <section class="panel">
+        <h2>Mint</h2>
+        <div class="row">
+          <input id="mintAddr" type="text" placeholder="ckt1q... recipient testnet address" />
+          <button id="mintBtn">Mint NFT</button>
+        </div>
+        <div id="mintBal" class="status"></div>
+        <p class="hint">The faucet wallet pays the ~140 CKB cell capacity and the tx fee. Each mint creates a unique randomly-generated SVG.</p>
+        <div id="mintStatus" class="status"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Held NFTs</h2>
+        <div class="row">
+          <input id="listAddr" type="text" placeholder="ckt1q... address to inspect" />
+          <button id="listBtn" class="secondary">Show NFTs</button>
+        </div>
+        <div id="listBal" class="status"></div>
+        <div id="listStatus" class="status"></div>
+        <div id="grid" class="grid"></div>
+      </section>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const EXPLORER = "https://pudge.explorer.nervos.org";
+
+      function setStatus(el, kind, html) {
+        el.className = "status " + (kind || "");
+        el.innerHTML = html;
+      }
+
+      async function mint() {
+        const addr = $("mintAddr").value.trim();
+        if (!addr) return setStatus($("mintStatus"), "err", "Address required.");
+        const btn = $("mintBtn");
+        btn.disabled = true;
+        setStatus($("mintStatus"), "", "Submitting transaction...");
+        try {
+          const r = await fetch("/api/mint", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ address: addr }),
+          });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || "mint failed");
+          setStatus(
+            $("mintStatus"),
+            "ok",
+            `Minted! sporeId=${data.sporeId.slice(0, 14)}... ` +
+              `<a href="${data.explorer}" target="_blank" rel="noopener">view tx</a>`,
+          );
+          // Auto-refresh the held list if it's already showing this address.
+          if ($("listAddr").value.trim() === addr) setTimeout(load, 4000);
+        } catch (e) {
+          setStatus($("mintStatus"), "err", String(e.message || e));
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      async function load() {
+        const addr = $("listAddr").value.trim();
+        const grid = $("grid");
+        grid.innerHTML = "";
+        if (!addr) return setStatus($("listStatus"), "err", "Address required.");
+        setStatus($("listStatus"), "", "Loading...");
+        try {
+          const r = await fetch("/api/nfts?address=" + encodeURIComponent(addr));
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || "fetch failed");
+          setStatus($("listStatus"), "ok", `${data.count} NFT(s)`);
+          if (data.count === 0) {
+            grid.innerHTML = '<div class="empty">No Spores found at this address.</div>';
+            return;
+          }
+          grid.innerHTML = data.nfts
+            .map((n) => {
+              const art =
+                n.contentType === "image/svg+xml"
+                  ? `<div class="art">${n.content}</div>`
+                  : `<div class="art" style="display:flex;align-items:center;justify-content:center;color:#666;">${escapeHtml(n.contentType)}</div>`;
+              const txUrl = `${EXPLORER}/transaction/${n.outPoint.txHash}`;
+              const idShort = n.id.slice(0, 10) + "..." + n.id.slice(-6);
+              return `<div class="nft">${art}<div class="meta">id: <a href="${txUrl}" target="_blank" rel="noopener" style="color:var(--accent)">${idShort}</a></div></div>`;
+            })
+            .join("");
+        } catch (e) {
+          setStatus($("listStatus"), "err", String(e.message || e));
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      // Convenience: copy mint address into list address field on first focus.
+      $("listAddr").addEventListener("focus", () => {
+        if (!$("listAddr").value && $("mintAddr").value) $("listAddr").value = $("mintAddr").value;
+      });
+
+      $("mintBtn").addEventListener("click", mint);
+      $("listBtn").addEventListener("click", load);
+      $("mintAddr").addEventListener("keydown", (e) => e.key === "Enter" && mint());
+      $("listAddr").addEventListener("keydown", (e) => e.key === "Enter" && load());
+
+      // Auto-show balance for any address typed/pasted into either field.
+      function debounce(fn, ms) {
+        let t;
+        return (...args) => {
+          clearTimeout(t);
+          t = setTimeout(() => fn(...args), ms);
+        };
+      }
+
+      async function showBalance(addr, el) {
+        if (!addr) return setStatus(el, "", "");
+        if (!/^ckt1[0-9a-z]+$/.test(addr)) {
+          return setStatus(el, "err", "Not a valid testnet address.");
+        }
+        setStatus(el, "", "Loading balance...");
+        try {
+          const r = await fetch("/api/balance?address=" + encodeURIComponent(addr));
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || "balance fetch failed");
+          setStatus(el, "ok", `Balance: ${data.ckb} CKB`);
+        } catch (e) {
+          setStatus(el, "err", String(e.message || e));
+        }
+      }
+
+      const mintBalDebounced = debounce(() => showBalance($("mintAddr").value.trim(), $("mintBal")), 400);
+      const listBalDebounced = debounce(() => showBalance($("listAddr").value.trim(), $("listBal")), 400);
+      $("mintAddr").addEventListener("input", mintBalDebounced);
+      $("listAddr").addEventListener("input", listBalDebounced);
+    </script>
+  </body>
+</html>
