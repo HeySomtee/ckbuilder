@@ -92,7 +92,8 @@
           <input id="mintAddr" type="text" placeholder="ckt1q... recipient testnet address" />
           <button id="mintBtn">Mint NFT</button>
         </div>
-        <div id="mintBal" class="status"></div>
+        <!-- Balance display disabled — the central faucet wallet funds every mint, recipient balance isn't relevant. Re-enable by uncommenting this and the listener wiring at the bottom of <script>. -->
+        <!-- <div id="mintBal" class="status"></div> -->
         <p class="hint">The faucet wallet pays the ~140 CKB cell capacity and the tx fee. Each mint creates a unique randomly-generated SVG.</p>
         <div id="mintStatus" class="status"></div>
       </section>
@@ -103,7 +104,7 @@
           <input id="listAddr" type="text" placeholder="ckt1q... address to inspect" />
           <button id="listBtn" class="secondary">Show NFTs</button>
         </div>
-        <div id="listBal" class="status"></div>
+        <!-- <div id="listBal" class="status"></div> -->
         <div id="listStatus" class="status"></div>
         <div id="grid" class="grid"></div>
       </section>
@@ -217,10 +218,13 @@
         }
       }
 
-      const mintBalDebounced = debounce(() => showBalance($("mintAddr").value.trim(), $("mintBal")), 400);
-      const listBalDebounced = debounce(() => showBalance($("listAddr").value.trim(), $("listBal")), 400);
-      $("mintAddr").addEventListener("input", mintBalDebounced);
-      $("listAddr").addEventListener("input", listBalDebounced);
+      // Balance auto-display disabled — uncomment these (and the <div id="mintBal"> /
+      // <div id="listBal"> markers above) to restore. The /api/balance endpoint and
+      // the showBalance() / debounce() helpers are intentionally left in place.
+      // const mintBalDebounced = debounce(() => showBalance($("mintAddr").value.trim(), $("mintBal")), 400);
+      // const listBalDebounced = debounce(() => showBalance($("listAddr").value.trim(), $("listBal")), 400);
+      // $("mintAddr").addEventListener("input", mintBalDebounced);
+      // $("listAddr").addEventListener("input", listBalDebounced);
     </script>
   </body>
 </html>
