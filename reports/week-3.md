@@ -197,6 +197,13 @@ Open `http://localhost:4000`, paste any `ckt1...` address, hit **Mint
 NFT**, then click **Show NFTs** to see the Spore in the recipient's
 collection. Each card links to the originating tx on the Pudge explorer.
 
+![NFT faucet UI: balance, mint, and three held Spores](./assets/week-3-dapp.png)
+
+The screenshot above shows the faucet wallet's address pasted into both
+fields: the live balance reads back from the testnet RPC under the Mint
+input, and the **Held NFTs** grid renders three on-chain SVGs straight
+out of their Spore cells' data — no IPFS, no off-chain metadata.
+
 ## How it connects to weeks 1–2
 
 | Week 1                                    | Week 2                              | Week 3                                                    |
