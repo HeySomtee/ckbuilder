@@ -15,10 +15,13 @@ src/
     wallet/          # CCC-based testnet CLI wallet
   week3/
     nft-faucet/      # Browser dApp: mint Spore NFTs to any testnet address
+  week4/
+    nft-dao/         # NFT-gated DAO: proposals + live holder-weighted voting
 reports/
   week-1.md          # Cell Model + Consensus + Address fundamentals
   week-2.md          # First real testnet transaction
   week-3.md          # NFT faucet (Spore) — server-paid mint, browser UI
+  week-4.md          # NFT-gated DAO, faucet registry, JSON proposal store
 ```
 
 ## Weekly Index
@@ -28,6 +31,7 @@ reports/
 | 1 | Fundamentals — Cell Model, Consensus, Address | [reports/week-1.md](reports/week-1.md) | [src/week1/cell-model](src/week1/cell-model) |
 | 2 | First testnet wallet & transfer (CCC) | [reports/week-2.md](reports/week-2.md) | [src/week2/wallet](src/week2/wallet) |
 | 3 | NFT faucet dApp — Spore mint + display | [reports/week-3.md](reports/week-3.md) | [src/week3/nft-faucet](src/week3/nft-faucet) |
+| 4 | NFT-gated DAO — proposals + live voting | [reports/week-4.md](reports/week-4.md) | [src/week4/nft-dao](src/week4/nft-dao) |
 
 ## Setup
 
@@ -83,6 +87,28 @@ npm run wallet -- balance
 
 # Start the faucet — open http://localhost:4000
 npm run week3
+```
+
+### Week 4 — NFT-gated DAO
+
+The DAO reuses the Week 3 faucet NFTs as membership tokens. The faucet records
+minted Spore IDs locally in `src/week3/nft-faucet/data/mints.json`, and the DAO
+checks that a voter currently holds one of those faucet-minted NFTs. Anyone can
+create proposals, but voting requires a `ckt1...` address with at least one
+faucet NFT. Votes are weighted by the number of faucet NFTs held by that
+address. Proposal and vote state is stored locally in
+`src/week4/nft-dao/data/dao.json`. Proposals include expiration times, and the
+server rejects votes after a proposal closes.
+
+Architecture diagram: [reports/assets/week-4-architecture.svg](reports/assets/week-4-architecture.svg).
+Editable draw.io source: [reports/assets/week-4-architecture.drawio](reports/assets/week-4-architecture.drawio).
+
+```bash
+# Terminal 1: keep the faucet running so users can mint membership NFTs.
+npm run week3
+
+# Terminal 2: open http://localhost:4001
+npm run week4
 ```
 
 ## Stack

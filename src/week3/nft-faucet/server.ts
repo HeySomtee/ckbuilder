@@ -24,6 +24,7 @@ import { getMyAddress } from "../../week2/wallet/wallet";
 import { getBalanceOf, shannonsToCkb } from "../../week2/wallet/wallet";
 import { listNfts, mintNft } from "./spore";
 import { randomSvg } from "./art";
+import { recordFaucetMint } from "./faucetStore";
 
 const PORT = Number(process.env.PORT ?? 4000);
 const PUBLIC_DIR = resolve(__dirname, "public");
@@ -90,6 +91,7 @@ async function handleMint(req: IncomingMessage, res: ServerResponse) {
       contentType: "image/svg+xml",
       content: svg,
     });
+    await recordFaucetMint({ sporeId, txHash, mintedTo: address });
     send(res, 200, {
       txHash,
       sporeId,

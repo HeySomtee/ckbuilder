@@ -1,0 +1,58 @@
+<mxfile host="app.diagrams.net" modified="2026-05-31T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="week4-architecture" name="Week 4 NFT DAO Architecture">
+    <mxGraphModel dx="1180" dy="760" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1180" pageHeight="760" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Week 4: NFT Faucet DAO Architecture" style="text;html=1;strokeColor=none;fillColor=none;fontSize=28;fontStyle=1;fontColor=#111827;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="760" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="browser" value="Browser&lt;br&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;Faucet UI: localhost:4000&lt;br&gt;DAO UI: localhost:4001&lt;br&gt;ckt1... address&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f5ee;strokeColor=#2f855a;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="120" width="240" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="faucet" value="Week 3 NFT Faucet&lt;br&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;POST /api/mint&lt;br&gt;createSpore + send tx&lt;br&gt;records minted Spore IDs&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e7f0ff;strokeColor=#2b6cb0;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="110" width="280" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="chain" value="Pudge Testnet&lt;br&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;Live Spore cells&lt;br&gt;Owner lock = recipient&lt;br&gt;on-chain NFT state&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff4d6;strokeColor=#b7791f;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="860" y="120" width="250" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="registry" value="Faucet Registry&lt;br&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;src/week3/nft-faucet/data/mints.json&lt;br&gt;sporeId, txHash, mintedTo, mintedAt&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f4f8;strokeColor=#4a5568;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="350" width="280" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="dao" value="Week 4 DAO Server&lt;br&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;GET /api/member&lt;br&gt;POST /api/proposals&lt;br&gt;POST /api/vote&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f5ee;strokeColor=#2f855a;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="540" width="280" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="store" value="DAO JSON Store&lt;br&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;src/week4/nft-dao/data/dao.json&lt;br&gt;proposals, expiresAt, votes&lt;br&gt;local dev persistence&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f4f8;strokeColor=#4a5568;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="540" width="280" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="rule" value="Eligibility Rule&lt;br&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;held Spore IDs&lt;br&gt;intersect faucet registry IDs&lt;br&gt;weight = faucet NFTs held&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e7f0ff;strokeColor=#2b6cb0;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="860" y="540" width="250" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="mint request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#4a5568;fontSize=12;" edge="1" parent="1" source="browser" target="faucet">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" value="broadcast tx" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#4a5568;fontSize=12;" edge="1" parent="1" source="faucet" target="chain">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="write mint" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#4a5568;fontSize=12;" edge="1" parent="1" source="faucet" target="registry">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" value="go vote" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#4a5568;fontSize=12;" edge="1" parent="1" source="browser" target="dao">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5" value="save/read proposals" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#4a5568;fontSize=12;" edge="1" parent="1" source="dao" target="store">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6" value="read registry" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeWidth=2;strokeColor=#4a5568;fontSize=12;" edge="1" parent="1" source="rule" target="registry">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e7" value="read held Spores" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeWidth=2;strokeColor=#4a5568;fontSize=12;" edge="1" parent="1" source="rule" target="chain">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e8" value="membership check" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeWidth=2;strokeColor=#4a5568;fontSize=12;" edge="1" parent="1" source="dao" target="rule">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

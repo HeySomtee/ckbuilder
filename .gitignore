@@ -8,3 +8,7 @@ dist/
 # Wallet — never commit private keys
 .ckb-wallet.key
 .env
+
+# Week 4 DAO local proposal/vote state
+src/week3/nft-faucet/data/
+src/week4/nft-dao/data/

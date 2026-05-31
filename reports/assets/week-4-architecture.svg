@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="760" viewBox="0 0 1180 760" role="img" aria-labelledby="title desc">
+  <title id="title">Week 4 NFT-gated DAO architecture</title>
+  <desc id="desc">Diagram showing the Week 3 NFT faucet, faucet mint registry, Week 4 DAO server, JSON proposal store, and Pudge testnet membership checks.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f1418"/>
+      <stop offset="0.55" stop-color="#18232a"/>
+      <stop offset="1" stop-color="#121716"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#79e2a6"/>
+      <stop offset="1" stop-color="#39bf72"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#87cbff"/>
+      <stop offset="1" stop-color="#4d96e8"/>
+    </linearGradient>
+    <linearGradient id="yellow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe18a"/>
+      <stop offset="1" stop-color="#ffc23d"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L12,7 L2,12 Z" fill="#a8b8c2"/>
+    </marker>
+    <style>
+      .label{font:700 24px system-ui,-apple-system,Segoe UI,sans-serif;fill:#f3f7f2}
+      .sub{font:500 15px system-ui,-apple-system,Segoe UI,sans-serif;fill:#b4c0c7}
+      .tiny{font:700 12px ui-monospace,SFMono-Regular,Consolas,monospace;fill:#d4dde2}
+      .box{fill:#172028;stroke:#344651;stroke-width:2;rx:18}
+      .soft{fill:#202b33;stroke:#3d505c;stroke-width:1.5;rx:14}
+      .line{fill:none;stroke:#a8b8c2;stroke-width:2.5;marker-end:url(#arrow)}
+      .dash{fill:none;stroke:#a8b8c2;stroke-width:2.5;stroke-dasharray:8 8;marker-end:url(#arrow)}
+      .pill{rx:18}
+    </style>
+  </defs>
+
+  <rect width="1180" height="760" fill="url(#bg)"/>
+  <circle cx="122" cy="70" r="180" fill="#55d68b" opacity="0.08"/>
+  <circle cx="1035" cy="700" r="220" fill="#6ab7ff" opacity="0.08"/>
+
+  <text x="54" y="62" class="label" font-size="32">Week 4: NFT Faucet DAO</text>
+  <text x="54" y="91" class="sub">The Week 3 faucet becomes the membership mint. The Week 4 DAO reads that faucet registry before allowing votes.</text>
+
+  <rect x="54" y="142" width="260" height="150" class="box"/>
+  <text x="82" y="184" class="label">Browser</text>
+  <text x="82" y="214" class="sub">Mint page: localhost:4000</text>
+  <text x="82" y="239" class="sub">DAO page: localhost:4001</text>
+  <rect x="82" y="254" width="148" height="24" fill="#25343d" class="pill"/>
+  <text x="96" y="271" class="tiny">ckt1... address</text>
+
+  <rect x="430" y="130" width="290" height="170" class="box"/>
+  <text x="458" y="171" class="label">Week 3 Faucet</text>
+  <text x="458" y="201" class="sub">POST /api/mint</text>
+  <text x="458" y="226" class="sub">createSpore + send transaction</text>
+  <text x="458" y="251" class="sub">records minted Spore IDs</text>
+  <rect x="458" y="266" width="185" height="24" fill="#263943" class="pill"/>
+  <text x="472" y="283" class="tiny">server.ts + spore.ts</text>
+
+  <rect x="846" y="142" width="260" height="150" class="box"/>
+  <text x="874" y="184" class="label">Pudge Testnet</text>
+  <text x="874" y="214" class="sub">Live Spore cells</text>
+  <text x="874" y="239" class="sub">Owner lock = recipient</text>
+  <rect x="874" y="254" width="156" height="24" fill="#263943" class="pill"/>
+  <text x="888" y="271" class="tiny">on-chain NFT state</text>
+
+  <rect x="430" y="374" width="290" height="130" class="soft"/>
+  <text x="458" y="416" class="label">Faucet Registry</text>
+  <text x="458" y="446" class="sub">src/week3/nft-faucet/data/</text>
+  <text x="458" y="471" class="sub">mints.json: sporeId, txHash, recipient</text>
+
+  <rect x="54" y="552" width="318" height="150" class="box"/>
+  <text x="82" y="594" class="label">Week 4 DAO</text>
+  <text x="82" y="624" class="sub">GET /api/member</text>
+  <text x="82" y="649" class="sub">POST /api/proposals</text>
+  <text x="82" y="674" class="sub">POST /api/vote</text>
+
+  <rect x="430" y="552" width="290" height="150" class="soft"/>
+  <text x="458" y="594" class="label">DAO JSON Store</text>
+  <text x="458" y="624" class="sub">src/week4/nft-dao/data/dao.json</text>
+  <text x="458" y="649" class="sub">proposals, expiresAt, votes</text>
+  <text x="458" y="674" class="sub">local dev persistence</text>
+
+  <rect x="846" y="552" width="260" height="150" class="box"/>
+  <text x="874" y="594" class="label">Eligibility Rule</text>
+  <text x="874" y="624" class="sub">Held Spore IDs</text>
+  <text x="874" y="649" class="sub">intersect registry IDs</text>
+  <text x="874" y="674" class="sub">weight = faucet NFTs held</text>
+
+  <path d="M314 198 C354 198 378 198 430 198" class="line"/>
+  <text x="342" y="183" class="tiny">mint request</text>
+
+  <path d="M720 198 C762 198 796 198 846 198" class="line"/>
+  <text x="746" y="183" class="tiny">broadcast tx</text>
+
+  <path d="M575 300 L575 374" class="line"/>
+  <text x="590" y="344" class="tiny">write mint</text>
+
+  <path d="M214 292 C214 382 214 466 214 552" class="line"/>
+  <text x="230" y="430" class="tiny">go vote</text>
+
+  <path d="M372 610 C410 610 410 610 430 610" class="line"/>
+  <text x="383" y="594" class="tiny">save/read</text>
+
+  <path d="M372 656 C520 744 700 744 846 656" class="dash"/>
+  <text x="552" y="733" class="tiny">member check</text>
+
+  <path d="M846 610 C790 560 757 506 720 454" class="dash"/>
+  <text x="747" y="542" class="tiny">read registry</text>
+
+  <path d="M976 552 L976 292" class="dash"/>
+  <text x="992" y="432" class="tiny">read held Spores</text>
+
+  <rect x="54" y="112" width="1052" height="1" fill="#334651"/>
+  <rect x="54" y="522" width="1052" height="1" fill="#334651"/>
+</svg>

@@ -79,13 +79,29 @@
       .nft .meta { padding: 8px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); word-break: break-all; }
       .empty { color: var(--muted); padding: 12px 0; }
       .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+      .nav {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 0 0 20px;
+      }
+      .nav a {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--fg);
+        padding: 8px 10px;
+        text-decoration: none;
+      }
+      .nav a:hover { border-color: var(--accent); color: var(--accent); }
     </style>
   </head>
   <body>
     <main>
       <h1>CKB NFT Faucet</h1>
       <p class="sub">Mint a Spore NFT to any testnet address; week 3 of the CKB learning journey.</p>
-
+      <nav class="nav">
+        <a href="http://localhost:4001" target="_blank" rel="noopener">Go to Week 4 DAO</a>
+      </nav>
       <section class="panel">
         <h2>Mint</h2>
         <div class="row">

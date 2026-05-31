@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CKB NFT DAO - week 4</title>
+    <style>
+      :root {
+        --bg: #101316;
+        --surface: #171b20;
+        --surface-2: #20262d;
+        --line: #33404b;
+        --fg: #f3f7f2;
+        --muted: #99a6ad;
+        --accent: #55d68b;
+        --accent-2: #6ab7ff;
+        --warn: #ffcf5a;
+        --bad: #ff6f6f;
+        --ink: #0c1110;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at 12% 0%, rgba(85, 214, 139, 0.16), transparent 32rem),
+          linear-gradient(135deg, #101316 0%, #172129 54%, #151616 100%);
+        color: var(--fg);
+      }
+      a { color: var(--accent-2); }
+      button, input, textarea { font: inherit; }
+      button {
+        min-height: 38px;
+        border: 0;
+        border-radius: 6px;
+        padding: 8px 14px;
+        font-weight: 750;
+        background: var(--accent);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      button:hover { filter: brightness(1.08); }
+      button:disabled { cursor: not-allowed; opacity: 0.52; }
+      button.secondary {
+        background: transparent;
+        color: var(--fg);
+        border: 1px solid var(--line);
+      }
+      input, textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #0d1114;
+        color: var(--fg);
+        padding: 10px 11px;
+      }
+      textarea { min-height: 112px; resize: vertical; }
+      input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+      main { max-width: 1180px; margin: 0 auto; padding: 28px 16px 42px; }
+      header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        align-items: end;
+        padding: 18px 0 26px;
+      }
+      h1 { margin: 0; font-size: clamp(28px, 5vw, 58px); line-height: 0.96; letter-spacing: 0; }
+      h2, h3 { margin: 0; letter-spacing: 0; }
+      h2 { font-size: 17px; }
+      h3 { font-size: 16px; }
+      .sub { max-width: 680px; margin: 12px 0 0; color: var(--muted); font-size: 16px; }
+      .top-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+      .band {
+        border-top: 1px solid rgba(255,255,255,0.08);
+        padding: 20px 0;
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.82fr) minmax(340px, 1.18fr);
+        gap: 18px;
+        align-items: start;
+      }
+      .panel {
+        background: rgba(23, 27, 32, 0.9);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 18px;
+        box-shadow: 0 16px 48px rgba(0,0,0,0.24);
+      }
+      .stack { display: grid; gap: 14px; }
+      .row { display: flex; gap: 8px; align-items: center; }
+      .field { display: grid; gap: 7px; }
+      label { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+      .status {
+        min-height: 1.4em;
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-size: 12px;
+      }
+      .status.ok { color: var(--accent); }
+      .status.err { color: var(--bad); }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+      .stat {
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        min-height: 78px;
+      }
+      .stat strong { display: block; font-size: 24px; line-height: 1; }
+      .stat span { color: var(--muted); font-size: 12px; }
+      .member-strip {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+        gap: 10px;
+      }
+      .mini-nft {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f8fbff;
+        aspect-ratio: 1;
+      }
+      .mini-nft svg { width: 100%; height: 100%; display: block; }
+      .proposal-list { display: grid; gap: 14px; }
+      .proposal {
+        display: grid;
+        gap: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+        background: rgba(23, 27, 32, 0.88);
+      }
+      .proposal-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: start;
+      }
+      .proposal-title { display: grid; gap: 5px; }
+      .proposal-title p { margin: 0; color: var(--muted); }
+      .stamp {
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 999px;
+        padding: 3px 9px;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 750;
+      }
+      .badge.expired {
+        color: var(--muted);
+      }
+      .meter {
+        display: grid;
+        gap: 7px;
+      }
+      .bar {
+        display: grid;
+        grid-template-columns: var(--for, 1fr) var(--against, 1fr) var(--abstain, 1fr);
+        height: 12px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #0d1114;
+        border: 1px solid rgba(255,255,255,0.07);
+      }
+      .bar span:nth-child(1) { background: var(--accent); }
+      .bar span:nth-child(2) { background: var(--bad); }
+      .bar span:nth-child(3) { background: var(--warn); }
+      .legend {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .vote-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      .vote-actions button:nth-child(2) { background: var(--bad); color: #180909; }
+      .vote-actions button:nth-child(3) { background: var(--warn); color: #1c1602; }
+      .empty {
+        border: 1px dashed var(--line);
+        border-radius: 8px;
+        padding: 20px;
+        color: var(--muted);
+        text-align: center;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        word-break: break-all;
+      }
+      @media (max-width: 820px) {
+        header, .workspace { grid-template-columns: 1fr; }
+        .top-actions { justify-content: flex-start; }
+        .stats, .legend { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Faucet Holder DAO</h1>
+          <p class="sub">Mint a Week 3 Spore NFT, bring that same testnet address here, create proposals, and vote with live holder-weighted stats.</p>
+        </div>
+        <div class="top-actions">
+          <a href="http://localhost:4000" target="_blank" rel="noopener"><button class="secondary">Open Faucet</button></a>
+          <button id="refreshBtn" class="secondary">Refresh</button>
+        </div>
+      </header>
+
+      <section class="band">
+        <div class="workspace">
+          <aside class="stack">
+            <section class="panel stack">
+              <h2>Holder Gate</h2>
+              <div class="field">
+                <label for="memberAddr">Voter address</label>
+                <input id="memberAddr" type="text" placeholder="ckt1q... address holding faucet NFT" />
+              </div>
+              <div class="row">
+                <button id="checkBtn">Check NFTs</button>
+                <button id="copyToCreatorBtn" class="secondary">Use as Creator</button>
+              </div>
+              <div id="memberStatus" class="status"></div>
+              <div class="stats">
+                <div class="stat"><strong id="memberNfts">0</strong><span>held NFTs</span></div>
+                <div class="stat"><strong id="totalProposals">0</strong><span>proposals</span></div>
+                <div class="stat"><strong id="totalVotes">0</strong><span>votes cast</span></div>
+              </div>
+              <div id="memberStrip" class="member-strip"></div>
+            </section>
+
+            <section class="panel stack">
+              <h2>Create Proposal</h2>
+              <div class="field">
+                <label for="creatorAddr">Creator address</label>
+                <input id="creatorAddr" type="text" placeholder="optional ckt1q... address" />
+              </div>
+              <div class="field">
+                <label for="proposalTitle">Title</label>
+                <input id="proposalTitle" type="text" maxlength="90" placeholder="Fund a community tutorial sprint" />
+              </div>
+              <div class="field">
+                <label for="proposalBody">Details</label>
+                <textarea id="proposalBody" maxlength="900" placeholder="What should the DAO decide, fund, or coordinate?"></textarea>
+              </div>
+              <div class="field">
+                <label for="proposalExpiresAt">Voting closes</label>
+                <input id="proposalExpiresAt" type="datetime-local" />
+              </div>
+              <button id="createBtn">Create Proposal</button>
+              <div id="createStatus" class="status"></div>
+            </section>
+          </aside>
+
+          <section class="stack">
+            <div class="panel stack">
+              <div class="proposal-head">
+                <div>
+                  <h2>Live Proposals</h2>
+                  <div class="status">Stats refresh automatically every 6 seconds.</div>
+                </div>
+                <div id="lastUpdated" class="stamp"></div>
+              </div>
+              <div id="proposalList" class="proposal-list"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const state = { proposals: [], memberNfts: [] };
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      function setStatus(el, kind, html) {
+        el.className = "status " + (kind || "");
+        el.innerHTML = html;
+      }
+
+      function shortAddress(address) {
+        if (!address) return "";
+        return address.slice(0, 12) + "..." + address.slice(-8);
+      }
+
+      function formatDate(iso) {
+        return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      }
+
+      function renderMemberNfts(nfts) {
+        $("memberStrip").innerHTML = nfts.slice(0, 8).map((nft) => {
+          if (nft.contentType === "image/svg+xml") return `<div class="mini-nft">${nft.content}</div>`;
+          return `<div class="mini-nft"></div>`;
+        }).join("");
+      }
+
+      async function checkMember() {
+        const address = $("memberAddr").value.trim();
+        if (!address) return setStatus($("memberStatus"), "err", "Address required.");
+        setStatus($("memberStatus"), "", "Checking faucet NFTs...");
+        try {
+          const r = await fetch("/api/member?address=" + encodeURIComponent(address));
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || "member check failed");
+          state.memberNfts = data.nfts || [];
+          $("memberNfts").textContent = data.count;
+          renderMemberNfts(state.memberNfts);
+          setStatus(
+            $("memberStatus"),
+            data.eligible ? "ok" : "err",
+            data.eligible ? `Eligible to vote with ${data.count} NFT weight.` : `No faucet NFTs found. <a href="http://localhost:4000" target="_blank" rel="noopener">Mint first</a>.`,
+          );
+        } catch (e) {
+          setStatus($("memberStatus"), "err", String(e.message || e));
+        }
+      }
+
+      async function createProposal() {
+        const payload = {
+          creatorAddress: $("creatorAddr").value.trim(),
+          title: $("proposalTitle").value.trim(),
+          body: $("proposalBody").value.trim(),
+          expiresAt: $("proposalExpiresAt").value,
+        };
+        setStatus($("createStatus"), "", "Creating proposal...");
+        $("createBtn").disabled = true;
+        try {
+          const r = await fetch("/api/proposals", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || "create failed");
+          $("proposalTitle").value = "";
+          $("proposalBody").value = "";
+          setDefaultExpiry();
+          setStatus($("createStatus"), "ok", "Proposal created.");
+          await loadProposals();
+        } catch (e) {
+          setStatus($("createStatus"), "err", String(e.message || e));
+        } finally {
+          $("createBtn").disabled = false;
+        }
+      }
+
+      async function vote(proposalId, choice) {
+        const address = $("memberAddr").value.trim();
+        if (!address) {
+          setStatus($("memberStatus"), "err", "Enter your holder address before voting.");
+          return;
+        }
+        try {
+          const r = await fetch("/api/vote", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ proposalId, address, choice }),
+          });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || "vote failed");
+          setStatus($("memberStatus"), "ok", `Vote saved with ${data.sporeCount} NFT weight.`);
+          await loadProposals();
+        } catch (e) {
+          setStatus($("memberStatus"), "err", String(e.message || e));
+        }
+      }
+
+      function renderProposal(proposal) {
+        const total = Math.max(1, proposal.total);
+        const forUnits = Math.max(0.0001, proposal.tally.for / total);
+        const againstUnits = Math.max(0.0001, proposal.tally.against / total);
+        const abstainUnits = Math.max(0.0001, proposal.tally.abstain / total);
+        const creator = proposal.creatorAddress ? `<p class="mono">by ${shortAddress(proposal.creatorAddress)}</p>` : "";
+        const expired = proposal.status === "expired";
+        const voteButtons = expired
+          ? '<div class="status">Voting closed.</div>'
+          : `<div class="vote-actions">
+                <button onclick="vote('${proposal.id}', 'for')">For</button>
+                <button onclick="vote('${proposal.id}', 'against')">Against</button>
+                <button onclick="vote('${proposal.id}', 'abstain')">Abstain</button>
+              </div>`;
+
+        return `
+          <article class="proposal">
+            <div class="proposal-head">
+              <div class="proposal-title">
+                <h3>${escapeHtml(proposal.title)}</h3>
+                ${creator}
+              </div>
+              <div class="stamp">
+                <span class="badge ${expired ? "expired" : ""}">${expired ? "Expired" : "Active"}</span>
+              </div>
+            </div>
+            <div class="status">Created ${formatDate(proposal.createdAt)} · closes ${formatDate(proposal.expiresAt)}</div>
+            <p>${escapeHtml(proposal.body)}</p>
+            <div class="meter">
+              <div class="bar" style="--for:${forUnits}fr;--against:${againstUnits}fr;--abstain:${abstainUnits}fr">
+                <span></span><span></span><span></span>
+              </div>
+              <div class="legend">
+                <span>For: ${proposal.tally.for}</span>
+                <span>Against: ${proposal.tally.against}</span>
+                <span>Abstain: ${proposal.tally.abstain}</span>
+              </div>
+            </div>
+            <div class="proposal-head">
+              <div class="status">${proposal.voterCount} voter(s), ${proposal.total} NFT-weighted vote(s)</div>
+              ${voteButtons}
+            </div>
+          </article>`;
+      }
+
+      async function loadProposals() {
+        try {
+          const r = await fetch("/api/proposals");
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || "proposal load failed");
+          state.proposals = data.proposals || [];
+          $("totalProposals").textContent = state.proposals.length;
+          $("totalVotes").textContent = state.proposals.reduce((sum, item) => sum + item.voterCount, 0);
+          $("lastUpdated").textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          $("proposalList").innerHTML = state.proposals.length
+            ? state.proposals.map(renderProposal).join("")
+            : '<div class="empty">No proposals yet. Create the first DAO decision.</div>';
+        } catch (e) {
+          $("proposalList").innerHTML = `<div class="empty">${escapeHtml(e.message || e)}</div>`;
+        }
+      }
+
+      $("checkBtn").addEventListener("click", checkMember);
+      $("refreshBtn").addEventListener("click", loadProposals);
+      $("createBtn").addEventListener("click", createProposal);
+      $("copyToCreatorBtn").addEventListener("click", () => {
+        $("creatorAddr").value = $("memberAddr").value.trim();
+      });
+      $("memberAddr").addEventListener("keydown", (e) => e.key === "Enter" && checkMember());
+
+      function setDefaultExpiry() {
+        const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        nextWeek.setSeconds(0, 0);
+        $("proposalExpiresAt").value = nextWeek.toISOString().slice(0, 16);
+      }
+
+      setDefaultExpiry();
+      loadProposals();
+      setInterval(loadProposals, 6000);
+    </script>
+  </body>
+</html>
