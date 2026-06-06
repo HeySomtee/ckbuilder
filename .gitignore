@@ -9,6 +9,7 @@ dist/
 .ckb-wallet.key
 .env
 
-# Week 4 DAO local proposal/vote state
+# Weekly project local state (JSON persistence)
 src/week3/nft-faucet/data/
 src/week4/nft-dao/data/
+src/week5/scroll/data/

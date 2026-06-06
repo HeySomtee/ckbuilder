@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: ckb-scroll
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run week5
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CKB_PRIVATE_KEY
+        sync: false   # set this manually in the Render dashboard — never commit the value
+    disk:
+      name: scroll-data
+      mountPath: /opt/render/project/src/src/week5/scroll/data
+      sizeGB: 1
