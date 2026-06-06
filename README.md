@@ -9,7 +9,7 @@ mirrors the mental model, then as a real interaction with the live network.
 ```
 src/
   week1/
-    cell-model/      # Generalized UTXO: Cells, OutPoints, Transactions, Scripts
+    cell-model/      # Generalised UTXO: Cells, OutPoints, Transactions, Scripts
     ckb-address/     # (scaffold) bech32m + address codec
   week2/
     wallet/          # CCC-based testnet CLI wallet
@@ -17,11 +17,14 @@ src/
     nft-faucet/      # Browser dApp: mint Spore NFTs to any testnet address
   week4/
     nft-dao/         # NFT-gated DAO: proposals + live holder-weighted voting
+  week5/
+    scroll/          # Permanent on-chain microblog: every post is a real CKB cell
 reports/
   week-1.md          # Cell Model + Consensus + Address fundamentals
   week-2.md          # First real testnet transaction
   week-3.md          # NFT faucet (Spore) — server-paid mint, browser UI
   week-4.md          # NFT-gated DAO, faucet registry, JSON proposal store
+  week-5.md          # CKB Scroll — raw cell storage, no scripts, permanent data
 ```
 
 ## Weekly Index
@@ -32,6 +35,7 @@ reports/
 | 2 | First testnet wallet & transfer (CCC) | [reports/week-2.md](reports/week-2.md) | [src/week2/wallet](src/week2/wallet) |
 | 3 | NFT faucet dApp — Spore mint + display | [reports/week-3.md](reports/week-3.md) | [src/week3/nft-faucet](src/week3/nft-faucet) |
 | 4 | NFT-gated DAO — proposals + live voting | [reports/week-4.md](reports/week-4.md) | [src/week4/nft-dao](src/week4/nft-dao) |
+| 5 | CKB Scroll — permanent on-chain microblog | [reports/week-5.md](reports/week-5.md) | [src/week5/scroll](src/week5/scroll) |
 
 ## Setup
 
@@ -111,6 +115,35 @@ npm run week3
 npm run week4
 ```
 
+### Week 5 — CKB Scroll (permanent on-chain microblog)
+
+Every post submitted through the UI creates a real CKB cell on the Pudge
+testnet. The cell's `data` field holds the message; its `capacity` locks a
+proportional amount of CKBs to pay for storage — permanently. No type script,
+no protocol contract, no off-chain database required. The chain is the
+persistence layer.
+
+Cost formula: **(61 + data bytes) CKB** per post (~150–300 testnet CKB for a
+typical message).
+
+```bash
+# Prereq: a funded week-2 wallet (300+ CKB per post recommended).
+npm run wallet -- balance
+
+# Start the server — open http://localhost:4002
+npm run week5
+```
+
+Features:
+- Live cost estimate updates as you type
+- Posts show a **pending** badge until the transaction is committed (polled every 15 s)
+- Every confirmed post links to the [Pudge explorer](https://pudge.explorer.nervos.org/) transaction
+- Tip button to send CKB directly to an author's address
+- Parchment-toned UI — serif font, aged-paper grain background
+
+**Deploy to Render**: see [render.yaml](render.yaml). Set `CKB_PRIVATE_KEY` as
+an environment variable in the Render dashboard — never commit the raw key.
+
 ## Stack
 
 - **TypeScript** + **ts-node** — no build step for demos.
@@ -119,6 +152,6 @@ npm run week4
 - **[`@ckb-ccc/spore`](https://github.com/ckb-devrel/ccc/tree/master/packages/spore)** —
   Spore protocol bindings for week 3's NFT mint.
 - **Zero runtime dependencies** in week 1 — the toy chain is self-contained
-  to keep the cell-model logic readable. Week 3's HTTP server uses only
-  Node built-ins (`http`, `fs`, `crypto`) — no Express, no frontend
-  framework.
+  to keep the cell-model logic readable. Weeks 3–5's HTTP servers use only
+  Node built-ins (`http`, `fs`, `crypto`) — no Express, no frontend framework.
+
