@@ -11,6 +11,7 @@
     "week3": "ts-node src/week3/nft-faucet/server.ts",
     "week4": "ts-node src/week4/nft-dao/server.ts",
     "week5": "ts-node src/week5/scroll/server.ts",
+    "streak": "npm --prefix products/streak start",
     "start": "ts-node src/week3/nft-faucet/server.ts"
   },
   "engines": {

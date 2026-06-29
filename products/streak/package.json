@@ -1,0 +1,23 @@
+{
+  "name": "streak",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Streak — an old-school on-chain prediction terminal. One pick a day. Keep the run alive.",
+  "scripts": {
+    "start": "ts-node src/server.ts",
+    "dev": "ts-node src/server.ts",
+    "build": "tsc",
+    "serve": "node dist/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "^1.12.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}

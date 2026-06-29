@@ -1,0 +1,249 @@
+/**
+ * Streak Terminal — shared types.
+ *
+ * Flat JSON shape (data/db.json). shannon amounts are decimal strings to
+ * dodge JSON's 53-bit integer limit. Convert to/from bigint at the seams.
+ */
+
+export type Outcome = "home" | "draw" | "away";
+export type MatchStatus = "scheduled" | "live" | "final";
+export type StreakStatus = "active" | "failed";
+
+/** A single World Cup fixture. */
+export interface Match {
+  id: string;
+  /** Stadium-local calendar day (YYYY-MM-DD). */
+  date: string;
+  stage: string;
+  group?: string;
+  home: Team;
+  away: Team;
+  /** True UTC ISO-8601 kickoff. Markets close at this instant. */
+  kickoff: string;
+  status: MatchStatus;
+  result?: Outcome;
+  score?: { home: number; away: number };
+  venue?: string;
+  matchday?: string;
+  /** True when result came from the live API (vs. demo simulator). */
+  liveResult?: boolean;
+}
+
+export interface Team {
+  code: string;
+  name: string;
+  flag: string;
+}
+
+// ── Prediction market ──────────────────────────────────────────────────────
+
+export type MarketStatus = "open" | "closed" | "resolved" | "void";
+
+/**
+ * Parimutuel market on a single fixture. Three outcomes (home/draw/away);
+ * winners split the losing pool pro-rata after fees, principal returned.
+ * shannons stored as decimal strings.
+ */
+export interface Market {
+  id: string;
+  matchId: string;
+  /** Creator userId, or "system" for auto-seeded markets. */
+  creatorId: string;
+  status: MarketStatus;
+  pools: Record<Outcome, string>;
+  totalBets: number;
+  uniqueBettors: number;
+  createdAt: string;
+  /** Kickoff: bets reject at this instant. */
+  closesAt: string;
+  resolvedAt?: string;
+  resolvedOutcome?: Outcome | "void";
+  feeBps: { protocol: number; creator: number };
+  /** Implied-probability ticks; capped at MARKET_HISTORY_CAP. */
+  history: PriceTick[];
+  payout?: PayoutSummary;
+}
+
+export interface PriceTick {
+  t: number;
+  p: Record<Outcome, number>;
+}
+
+export interface PayoutSummary {
+  winnerPoolShannons: string;
+  loserPoolShannons: string;
+  totalPaidShannons: string;
+  protocolFeeShannons: string;
+  creatorFeeShannons: string;
+  winnerCount: number;
+}
+
+export interface Bet {
+  id: string;
+  marketId: string;
+  matchId: string;
+  userId: string;
+  outcome: Outcome;
+  amount: string; // shannons
+  placedAt: string;
+  priceAtBet: number;
+  settled: boolean;
+  payout?: string;
+  isStreakPick?: boolean;
+  streakAtPick?: number;
+}
+
+// ── Custody ────────────────────────────────────────────────────────────────
+
+export interface UserWallet {
+  address: string;
+  /** Testnet-only custodial key. See README "Security model". */
+  privateKey: string;
+}
+
+export interface UserStreak {
+  current: number;
+  best: number;
+  status: StreakStatus;
+  /** YYYY-MM-DD of the most recent streak pick. */
+  lastPickDate?: string;
+  /** Set when the failed streak pick still owes a renewal. */
+  failedBetId?: string;
+}
+
+export interface UserStats {
+  totalBets: number;
+  wonBets: number;
+  lostBets: number;
+  renews: number;
+  netPnlShannons: string;   // may be "-12345"
+  turnoverShannons: string;
+}
+
+export interface User {
+  id: string;
+  username: string;
+  passwordHash: string;
+  passwordSalt: string;
+  createdAt: string;
+  wallet: UserWallet;
+  escrowShannons: string;
+  creatorFeesShannons: string;
+  streak: UserStreak;
+  stats: UserStats;
+}
+
+export interface Deposit {
+  id: string;
+  userId: string;
+  amountShannons: string;
+  txHash: string;
+  at: string;
+}
+
+export interface Withdraw {
+  id: string;
+  userId: string;
+  amountShannons: string;
+  txHash: string;
+  at: string;
+}
+
+// ── Store ──────────────────────────────────────────────────────────────────
+
+export interface StreakDB {
+  schema: number;
+  users: User[];
+  matches: Match[];
+  markets: Market[];
+  bets: Bet[];
+  deposits: Deposit[];
+  withdraws: Withdraw[];
+  treasury?: UserWallet;
+  protocolFeesShannons: string;
+  liveScores?: LiveScoresAuth;
+  matchesSchema?: number;
+}
+
+export interface LiveScoresAuth {
+  base: string;
+  email: string;
+  token: string;
+  obtainedAt: string;
+}
+
+// ── API view-models ────────────────────────────────────────────────────────
+
+export interface PublicUser {
+  id: string;
+  username: string;
+  createdAt: string;
+  walletAddress: string;
+  escrowCkb: string;
+  creatorFeesCkb: string;
+  streak: UserStreak;
+  stats: UserStats;
+  winRate: number;
+  rank: number;
+}
+
+export interface LeaderboardRow {
+  rank: number;
+  username: string;
+  current: number;
+  best: number;
+  winRate: number;
+  netPnlCkb: string;
+  turnoverCkb: string;
+  isMe?: boolean;
+}
+
+export interface MarketSummary {
+  id: string;
+  match: {
+    id: string;
+    label: string;
+    kickoff: string;
+    stage: string;
+    status: MatchStatus;
+    home: Team;
+    away: Team;
+    score?: { home: number; away: number };
+  };
+  status: MarketStatus;
+  prices: Record<Outcome, number>;
+  pools: Record<Outcome, string>;
+  totalPoolCkb: string;
+  totalBets: number;
+  uniqueBettors: number;
+  closesAt: string;
+  resolvedOutcome?: Outcome | "void";
+  /** Last ~32 ticks for sparkline display. */
+  spark: PriceTick[];
+}
+
+export interface MarketDetail extends MarketSummary {
+  createdAt: string;
+  creator: { id: string; username: string } | null;
+  history: PriceTick[];
+  feeBps: { protocol: number; creator: number };
+  payout?: PayoutSummary;
+  myPositions: Array<{
+    id: string;
+    outcome: Outcome;
+    amountCkb: string;
+    priceAtBet: number;
+    placedAt: string;
+    settled: boolean;
+    payoutCkb?: string;
+    isStreakPick?: boolean;
+  }>;
+  feed: Array<{
+    id: string;
+    user: string;
+    outcome: Outcome;
+    amountCkb: string;
+    priceAtBet: number;
+    placedAt: string;
+  }>;
+}
