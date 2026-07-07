@@ -19,12 +19,16 @@ src/
     nft-dao/         # NFT-gated DAO: proposals + live holder-weighted voting
   week5/
     scroll/          # Permanent on-chain microblog: every post is a real CKB cell
+products/
+  streak/            # Parimutuel WC2026 prediction-market terminal (weeks 6–7)
 reports/
   week-1.md          # Cell Model + Consensus + Address fundamentals
   week-2.md          # First real testnet transaction
   week-3.md          # NFT faucet (Spore) — server-paid mint, browser UI
   week-4.md          # NFT-gated DAO, faucet registry, JSON proposal store
   week-5.md          # CKB Scroll — raw cell storage, no scripts, permanent data
+  week-6.md          # Streak Terminal — parimutuel prediction-market engine
+  week-7.md          # Streak Terminal — on-chain custody bridge + live oracle
 ```
 
 ## Weekly Index
@@ -36,6 +40,8 @@ reports/
 | 3 | NFT faucet dApp — Spore mint + display | [reports/week-3.md](reports/week-3.md) | [src/week3/nft-faucet](src/week3/nft-faucet) |
 | 4 | NFT-gated DAO — proposals + live voting | [reports/week-4.md](reports/week-4.md) | [src/week4/nft-dao](src/week4/nft-dao) |
 | 5 | CKB Scroll — permanent on-chain microblog | [reports/week-5.md](reports/week-5.md) | [src/week5/scroll](src/week5/scroll) |
+| 6 | Streak Terminal — parimutuel prediction-market engine | [reports/week-6.md](reports/week-6.md) | [products/streak](products/streak) |
+| 7 | Streak Terminal — on-chain custody bridge + live oracle | [reports/week-7.md](reports/week-7.md) | [products/streak](products/streak) |
 
 ## Setup
 
@@ -143,6 +149,27 @@ Features:
 
 **Deploy to Render**: see [render.yaml](render.yaml). Set `CKB_PRIVATE_KEY` as
 an environment variable in the Render dashboard — never commit the raw key.
+
+### Weeks 6–7 — Streak Terminal (prediction-market product)
+
+A Polymarket-style parimutuel prediction-market terminal for the FIFA World
+Cup 2026, settled on the Pudge testnet. Week 6 is the market engine (parimutuel
+pricing, automatic settlement, the daily streak game as a tagged bet); week 7
+is the on-chain custody bridge (per-user Pudge wallet, real deposit/withdraw
+transactions via CCC) and the live worldcup26.ir results oracle, with a
+deterministic simulator fallback.
+
+```bash
+# Start the terminal — open http://localhost:4100
+npm run streak
+```
+
+Sign up (a Pudge wallet is generated automatically), fund the printed address
+from the [Pudge faucet](https://faucet.nervos.org/), then **Deposit** to credit
+your escrow and start betting. Live results are optional — set `WC_API_EMAIL` +
+`WC_API_PASSWORD` (or `WC_API_TOKEN`) to drive real settlement; with nothing
+set, markets settle from a deterministic simulator. See
+[products/streak/README.md](products/streak/README.md) for full configuration.
 
 ## Stack
 
