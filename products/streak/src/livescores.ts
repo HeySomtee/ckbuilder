@@ -62,6 +62,11 @@ export function liveScoresEnabled(): boolean {
   return !!(EXPLICIT_TOKEN || (EMAIL && PASSWORD));
 }
 
+/** Base URL of the live-scores API (for receipts/attribution). */
+export function liveScoresBase(): string {
+  return BASE;
+}
+
 function outcomeFromScore(home: number, away: number): Outcome {
   if (home > away) return "home";
   if (away > home) return "away";

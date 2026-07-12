@@ -29,6 +29,7 @@ reports/
   week-5.md          # CKB Scroll — raw cell storage, no scripts, permanent data
   week-6.md          # Streak Terminal — parimutuel prediction-market engine
   week-7.md          # Streak Terminal — on-chain custody bridge + live oracle
+  week-8.md          # Streak Terminal — on-chain settlement receipts (publish · verify · share)
 ```
 
 ## Weekly Index
@@ -42,6 +43,7 @@ reports/
 | 5 | CKB Scroll — permanent on-chain microblog | [reports/week-5.md](reports/week-5.md) | [src/week5/scroll](src/week5/scroll) |
 | 6 | Streak Terminal — parimutuel prediction-market engine | [reports/week-6.md](reports/week-6.md) | [products/streak](products/streak) |
 | 7 | Streak Terminal — on-chain custody bridge + live oracle | [reports/week-7.md](reports/week-7.md) | [products/streak](products/streak) |
+| 8 | Streak Terminal — on-chain settlement receipts (publish · verify · share) | [reports/week-8.md](reports/week-8.md) | [products/streak](products/streak) |
 
 ## Setup
 

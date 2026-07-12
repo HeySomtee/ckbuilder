@@ -62,6 +62,8 @@ export interface Market {
   /** Implied-probability ticks; capped at MARKET_HISTORY_CAP. */
   history: PriceTick[];
   payout?: PayoutSummary;
+  /** Set once the on-chain settlement receipt for this market has been published. */
+  receipt?: MarketReceiptRef;
 }
 
 export interface PriceTick {
@@ -76,6 +78,60 @@ export interface PayoutSummary {
   protocolFeeShannons: string;
   creatorFeeShannons: string;
   winnerCount: number;
+}
+
+// ── On-chain settlement receipt ─────────────────────────────────────────────
+
+/**
+ * Reference to the on-chain receipt cell published for a settled market.
+ * Stored on the Market once `settlement.ts` succeeds; the actual receipt
+ * payload lives in `StreakDB.receipts` keyed by marketId.
+ */
+export interface MarketReceiptRef {
+  /** Pudge tx hash that produced the receipt cell. */
+  txHash: string;
+  /** Output index of the receipt cell within that tx. */
+  index: number;
+  /** sha256 hex of the canonical payload bytes (matches on-chain data). */
+  payloadHash: string;
+  /** Merkle root over the market's bets (cached for quick UI display). */
+  merkleRoot: string;
+  publishedAt: string;
+}
+
+/**
+ * Full off-chain settlement receipt. Its canonical UTF-8 JSON serialization
+ * (`canonicalize()` in settlement.ts) is what the on-chain cell hashes.
+ */
+export interface SettlementReceipt {
+  /** Payload schema version — bump for any breaking layout change. */
+  v: number;
+  marketId: string;
+  matchId: string;
+  match: {
+    home: { code: string; name: string };
+    away: { code: string; name: string };
+    stage: string;
+    kickoff: string;
+    score?: { home: number; away: number };
+  };
+  winner: Outcome | "void";
+  pools: Record<Outcome, string>;
+  totalPoolShannons: string;
+  fees: { protocolBps: number; creatorBps: number };
+  distributableShannons: string;
+  protocolFeeShannons: string;
+  creatorFeeShannons: string;
+  winnerCount: number;
+  totalPaidShannons: string;
+  oracle: { source: string; live: boolean };
+  bets: {
+    count: number;
+    /** sha256 root of per-bet leaves (see settlement.ts). */
+    merkleRoot: string;
+  };
+  treasuryAddress: string;
+  settledAt: string;
 }
 
 export interface Bet {
@@ -163,6 +219,8 @@ export interface StreakDB {
   protocolFeesShannons: string;
   liveScores?: LiveScoresAuth;
   matchesSchema?: number;
+  /** Off-chain full payloads for every published on-chain receipt. */
+  receipts: SettlementReceipt[];
 }
 
 export interface LiveScoresAuth {

@@ -30,6 +30,7 @@ import {
 import { RENEW_FEE_CKB } from "./config";
 import { asBig, getTreasury } from "./wallet";
 import { ensureMarketsForMatches, settleMarkets, winRate } from "./markets";
+import { buildReceiptPayload, publishReceipt } from "./settlement";
 import type { LeaderboardRow, Match, PublicUser, StreakDB, User } from "./types";
 
 export { winRate } from "./markets";
@@ -50,7 +51,7 @@ export async function syncMatches(): Promise<Match[]> {
   const today = dayKey();
   const live = await fetchLiveResults();
 
-  return update((db) => {
+  const slate = await update((db) => {
     if (db.matches.length === 0 || (db.matchesSchema ?? 0) < MATCHES_SCHEMA_VERSION) {
       const fresh = loadAllMatches();
       const prev = new Map(db.matches.map((m) => [m.id, m]));
@@ -71,6 +72,90 @@ export async function syncMatches(): Promise<Match[]> {
       .filter((m) => m.date === slateDate)
       .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
   });
+
+  // Publish on-chain receipts for any newly-settled markets. Runs outside the
+  // write lock because the CCC tx round-trip takes seconds. Failures are
+  // swallowed with a log — the next sync loop will retry.
+  publishPendingReceipts().catch((e) =>
+    console.error("[settlement] publish loop:", (e as Error).message),
+  );
+
+  return slate;
+}
+
+// ── Receipt publisher (runs after each syncMatches) ─────────────────────────
+
+/**
+ * Serialize concurrent runs so a slow chain call can't stack. If a publish is
+ * already in flight, later triggers just re-await it.
+ */
+let publishing: Promise<void> | null = null;
+/** Suppress the "insufficient CKB" retry-flood — log at most once per hour. */
+let lastUnderfundedWarn = 0;
+
+export async function publishPendingReceipts(): Promise<void> {
+  if (publishing) return publishing;
+  publishing = (async () => {
+    const treasury = await getTreasury();
+
+    // Snapshot the outstanding work outside a write lock.
+    const pending = await read((db) =>
+      db.markets
+        .filter((m) => (m.status === "resolved" || m.status === "void") && !m.receipt)
+        .map((m) => m.id),
+    );
+    if (pending.length === 0) return;
+
+    for (const marketId of pending) {
+      try {
+        // Rebuild the payload from the CURRENT DB state to avoid drift.
+        const built = await read((db) => {
+          const market = db.markets.find((m) => m.id === marketId);
+          if (!market) return null;
+          return buildReceiptPayload(db, market, treasury);
+        });
+        if (!built) continue;
+
+        const { txHash, index } = await publishReceipt(treasury, built.payloadHash);
+
+        // Persist the receipt reference + full payload.
+        await update((db) => {
+          const m = db.markets.find((x) => x.id === marketId);
+          if (!m) return;
+          m.receipt = {
+            txHash,
+            index,
+            payloadHash: built.payloadHash,
+            merkleRoot: built.payload.bets.merkleRoot,
+            publishedAt: new Date().toISOString(),
+          };
+          // Replace any pre-existing payload (idempotent).
+          db.receipts = db.receipts.filter((r) => r.marketId !== marketId);
+          db.receipts.push(built.payload);
+        });
+        console.log(`[settlement] published ${marketId} → ${txHash}`);
+      } catch (err) {
+        const msg = (err as Error).message || String(err);
+        // Treasury-underfunded is expected until an operator funds the wallet
+        // — retry silently, but nudge once per hour so it's not invisible.
+        if (/Insufficient CKB/i.test(msg)) {
+          if (Date.now() - lastUnderfundedWarn > 60 * 60 * 1000) {
+            lastUnderfundedWarn = Date.now();
+            console.warn(
+              `[settlement] treasury underfunded — ${pending.length} receipt(s) waiting. ` +
+                `Fund ${treasury.address} from https://faucet.nervos.org/`,
+            );
+          }
+          return; // stop this batch; try again next tick
+        }
+        console.error(`[settlement] publish ${marketId} failed:`, msg);
+        return;
+      }
+    }
+  })().finally(() => {
+    publishing = null;
+  });
+  return publishing;
 }
 
 // ── Streak revival ──────────────────────────────────────────────────────────

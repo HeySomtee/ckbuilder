@@ -27,12 +27,35 @@ import type { Deposit, UserWallet, Withdraw } from "./types";
 
 // ── Treasury (singleton; created on first boot) ─────────────────────────────
 
-import { createWallet } from "./chain";
+import { createWallet, getClient } from "./chain";
+import { ccc } from "@ckb-ccc/core";
 
+/**
+ * Return the platform treasury wallet.
+ *
+ * Precedence:
+ *   1. If a persisted treasury exists in the store, use it.
+ *   2. Else, if TREASURY_PRIVATE_KEY is set in the env, derive the treasury
+ *      from that key and persist it. This lets a fresh boot reuse a wallet
+ *      the operator has already funded from the Pudge faucet — critical for
+ *      publishing on-chain receipts (each one costs ~100 CKB of capacity).
+ *   3. Else, generate a brand-new wallet.
+ */
 export async function getTreasury(): Promise<UserWallet> {
   const existing = await read((db) => db.treasury);
   if (existing) return existing;
-  const wallet = await createWallet();
+
+  let wallet: UserWallet;
+  const envKey = process.env.TREASURY_PRIVATE_KEY?.trim();
+  if (envKey) {
+    const key = envKey.startsWith("0x") ? envKey : "0x" + envKey;
+    const signer = new ccc.SignerCkbPrivateKey(getClient(), key);
+    const address = await signer.getRecommendedAddress();
+    wallet = { address, privateKey: key };
+  } else {
+    wallet = await createWallet();
+  }
+
   return update((db) => {
     if (!db.treasury) db.treasury = wallet;
     return db.treasury;

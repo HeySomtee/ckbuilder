@@ -155,6 +155,8 @@ const routes = {
   "wallet": renderWallet,
   "leaderboard": renderLeaderboard,
   "fixtures": renderFixtures,
+  "receipts": renderReceipts,         // gallery of published receipts
+  "receipt": renderReceiptPublic,     // #receipt/<marketId>  (unauthenticated shareable page)
 };
 
 function parseRoute() {
@@ -165,6 +167,13 @@ function parseRoute() {
 async function navigate() {
   const r = parseRoute();
   state.route = r;
+  // Public shareable receipt page — no auth required.
+  if (r.name === "receipt") {
+    teardownShell();
+    try { await renderReceiptPublic(r); }
+    catch (err) { console.error(err); root.innerHTML = `<div class="public-shell"><div class="public-card"><h1>Receipt not available</h1><p class="dim mono">${esc(err.message)}</p></div></div>`; }
+    return;
+  }
   if (!isAuthed()) {
     return renderAuth(r);
   }
@@ -209,6 +218,7 @@ function navHtml() {
     <a data-route="dashboard"><span class="icon">${icon("dash")}</span>Overview</a>
     <a data-route="markets"><span class="icon">${icon("mkt")}</span>Markets</a>
     <a data-route="fixtures"><span class="icon">${icon("cal")}</span>Schedule</a>
+    <a data-route="receipts"><span class="icon">${icon("rc")}</span>Receipts</a>
     <div class="rail-section">Account</div>
     <a data-route="portfolio"><span class="icon">${icon("pf")}</span>Portfolio</a>
     <a data-route="streak"><span class="icon">${icon("st")}</span>Streak</a>
@@ -233,6 +243,7 @@ function icon(k) {
     st: '<polygon points="8,2 10,7 15,7 11,10 13,15 8,12 3,15 5,10 1,7 6,7" stroke="currentColor" fill="none"/>',
     wl: '<rect x="2" y="4" width="12" height="9" stroke="currentColor" fill="none"/><circle cx="11" cy="8.5" r="1" fill="currentColor"/>',
     lb: '<line x1="3" y1="13" x2="3" y2="8" stroke="currentColor"/><line x1="8" y1="13" x2="8" y2="3" stroke="currentColor"/><line x1="13" y1="13" x2="13" y2="6" stroke="currentColor"/>',
+    rc: '<rect x="3" y="2" width="10" height="12" stroke="currentColor" fill="none"/><line x1="5" y1="5" x2="11" y2="5" stroke="currentColor"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor"/><line x1="5" y1="11" x2="9" y2="11" stroke="currentColor"/>',
   };
   return `<svg viewBox="0 0 16 16" width="14" height="14" stroke-width="1.4">${paths[k] || ""}</svg>`;
 }
@@ -306,6 +317,10 @@ function updateFootBar() {
 
 function spinner() {
   return `<div style="padding:60px;text-align:center;color:var(--ink-2);font-family:var(--mono);font-size:11px;letter-spacing:0.14em">LOADING…</div>`;
+}
+
+function spinnerInline() {
+  return `<span class="dim mono" style="font-size:10px;letter-spacing:0.14em">CHECKING…</span>`;
 }
 
 // ─────────────────────────────────────────────────────────── tape feed ─────
@@ -691,6 +706,16 @@ async function renderMarketDetail(r) {
           <div class="panel-b">${m.status === "open" ? betPanelHtml(m) : marketSummaryHtml(m)}</div>
         </div>
 
+        ${m.status === "resolved" || m.status === "void" ? `
+          <div class="panel" id="settlement-panel">
+            <div class="panel-h">
+              <span class="title">On-chain Settlement</span>
+              <span class="meta" id="settlement-badge">${spinnerInline()}</span>
+            </div>
+            <div class="panel-b" id="settlement-body">${spinner()}</div>
+          </div>
+        ` : ""}
+
         <div class="panel">
           <div class="panel-h"><span class="title">Pool Composition</span></div>
           <div class="panel-b">
@@ -713,6 +738,7 @@ async function renderMarketDetail(r) {
     </div>
   `;
   if (m.status === "open") bindBetPanel(m);
+  if (m.status === "resolved" || m.status === "void") loadSettlementPanel(m);
   startPolling(renderMarketDetail);
 }
 
@@ -1361,6 +1387,258 @@ function startPolling(viewFn) {
   }, 12_000);
   // Status-bar clock tick
   setInterval(updateStatusBar, 1000);
+}
+
+// ───────────────────────────────────────── settlement receipts (UI) ────────
+
+/**
+ * Loads the on-chain settlement panel on the market-detail page and, if the
+ * user has any bets in this market, appends "prove my bet" affordances.
+ */
+async function loadSettlementPanel(m) {
+  const body = document.getElementById("settlement-body");
+  const badge = document.getElementById("settlement-badge");
+  if (!body || !badge) return;
+  let d;
+  try {
+    d = await api(`/receipts/${encodeURIComponent(m.id)}`);
+  } catch (err) {
+    body.innerHTML = `<div class="dim mono" style="font-size:11.5px">
+      Receipt not yet published. The engine writes an on-chain fingerprint to Pudge shortly after settlement.
+    </div>`;
+    badge.innerHTML = `<span class="chip">PENDING</span>`;
+    return;
+  }
+  const p = d.payload;
+  const rec = d.receipt;
+  const oc = d.onChain || {};
+  const verifiedChip = rec
+    ? (oc.ok
+        ? `<span class="chip open" style="background:rgba(66,196,138,0.14);border-color:rgba(66,196,138,0.4);color:var(--up)">✓ VERIFIED ON-CHAIN</span>`
+        : `<span class="chip failed">CHECK FAILED</span>`)
+    : `<span class="chip">PENDING</span>`;
+  badge.innerHTML = verifiedChip;
+
+  const shareUrl = `${location.origin}/#/receipt/${encodeURIComponent(m.id)}`;
+  const tweetText = `Settled on-chain via Streak — ${p.match.home.code} vs ${p.match.away.code} · winner: ${String(p.winner).toUpperCase()}${p.match.score ? " " + p.match.score.home + "-" + p.match.score.away : ""} · ${p.bets.count} bets, ${fmtCkb(Number(p.totalPaidShannons)/1e8)} CKB paid`;
+  const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`;
+
+  body.innerHTML = `
+    <div style="font-family:var(--mono);font-size:11.5px;color:var(--ink-1);display:grid;grid-template-columns:1fr auto;gap:6px 12px">
+      <span class="label">Winner</span><span class="amber">${String(p.winner).toUpperCase()}</span>
+      <span class="label">Bets settled</span><span>${p.bets.count}</span>
+      <span class="label">Oracle</span><span>${esc(p.oracle.source)}${p.oracle.live ? "" : " (sim)"}</span>
+      <span class="label">Payload hash</span><span class="hash-cell" title="${esc(d.payloadHash)}">${shortHash(d.payloadHash)}<button class="copy-mini" data-copy="${esc(d.payloadHash)}">copy</button></span>
+      <span class="label">Merkle root</span><span class="hash-cell" title="${esc(p.bets.merkleRoot)}">${shortHash(p.bets.merkleRoot)}<button class="copy-mini" data-copy="${esc(p.bets.merkleRoot)}">copy</button></span>
+      ${rec ? `
+        <span class="label">Receipt tx</span><span class="hash-cell" title="${esc(rec.txHash)}">${shortHash(rec.txHash)}<button class="copy-mini" data-copy="${esc(rec.txHash)}">copy</button></span>
+        <span class="label">Output idx</span><span>${rec.index}</span>
+        <span class="label">Treasury lock</span><span class="hash-cell" title="${esc(oc.expectedTreasuryLockArgs || "")}">${shortHash(oc.expectedTreasuryLockArgs || "")}</span>
+      ` : ""}
+    </div>
+    ${rec && oc.ok === false ? `<div class="dim mono" style="font-size:10.5px;color:var(--down);margin-top:8px">verification failed: ${esc(oc.reason || "unknown")}</div>` : ""}
+    <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">
+      <a class="btn btn-ghost btn-sm" href="#/receipt/${encodeURIComponent(m.id)}">Public receipt ›</a>
+      ${d.explorer ? `<a class="btn btn-ghost btn-sm" href="${esc(d.explorer)}" target="_blank" rel="noopener">Pudge explorer ↗</a>` : ""}
+      <button class="btn btn-ghost btn-sm" data-copy="${esc(shareUrl)}">Copy share link</button>
+      <a class="btn btn-ghost btn-sm" href="${esc(twitterUrl)}" target="_blank" rel="noopener">Share ↗</a>
+      ${state.user ? `<button class="btn btn-ghost btn-sm" id="prove-mine">Prove my bet(s)</button>` : ""}
+    </div>
+    <div class="dim mono" style="font-size:10px;line-height:1.6;margin-top:10px">
+      The Pudge cell holds <code>STKR</code>|v|sha256(payload) at the treasury lock. Anyone can verify with <code>npm run verify -- ${esc(m.id)}</code>.
+    </div>
+    <div id="prove-out" style="margin-top:10px"></div>
+  `;
+
+  body.querySelectorAll("[data-copy]").forEach((el) => {
+    el.onclick = async (e) => {
+      e.preventDefault();
+      try { await navigator.clipboard.writeText(el.dataset.copy); toast("copied", "ok"); }
+      catch { toast("copy failed", "err"); }
+    };
+  });
+  const prove = document.getElementById("prove-mine");
+  if (prove) prove.onclick = () => showInclusionProof(m.id, { mine: true });
+}
+
+async function showInclusionProof(marketId, { mine, betId } = {}) {
+  const q = new URLSearchParams();
+  if (mine) q.set("mine", "1");
+  if (betId) q.set("bet", betId);
+  const url = `/receipts/${encodeURIComponent(marketId)}/proof${q.toString() ? "?" + q.toString() : ""}`;
+  let d;
+  try { d = await api(url); }
+  catch (err) { toast(err.message, "err"); return; }
+  const out = document.getElementById("prove-out") || document.getElementById("receipt-prove-out");
+  if (!out) return;
+  const proofs = d.proofs || [];
+  if (proofs.length === 0) {
+    out.innerHTML = `<div class="dim mono" style="font-size:11px">No bets to prove in this market.</div>`;
+    return;
+  }
+  out.innerHTML = `
+    <div class="panel-inner" style="border:1px solid var(--line);padding:10px;background:rgba(0,0,0,0.28)">
+      <div class="dim mono" style="font-size:10px;letter-spacing:0.14em;margin-bottom:6px">INCLUSION ${d.rootsMatch ? '<span class="up">· ROOT ✓</span>' : '<span class="down">· ROOT MISMATCH</span>'}</div>
+      ${proofs.map((p) => p.ok ? `
+        <div style="border-top:1px dashed var(--line);padding-top:8px;margin-top:8px;font-family:var(--mono);font-size:11px">
+          <div class="row"><span class="label flex-1">bet</span><span>${shortHash(p.betId)}</span></div>
+          <div class="row"><span class="label flex-1">index</span><span>${p.index}</span></div>
+          <div class="row"><span class="label flex-1">outcome</span><span>${p.leaf.outcome.toUpperCase()} · ${fmtCkb(Number(p.leaf.amountShannons)/1e8)} CKB</span></div>
+          <div class="row"><span class="label flex-1">leaf</span><span class="hash-cell">${shortHash(p.leafHash)}</span></div>
+          <div class="dim" style="font-size:10px;margin-top:4px">${p.proof.length} sibling(s) · walking to root ${shortHash(d.merkleRoot)}</div>
+        </div>
+      ` : `<div class="dim" style="font-size:11px">bet ${shortHash(p.betId)}: ${esc(p.reason)}</div>`).join("")}
+    </div>
+  `;
+}
+
+function shortHash(h) {
+  if (!h) return "—";
+  const s = String(h);
+  return s.length > 14 ? `${s.slice(0, 10)}…${s.slice(-4)}` : s;
+}
+
+// ────────────────────── Receipts gallery (/#/receipts) ─────────────────────
+
+async function renderReceipts() {
+  const view = $("#view");
+  view.innerHTML = spinner();
+  const { receipts } = await api("/receipts");
+  view.innerHTML = `
+    <div class="page-h">
+      <h1>Settlement Receipts</h1>
+      <span class="sub">Every resolved market with an on-chain fingerprint on Pudge testnet</span>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><span class="title">${receipts.length} published</span><span class="meta">newest first</span></div>
+      ${receipts.length === 0
+        ? `<div class="dim mono center" style="padding:60px;font-size:11px;letter-spacing:0.14em">NO RECEIPTS YET — SETTLE A MARKET TO PUBLISH ONE</div>`
+        : `<table class="tbl">
+             <thead><tr><th>Match</th><th>Stage</th><th>Winner</th><th class="right">Bets</th><th class="right">Paid</th><th>Settled</th><th>Tx</th><th></th></tr></thead>
+             <tbody>
+               ${receipts.map((r) => `
+                 <tr data-go="${esc(r.marketId)}">
+                   <td>${esc(r.label)}${r.score ? ` <span class="dim">(${r.score.home}-${r.score.away})</span>` : ""}</td>
+                   <td class="small dim">${esc(r.stage)}</td>
+                   <td class="amber">${String(r.winner).toUpperCase()}</td>
+                   <td class="num">${r.betCount}</td>
+                   <td class="num">${fmtCkb(Number(r.totalPaidShannons)/1e8)}</td>
+                   <td class="small dim">${fmtDateTime(r.settledAt)}</td>
+                   <td class="mono small hash-cell">${r.receipt ? shortHash(r.receipt.txHash) : `<span class="chip">PENDING</span>`}</td>
+                   <td class="small"><a class="btn btn-ghost btn-sm" href="#/receipt/${encodeURIComponent(r.marketId)}">Open ›</a></td>
+                 </tr>
+               `).join("")}
+             </tbody>
+           </table>`
+      }
+    </div>
+  `;
+}
+
+// ────────────────── Public receipt page (/#/receipt/:id) ───────────────────
+
+async function renderReceiptPublic(r) {
+  const id = r.params[0];
+  if (!id) throw new Error("Missing market id.");
+  document.title = `Receipt · Streak`;
+  const d = await api(`/receipts/${encodeURIComponent(id)}`);
+  const p = d.payload;
+  const rec = d.receipt;
+  const oc = d.onChain || {};
+  const verified = rec && oc.ok;
+
+  const shareUrl = `${location.origin}/#/receipt/${encodeURIComponent(id)}`;
+  const tweet = `Settled on-chain via Streak — ${p.match.home.code} vs ${p.match.away.code} · winner: ${String(p.winner).toUpperCase()}${p.match.score ? " " + p.match.score.home + "-" + p.match.score.away : ""}`;
+
+  root.innerHTML = `
+    <div class="public-shell">
+      <header class="public-topbar">
+        <span class="brand">STREAK · SETTLEMENT RECEIPT</span>
+        <span class="dim mono small">CKB · PUDGE TESTNET</span>
+        <a class="btn btn-ghost btn-sm" href="#/dashboard">Open terminal ›</a>
+      </header>
+
+      <main class="public-card">
+        <div class="verdict ${verified ? "ok" : rec ? "bad" : "pending"}">
+          ${verified
+            ? `<span class="v-tick">✓</span><span>Verified on-chain</span><span class="dim mono small">payload hash matches Pudge cell</span>`
+            : rec
+              ? `<span class="v-tick down">✗</span><span>Verification failed</span><span class="dim mono small">${esc(oc.reason || "hash disagreement")}</span>`
+              : `<span class="v-tick">…</span><span>Publish pending</span><span class="dim mono small">on-chain fingerprint not yet written</span>`}
+        </div>
+
+        <div class="match-block">
+          <div class="tm"><span class="flag">${p.match.home.name === "—" ? "🏳️" : ""}</span><span class="code">${p.match.home.code}</span> <span class="nm dim">${esc(p.match.home.name)}</span></div>
+          <div class="score">${p.match.score ? `${p.match.score.home} : ${p.match.score.away}` : `vs`}</div>
+          <div class="tm r"><span class="nm dim">${esc(p.match.away.name)}</span> <span class="code">${p.match.away.code}</span></div>
+        </div>
+        <div class="dim mono small center" style="margin-top:-6px">${esc(p.match.stage)} · kickoff ${fmtDateTime(p.match.kickoff)}</div>
+
+        <div class="winner-row">
+          <span class="lab">WINNER</span>
+          <span class="amber big">${String(p.winner).toUpperCase()}</span>
+          <span class="sep">·</span>
+          <span class="dim">${p.bets.count} bets, ${p.winnerCount} winners</span>
+          <span class="sep">·</span>
+          <span class="dim">${fmtCkb(Number(p.totalPaidShannons)/1e8)} CKB paid</span>
+        </div>
+
+        <div class="grid2">
+          <div class="mini-panel">
+            <div class="mp-h">POOLS</div>
+            <div class="mp-row"><span class="up">HOME</span><span class="num">${fmtCkb(Number(p.pools.home)/1e8)}</span></div>
+            <div class="mp-row"><span class="neutral">DRAW</span><span class="num">${fmtCkb(Number(p.pools.draw)/1e8)}</span></div>
+            <div class="mp-row"><span class="down">AWAY</span><span class="num">${fmtCkb(Number(p.pools.away)/1e8)}</span></div>
+          </div>
+          <div class="mini-panel">
+            <div class="mp-h">FEES</div>
+            <div class="mp-row"><span class="dim">Protocol ${(p.fees.protocolBps/100).toFixed(2)}%</span><span class="num">${fmtCkb(Number(p.protocolFeeShannons)/1e8)}</span></div>
+            <div class="mp-row"><span class="dim">Creator ${(p.fees.creatorBps/100).toFixed(2)}%</span><span class="num">${fmtCkb(Number(p.creatorFeeShannons)/1e8)}</span></div>
+            <div class="mp-row"><span class="dim">Distributable</span><span class="num amber">${fmtCkb(Number(p.distributableShannons)/1e8)}</span></div>
+          </div>
+        </div>
+
+        <div class="mini-panel">
+          <div class="mp-h">ON-CHAIN PROOF</div>
+          <div class="mp-row"><span class="dim">Payload hash</span><span class="hash-cell mono small">${shortHash(d.payloadHash)}<button class="copy-mini" data-copy="${esc(d.payloadHash)}">copy</button></span></div>
+          <div class="mp-row"><span class="dim">Merkle root</span><span class="hash-cell mono small">${shortHash(p.bets.merkleRoot)}<button class="copy-mini" data-copy="${esc(p.bets.merkleRoot)}">copy</button></span></div>
+          ${rec ? `
+            <div class="mp-row"><span class="dim">Receipt tx</span><span class="hash-cell mono small">${shortHash(rec.txHash)}<button class="copy-mini" data-copy="${esc(rec.txHash)}">copy</button></span></div>
+            <div class="mp-row"><span class="dim">Cell data</span><span class="mono small"><code>STKR</code>|v${d.version}|sha256(payload)</span></div>
+            <div class="mp-row"><span class="dim">Treasury lock</span><span class="hash-cell mono small">${shortHash(oc.expectedTreasuryLockArgs || "")}</span></div>
+          ` : ""}
+          <div class="mp-row"><span class="dim">Oracle</span><span class="mono small">${esc(p.oracle.source)}${p.oracle.live ? "" : " (simulated)"}</span></div>
+          <div class="mp-row"><span class="dim">Settled at</span><span class="mono small">${fmtDateTime(p.settledAt)}</span></div>
+        </div>
+
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:14px">
+          ${d.explorer ? `<a class="btn btn-amber btn-sm" href="${esc(d.explorer)}" target="_blank" rel="noopener">Pudge explorer ↗</a>` : ""}
+          <button class="btn btn-ghost btn-sm" data-copy="${esc(shareUrl)}">Copy link</button>
+          <a class="btn btn-ghost btn-sm" href="https://twitter.com/intent/tweet?text=${encodeURIComponent(tweet)}&url=${encodeURIComponent(shareUrl)}" target="_blank" rel="noopener">Share on X ↗</a>
+          <button class="btn btn-ghost btn-sm" id="rec-verify-cmd" data-copy="npm run verify -- ${esc(id)}">Copy verifier command</button>
+        </div>
+
+        <details class="raw-details">
+          <summary>Show canonical payload (hashed on-chain)</summary>
+          <pre class="raw-json">${esc(d.canonical)}</pre>
+        </details>
+
+        <div id="receipt-prove-out"></div>
+
+        <footer class="public-foot">
+          <span class="dim mono small">Streak Terminal · on-chain parimutuel market on Nervos CKB Pudge</span>
+        </footer>
+      </main>
+    </div>
+  `;
+
+  root.querySelectorAll("[data-copy]").forEach((el) => {
+    el.onclick = async (e) => {
+      e.preventDefault();
+      try { await navigator.clipboard.writeText(el.dataset.copy); toast("copied", "ok"); }
+      catch { toast("copy failed", "err"); }
+    };
+  });
 }
 
 // ──────────────────────────────────────────────────────────── boot ────────

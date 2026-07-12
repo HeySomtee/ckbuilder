@@ -46,6 +46,17 @@ import {
   portfolio,
 } from "./markets";
 import {
+  betsToLeaves,
+  buildMerkleTree,
+  canonicalize,
+  inclusionProof,
+  leafHash,
+  sha256Hex,
+  verifyReceiptOnChain,
+  RECEIPT_MAGIC,
+  RECEIPT_VERSION,
+} from "./settlement";
+import {
   WalletError,
   asBig,
   deposit,
@@ -507,6 +518,146 @@ async function handleStatus(_req: IncomingMessage, res: ServerResponse): Promise
   });
 }
 
+// ── On-chain settlement receipts ────────────────────────────────────────────
+
+/** Compact list of every published receipt — powers the /#/receipts gallery. */
+async function handleReceiptsList(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const items = await read((db) => {
+    const marketById = new Map(db.markets.map((m) => [m.id, m]));
+    return db.receipts
+      .slice()
+      .sort((a, b) => b.settledAt.localeCompare(a.settledAt))
+      .map((r) => {
+        const m = marketById.get(r.marketId);
+        return {
+          marketId: r.marketId,
+          matchId: r.matchId,
+          label: `${r.match.home.code} vs ${r.match.away.code}`,
+          stage: r.match.stage,
+          kickoff: r.match.kickoff,
+          winner: r.winner,
+          score: r.match.score,
+          totalPaidShannons: r.totalPaidShannons,
+          betCount: r.bets.count,
+          settledAt: r.settledAt,
+          receipt: m?.receipt,
+          explorer: m?.receipt ? txUrl(m.receipt.txHash) : undefined,
+        };
+      });
+  });
+  sendJson(res, 200, { receipts: items });
+}
+
+/**
+ * Full receipt for one market: the canonical payload, its hash, the on-chain
+ * reference, and a fresh live verification against Pudge RPC (source of truth).
+ */
+async function handleReceiptDetail(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  marketId: string,
+): Promise<void> {
+  const data = await read((db) => {
+    const market = db.markets.find((m) => m.id === marketId);
+    const payload = db.receipts.find((r) => r.marketId === marketId);
+    const match = market ? db.matches.find((m) => m.id === market.matchId) : undefined;
+    return { market, payload, match };
+  });
+  if (!data.market || !data.payload) {
+    return sendJson(res, 404, { error: "Receipt not found." });
+  }
+  const canonicalStr = canonicalize(data.payload);
+  const payloadHash = sha256Hex(canonicalStr);
+
+  let onChain:
+    | Awaited<ReturnType<typeof verifyReceiptOnChain>>
+    | { ok: false; reason: string } = {
+    ok: false,
+    reason: "receipt not yet published on-chain",
+  };
+  if (data.market.receipt) {
+    try {
+      const treasury = await getTreasury();
+      onChain = await verifyReceiptOnChain(data.market.receipt, payloadHash, treasury);
+    } catch (err: any) {
+      onChain = { ok: false, reason: `rpc error: ${err?.message || err}` };
+    }
+  }
+
+  sendJson(res, 200, {
+    payload: data.payload,
+    canonical: canonicalStr,
+    payloadHash,
+    receipt: data.market.receipt ?? null,
+    explorer: data.market.receipt ? txUrl(data.market.receipt.txHash) : null,
+    onChain,
+    magic: RECEIPT_MAGIC.toString("ascii"),
+    version: RECEIPT_VERSION,
+    match: data.match
+      ? { home: data.match.home, away: data.match.away, kickoff: data.match.kickoff, stage: data.match.stage, score: data.match.score }
+      : null,
+  });
+}
+
+/**
+ * Merkle inclusion proof for a specific bet.
+ *   - `?bet=<betId>` for any anonymous verifier (public receipt page).
+ *   - `?mine=1`     for the signed-in user's bets in that market.
+ */
+async function handleReceiptProof(
+  req: IncomingMessage,
+  res: ServerResponse,
+  marketId: string,
+  url: URL,
+): Promise<void> {
+  const betId = url.searchParams.get("bet") ?? undefined;
+  const mine = url.searchParams.get("mine") === "1";
+  const meId = currentUserId(req);
+
+  const built = await read((db) => {
+    const market = db.markets.find((m) => m.id === marketId);
+    const payload = db.receipts.find((r) => r.marketId === marketId);
+    if (!market || !payload) return null;
+    const leaves = betsToLeaves(db.bets, marketId);
+    const hashes = leaves.map(leafHash);
+    const tree = buildMerkleTree(hashes);
+    const root = tree[tree.length - 1][0];
+
+    const mineBets = mine && meId
+      ? db.bets
+          .filter((b) => b.marketId === marketId && b.userId === meId)
+          .map((b) => b.id)
+      : [];
+    const targets = new Set<string>();
+    if (betId) targets.add(betId);
+    for (const id of mineBets) targets.add(id);
+
+    const proofs = [...targets].map((id) => {
+      const index = leaves.findIndex((l) => l.betId === id);
+      if (index < 0) return { betId: id, ok: false, reason: "bet not in this market" };
+      return {
+        betId: id,
+        ok: true,
+        leaf: leaves[index],
+        leafHash: hashes[index],
+        index,
+        proof: inclusionProof(tree, index),
+      };
+    });
+
+    return {
+      marketId,
+      merkleRoot: root,
+      payloadRoot: payload.bets.merkleRoot,
+      rootsMatch: root === payload.bets.merkleRoot,
+      proofs,
+    };
+  });
+
+  if (!built) return sendJson(res, 404, { error: "Receipt not found." });
+  sendJson(res, 200, built);
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
@@ -527,6 +678,7 @@ const staticRoutes: Record<string, Handler> = {
   "POST /api/reset": (req, res) => handleReset(req, res),
   "GET /api/matches": (req, res) => handleMatchesList(req, res),
   "GET /api/status": (req, res) => handleStatus(req, res),
+  "GET /api/receipts": (req, res) => handleReceiptsList(req, res),
 };
 
 const server = createServer(async (req, res) => {
@@ -546,6 +698,16 @@ const server = createServer(async (req, res) => {
         if (req.method === "GET" && !sub) return await handleMarketDetail(req, res, id);
         if (req.method === "POST" && sub === "bet") return await handleBet(req, res, id);
       }
+
+      // /api/receipts/:marketId and /api/receipts/:marketId/proof
+      const rec = url.pathname.match(/^\/api\/receipts\/([^\/]+)(?:\/(proof))?$/);
+      if (rec && req.method === "GET") {
+        const id = rec[1];
+        const sub = rec[2];
+        if (!sub) return await handleReceiptDetail(req, res, id);
+        if (sub === "proof") return await handleReceiptProof(req, res, id, url);
+      }
+
       return sendJson(res, 404, { error: "Unknown endpoint." });
     }
     await serveStatic(req, res, url.pathname);
@@ -558,7 +720,7 @@ const server = createServer(async (req, res) => {
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 async function boot(): Promise<void> {
-  await getTreasury();
+  const treasury = await getTreasury();
   await syncMatches();
 
   setInterval(() => {
@@ -566,6 +728,11 @@ async function boot(): Promise<void> {
   }, SETTLE_INTERVAL_MS);
 
   const live = await liveScoresStatus();
+  let treasuryBalCkb: string | null = null;
+  try {
+    treasuryBalCkb = shannonsToCkb(await getBalanceShannons(treasury.address));
+  } catch { /* rpc may be flaky at boot; skip */ }
+
   server.listen(PORT, () => {
     console.log(`\n  STREAK TERMINAL online`);
     console.log(`     http://localhost:${PORT}`);
@@ -576,6 +743,10 @@ async function boot(): Promise<void> {
       );
     } else {
       console.log(`     live data: off — using simulated results`);
+    }
+    console.log(`     treasury:  ${treasury.address}`);
+    if (treasuryBalCkb !== null) {
+      console.log(`               ${treasuryBalCkb} CKB (need ≥100 per on-chain receipt)`);
     }
     console.log();
   });

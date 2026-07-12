@@ -36,6 +36,13 @@ Sign up → a Pudge wallet is generated automatically. Fund it from the
 [Nervos Pudge faucet](https://faucet.nervos.org/) (address is on the **Wallet**
 page), then **Deposit** to credit your platform escrow and start betting.
 
+Independently verify any settled market:
+
+```bash
+npm run verify -- m-wc-6            # against local http://localhost:4100
+STREAK_BASE=https://your.host npm run verify -- m-wc-6
+```
+
 ---
 
 ## How the market engine works (parimutuel)
@@ -113,16 +120,17 @@ A failed streak must be resolved before the next pick:
 
 ```
 Browser (vanilla SPA)                       Node http server (no framework)
-  index.html / styles.css                     src/server.ts    — routing, static, sessions
-  app.js   — router, views, charts    ⇄ JSON  src/markets.ts   — parimutuel engine
-                                              src/game.ts      — match sync, streak revival
-                                              src/wallet.ts    — deposit / withdraw
-                                              src/matches.ts   — applyResult (oracle ↔ simulator)
-                                              src/livescores.ts — worldcup26.ir client (oracle role)
-                                              src/wcdata.ts    — real WC2026 fixture loader
-                                              src/auth.ts      — scrypt + session tokens
-                                              src/chain.ts     — CCC: wallets, balances, transfers
-                                              src/store.ts     — atomic JSON store (data/db.json)
+  index.html / styles.css                     src/server.ts      — routing, static, sessions
+  app.js   — router, views, charts    ⇄ JSON  src/markets.ts     — parimutuel engine
+                                              src/game.ts        — match sync, streak revival
+                                              src/wallet.ts      — deposit / withdraw
+                                              src/settlement.ts  — on-chain receipt cells (publish/verify/merkle)
+                                              src/matches.ts     — applyResult (oracle ↔ simulator)
+                                              src/livescores.ts  — worldcup26.ir client (oracle role)
+                                              src/wcdata.ts      — real WC2026 fixture loader
+                                              src/auth.ts        — scrypt + session tokens
+                                              src/chain.ts       — CCC: wallets, balances, transfers
+                                              src/store.ts       — atomic JSON store (data/db.json)
                                                       │
                                               CKB Pudge testnet (CCC public RPC)
 ```
@@ -146,15 +154,106 @@ Layout:
 - **Top status bar** — brand, network, live-oracle indicator, balance, streak,
   clock.
 - **Ticker tape** — live marquee of the most recent platform bets.
-- **Left rail** — Overview · Markets · Schedule · Portfolio · Streak · Wallet ·
-  Leaderboard.
+- **Left rail** — Overview · Markets · Schedule · Receipts · Portfolio · Streak
+  · Wallet · Leaderboard.
 - **Main pane** — page content.
 - **Footer bar** — aggregate pool size and market state counts.
 
 Pages: `Overview`, `Markets` (sortable table with price-cells and sparklines),
 `Market detail` (large implied-prob chart, order-book-style bet feed, place-bet
-panel, pool composition), `Schedule`, `Streak`, `Portfolio`, `Wallet`,
-`Leaderboard`.
+panel, pool composition, **on-chain settlement panel with share links**),
+`Schedule`, `Streak`, `Portfolio`, `Wallet`, `Leaderboard`, `Receipts`
+(chronological wall of every published settlement receipt), and a public,
+unauthenticated `#/receipt/:marketId` page for sharing individual results.
+
+---
+
+## On-chain settlement receipts
+
+Every resolved market publishes a **receipt cell** on Pudge so anyone — with no
+account, no server access, no trust in this codebase — can verify a settlement
+independently.
+
+### Design
+
+To keep testnet costs low the on-chain cell only holds a compact fingerprint;
+the full receipt payload lives off-chain and is served by the API.
+
+```
+┌─── Off-chain (this DB / API) ───────────────────────────────────────┐
+│ SettlementReceipt payload (canonical UTF-8 JSON)                    │
+│ → served at /api/receipts/:marketId                                 │
+└────────────────────┬────────────────────────────────────────────────┘
+                     │ sha256(canonical bytes)
+                     ▼
+┌─── On-chain (Pudge cell) ───────────────────────────────────────────┐
+│ Lock:  treasury (only the treasury key can publish)                 │
+│ Type:  none                                                         │
+│ Data:  magic "STKR" (4) | version (1) | sha256 (32) = 37 bytes      │
+│ Cap :  100 CKB  (min ~98; = 8 + 53 lock + 37 data)                  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+A **merkle root over every bet** is embedded in the payload so a bettor can
+produce an inclusion proof for their own bet. Leaves are ordered by `placedAt`
+and hashed as `sha256({betId, userHash, outcome, amountShannons})`, where
+`userHash = sha256(userId + ":" + marketId)` — identity doesn't leak across
+markets while a user can still prove ownership of their own leaves inside a
+single market.
+
+### Verifying, three ways
+
+1. **In the app** — the Market Detail page shows a green "✓ VERIFIED ON-CHAIN"
+   chip when the on-chain cell exists and its hash matches. Click **Public
+   receipt ›** for a shareable page (`#/receipt/:marketId`) that works without
+   signing in.
+2. **Via API** — `GET /api/receipts/:marketId` performs a fresh Pudge RPC
+   round-trip and returns `{onChain: {ok, onChainPayloadHash, ...}}`.
+3. **Standalone CLI** — `npm run verify -- <marketId>` doesn't touch the
+   server internals at all. It fetches the payload from the HTTP API,
+   canonicalises + sha256s it, rebuilds the merkle root over the bet set, and
+   queries public CKB RPC directly to compare the on-chain hash + treasury
+   lock:
+
+   ```
+   $ npm run verify -- m-wc-6
+   Streak receipt verifier
+     market         m-wc-6
+     api base       http://localhost:4100
+   1. payload
+     ✓ sha256(payload) matches server: 0xcd5fb6a3c82637c7…
+   2. merkle root
+     ✓ merkle root over live bet set matches payload
+   3. on-chain cell
+     magic          STKR
+     version        1
+     ✓ on-chain hash matches computed payload hash
+   ✓ verified — this receipt is authentically pinned on Pudge
+   ```
+
+   Point the CLI at a remote instance with `STREAK_BASE=https://…` or
+   `--base https://…`.
+
+Every published receipt shows up in the **Receipts** gallery in the left rail
+(and at `#/receipts`):
+
+![Receipts gallery](../../reports/assets/week-8-gallery.png)
+
+And each one has an unauthenticated shareable page at
+`#/receipt/:marketId` — designed to be pasted into a group chat:
+
+![Public receipt page](../../reports/assets/week-8-public-receipt.png)
+
+### Treasury funding
+
+Each receipt cell locks up ~100 CKB of capacity. In practice this means the
+treasury wallet has to be pre-funded — set `TREASURY_PRIVATE_KEY` in `.env` to
+reuse a wallet you've already funded from the [Pudge faucet][faucet], or leave
+it blank and fund the address printed at boot. If the treasury runs low, the
+engine keeps the receipt in a `PENDING` state and retries silently until it can
+pay, logging a nudge once per hour.
+
+[faucet]: https://faucet.nervos.org/
 
 ---
 
@@ -204,6 +303,9 @@ POST /api/reset                  → abandon a failed streak (zero, free)
 GET  /api/leaderboard            → top 100 by realised P&L
 GET  /api/matches                → full WC2026 schedule
 GET  /api/status                 → live-oracle status + economic constants
+GET  /api/receipts               → every published settlement receipt (public)
+GET  /api/receipts/:id           → full payload + fresh on-chain verification
+GET  /api/receipts/:id/proof     → merkle inclusion proof(s) for ?bet= or ?mine=1
 ```
 
 ---
@@ -244,3 +346,4 @@ Environment variables (all optional):
 | `WC_API_TOKEN` / `WC_API_EMAIL` + `WC_API_PASSWORD` | — | Enable live oracle. |
 | `WC_API_BASE` | `https://worldcup26.ir` | Override oracle base URL. |
 | `WC_API_NAME` | `Streak Terminal` | Display name during auto-registration. |
+| `TREASURY_PRIVATE_KEY` | *auto-generated* | Reuse a funded Pudge wallet as the treasury (needed to publish on-chain settlement receipts). |

@@ -25,6 +25,7 @@ const EMPTY: StreakDB = {
   deposits: [],
   withdraws: [],
   protocolFeesShannons: "0",
+  receipts: [],
 };
 
 let writeQueue: Promise<unknown> = Promise.resolve();
@@ -69,6 +70,7 @@ export async function loadDB(): Promise<StreakDB> {
     protocolFeesShannons: parsed.protocolFeesShannons ?? "0",
     liveScores: parsed.liveScores,
     matchesSchema: parsed.matchesSchema,
+    receipts: parsed.receipts ?? [],
   };
 }
 
