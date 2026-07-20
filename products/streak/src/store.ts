@@ -26,6 +26,7 @@ const EMPTY: StreakDB = {
   withdraws: [],
   protocolFeesShannons: "0",
   receipts: [],
+  crews: [],
 };
 
 let writeQueue: Promise<unknown> = Promise.resolve();
@@ -55,6 +56,8 @@ export async function loadDB(): Promise<StreakDB> {
         : [],
       treasury: parsed?.treasury,
       liveScores: parsed?.liveScores,
+      // Crews reference user ids (preserved), so they can survive a reset.
+      crews: Array.isArray(parsed?.crews) ? parsed.crews : [],
     };
   }
 
@@ -71,6 +74,8 @@ export async function loadDB(): Promise<StreakDB> {
     liveScores: parsed.liveScores,
     matchesSchema: parsed.matchesSchema,
     receipts: parsed.receipts ?? [],
+    crews: parsed.crews ?? [],
+    dummyAnchorIso: parsed.dummyAnchorIso,
   };
 }
 

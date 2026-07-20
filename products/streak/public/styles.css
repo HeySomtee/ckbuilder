@@ -551,6 +551,26 @@ a:hover { color: var(--ink-0); }
 .match-card .center .kick { font-family: var(--mono); font-size: 11px; color: var(--ink-2); letter-spacing: 0.08em; }
 .match-card.away .nm { text-align: right; }
 
+/* Quick-pick outcome buttons (market-detail header) — reset native <button>
+   appearance so the terminal background applies instead of the OS buttonface. */
+button.outcome {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  padding: 10px 8px;
+  color: var(--ink-0);
+  cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-family: var(--sans);
+  transition: background 80ms ease, border-color 80ms ease;
+}
+button.outcome:hover { background: var(--bg-3); border-color: var(--line-bright); }
+button.outcome.home:hover { border-color: var(--up); }
+button.outcome.draw:hover { border-color: var(--neutral); }
+button.outcome.away:hover { border-color: var(--down); }
+
 /* Place-bet panel */
 .bet-panel { display: flex; flex-direction: column; gap: 10px; }
 .bet-panel .outcomes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
@@ -865,3 +885,66 @@ a:hover { color: var(--ink-0); }
   .public-card .match-block .tm { justify-content: center; }
   .public-card .match-block .tm.r { justify-content: center; }
 }
+
+/* ─────────────────────────────────────────────── crews (social layer) ───── */
+.crew-actions {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.crew-join { display: flex; align-items: center; gap: 6px; }
+.input-sm {
+  padding: 4px 8px; font-size: 11px; width: 140px;
+  font-family: var(--mono); letter-spacing: 0.16em;
+}
+.status-bar .pulse.sim {
+  background: var(--amber);
+  box-shadow: 0 0 0 0 rgba(240, 180, 0, 0.5);
+  animation: pulse 2s infinite;
+}
+.crew-panel .code-chip {
+  cursor: pointer; margin-left: 8px;
+  background: var(--amber-dim); border-color: var(--amber); color: var(--amber);
+  letter-spacing: 0.12em;
+}
+.crew-panel .code-chip:hover { filter: brightness(1.2); }
+.crew-sub {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ink-2);
+  padding: 12px 12px 4px;
+}
+.crew-revive {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 8px 12px 2px; padding: 8px 10px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.5;
+  border-radius: 3px; border: 1px solid var(--line-strong);
+}
+.crew-revive.up { border-color: var(--up); background: var(--up-dim); color: var(--up); }
+.crew-revive.dim { color: var(--ink-2); }
+.crew-revive a { flex-shrink: 0; }
+.crew-copicks { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 12px 4px; }
+.copick-chip {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 3px 8px; border: 1px solid var(--line-bright); border-radius: 3px;
+  font-family: var(--mono); font-size: 10.5px; background: var(--bg-2);
+}
+.copick-chip:hover { border-color: var(--amber); }
+.copick-chip .cp-n { color: var(--amber); font-weight: 600; }
+.crew-panel .o.home { color: var(--up); }
+.crew-panel .o.draw { color: var(--neutral); }
+.crew-panel .o.away { color: var(--down); }
+.crew-feed {
+  font-family: var(--mono); font-size: 11px;
+  padding: 0 12px 10px;
+}
+.crew-feed .feed-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0; border-bottom: 1px solid var(--line);
+}
+.crew-feed .feed-row:last-child { border-bottom: none; }
+.crew-feed .feed-user { color: var(--ink-1); min-width: 96px; }
+.crew-feed .feed-kind { font-size: 9.5px; letter-spacing: 0.12em; min-width: 46px; }
+.crew-feed .feed-kind.win { color: var(--up); }
+.crew-feed .feed-kind.loss { color: var(--down); }
+.crew-feed .feed-kind.pick { color: var(--amber); }
+.crew-feed .feed-match { color: var(--ink-0); flex: 1; }
+.crew-feed .feed-time { margin-left: auto; font-size: 10px; }

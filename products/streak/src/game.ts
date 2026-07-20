@@ -18,9 +18,8 @@ import {
   applyResult,
   currentSlateDate,
   dayKey,
-  loadAllMatches,
 } from "./matches";
-import { fetchLiveResults } from "./livescores";
+import { provider } from "./providers";
 import {
   canAffordRenewal,
   getBalanceShannons,
@@ -28,7 +27,8 @@ import {
   transferFrom,
 } from "./chain";
 import { RENEW_FEE_CKB } from "./config";
-import { asBig, getTreasury } from "./wallet";
+import { asBig, asString, getTreasury } from "./wallet";
+import { reviveRebate } from "./crews";
 import { ensureMarketsForMatches, settleMarkets, winRate } from "./markets";
 import { buildReceiptPayload, publishReceipt } from "./settlement";
 import type { LeaderboardRow, Match, PublicUser, StreakDB, User } from "./types";
@@ -49,11 +49,11 @@ const MATCHES_SCHEMA_VERSION = 2;
  */
 export async function syncMatches(): Promise<Match[]> {
   const today = dayKey();
-  const live = await fetchLiveResults();
+  const live = await provider.fetchResults();
 
   const slate = await update((db) => {
     if (db.matches.length === 0 || (db.matchesSchema ?? 0) < MATCHES_SCHEMA_VERSION) {
-      const fresh = loadAllMatches();
+      const fresh = provider.loadFixtures();
       const prev = new Map(db.matches.map((m) => [m.id, m]));
       db.matches = fresh.map((m) => {
         const old = prev.get(m.id);
@@ -169,7 +169,12 @@ export class GameError extends Error {
 export interface RenewResult {
   txHash: string;
   newBalanceCkb: string;
+  newEscrowCkb: string;
   streak: number;
+  /** Crew revive rebate credited to escrow (CKB, "0" when none). */
+  rebateCkb: string;
+  /** Crew-mates whose same-match streak pick earned the rebate. */
+  coPickers: string[];
 }
 
 /** Pay the on-chain renewal fee (wallet → treasury) and revive the streak. */
@@ -190,17 +195,36 @@ export async function renewStreak(userId: string): Promise<RenewResult> {
 
   const txHash = await transferFrom(user.wallet.privateKey, treasury.address, RENEW_FEE_CKB);
 
-  await update((db) => {
+  const { newEscrowShannons, rebateCkb, coPickers } = await update((db) => {
     const u = db.users.find((x) => x.id === userId);
     if (!u) throw new GameError("no_user", "User not found.");
+    // Compute the crew rebate BEFORE clearing the failed streak (it reads it).
+    const rebate = reviveRebate(db, userId);
     u.streak.status = "active";
     u.streak.failedBetId = undefined;
     u.streak.lastPickDate = undefined; // free up today's streak pick slot
     u.stats.renews += 1;
+    // Credit the rebate to escrow. It's fully backed by the RENEW_FEE the user
+    // just paid the treasury on-chain (the treasury nets fee − rebate).
+    if (rebate.rebateShannons > 0n) {
+      u.escrowShannons = asString(asBig(u.escrowShannons) + rebate.rebateShannons);
+    }
+    return {
+      newEscrowShannons: u.escrowShannons,
+      rebateCkb: shannonsToCkb(rebate.rebateShannons),
+      coPickers: rebate.coPickers,
+    };
   });
 
   const bal = await getBalanceShannons(user.wallet.address);
-  return { txHash, newBalanceCkb: shannonsToCkb(bal), streak: user.streak.current };
+  return {
+    txHash,
+    newBalanceCkb: shannonsToCkb(bal),
+    newEscrowCkb: shannonsToCkb(asBig(newEscrowShannons)),
+    streak: user.streak.current,
+    rebateCkb,
+    coPickers,
+  };
 }
 
 /** Abandon a failed run: reset to zero, no payment. */

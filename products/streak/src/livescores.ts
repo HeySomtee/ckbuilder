@@ -19,6 +19,10 @@
 
 import { read, update } from "./store";
 import type { LiveScoresAuth, Outcome } from "./types";
+import type { LiveResult } from "./providers/types";
+
+// Re-exported so existing importers (matches.ts) keep their `./livescores` path.
+export type { LiveResult } from "./providers/types";
 
 const EXPLICIT_TOKEN = process.env.WC_API_TOKEN?.trim() || undefined;
 const EMAIL = process.env.WC_API_EMAIL?.trim() || undefined;
@@ -31,14 +35,6 @@ const BASE = (process.env.WC_API_BASE?.trim() || "https://worldcup26.ir").replac
 
 const CACHE_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 20_000;
-
-export interface LiveResult {
-  finished: boolean;
-  live: boolean;
-  home: number;
-  away: number;
-  result?: Outcome;
-}
 
 export interface LiveScoresStatus {
   enabled: boolean;

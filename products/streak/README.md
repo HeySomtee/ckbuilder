@@ -282,6 +282,35 @@ curl http://localhost:4100/api/status
 
 ---
 
+## Match-data providers (pluggable feed)
+
+Fixtures + results come through a single seam, `MatchDataProvider`
+([src/providers/types.ts](src/providers/types.ts)). Pick one with
+`MATCH_PROVIDER`; nothing in the engine changes when you swap feeds.
+
+| `MATCH_PROVIDER` | Feed                                                                 |
+| ---------------- | -------------------------------------------------------------------- |
+| `worldcup` (default) | Real WC2026 fixtures + the worldcup26.ir oracle above.           |
+| `dummy`          | A self-contained simulator: 20 Premier League clubs, round-robin gameweeks, matches that kick off / run / finish on a real clock. |
+
+The `dummy` provider exists so the full lifecycle (open → live → resolved →
+on-chain receipt) stays testable after the World Cup ends, and doubles as the
+template for the next real feed — when the Premier League resumes, drop in an
+`eplProvider` implementing the same interface and register it in
+[src/providers/index.ts](src/providers/index.ts).
+
+```bash
+MATCH_PROVIDER=dummy npm run streak    # simulated EPL fixtures, live now
+```
+
+The simulator anchors its schedule to a persisted timestamp
+(`dummyAnchorIso`) so kickoff times survive restarts, and auto-rolls to a fresh
+anchor once the whole schedule has finished. Tunables:
+`DUMMY_GAMEWEEKS` (30), `DUMMY_STAGGER_MIN` (20), `DUMMY_MATCH_MINUTES` (96),
+`DUMMY_ANCHOR` (pin the anchor explicitly).
+
+---
+
 ## API surface
 
 ```
@@ -300,8 +329,12 @@ POST /api/wallet/deposit         → { amountCkb }   real Pudge tx wallet→trea
 POST /api/wallet/withdraw        → { amountCkb }   real Pudge tx treasury→wallet
 POST /api/renew                  → revive a failed streak (on-chain fee)
 POST /api/reset                  → abandon a failed streak (zero, free)
+GET  /api/crews                  → my crews (H2H streaks, co-picks, feed)
+POST /api/crews                  → { name }        create a crew
+POST /api/crews/join             → { code }        join by invite code
+POST /api/crews/:id/leave        → leave (ownership hands over / crew deleted)
 GET  /api/leaderboard            → top 100 by realised P&L
-GET  /api/matches                → full WC2026 schedule
+GET  /api/matches                → full fixture schedule (active provider)
 GET  /api/status                 → live-oracle status + economic constants
 GET  /api/receipts               → every published settlement receipt (public)
 GET  /api/receipts/:id           → full payload + fresh on-chain verification
@@ -335,6 +368,7 @@ All economic constants live in [src/config.ts](src/config.ts):
 | `PROTOCOL_FEE_BPS`  | 200     | 2.00% of loser pool → protocol treasury          |
 | `CREATOR_FEE_BPS`   | 100     | 1.00% of loser pool → market creator             |
 | `RENEW_FEE_CKB`     | 63      | Streak revival fee (real on-chain)               |
+| `CREW_REVIVE_REBATE_CKB` | 20 | Escrow rebate per crew-mate who co-picked the revived match (cap 40) |
 | `SETTLE_INTERVAL_MS`| 20000   | Background slate-refresh / settlement cadence    |
 | `MARKET_HISTORY_CAP`| 480     | Max implied-prob ticks retained per market       |
 
@@ -343,6 +377,8 @@ Environment variables (all optional):
 | Var    | Default | Purpose   |
 | ------ | ------- | --------- |
 | `PORT` | `4100`  | HTTP port |
+| `MATCH_PROVIDER` | `worldcup` | Active fixture/result feed (`worldcup` or `dummy`). |
+| `DUMMY_GAMEWEEKS` / `DUMMY_STAGGER_MIN` / `DUMMY_MATCH_MINUTES` / `DUMMY_ANCHOR` | `30` / `20` / `96` / *now−2h* | Shape the simulated schedule (dummy provider). |
 | `WC_API_TOKEN` / `WC_API_EMAIL` + `WC_API_PASSWORD` | — | Enable live oracle. |
 | `WC_API_BASE` | `https://worldcup26.ir` | Override oracle base URL. |
 | `WC_API_NAME` | `Streak Terminal` | Display name during auto-registration. |

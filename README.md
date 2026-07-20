@@ -20,7 +20,7 @@ src/
   week5/
     scroll/          # Permanent on-chain microblog: every post is a real CKB cell
 products/
-  streak/            # Parimutuel WC2026 prediction-market terminal (weeks 6–7)
+  streak/            # Parimutuel prediction-market terminal (weeks 6–9)
 reports/
   week-1.md          # Cell Model + Consensus + Address fundamentals
   week-2.md          # First real testnet transaction
@@ -30,6 +30,7 @@ reports/
   week-6.md          # Streak Terminal — parimutuel prediction-market engine
   week-7.md          # Streak Terminal — on-chain custody bridge + live oracle
   week-8.md          # Streak Terminal — on-chain settlement receipts (publish · verify · share)
+  week-9.md          # Streak Terminal — pluggable oracle (dummy/EPL) + social crews
 ```
 
 ## Weekly Index
@@ -44,6 +45,7 @@ reports/
 | 6 | Streak Terminal — parimutuel prediction-market engine | [reports/week-6.md](reports/week-6.md) | [products/streak](products/streak) |
 | 7 | Streak Terminal — on-chain custody bridge + live oracle | [reports/week-7.md](reports/week-7.md) | [products/streak](products/streak) |
 | 8 | Streak Terminal — on-chain settlement receipts (publish · verify · share) | [reports/week-8.md](reports/week-8.md) | [products/streak](products/streak) |
+| 9 | Streak Terminal — pluggable oracle (dummy/EPL) + social crews | [reports/week-9.md](reports/week-9.md) | [products/streak](products/streak) |
 
 ## Setup
 
@@ -152,25 +154,33 @@ Features:
 **Deploy to Render**: see [render.yaml](render.yaml). Set `CKB_PRIVATE_KEY` as
 an environment variable in the Render dashboard — never commit the raw key.
 
-### Weeks 6–7 — Streak Terminal (prediction-market product)
+### Weeks 6–9 — Streak Terminal (prediction-market product)
 
-A Polymarket-style parimutuel prediction-market terminal for the FIFA World
-Cup 2026, settled on the Pudge testnet. Week 6 is the market engine (parimutuel
-pricing, automatic settlement, the daily streak game as a tagged bet); week 7
-is the on-chain custody bridge (per-user Pudge wallet, real deposit/withdraw
-transactions via CCC) and the live worldcup26.ir results oracle, with a
-deterministic simulator fallback.
+A Polymarket-style parimutuel prediction-market terminal, settled on the Pudge
+testnet. Week 6 is the market engine (parimutuel pricing, automatic settlement,
+the daily streak game as a tagged bet); week 7 is the on-chain custody bridge
+(per-user Pudge wallet, real deposit/withdraw transactions via CCC) and the
+live results oracle; week 8 publishes a verifiable on-chain settlement receipt
+for every resolved market; week 9 puts the data feed behind a pluggable
+provider (swap the World Cup oracle for a built-in simulator or a future EPL
+feed) and adds a social layer — crews, head-to-head streaks, co-picks, and a
+revive rebate when a crew-mate backs the same match.
 
 ```bash
 # Start the terminal — open http://localhost:4100
 npm run streak
+
+# ...or run it on the built-in simulator (no live feed needed)
+MATCH_PROVIDER=dummy npm run streak
 ```
 
 Sign up (a Pudge wallet is generated automatically), fund the printed address
 from the [Pudge faucet](https://faucet.nervos.org/), then **Deposit** to credit
-your escrow and start betting. Live results are optional — set `WC_API_EMAIL` +
-`WC_API_PASSWORD` (or `WC_API_TOKEN`) to drive real settlement; with nothing
-set, markets settle from a deterministic simulator. See
+your escrow and start betting. The data feed is selectable: `MATCH_PROVIDER=dummy`
+runs a self-contained EPL simulator (matches live at boot), while the default
+`worldcup` provider uses the worldcup26.ir oracle when `WC_API_EMAIL` +
+`WC_API_PASSWORD` (or `WC_API_TOKEN`) are set, falling back to a deterministic
+simulator otherwise. See
 [products/streak/README.md](products/streak/README.md) for full configuration.
 
 ## Stack

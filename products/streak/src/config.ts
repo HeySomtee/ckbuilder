@@ -18,7 +18,7 @@ export const PUBLIC_DIR = resolve(__dirname, "..", "public");
 export const SHANNONS_PER_CKB = 100_000_000n;
 
 /** Bump on incompatible DB shape changes; loader will reset non-wallet state. */
-export const DB_SCHEMA = 3;
+export const DB_SCHEMA = 4;
 
 export const SESSION_COOKIE = "streak_sid";
 export const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
@@ -51,3 +51,23 @@ export const MATCH_DURATION_MIN = 110;
 
 /** Max price-history ticks kept per market. */
 export const MARKET_HISTORY_CAP = 480;
+
+// ── Social (crews) ──────────────────────────────────────────────────────────
+
+/** Max members in a single crew. */
+export const CREW_MAX_MEMBERS = 12;
+/** Max crews one user can belong to. */
+export const CREW_MAX_PER_USER = 6;
+export const CREW_NAME_MIN = 2;
+export const CREW_NAME_MAX = 30;
+
+/**
+ * Revive rebate: when you revive a failed streak, every crew-mate who also
+ * made a streak pick on the same match earns you a rebate credited to escrow.
+ *
+ * It's a rebate (not a cheaper on-chain payment) because the renewal transfer
+ * already sits just above the 61 CKB cell-floor — there's no room to shrink it
+ * on-chain. The rebate is fully backed by the CKB the renewal just paid in.
+ */
+export const CREW_REVIVE_REBATE_CKB = 20;
+export const CREW_REVIVE_REBATE_CAP_CKB = 40;

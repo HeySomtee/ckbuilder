@@ -64,7 +64,15 @@ import {
   withdraw,
 } from "./wallet";
 import { addressUrl, createWallet, getBalanceShannons, shannonsToCkb, txUrl } from "./chain";
-import { liveScoresStatus } from "./livescores";
+import { provider } from "./providers";
+import {
+  CrewError,
+  createCrew,
+  joinCrew,
+  leaveCrew,
+  listCrews,
+  reviveHint,
+} from "./crews";
 import type { Outcome, User } from "./types";
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
@@ -255,7 +263,7 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
   await syncMatches();
   const fresh = await read((db) => db.users.find((u) => u.id === user.id))!;
   const board = await leaderboard(user.id);
-  const live = await liveScoresStatus();
+  const live = await provider.status();
 
   // Headline (next or current featured market): first open market closing soonest.
   const all = await listMarkets();
@@ -300,6 +308,8 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
     ),
   }));
 
+  const crewRevive = await reviveHint(user.id);
+
   sendJson(res, 200, {
     user: await toPublicUser(fresh!),
     walletBalanceCkb,
@@ -308,6 +318,7 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
     headline: headline ?? null,
     recentBets,
     counts,
+    crewRevive,
     rank: board.find((r) => r.isMe)?.rank ?? null,
     leaderboardTop: board.slice(0, 5),
     live,
@@ -488,6 +499,57 @@ async function handleReset(req: IncomingMessage, res: ServerResponse): Promise<v
   sendJson(res, 200, { ok: true });
 }
 
+// ── Crews (social layer) ─────────────────────────────────────────────────────
+
+async function handleCrewsList(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  await syncMatches();
+  sendJson(res, 200, { crews: await listCrews(user.id) });
+}
+
+async function handleCrewCreate(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const body = await readJson(req);
+  try {
+    const crew = await createCrew(user.id, body.name);
+    sendJson(res, 201, { crew });
+  } catch (err) {
+    if (err instanceof CrewError) return sendJson(res, 400, { error: err.message, code: err.code });
+    throw err;
+  }
+}
+
+async function handleCrewJoin(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const body = await readJson(req);
+  try {
+    const crew = await joinCrew(user.id, body.code);
+    sendJson(res, 200, { crew });
+  } catch (err) {
+    if (err instanceof CrewError) return sendJson(res, 400, { error: err.message, code: err.code });
+    throw err;
+  }
+}
+
+async function handleCrewLeave(
+  req: IncomingMessage,
+  res: ServerResponse,
+  crewId: string,
+): Promise<void> {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  try {
+    await leaveCrew(user.id, crewId);
+    sendJson(res, 200, { ok: true });
+  } catch (err) {
+    if (err instanceof CrewError) return sendJson(res, 400, { error: err.message, code: err.code });
+    throw err;
+  }
+}
+
 // ── Misc ────────────────────────────────────────────────────────────────────
 
 async function handleLeaderboard(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -506,7 +568,7 @@ async function handleMatchesList(_req: IncomingMessage, res: ServerResponse): Pr
 
 async function handleStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   sendJson(res, 200, {
-    live: await liveScoresStatus(),
+    live: await provider.status(),
     constants: {
       minBetCkb: MIN_BET_CKB,
       maxBetCkb: MAX_BET_CKB,
@@ -676,6 +738,9 @@ const staticRoutes: Record<string, Handler> = {
   "POST /api/wallet/withdraw": (req, res) => handleWithdraw(req, res),
   "POST /api/renew": (req, res) => handleRenew(req, res),
   "POST /api/reset": (req, res) => handleReset(req, res),
+  "GET /api/crews": (req, res) => handleCrewsList(req, res),
+  "POST /api/crews": (req, res) => handleCrewCreate(req, res),
+  "POST /api/crews/join": (req, res) => handleCrewJoin(req, res),
   "GET /api/matches": (req, res) => handleMatchesList(req, res),
   "GET /api/status": (req, res) => handleStatus(req, res),
   "GET /api/receipts": (req, res) => handleReceiptsList(req, res),
@@ -708,6 +773,12 @@ const server = createServer(async (req, res) => {
         if (sub === "proof") return await handleReceiptProof(req, res, id, url);
       }
 
+      // /api/crews/:id/leave
+      const crew = url.pathname.match(/^\/api\/crews\/([^\/]+)\/leave$/);
+      if (crew && req.method === "POST") {
+        return await handleCrewLeave(req, res, crew[1]);
+      }
+
       return sendJson(res, 404, { error: "Unknown endpoint." });
     }
     await serveStatic(req, res, url.pathname);
@@ -721,13 +792,14 @@ const server = createServer(async (req, res) => {
 
 async function boot(): Promise<void> {
   const treasury = await getTreasury();
+  await provider.init?.();
   await syncMatches();
 
   setInterval(() => {
     syncMatches().catch((e) => console.error("[streak] settle loop:", e.message));
   }, SETTLE_INTERVAL_MS);
 
-  const live = await liveScoresStatus();
+  const live = await provider.status();
   let treasuryBalCkb: string | null = null;
   try {
     treasuryBalCkb = shannonsToCkb(await getBalanceShannons(treasury.address));
@@ -737,7 +809,10 @@ async function boot(): Promise<void> {
     console.log(`\n  STREAK TERMINAL online`);
     console.log(`     http://localhost:${PORT}`);
     console.log(`     network: CKB Pudge testnet`);
-    if (live.enabled) {
+    console.log(`     provider: ${live.provider} · ${live.league}`);
+    if (live.simulated) {
+      console.log(`     live data: simulated (${live.detail ?? live.base})`);
+    } else if (live.enabled) {
       console.log(
         `     live data: ${live.base} (${live.source}${live.email ? ", " + live.email : ""})`,
       );

@@ -205,6 +205,24 @@ export interface Withdraw {
   at: string;
 }
 
+// ── Social (crews) ───────────────────────────────────────────────────────────
+
+/**
+ * A friend crew: a small named group joined by invite code. Crews add a
+ * social layer over settlements — head-to-head streaks, shared co-picks, and
+ * a revive rebate when crew-mates back the same match.
+ */
+export interface Crew {
+  id: string;
+  name: string;
+  /** Creator userId; inherits to the next member if the owner leaves. */
+  ownerId: string;
+  /** Short shareable code used to join. */
+  inviteCode: string;
+  memberIds: string[];
+  createdAt: string;
+}
+
 // ── Store ──────────────────────────────────────────────────────────────────
 
 export interface StreakDB {
@@ -221,6 +239,10 @@ export interface StreakDB {
   matchesSchema?: number;
   /** Off-chain full payloads for every published on-chain receipt. */
   receipts: SettlementReceipt[];
+  /** Friend crews (social layer). */
+  crews: Crew[];
+  /** Persisted schedule anchor for the dummy match-data provider. */
+  dummyAnchorIso?: string;
 }
 
 export interface LiveScoresAuth {

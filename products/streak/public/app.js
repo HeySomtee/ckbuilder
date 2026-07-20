@@ -107,6 +107,7 @@ const state = {
   dashboard: null,
   liveStatus: null,
   pollTimer: null,
+  clockTimer: null,
   route: null,
 };
 
@@ -154,6 +155,7 @@ const routes = {
   "portfolio": renderPortfolio,
   "wallet": renderWallet,
   "leaderboard": renderLeaderboard,
+  "crews": renderCrews,
   "fixtures": renderFixtures,
   "receipts": renderReceipts,         // gallery of published receipts
   "receipt": renderReceiptPublic,     // #receipt/<marketId>  (unauthenticated shareable page)
@@ -177,6 +179,10 @@ async function navigate() {
   if (!isAuthed()) {
     return renderAuth(r);
   }
+  // Stop any polling armed by the previous view; the incoming view re-arms it
+  // via startPolling() if it needs live refresh. Without this, e.g. the
+  // dashboard's poll keeps re-rendering Overview on top of other pages.
+  if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
   renderShell();
   const view = routes[r.name] || routes["dashboard"];
   try {
@@ -222,6 +228,7 @@ function navHtml() {
     <div class="rail-section">Account</div>
     <a data-route="portfolio"><span class="icon">${icon("pf")}</span>Portfolio</a>
     <a data-route="streak"><span class="icon">${icon("st")}</span>Streak</a>
+    <a data-route="crews"><span class="icon">${icon("crew")}</span>Crews</a>
     <a data-route="wallet"><span class="icon">${icon("wl")}</span>Wallet</a>
     <a data-route="leaderboard"><span class="icon">${icon("lb")}</span>Leaderboard</a>
     <div class="rail-foot">
@@ -244,6 +251,7 @@ function icon(k) {
     wl: '<rect x="2" y="4" width="12" height="9" stroke="currentColor" fill="none"/><circle cx="11" cy="8.5" r="1" fill="currentColor"/>',
     lb: '<line x1="3" y1="13" x2="3" y2="8" stroke="currentColor"/><line x1="8" y1="13" x2="8" y2="3" stroke="currentColor"/><line x1="13" y1="13" x2="13" y2="6" stroke="currentColor"/>',
     rc: '<rect x="3" y="2" width="10" height="12" stroke="currentColor" fill="none"/><line x1="5" y1="5" x2="11" y2="5" stroke="currentColor"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor"/><line x1="5" y1="11" x2="9" y2="11" stroke="currentColor"/>',
+    crew: '<circle cx="5.5" cy="6" r="2" stroke="currentColor" fill="none"/><circle cx="11" cy="6" r="1.6" stroke="currentColor" fill="none"/><path d="M2 13c0-2 1.5-3 3.5-3s3.5 1 3.5 3" stroke="currentColor" fill="none"/><path d="M9.5 12c.2-1.6 1.4-2.4 2.8-2.2" stroke="currentColor" fill="none"/>',
   };
   return `<svg viewBox="0 0 16 16" width="14" height="14" stroke-width="1.4">${paths[k] || ""}</svg>`;
 }
@@ -266,6 +274,7 @@ function teardownShell() {
   root.innerHTML = "";
   delete root.dataset.shell;
   if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
+  if (state.clockTimer) { clearInterval(state.clockTimer); state.clockTimer = null; }
 }
 
 function highlightNav(name) {
@@ -280,10 +289,14 @@ function updateStatusBar() {
   const bar = $("#status-bar");
   if (!bar) return;
   const live = state.liveStatus;
-  const liveDot = live?.enabled ? `<span class="pulse"></span><span class="up">LIVE</span>` : `<span class="pulse off"></span><span class="dim">SIM</span>`;
-  const liveText = live?.enabled
-    ? `${esc(live.base.replace(/^https?:\/\//, ""))} · ${live.matchCount} fx · ${live.liveMatches} live · ${live.finishedMatches} final`
-    : `simulated results — set WC_API_EMAIL/PASSWORD to enable live data`;
+  const liveDot = live?.simulated
+    ? `<span class="pulse sim"></span><span class="amber">SIM</span>`
+    : live?.enabled
+      ? `<span class="pulse"></span><span class="up">LIVE</span>`
+      : `<span class="pulse off"></span><span class="dim">SIM</span>`;
+  const liveText = live
+    ? `${esc(live.league || live.base.replace(/^https?:\/\//, ""))} · ${live.matchCount} fx · ${live.liveMatches} live · ${live.finishedMatches} final`
+    : `connecting…`;
   const u = state.user;
   bar.innerHTML = `
     <span class="brand">STREAK · TERM</span>
@@ -941,7 +954,7 @@ async function renderStreak() {
       </div>
       <div class="col" style="gap:6px">
         ${u.streak.status === "failed"
-          ? `<button class="btn btn-amber" id="renew">REVIVE · ${state.dashboard?.constants.renewFeeCkb ?? 63} CKB</button><button class="btn btn-ghost" id="reset">RESET TO 0</button>`
+          ? `<button class="btn btn-amber" id="renew">REVIVE · ${state.dashboard?.constants.renewFeeCkb ?? 63} CKB</button><button class="btn btn-ghost" id="reset">RESET TO 0</button>${state.dashboard?.crewRevive?.eligible ? `<div class="dim mono up" style="font-size:10px;text-align:right;margin-top:2px">+${fmtCkb(state.dashboard.crewRevive.rebateCkb)} CKB crew rebate applies</div>` : ""}`
           : canPick
             ? `<div class="dim mono" style="font-size:11px;text-align:right">Pick any market below and<br/>check "streak pick" to lock it.</div>`
             : `<div class="dim mono" style="font-size:11px;text-align:right">Streak pick locked for today.<br/>Come back tomorrow.</div>`
@@ -980,6 +993,10 @@ async function renderStreak() {
 
 function confirmRenew() {
   const fee = state.dashboard?.constants.renewFeeCkb ?? 63;
+  const revive = state.dashboard?.crewRevive;
+  const rebateLine = revive && revive.eligible
+    ? `<div class="mono up" style="font-size:11px;line-height:1.5">Crew rebate: <span class="amber">+${fmtCkb(revive.rebateCkb)} CKB</span> credited to escrow — ${esc((revive.coPickers || []).join(", "))} co-picked ${esc(revive.matchLabel || "the same match")}.</div>`
+    : "";
   openModal(`
     <div class="modal">
       <div class="m-h">Revive Streak <span class="close" data-close>×</span></div>
@@ -990,6 +1007,7 @@ function confirmRenew() {
         <div class="dim mono" style="font-size:10.5px">
           Wallet balance: <span class="mono-num">${fmtCkb(state.dashboard?.walletBalanceCkb)}</span> CKB
         </div>
+        ${rebateLine}
       </div>
       <div class="m-f">
         <button class="btn btn-ghost" data-close>Cancel</button>
@@ -1003,7 +1021,9 @@ function confirmRenew() {
     try {
       const r = await api("/renew", { method: "POST" });
       closeModal();
-      toast(`Streak revived · tx ${r.txHash.slice(0, 10)}…`, "ok");
+      const extra = Number(r.rebateCkb) > 0 ? ` · +${fmtCkb(r.rebateCkb)} CKB crew rebate` : "";
+      toast(`Streak revived · tx ${r.txHash.slice(0, 10)}…${extra}`, "ok");
+      await refreshDashboard();
       await refreshUser();
       renderStreak();
     } catch (err) {
@@ -1211,6 +1231,175 @@ async function renderLeaderboard() {
   `;
 }
 
+// ──────────────────────────────────────────────────────── crews ──────────
+
+async function renderCrews() {
+  const view = $("#view");
+  view.innerHTML = spinner();
+  const { crews } = await api("/crews");
+  const u = state.user;
+
+  view.innerHTML = `
+    <div class="page-h">
+      <h1>Crews</h1>
+      <span class="sub">Friend groups over settlements — head-to-head streaks, co-picks &amp; revive rebates</span>
+    </div>
+
+    <div class="crew-actions">
+      <button class="btn btn-amber btn-sm" id="crew-create">+ Create crew</button>
+      <div class="crew-join">
+        <input class="input input-sm" id="crew-code" placeholder="INVITE CODE" maxlength="6" autocomplete="off" style="text-transform:uppercase"/>
+        <button class="btn btn-ghost btn-sm" id="crew-join-btn">Join</button>
+      </div>
+    </div>
+
+    ${crews.length === 0
+      ? `<div class="panel"><div class="panel-b dim mono center" style="padding:44px;font-size:11px;letter-spacing:0.14em">
+          NO CREWS YET — CREATE ONE AND SHARE THE INVITE CODE, OR JOIN A FRIEND'S WITH THEIR CODE
+        </div></div>`
+      : crews.map((c) => crewCard(c)).join("")}
+  `;
+
+  $("#crew-create").onclick = promptCreateCrew;
+  const joinBtn = $("#crew-join-btn");
+  if (joinBtn) joinBtn.onclick = () => doJoinCrew($("#crew-code").value);
+  const codeInput = $("#crew-code");
+  if (codeInput) codeInput.onkeydown = (e) => { if (e.key === "Enter") doJoinCrew(codeInput.value); };
+  view.querySelectorAll("[data-copy]").forEach((el) => {
+    el.onclick = () => { navigator.clipboard?.writeText(el.dataset.copy); toast("Invite code copied", "ok"); };
+  });
+  view.querySelectorAll("[data-leave]").forEach((btn) => {
+    btn.onclick = () => confirmLeaveCrew(btn.dataset.leave, btn.dataset.name);
+  });
+  view.querySelectorAll("[data-go]").forEach((el) => {
+    el.onclick = () => { location.hash = `#/market/${el.dataset.go}`; };
+  });
+}
+
+function crewCard(c) {
+  const hint = c.reviveHint;
+  const reviveBanner = hint && hint.eligible
+    ? `<div class="crew-revive up">
+         <span>✓ Revive rebate ready — <span class="amber">+${fmtCkb(hint.rebateCkb)} CKB</span> to escrow.
+         ${hint.coPickers.map(esc).join(", ")} also backed ${esc(hint.matchLabel || "the same match")}.</span>
+         <a class="btn btn-sm btn-amber" href="#/streak">Revive ›</a>
+       </div>`
+    : hint
+      ? `<div class="crew-revive dim">Your streak failed — no crew-mate co-picked that match, so no rebate yet. <a href="#/streak">Revive ›</a></div>`
+      : "";
+
+  const coPicks = c.coPicks.length
+    ? `<div class="crew-copicks">${c.coPicks.map((cp) => `
+        <span class="copick-chip" data-go="m-${cp.matchId}" title="Open market">
+          <span class="cp-match">${esc(cp.matchLabel)}</span>
+          ${cp.outcome ? `<span class="o ${cp.outcome}">${cp.outcome.toUpperCase()}</span>` : `<span class="dim">SPLIT</span>`}
+          <span class="cp-n">×${cp.members.length}</span>
+        </span>`).join("")}</div>`
+    : `<div class="dim mono" style="font-size:10.5px;padding:2px 2px">No shared streak picks today.</div>`;
+
+  return `
+    <div class="panel crew-panel" style="margin-bottom:12px">
+      <div class="panel-h">
+        <span class="title">${esc(c.name)}</span>
+        <span class="chip code-chip" data-copy="${esc(c.inviteCode)}" title="Copy invite code">CODE ${esc(c.inviteCode)}</span>
+        <span class="meta">${c.memberCount} member${c.memberCount === 1 ? "" : "s"}</span>
+        <button class="btn btn-ghost btn-sm" data-leave="${c.id}" data-name="${esc(c.name)}" style="margin-left:auto">Leave</button>
+      </div>
+      ${reviveBanner}
+      <div class="crew-sub">Today's co-picks</div>
+      ${coPicks}
+      <div class="crew-sub">Head-to-head</div>
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Member</th><th class="right">Streak</th><th class="right">Best</th><th class="right">Win</th><th class="right">P&amp;L</th><th>Today's pick</th></tr></thead>
+        <tbody>${c.members.map((m, i) => `
+          <tr class="${m.isMe ? "me" : ""}">
+            <td class="mono amber">${i + 1}</td>
+            <td>${m.isOwner ? `<span title="owner" class="amber">★</span> ` : ""}@${esc(m.username)} ${m.isMe ? `<span class="tag-streak">YOU</span>` : ""} ${m.status === "failed" ? `<span class="chip failed" style="margin-left:4px">FAILED</span>` : ""}</td>
+            <td class="num amber">${m.current}</td>
+            <td class="num">${m.best}</td>
+            <td class="num small">${m.winRate}%</td>
+            <td class="num ${pnlClass(m.netPnlCkb)}">${fmtPnl(m.netPnlCkb)}</td>
+            <td class="small">${m.todayPick ? `${esc(m.todayPick.matchLabel)} <span class="o ${m.todayPick.outcome}">${m.todayPick.outcome.toUpperCase()}</span>` : `<span class="dim">—</span>`}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      <div class="crew-sub">Crew feed</div>
+      ${c.feed.length
+        ? `<div class="crew-feed">${c.feed.map((f) => `
+            <div class="feed-row">
+              <span class="feed-user">@${esc(f.user)}</span>
+              <span class="feed-kind ${f.kind}">${f.kind === "win" ? "WON" : f.kind === "loss" ? "LOST" : "PICKED"}</span>
+              <span class="o ${f.outcome}">${f.outcome.toUpperCase()}</span>
+              <span class="feed-match">${esc(f.matchLabel)}</span>
+              <span class="feed-time dim">${fmtDateTime(f.at)}</span>
+            </div>`).join("")}</div>`
+        : `<div class="dim mono" style="font-size:10.5px;padding:2px 2px">No streak-pick activity yet.</div>`}
+    </div>
+  `;
+}
+
+function promptCreateCrew() {
+  openModal(`
+    <div class="modal">
+      <div class="m-h">Create Crew <span class="close" data-close>×</span></div>
+      <div class="m-b">
+        <div class="field"><label>Crew name</label><input class="input" id="crew-name" maxlength="30" placeholder="e.g. The Away Enders"/></div>
+        <div class="dim mono" style="font-size:10.5px">You'll get an invite code to share. Up to 12 members per crew.</div>
+      </div>
+      <div class="m-f">
+        <button class="btn btn-ghost" data-close>Cancel</button>
+        <button class="btn btn-amber" id="crew-create-go">Create</button>
+      </div>
+    </div>
+  `);
+  const go = $("#crew-create-go");
+  const input = $("#crew-name");
+  go.onclick = async () => {
+    const name = input.value.trim();
+    go.disabled = true; go.textContent = "Creating…";
+    try {
+      const { crew } = await api("/crews", { method: "POST", body: { name } });
+      closeModal();
+      toast(`Crew "${crew.name}" created · code ${crew.inviteCode}`, "ok");
+      renderCrews();
+    } catch (err) { go.disabled = false; go.textContent = "Create"; toast(err.message, "err"); }
+  };
+  input.focus();
+  input.onkeydown = (e) => { if (e.key === "Enter") go.click(); };
+}
+
+async function doJoinCrew(code) {
+  if (!code || !code.trim()) { toast("Enter an invite code", "err"); return; }
+  try {
+    const { crew } = await api("/crews/join", { method: "POST", body: { code: code.trim() } });
+    toast(`Joined "${crew.name}"`, "ok");
+    renderCrews();
+  } catch (err) { toast(err.message, "err"); }
+}
+
+function confirmLeaveCrew(crewId, name) {
+  openModal(`
+    <div class="modal">
+      <div class="m-h">Leave Crew <span class="close" data-close>×</span></div>
+      <div class="m-b mono" style="font-size:12px;line-height:1.6">
+        Leave <span class="amber">${esc(name)}</span>? If you're the owner, it passes to another member. If you're the last one, the crew is deleted.
+      </div>
+      <div class="m-f">
+        <button class="btn btn-ghost" data-close>Cancel</button>
+        <button class="btn btn-down" id="crew-leave-go">Leave crew</button>
+      </div>
+    </div>
+  `);
+  $("#crew-leave-go").onclick = async () => {
+    try {
+      await api(`/crews/${encodeURIComponent(crewId)}/leave`, { method: "POST" });
+      closeModal();
+      toast("Left crew", "ok");
+      renderCrews();
+    } catch (err) { toast(err.message, "err"); }
+  };
+}
+
 // ──────────────────────────────────────────────────────── fixtures ────────
 
 async function renderFixtures() {
@@ -1224,7 +1413,7 @@ async function renderFixtures() {
   const today = new Date().toISOString().slice(0, 10);
 
   view.innerHTML = `
-    <div class="page-h"><h1>Schedule</h1><span class="sub">FIFA World Cup 2026 · ${matches.length} fixtures</span></div>
+    <div class="page-h"><h1>Schedule</h1><span class="sub">${esc(state.liveStatus?.league ?? "Fixtures")} · ${matches.length} fixtures</span></div>
     ${dates.map((d) => `
       <div class="panel" style="margin-bottom:10px">
         <div class="panel-h">
@@ -1385,8 +1574,8 @@ function startPolling(viewFn) {
       await viewFn(state.route);
     } catch (err) { /* swallow */ }
   }, 12_000);
-  // Status-bar clock tick
-  setInterval(updateStatusBar, 1000);
+  // Status-bar clock tick (set once; survives view changes).
+  if (!state.clockTimer) state.clockTimer = setInterval(updateStatusBar, 1000);
 }
 
 // ───────────────────────────────────────── settlement receipts (UI) ────────
