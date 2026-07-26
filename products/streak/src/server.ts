@@ -14,7 +14,7 @@ import { createReadStream } from "fs";
 import { stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { extname, join, normalize, resolve } from "path";
-import { randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { URL } from "url";
 
 import { PORT, PUBLIC_DIR, RENEW_FEE_CKB, SESSION_COOKIE, SETTLE_INTERVAL_MS,
@@ -65,6 +65,8 @@ import {
 } from "./wallet";
 import { addressUrl, createWallet, getBalanceShannons, shannonsToCkb, txUrl } from "./chain";
 import { provider } from "./providers";
+import { initNotifications } from "./notifications";
+import { supaEnsureTable } from "./store_supabase";
 import {
   CrewError,
   createCrew,
@@ -252,6 +254,106 @@ async function handleMe(req: IncomingMessage, res: ServerResponse): Promise<void
   const user = await requireUser(req, res);
   if (!user) return;
   sendJson(res, 200, { user: await toPublicUser(user) });
+}
+
+async function handleSetNotify(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const body = await readJson(req);
+  const chatId = typeof body.telegramChatId === "string" ? body.telegramChatId.trim() : "";
+  await (await import("./store")).update((db) => {
+    const u = db.users.find((x) => x.id === user.id);
+    if (!u) return;
+    if (chatId) u.telegramChatId = chatId;
+    else delete (u as any).telegramChatId;
+  });
+  const fresh = await read((db) => db.users.find((x) => x.id === user.id))!;
+  sendJson(res, 200, { user: await toPublicUser(fresh!) });
+}
+
+async function telegramSendText(chatId: string, text: string): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token || !chatId) return;
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text }),
+  });
+}
+
+async function handleTelegramConnect(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+  if (!botUsername) {
+    return sendJson(res, 400, { error: "TELEGRAM_BOT_USERNAME is not configured." });
+  }
+
+  const token = randomBytes(18).toString("base64url");
+  const now = Date.now();
+  const expiresAt = new Date(now + 15 * 60 * 1000).toISOString();
+
+  await (await import("./store")).update((db) => {
+    const links = db.telegramLinks ?? [];
+    const kept = links.filter((l) => !l.usedAt && new Date(l.expiresAt).getTime() > now && l.userId !== user.id);
+    kept.push({ token, userId: user.id, createdAt: new Date(now).toISOString(), expiresAt });
+    db.telegramLinks = kept;
+  });
+
+  const deepLink = `https://t.me/${botUsername}?start=link_${token}`;
+  sendJson(res, 200, { url: deepLink, expiresAt });
+}
+
+async function handleTelegramDisconnect(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  await (await import("./store")).update((db) => {
+    const u = db.users.find((x) => x.id === user.id);
+    if (!u) return;
+    delete u.telegramChatId;
+    delete u.telegramUsername;
+  });
+  const fresh = await read((db) => db.users.find((x) => x.id === user.id))!;
+  sendJson(res, 200, { user: await toPublicUser(fresh!) });
+}
+
+async function handleTelegramWebhook(req: IncomingMessage, res: ServerResponse, secret: string): Promise<void> {
+  const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!expected || secret !== expected) return sendJson(res, 403, { error: "forbidden" });
+
+  const body = await readJson(req);
+  const msg = body?.message;
+  const text = typeof msg?.text === "string" ? msg.text : "";
+  const chatId = msg?.chat?.id;
+  if (!text || !String(text).startsWith("/start link_") || chatId === undefined) {
+    return sendJson(res, 200, { ok: true });
+  }
+
+  const token = String(text).replace("/start link_", "").trim().split(/\s+/)[0];
+  const now = Date.now();
+
+  const linkedUser = await (await import("./store")).update((db) => {
+    const links = db.telegramLinks ?? [];
+    const idx = links.findIndex((l) => l.token === token && !l.usedAt);
+    if (idx < 0) return null;
+    const link = links[idx];
+    if (new Date(link.expiresAt).getTime() <= now) return null;
+    const u = db.users.find((x) => x.id === link.userId);
+    if (!u) return null;
+    u.telegramChatId = String(chatId);
+    if (msg?.from?.username) u.telegramUsername = String(msg.from.username);
+    link.usedAt = new Date(now).toISOString();
+    db.telegramLinks = links.filter((l) => !l.usedAt && new Date(l.expiresAt).getTime() > now);
+    return { username: u.username };
+  });
+
+  if (linkedUser) {
+    await telegramSendText(String(chatId), `Connected to Streak as @${linkedUser.username}. You'll now receive pick and settlement notifications.`);
+  } else {
+    await telegramSendText(String(chatId), "This connect link is invalid or expired. Please create a new one from the app.");
+  }
+  sendJson(res, 200, { ok: true });
 }
 
 // ── Terminal home (one-shot dashboard payload) ──────────────────────────────
@@ -729,6 +831,9 @@ const staticRoutes: Record<string, Handler> = {
   "POST /api/login": (req, res) => handleLogin(req, res),
   "POST /api/logout": (req, res) => handleLogout(req, res),
   "GET /api/me": (req, res) => handleMe(req, res),
+  "POST /api/me/notify": (req, res) => handleSetNotify(req, res),
+  "POST /api/integrations/telegram/connect": (req, res) => handleTelegramConnect(req, res),
+  "POST /api/integrations/telegram/disconnect": (req, res) => handleTelegramDisconnect(req, res),
   "GET /api/dashboard": (req, res) => handleDashboard(req, res),
   "GET /api/markets": (req, res, url) => handleMarkets(req, res, url),
   "GET /api/portfolio": (req, res) => handlePortfolio(req, res),
@@ -779,6 +884,12 @@ const server = createServer(async (req, res) => {
         return await handleCrewLeave(req, res, crew[1]);
       }
 
+      // /api/integrations/telegram/webhook/:secret
+      const tg = url.pathname.match(/^\/api\/integrations\/telegram\/webhook\/([^\/]+)$/);
+      if (tg && req.method === "POST") {
+        return await handleTelegramWebhook(req, res, tg[1]);
+      }
+
       return sendJson(res, 404, { error: "Unknown endpoint." });
     }
     await serveStatic(req, res, url.pathname);
@@ -791,8 +902,27 @@ const server = createServer(async (req, res) => {
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 async function boot(): Promise<void> {
+  await supaEnsureTable();
+  // Best-effort Telegram webhook auto-setup for deep-link connect flow.
+  const appUrl = process.env.APP_PUBLIC_URL;
+  const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+  const tgSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (appUrl && tgToken && tgSecret) {
+    const hookUrl = `${appUrl.replace(/\/$/, "")}/api/integrations/telegram/webhook/${tgSecret}`;
+    try {
+      await fetch(`https://api.telegram.org/bot${tgToken}/setWebhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: hookUrl }),
+      });
+      console.log("[telegram] webhook configured");
+    } catch (e) {
+      console.warn("[telegram] webhook setup failed", e);
+    }
+  }
   const treasury = await getTreasury();
   await provider.init?.();
+  await initNotifications();
   await syncMatches();
 
   setInterval(() => {

@@ -31,6 +31,7 @@ import { asBig, asString, getTreasury } from "./wallet";
 import { reviveRebate } from "./crews";
 import { ensureMarketsForMatches, settleMarkets, winRate } from "./markets";
 import { buildReceiptPayload, publishReceipt } from "./settlement";
+import { notifyReceipt, notifyRevive } from "./notifications";
 import type { LeaderboardRow, Match, PublicUser, StreakDB, User } from "./types";
 
 export { winRate } from "./markets";
@@ -133,6 +134,12 @@ export async function publishPendingReceipts(): Promise<void> {
           db.receipts = db.receipts.filter((r) => r.marketId !== marketId);
           db.receipts.push(built.payload);
         });
+        // notify about published receipt (best-effort)
+        (async () => {
+          try {
+            await notifyReceipt({ marketId, txHash });
+          } catch (e) {}
+        })();
         console.log(`[settlement] published ${marketId} → ${txHash}`);
       } catch (err) {
         const msg = (err as Error).message || String(err);
@@ -217,6 +224,14 @@ export async function renewStreak(userId: string): Promise<RenewResult> {
   });
 
   const bal = await getBalanceShannons(user.wallet.address);
+  // best-effort notify about revive rebate
+  if (Number(rebateCkb) > 0) {
+    (async () => {
+      try {
+        await notifyRevive({ username: user.username, rebateCkb, coPickers, chatId: user.telegramChatId });
+      } catch (e) {}
+    })();
+  }
   return {
     txHash,
     newBalanceCkb: shannonsToCkb(bal),
@@ -251,6 +266,8 @@ export async function toPublicUser(user: User): Promise<PublicUser> {
   return {
     id: user.id,
     username: user.username,
+    telegramConnected: !!user.telegramChatId,
+    telegramUsername: user.telegramUsername,
     createdAt: user.createdAt,
     walletAddress: user.wallet.address,
     escrowCkb: shannonsToCkb(asBig(user.escrowShannons)),

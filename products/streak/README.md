@@ -45,6 +45,78 @@ STREAK_BASE=https://your.host npm run verify -- m-wc-6
 
 ---
 
+## Notifications (Telegram)
+
+Streak supports pluggable notification providers. To enable Telegram
+notifications set environment variables in `products/streak/.env` or your
+process environment:
+
+```
+NOTIFY_PROVIDER=telegram
+TELEGRAM_BOT_TOKEN=<your-bot-token>
+TELEGRAM_CHAT_ID=<numeric-chat-id-or-@username>
+```
+
+When configured the server will post short messages for streak picks, published
+receipts and revive rebates. Use `NOTIFY_PROVIDER=telegram npm start` to run.
+
+Users can connect Telegram from the Wallet page with one click (no manual chat
+id copy/paste):
+
+- App creates a short-lived deep link token.
+- User opens Telegram and taps **Start** on the bot.
+- Webhook links `chat.id` to the signed-in user automatically.
+
+You can also set your personal Telegram chat id from the app (Settings) or via
+API to receive direct messages. POST `/api/me/notify` with JSON `{ "telegramChatId": "@you_or_numeric_id" }`.
+
+---
+
+## Optional: Supabase-backed persistence
+
+Streak supports using Supabase as the primary store instead of the local
+`data/db.json`. To enable, create a table (suggested schema) and set the
+environment variables below. When Supabase is configured the app will upsert
+the entire state into a single row — the existing file store remains as a
+fallback when Supabase is unavailable.
+
+Required `.env` variables:
+
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=eyJ...your-service-role-or-anon-key
+SUPABASE_DB_URL=postgres://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres
+SUPABASE_TABLE=streak_state   # optional (default: streak_state)
+SUPABASE_ROW_ID=singleton     # optional (default: singleton)
+```
+
+Table layout (example SQL):
+
+```sql
+create table streak_state (
+  id text primary key,
+  data jsonb
+);
+```
+
+If `SUPABASE_DB_URL` is set, Streak now auto-creates this table on startup
+(`create table if not exists ...`).
+
+With Supabase enabled the following env vars are relevant for notifications
+and providers as well: `NOTIFY_PROVIDER`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `MATCH_PROVIDER`.
+
+For one-tap Telegram connect flow add:
+
+```
+TELEGRAM_BOT_USERNAME=your_bot_username_without_@
+TELEGRAM_WEBHOOK_SECRET=long-random-secret
+APP_PUBLIC_URL=https://your-public-app-url
+```
+
+`APP_PUBLIC_URL` must be reachable by Telegram (public HTTPS). On boot, Streak
+will attempt to call Telegram `setWebhook` automatically.
+
+
 ## How the market engine works (parimutuel)
 
 ```

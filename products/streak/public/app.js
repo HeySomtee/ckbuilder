@@ -1154,6 +1154,22 @@ async function renderWallet() {
     </div>
 
     <div class="panel" style="margin-top:14px">
+      <div class="panel-h"><span class="title">Telegram Notifications</span></div>
+      <div class="panel-b" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div class="dim mono" style="font-size:11px;line-height:1.5">
+          ${state.user?.telegramConnected
+            ? `Connected${state.user?.telegramUsername ? ` as @${esc(state.user.telegramUsername)}` : ""}. You will receive personalized pick and settlement alerts.`
+            : "Connect Telegram in one tap. We auto-link your chat when you press Start in the bot."}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${state.user?.telegramConnected
+            ? `<button class="btn btn-ghost btn-sm" id="tg-disconnect">Disconnect</button>`
+            : `<button class="btn btn-amber btn-sm" id="tg-connect">Connect Telegram</button>`}
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
       <div class="panel-h"><span class="title">Wallet Details</span></div>
       <div class="panel-b" style="font-family:var(--mono);font-size:11.5px;color:var(--ink-1);display:grid;grid-template-columns:140px 1fr auto;gap:6px 12px;align-items:center">
         <span class="label">Address</span><span class="mono-num" id="addr">${esc(w.address)}</span><a class="btn btn-ghost btn-sm" href="${w.explorer}" target="_blank" rel="noopener">EXPLORER ↗</a>
@@ -1202,6 +1218,37 @@ async function renderWallet() {
       renderWallet();
     } catch (err) { btn.disabled = false; btn.textContent = "SIGN & WITHDRAW"; toast(err.message, "err"); }
   };
+
+  const tgConnect = $("#tg-connect");
+  if (tgConnect) {
+    tgConnect.onclick = async () => {
+      const btn = tgConnect; btn.disabled = true; btn.textContent = "CREATING LINK…";
+      try {
+        const r = await api("/integrations/telegram/connect", { method: "POST" });
+        window.open(r.url, "_blank", "noopener");
+        toast("Telegram link opened — press Start in the bot", "ok");
+      } catch (err) {
+        toast(err.message, "err");
+      } finally {
+        btn.disabled = false; btn.textContent = "Connect Telegram";
+      }
+    };
+  }
+  const tgDisconnect = $("#tg-disconnect");
+  if (tgDisconnect) {
+    tgDisconnect.onclick = async () => {
+      const btn = tgDisconnect; btn.disabled = true; btn.textContent = "DISCONNECTING…";
+      try {
+        const r = await api("/integrations/telegram/disconnect", { method: "POST" });
+        state.user = r.user;
+        toast("Telegram disconnected", "ok");
+        await renderWallet();
+      } catch (err) {
+        btn.disabled = false; btn.textContent = "Disconnect";
+        toast(err.message, "err");
+      }
+    };
+  }
 }
 
 // ──────────────────────────────────────────────────────── leaderboard ─────

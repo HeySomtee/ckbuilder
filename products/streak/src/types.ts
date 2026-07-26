@@ -179,6 +179,10 @@ export interface UserStats {
 export interface User {
   id: string;
   username: string;
+  /** Optional Telegram chat id or @username for direct notifications */
+  telegramChatId?: string;
+  /** Optional Telegram username captured during bot connect flow */
+  telegramUsername?: string;
   passwordHash: string;
   passwordSalt: string;
   createdAt: string;
@@ -243,6 +247,16 @@ export interface StreakDB {
   crews: Crew[];
   /** Persisted schedule anchor for the dummy match-data provider. */
   dummyAnchorIso?: string;
+  /** Pending Telegram deep-link connect tokens keyed to users. */
+  telegramLinks?: TelegramLink[];
+}
+
+export interface TelegramLink {
+  token: string;
+  userId: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt?: string;
 }
 
 export interface LiveScoresAuth {
@@ -257,6 +271,8 @@ export interface LiveScoresAuth {
 export interface PublicUser {
   id: string;
   username: string;
+  telegramConnected?: boolean;
+  telegramUsername?: string;
   createdAt: string;
   walletAddress: string;
   escrowCkb: string;

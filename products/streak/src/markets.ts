@@ -33,6 +33,7 @@ import { ckbToShannons, shannonsToCkb } from "./chain";
 import { matchLabel } from "./matches";
 import { read, update } from "./store";
 import { asBig, asString } from "./wallet";
+import { notifyPick } from "./notifications";
 import type {
   Bet,
   Market,
@@ -294,7 +295,7 @@ export async function placeBet(input: PlaceBetInput): Promise<PlaceBetResult> {
     throw new MarketError("max_bet", `Maximum bet is ${MAX_BET_CKB} CKB.`);
   }
 
-  return update((db) => {
+  const result = await update((db) => {
     const user = db.users.find((u) => u.id === input.userId);
     if (!user) throw new MarketError("no_user", "User not found.");
     const match = db.matches.find((m) => m.id === input.matchId);
@@ -386,6 +387,22 @@ export async function placeBet(input: PlaceBetInput): Promise<PlaceBetResult> {
       newEscrowCkb: shannonsToCkb(asBig(user.escrowShannons)),
     };
   });
+
+  // notify asynchronously about picks (streak + regular bets)
+  (async () => {
+    try {
+      const db = await read((d) => d);
+      const u = db.users.find((x) => x.id === result.bet.userId);
+      const username = u?.username ?? result.bet.userId;
+      const match = db.matches.find((m) => m.id === result.bet.matchId);
+      const matchLabel = match ? `${match.home.code}–${match.away.code}` : result.bet.matchId;
+      await notifyPick({ username, matchLabel, outcome: result.bet.outcome, chatId: u?.telegramChatId });
+    } catch (e) {
+      console.warn("[notifications] bet notify failed", e);
+    }
+  })();
+
+  return result;
 }
 
 // ── View models ─────────────────────────────────────────────────────────────
