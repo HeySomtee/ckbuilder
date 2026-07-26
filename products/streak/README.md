@@ -33,7 +33,7 @@ npm start
 Open <http://localhost:4100>.
 
 Sign up → a Pudge wallet is generated automatically. Fund it from the
-[Nervos Pudge faucet](https://faucet.nervos.org/) (address is on the **Wallet**
+[Nervos Pudge faucet](https://faucet.nervos.org/) (address is on the **Account**
 page), then **Deposit** to credit your platform escrow and start betting.
 
 Independently verify any settled market:
@@ -60,7 +60,7 @@ TELEGRAM_CHAT_ID=<numeric-chat-id-or-@username>
 When configured the server will post short messages for streak picks, published
 receipts and revive rebates. Use `NOTIFY_PROVIDER=telegram npm start` to run.
 
-Users can connect Telegram from the Wallet page with one click (no manual chat
+Users can connect Telegram from the Account page with one click (no manual chat
 id copy/paste):
 
 - App creates a short-lived deep link token.
@@ -227,14 +227,14 @@ Layout:
   clock.
 - **Ticker tape** — live marquee of the most recent platform bets.
 - **Left rail** — Overview · Markets · Schedule · Receipts · Portfolio · Streak
-  · Wallet · Leaderboard.
+  · Account · Leaderboard.
 - **Main pane** — page content.
 - **Footer bar** — aggregate pool size and market state counts.
 
 Pages: `Overview`, `Markets` (sortable table with price-cells and sparklines),
 `Market detail` (large implied-prob chart, order-book-style bet feed, place-bet
 panel, pool composition, **on-chain settlement panel with share links**),
-`Schedule`, `Streak`, `Portfolio`, `Wallet`, `Leaderboard`, `Receipts`
+`Schedule`, `Streak`, `Portfolio`, `Account` (`#/wallet`), `Leaderboard`, `Receipts`
 (chronological wall of every published settlement receipt), and a public,
 unauthenticated `#/receipt/:marketId` page for sharing individual results.
 

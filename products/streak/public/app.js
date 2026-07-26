@@ -229,7 +229,7 @@ function navHtml() {
     <a data-route="portfolio"><span class="icon">${icon("pf")}</span>Portfolio</a>
     <a data-route="streak"><span class="icon">${icon("st")}</span>Streak</a>
     <a data-route="crews"><span class="icon">${icon("crew")}</span>Crews</a>
-    <a data-route="wallet"><span class="icon">${icon("wl")}</span>Wallet</a>
+    <a data-route="wallet"><span class="icon">${icon("wl")}</span>Account</a>
     <a data-route="leaderboard"><span class="icon">${icon("lb")}</span>Leaderboard</a>
     <div class="rail-foot">
       <span class="label">Signed in</span>
@@ -1123,8 +1123,8 @@ async function renderWallet() {
 
   view.innerHTML = `
     <div class="page-h">
-      <h1>Wallet</h1>
-      <span class="sub">Pudge testnet · custodial bridge between your CKB wallet and platform escrow</span>
+      <h1>Account</h1>
+      <span class="sub">Funding, custody, and Telegram notifications for your Streak account</span>
       <div class="right"><a class="btn btn-ghost" href="${w.faucet}" target="_blank" rel="noopener">FAUCET ↗</a></div>
     </div>
 
