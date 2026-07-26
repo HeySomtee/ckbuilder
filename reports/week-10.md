@@ -55,6 +55,8 @@ Tapping Connect launches the bot with a signed deep-link token. The user only
 needs to press `Start` in Telegram; the webhook validates the token and binds
 that Telegram chat to the logged-in Streak account.
 
+![Telegram deep-link landing page with Start Bot action](assets/week-10-telegram-start-bot-page.png)
+
 Once linked, the card flips into connected state with account identity and a
 disconnect action:
 
