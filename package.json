@@ -5,6 +5,7 @@
   "description": "Weekly TypeScript replicas of CKB fundamentals while learning Nervos CKB",
   "scripts": {
     "build": "tsc",
+    "postinstall": "npm --prefix products/streak install",
     "week1": "ts-node src/week1/cell-model/demo.ts",
     "test:week1": "ts-node src/week1/cell-model/demo.ts",
     "wallet": "ts-node src/week2/wallet/cli.ts",
@@ -12,7 +13,7 @@
     "week4": "ts-node src/week4/nft-dao/server.ts",
     "week5": "ts-node src/week5/scroll/server.ts",
     "streak": "npm --prefix products/streak start",
-    "start": "ts-node src/week3/nft-faucet/server.ts"
+    "start": "npm run streak"
   },
   "engines": {
     "node": ">=20"
