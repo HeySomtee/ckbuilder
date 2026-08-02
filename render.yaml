@@ -4,25 +4,35 @@ services:
     env: node
     region: oregon
     plan: free
-    # Install root deps, then the streak product's deps.
-    buildCommand: npm install && npm --prefix products/streak install
+    # Root `npm install` also installs the streak product's deps (via postinstall).
+    buildCommand: npm install
     startCommand: npm run streak
     envVars:
-      - key: NODE_ENV
-        value: production
       # Render sets PORT at runtime; Streak reads process.env.PORT.
       - key: PORT
         value: 10000
       # Simulated Premier League feed so the demo runs any day of the year.
       - key: MATCH_PROVIDER
         value: dummy
-      # Treasury wallet key — set manually in the Render dashboard, never commit the value.
+      - key: NOTIFY_PROVIDER
+        value: telegram
+      - key: SUPABASE_TABLE
+        value: streak_state
+      # Secrets — set these values in the Render dashboard, never commit them.
+      # Free tier has no persistent disk, so Supabase is the durable store:
+      # SUPABASE_URL + SUPABASE_KEY are required for data to survive restarts.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
       - key: TREASURY_PRIVATE_KEY
         sync: false
-      # Public URL of this service (used for the Telegram webhook). Set after the first deploy.
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      # Public URL of this service (Telegram webhook). Set after the first deploy.
       - key: APP_PUBLIC_URL
         sync: false
-    disk:
-      name: streak-data
-      mountPath: /opt/render/project/src/products/streak/data
-      sizeGB: 1
