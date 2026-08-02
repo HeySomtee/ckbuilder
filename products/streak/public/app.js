@@ -167,6 +167,7 @@ function parseRoute() {
 }
 
 async function navigate() {
+  closeMobileNav();
   const r = parseRoute();
   state.route = r;
   // Public shareable receipt page — no auth required.
@@ -210,12 +211,13 @@ function renderShell() {
       <aside class="rail" id="rail">${navHtml()}</aside>
       <main class="main"><div class="view" id="view">${spinner()}</div></main>
       <footer class="foot" id="foot"></footer>
+      <div class="mobile-nav-drawer" id="mobile-nav-drawer" aria-hidden="true"></div>
     </div>
   `;
   root.dataset.shell = "1";
-  bindNav();
   updateStatusBar();
   updateFootBar();
+  bindNav();
 }
 
 function navHtml() {
@@ -232,10 +234,10 @@ function navHtml() {
     <a data-route="wallet"><span class="icon">${icon("wl")}</span>Account</a>
     <a data-route="leaderboard"><span class="icon">${icon("lb")}</span>Leaderboard</a>
     <div class="rail-foot">
-      <span class="label">Signed in</span>
-      <span class="mono">${esc(state.user?.username ?? "—")}</span>
+      <span class="label">Signed in</span> 
+      <span class="mono">${esc(state.user?.username ?? "—")}</span> <br /> <br />
       <span class="label" style="margin-top:6px">Wallet</span>
-      <span class="mono" title="${esc(state.user?.walletAddress ?? "")}">${shortAddr(state.user?.walletAddress)}</span>
+      <span class="mono" title="${esc(state.user?.walletAddress ?? "")}">${shortAddr(state.user?.walletAddress)}</span> <br /> <br />
       <button class="btn btn-ghost btn-sm" style="margin-top:8px" id="signout">Sign out</button>
     </div>
   `;
@@ -257,17 +259,73 @@ function icon(k) {
 }
 
 function bindNav() {
-  $("#rail").querySelectorAll("a[data-route]").forEach((a) => {
-    a.onclick = (e) => { e.preventDefault(); location.hash = `#/${a.dataset.route}`; };
+  const drawer = $("#mobile-nav-drawer");
+  if (drawer && !drawer.dataset.ready) {
+    drawer.innerHTML = `<div class="mobile-nav-panel">${navHtml()}</div>`;
+    drawer.dataset.ready = "1";
+  }
+  ensureNavDelegation();
+}
+
+// Nav elements live inside containers that re-render (the status bar rewrites
+// its innerHTML every second, wiping the hamburger's handler). So delegate all
+// nav interaction from document — attached once — instead of binding elements
+// directly. This survives every re-render.
+let navDelegated = false;
+function ensureNavDelegation() {
+  if (navDelegated) return;
+  navDelegated = true;
+
+  document.addEventListener("click", async (e) => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+
+    // Hamburger toggle
+    if (t.closest("#mobile-nav-toggle")) {
+      e.preventDefault();
+      toggleMobileNav();
+      return;
+    }
+
+    // Sign out
+    if (t.closest("#signout")) {
+      e.preventDefault();
+      closeMobileNav();
+      try { await api("/logout", { method: "POST" }); } catch {}
+      state.user = null;
+      location.hash = "";
+      teardownShell();
+      navigate();
+      return;
+    }
+
+    // Route links (rail + drawer)
+    const link = t.closest("a[data-route]");
+    if (link) {
+      e.preventDefault();
+      closeMobileNav();
+      location.hash = `#/${link.dataset.route}`;
+      return;
+    }
+
+    // Backdrop click closes the drawer
+    const drawer = $("#mobile-nav-drawer");
+    if (drawer && t === drawer) closeMobileNav();
   });
-  const out = $("#signout");
-  if (out) out.onclick = async () => {
-    try { await api("/logout", { method: "POST" }); } catch {}
-    state.user = null;
-    location.hash = "";
-    teardownShell();
-    navigate();
-  };
+}
+
+function toggleMobileNav() {
+  const drawer = $("#mobile-nav-drawer");
+  if (!drawer) return;
+  const open = drawer.classList.toggle("on");
+  drawer.setAttribute("aria-hidden", open ? "false" : "true");
+}
+
+function closeMobileNav() {
+  const drawer = $("#mobile-nav-drawer");
+  if (!drawer) return;
+  drawer.classList.remove("on");
+  drawer.setAttribute("aria-hidden", "true");
 }
 
 function teardownShell() {
@@ -299,6 +357,7 @@ function updateStatusBar() {
     : `connecting…`;
   const u = state.user;
   bar.innerHTML = `
+    <button class="mobile-nav-btn" id="mobile-nav-toggle" aria-label="Open navigation">☰</button>
     <span class="brand">STREAK · TERM</span>
     <span class="sep">|</span>
     <span>CKB · PUDGE</span>
@@ -1071,7 +1130,7 @@ async function renderPortfolio() {
       <span class="sub">All positions across all markets</span>
     </div>
 
-    <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+    <div class="kpis" style="grid-template-columns:repeat(2,1fr)">
       <div class="kpi"><span class="l">Realised P&L</span><span class="v ${pnlClass(data.realisedPnlCkb)}">${fmtPnl(data.realisedPnlCkb)}</span><span class="d dim">CKB · all-time</span></div>
       <div class="kpi"><span class="l">Open Stake</span><span class="v">${fmtCkb(data.openStakeCkb)}</span><span class="d dim">CKB · unresolved</span></div>
       <div class="kpi"><span class="l">Turnover</span><span class="v">${fmtNum(Number(u.stats.turnoverShannons) / 1e8)}</span><span class="d dim">CKB · lifetime</span></div>

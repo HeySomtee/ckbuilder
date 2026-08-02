@@ -1,19 +1,28 @@
 services:
   - type: web
-    name: ckb-scroll
+    name: streak-terminal
     env: node
     region: oregon
     plan: free
-    buildCommand: npm install
-    startCommand: npm run week5
+    # Install root deps, then the streak product's deps.
+    buildCommand: npm install && npm --prefix products/streak install
+    startCommand: npm run streak
     envVars:
       - key: NODE_ENV
         value: production
+      # Render sets PORT at runtime; Streak reads process.env.PORT.
       - key: PORT
         value: 10000
-      - key: CKB_PRIVATE_KEY
-        sync: false   # set this manually in the Render dashboard — never commit the value
+      # Simulated Premier League feed so the demo runs any day of the year.
+      - key: MATCH_PROVIDER
+        value: dummy
+      # Treasury wallet key — set manually in the Render dashboard, never commit the value.
+      - key: TREASURY_PRIVATE_KEY
+        sync: false
+      # Public URL of this service (used for the Telegram webhook). Set after the first deploy.
+      - key: APP_PUBLIC_URL
+        sync: false
     disk:
-      name: scroll-data
-      mountPath: /opt/render/project/src/src/week5/scroll/data
+      name: streak-data
+      mountPath: /opt/render/project/src/products/streak/data
       sizeGB: 1

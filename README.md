@@ -20,7 +20,7 @@ src/
   week5/
     scroll/          # Permanent on-chain microblog: every post is a real CKB cell
 products/
-  streak/            # Parimutuel prediction-market terminal (weeks 6–9)
+  streak/            # Parimutuel prediction-market terminal (weeks 6–11)
 reports/
   week-1.md          # Cell Model + Consensus + Address fundamentals
   week-2.md          # First real testnet transaction
@@ -31,6 +31,8 @@ reports/
   week-7.md          # Streak Terminal — on-chain custody bridge + live oracle
   week-8.md          # Streak Terminal — on-chain settlement receipts (publish · verify · share)
   week-9.md          # Streak Terminal — pluggable oracle (dummy/EPL) + social crews
+  week-10.md         # Streak Terminal — one-tap Telegram alerts + Supabase state
+  week-11.md         # Streak Terminal — responsive/mobile UI + Render deploy
 ```
 
 ## Weekly Index
@@ -46,6 +48,8 @@ reports/
 | 7 | Streak Terminal — on-chain custody bridge + live oracle | [reports/week-7.md](reports/week-7.md) | [products/streak](products/streak) |
 | 8 | Streak Terminal — on-chain settlement receipts (publish · verify · share) | [reports/week-8.md](reports/week-8.md) | [products/streak](products/streak) |
 | 9 | Streak Terminal — pluggable oracle (dummy/EPL) + social crews | [reports/week-9.md](reports/week-9.md) | [products/streak](products/streak) |
+| 10 | Streak Terminal — one-tap Telegram alerts + Supabase state | [reports/week-10.md](reports/week-10.md) | [products/streak](products/streak) |
+| 11 | Streak Terminal — responsive/mobile UI + Render deploy | [reports/week-11.md](reports/week-11.md) | [products/streak](products/streak) |
 
 ## Setup
 
@@ -154,7 +158,7 @@ Features:
 **Deploy to Render**: see [render.yaml](render.yaml). Set `CKB_PRIVATE_KEY` as
 an environment variable in the Render dashboard — never commit the raw key.
 
-### Weeks 6–9 — Streak Terminal (prediction-market product)
+### Weeks 6–11 — Streak Terminal (prediction-market product)
 
 A Polymarket-style parimutuel prediction-market terminal, settled on the Pudge
 testnet. Week 6 is the market engine (parimutuel pricing, automatic settlement,
@@ -164,7 +168,9 @@ live results oracle; week 8 publishes a verifiable on-chain settlement receipt
 for every resolved market; week 9 puts the data feed behind a pluggable
 provider (swap the World Cup oracle for a built-in simulator or a future EPL
 feed) and adds a social layer — crews, head-to-head streaks, co-picks, and a
-revive rebate when a crew-mate backs the same match.
+revive rebate when a crew-mate backs the same match; week 10 adds one-tap
+Telegram alerts and moves state to Supabase (with local fallback); week 11
+makes the terminal fully responsive for mobile and deploys it on Render.
 
 ```bash
 # Start the terminal — open http://localhost:4100
