@@ -49,10 +49,17 @@ export async function createWallet(): Promise<UserWallet> {
 }
 
 /** Live available balance for an address, in shannons. */
+const BALANCE_TTL_MS = Number(process.env.BALANCE_CACHE_TTL_MS) || 10_000;
+const balanceCache = new Map<string, { value: bigint; at: number }>();
+
 export async function getBalanceShannons(address: string): Promise<bigint> {
+  const cached = balanceCache.get(address);
+  if (cached && Date.now() - cached.at < BALANCE_TTL_MS) return cached.value;
   const c = getClient();
   const { script } = await ccc.Address.fromString(address, c);
-  return await c.getBalanceSingle(script);
+  const value = await c.getBalanceSingle(script);
+  balanceCache.set(address, { value, at: Date.now() });
+  return value;
 }
 
 /** Pretty CKB string from shannons. */

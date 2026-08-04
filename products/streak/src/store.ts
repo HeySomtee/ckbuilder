@@ -33,7 +33,21 @@ const EMPTY: StreakDB = {
 
 let writeQueue: Promise<unknown> = Promise.resolve();
 
+// Short-lived in-memory snapshot so a burst of reads within one request (or a
+// few close-together requests) doesn't re-fetch the whole DB blob from Supabase
+// on every call. Writes refresh it so freshly-written state is served at once.
+const READ_TTL_MS = Number(process.env.STORE_READ_TTL_MS) || 1500;
+let cache: { db: StreakDB; at: number } | null = null;
+
+/** Cached snapshot for reads; falls back to a fresh fetch when stale. */
 export async function loadDB(): Promise<StreakDB> {
+  if (cache && Date.now() - cache.at < READ_TTL_MS) return cache.db;
+  const db = await loadFromSource();
+  cache = { db, at: Date.now() };
+  return db;
+}
+
+async function loadFromSource(): Promise<StreakDB> {
   if (supaEnabled()) {
     try {
       const parsed = await supaLoadDB();
@@ -166,9 +180,10 @@ async function saveDB(db: StreakDB): Promise<void> {
  */
 export function update<T>(fn: (db: StreakDB) => T | Promise<T>): Promise<T> {
   const run = writeQueue.then(async () => {
-    const db = await loadDB();
+    const db = await loadFromSource();
     const result = await fn(db);
     await saveDB(db);
+    cache = { db, at: Date.now() };
     return result;
   });
   writeQueue = run.then(

@@ -211,8 +211,8 @@ function openModal(html) {
   overlay.innerHTML = html;
   overlay.classList.add("on");
   overlay.setAttribute("aria-hidden", "false");
-  const closer = overlay.querySelector("[data-close]");
-  if (closer) closer.onclick = closeModal;
+  // Wire EVERY [data-close] control (X icon, Skip/Cancel buttons), not just the first.
+  overlay.querySelectorAll("[data-close]").forEach((el) => { el.onclick = closeModal; });
   overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 }
 function closeModal() {
@@ -1065,13 +1065,17 @@ function confirmBet({ market, side, amount, asStreakPick }) {
 
 async function renderStreak() {
   const view = $("#view");
-  const u = state.user;
-  await refreshDashboard();
+  let u = state.user;
   const today = localDateKey();
-  const canPick = u.streak.status === "active" && u.streak.lastPickDate !== today;
 
-  // Find today's headline market (first open market of the day).
-  const { markets } = await api("/markets?status=open");
+  // Fetch dashboard + open markets together to cut a round-trip off tab load.
+  const [, marketsResp] = await Promise.all([
+    refreshDashboard(),
+    api("/markets?status=open"),
+  ]);
+  u = state.user || u;
+  const canPick = u.streak.status === "active" && u.streak.lastPickDate !== today;
+  const { markets } = marketsResp;
   const todays = (markets || []).filter((m) => localDateKey(m.closesAt) === today);
   const visibleMarkets = todays.length ? todays : (markets || []).slice(0, 8);
 
