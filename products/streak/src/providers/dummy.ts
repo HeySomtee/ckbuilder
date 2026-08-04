@@ -11,37 +11,40 @@
  * `MATCH_PROVIDER=epl`.
  *
  * How it works:
- *   - 20 clubs, round-robin gameweeks (circle method), kickoffs staggered
- *     every `DUMMY_STAGGER_MIN` minutes from a persisted anchor.
- *   - The anchor is stored in the DB (`dummyAnchorIso`) so fixture times are
- *     stable across restarts; it defaults to "start of the current hour minus
- *     2h" so a handful of matches are already live/finished the instant you
- *     boot.
- *   - `fetchResults()` derives each fixture's live/final state from the wall
- *     clock: before kickoff → absent, in play → running score, past full time
- *     → deterministic final score (seeded by match id, so every restart agrees).
+ *   - 20 clubs, round-robin pairings (circle method) mapped onto absolute
+ *     wall-clock slots `DUMMY_STAGGER_MIN` minutes apart. Slot IDs are stable
+ *     (`epl-s<slot>`), so the feed is an endless rolling window: a fresh
+ *     upcoming fixture appears every slot and the engine never runs out of
+ *     open markets — no persisted anchor, nothing to expire.
+ *   - `loadFixtures()` returns a window from a short past tail (for live /
+ *     just-finished matches) out to `DUMMY_AHEAD_SLOTS` upcoming fixtures.
+ *   - `fetchResults()` derives each started fixture's live/final state from the
+ *     wall clock: in play → running score, past full time → deterministic final
+ *     score (seeded by match id, so every restart agrees).
  *
  * Tunables (env):
- *   MATCH_PROVIDER=dummy    enable this provider
- *   DUMMY_GAMEWEEKS=20      number of round-robin gameweeks to generate
- *   DUMMY_STAGGER_MIN=20    minutes between consecutive kickoffs
- *   DUMMY_MATCH_MINUTES=96  match length (90 + stoppage)
- *   DUMMY_ANCHOR=<ISO>      pin the schedule anchor explicitly (advanced)
+ *   MATCH_PROVIDER=dummy     enable this provider
+ *   DUMMY_STAGGER_MIN=20     minutes between consecutive kickoffs
+ *   DUMMY_MATCH_MINUTES=96   match length (90 + stoppage)
+ *   DUMMY_PAST_SLOTS=6       recent slots kept live / just-finished
+ *   DUMMY_AHEAD_SLOTS=48     upcoming slots to open markets for
  */
 
-import { read, update } from "../store";
 import type { Match, Outcome, Team } from "../types";
 import type { LiveResult, MatchDataProvider, ProviderStatus } from "./types";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const GAMEWEEKS = clampInt(process.env.DUMMY_GAMEWEEKS, 30, 1, 38);
 const STAGGER_MIN = clampInt(process.env.DUMMY_STAGGER_MIN, 20, 5, 240);
 const MATCH_MINUTES = clampInt(process.env.DUMMY_MATCH_MINUTES, 96, 30, 200);
 const STAGGER_MS = STAGGER_MIN * 60_000;
 const MATCH_MS = MATCH_MINUTES * 60_000;
-/** Wall-clock span from first kickoff to the last match's full time. */
-const WINDOW_MS = GAMEWEEKS * 10 * STAGGER_MS + MATCH_MS;
+// A short past tail keeps a couple of matches live/just-finished; a long future
+// run keeps a healthy book of OPEN markets. The feed is a rolling wall-clock
+// window, so a fresh upcoming fixture appears every `DUMMY_STAGGER_MIN` minutes
+// and the engine never runs out of open markets.
+const PAST_SLOTS = clampInt(process.env.DUMMY_PAST_SLOTS, 6, 1, 240);
+const AHEAD_SLOTS = clampInt(process.env.DUMMY_AHEAD_SLOTS, 48, 6, 600);
 
 function clampInt(raw: string | undefined, def: number, lo: number, hi: number): number {
   const n = Number(raw);
@@ -153,52 +156,51 @@ function pairingsForRound(round: number): Array<[number, number]> {
   return pairs;
 }
 
-// ── Anchor (persisted so fixture times survive restarts) ─────────────────────
+// ── Rolling fixture generation (absolute wall-clock slots) ───────────────────
+//
+// Every `STAGGER_MIN`-minute slot on the absolute clock maps deterministically
+// to exactly one fixture with a stable id (`epl-s<slot>`). As time advances,
+// new slots enter the future edge of the window and mint brand-new markets,
+// while past slots keep their settled history. No anchor, nothing to expire.
 
-let anchorMs: number | null = null;
+const N = TEAMS.length;
+const ROUNDS = N - 1;
+const PER_ROUND = N / 2;
 
-function computeDefaultAnchor(): number {
-  const explicit = process.env.DUMMY_ANCHOR?.trim();
-  if (explicit) {
-    const t = Date.parse(explicit);
-    if (Number.isFinite(t)) return t;
-  }
-  const d = new Date();
-  d.setMinutes(0, 0, 0);
-  return d.getTime() - 2 * 3_600_000; // 2h ago → some matches already live/finished
+/** The absolute slot index that "now" falls in. */
+function currentSlot(): number {
+  return Math.floor(Date.now() / STAGGER_MS);
 }
 
-// ── Fixture generation (cached per anchor) ───────────────────────────────────
+/** Deterministic fixture for one absolute time-slot. */
+function fixtureForSlot(slot: number): Match {
+  const cycle = Math.floor(slot / PER_ROUND); // rolling "gameweek"
+  const round = ((cycle % ROUNDS) + ROUNDS) % ROUNDS;
+  const pairIdx = ((slot % PER_ROUND) + PER_ROUND) % PER_ROUND;
+  const [x, y] = pairingsForRound(round)[pairIdx];
+  const [home, away] = cycle % 2 === 0 ? [x, y] : [y, x]; // alternate home/away
+  const iso = new Date(slot * STAGGER_MS).toISOString();
+  const matchday = (cycle % 38) + 1;
+  return {
+    id: `epl-s${slot}`,
+    date: iso.slice(0, 10),
+    stage: `Matchday ${matchday}`,
+    home: TEAMS[home],
+    away: TEAMS[away],
+    kickoff: iso,
+    status: "scheduled",
+    venue: `${TEAMS[home].name} Stadium`,
+    matchday: String(matchday),
+  };
+}
 
-let cache: { anchor: number; matches: Match[] } | null = null;
-
-function generate(anchor: number): Match[] {
-  if (cache && cache.anchor === anchor) return cache.matches;
+/** Fixtures spanning the recent past → near future around "now". */
+function windowFixtures(): Match[] {
+  const k0 = currentSlot();
   const out: Match[] = [];
-  let n = 0;
-  for (let gw = 0; gw < GAMEWEEKS; gw++) {
-    const pairs = pairingsForRound(gw);
-    pairs.forEach(([h, a], i) => {
-      // Alternate home/away each gameweek for a bit of fairness.
-      const [home, away] = gw % 2 === 0 ? [h, a] : [a, h];
-      const kickoffMs = anchor + n * STAGGER_MS;
-      n += 1;
-      const iso = new Date(kickoffMs).toISOString();
-      out.push({
-        id: `epl-${gw + 1}-${i + 1}`,
-        date: iso.slice(0, 10),
-        stage: `Gameweek ${gw + 1}`,
-        home: TEAMS[home],
-        away: TEAMS[away],
-        kickoff: iso,
-        status: "scheduled",
-        venue: `${TEAMS[home].name} Stadium`,
-        matchday: String(gw + 1),
-      });
-    });
+  for (let k = Math.max(0, k0 - PAST_SLOTS); k <= k0 + AHEAD_SLOTS; k++) {
+    out.push(fixtureForSlot(k));
   }
-  out.sort((x, y) => x.kickoff.localeCompare(y.kickoff));
-  cache = { anchor, matches: out };
   return out;
 }
 
@@ -212,53 +214,28 @@ let lastCounts = { matchCount: 0, liveMatches: 0, finishedMatches: 0 };
 export const dummyProvider: MatchDataProvider = {
   id: "dummy",
 
-  /** Load or persist the schedule anchor before any sync runs. */
-  async init(): Promise<void> {
-    if (anchorMs != null) return;
-    const persisted = await read((db) => db.dummyAnchorIso);
-    const persistedMs = persisted ? Date.parse(persisted) : NaN;
-
-    // Reuse the persisted anchor while its schedule window is still live, so
-    // fixture times stay stable across restarts.
-    if (Number.isFinite(persistedMs) && persistedMs + WINDOW_MS > Date.now()) {
-      anchorMs = persistedMs;
-      return;
-    }
-
-    // First boot, or the whole schedule has already finished → roll a fresh
-    // anchor so there are live/upcoming fixtures again, and drop the stale
-    // dummy fixtures so the engine reseeds them at the new times.
-    anchorMs = computeDefaultAnchor();
-    const iso = new Date(anchorMs).toISOString();
-    const hadPrevious = Number.isFinite(persistedMs);
-    await update((db) => {
-      db.dummyAnchorIso = iso;
-      if (hadPrevious) db.matches = db.matches.filter((m) => !m.id.startsWith("epl-"));
-    });
-  },
-
   loadFixtures(): Match[] {
-    // Must be sync + store-free (called under the write lock). `init()` has
-    // already set `anchorMs`; fall back to a transient anchor just in case.
-    const anchor = anchorMs ?? computeDefaultAnchor();
-    return generate(anchor);
+    // Sync + store-free (called under the write lock): a rolling wall-clock
+    // window, so every sync surfaces the next upcoming fixtures.
+    return windowFixtures();
   },
 
   async fetchResults(): Promise<Record<string, LiveResult>> {
-    const anchor = anchorMs ?? computeDefaultAnchor();
-    const matches = generate(anchor);
     const now = Date.now();
+    const k0 = currentSlot();
     const map: Record<string, LiveResult> = {};
     let live = 0;
     let finished = 0;
 
-    for (const m of matches) {
-      const kickoff = Date.parse(m.kickoff);
+    // Only started slots in the recent tail can carry a live/final result.
+    for (let k = Math.max(0, k0 - PAST_SLOTS); k <= k0; k++) {
+      const kickoff = k * STAGGER_MS;
       if (now < kickoff) continue; // not started → mirror a real feed (absent)
+      const id = `epl-s${k}`;
       const end = kickoff + MATCH_MS;
       if (now >= end) {
-        const ft = finalScore(m.id);
-        map[m.id] = {
+        const ft = finalScore(id);
+        map[id] = {
           finished: true,
           live: false,
           home: ft.home,
@@ -268,8 +245,8 @@ export const dummyProvider: MatchDataProvider = {
         finished += 1;
       } else {
         const elapsedMin = Math.floor((now - kickoff) / 60_000);
-        const s = liveScore(m.id, elapsedMin);
-        map[m.id] = { finished: false, live: true, home: s.home, away: s.away };
+        const s = liveScore(id, elapsedMin);
+        map[id] = { finished: false, live: true, home: s.home, away: s.away };
         live += 1;
       }
     }
@@ -287,7 +264,7 @@ export const dummyProvider: MatchDataProvider = {
       simulated: true,
       source: "simulated",
       base: "sim://epl",
-      detail: `synthetic feed · ${GAMEWEEKS} gameweeks · kickoff every ${STAGGER_MIN}m`,
+      detail: `synthetic rolling feed · kickoff every ${STAGGER_MIN}m · ${AHEAD_SLOTS} upcoming`,
       lastSyncIso,
       matchCount: lastCounts.matchCount,
       liveMatches: lastCounts.liveMatches,

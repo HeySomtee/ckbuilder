@@ -681,7 +681,7 @@ async function renderMarkets(r) {
   view.innerHTML = `
     <div class="page-h">
       <h1>Markets</h1>
-      <span class="sub">FIFA World Cup 2026 · Round of 32 → Final</span>
+      <span class="sub"></span>
       <div class="right">
         <select class="input" id="flt" style="width:auto;font-size:11px">
           <option value="">All states</option>

@@ -40,6 +40,34 @@ export { winRate } from "./markets";
 
 const MATCHES_SCHEMA_VERSION = 2;
 
+/** How long a settled, untouched simulated market is kept before pruning. */
+const SIM_RETENTION_MS = 2 * 24 * 60 * 60_000;
+
+/**
+ * Keep the rolling simulated feed from growing without bound: drop old,
+ * fully-settled sim markets (and their orphaned matches) that nobody bet on.
+ * Bets, on-chain receipts and the real World Cup history are always preserved.
+ */
+function pruneStaleSimMarkets(db: StreakDB): void {
+  const cutoff = Date.now() - SIM_RETENTION_MS;
+  const kickoffById = new Map(db.matches.map((m) => [m.id, Date.parse(m.kickoff)]));
+  const betMarketIds = new Set(db.bets.map((b) => b.marketId));
+
+  db.markets = db.markets.filter((m) => {
+    if (!m.matchId.startsWith("epl-s")) return true; // real / legacy market
+    if (m.status !== "resolved" && m.status !== "void") return true; // still active
+    if (m.receipt) return true; // published on-chain
+    if (betMarketIds.has(m.id)) return true; // someone has a position
+    const ko = kickoffById.get(m.matchId) ?? Infinity;
+    return ko >= cutoff; // keep while recent
+  });
+
+  const referenced = new Set(db.markets.map((m) => m.matchId));
+  db.matches = db.matches.filter(
+    (m) => !m.id.startsWith("epl-s") || referenced.has(m.id),
+  );
+}
+
 /**
  * Boot + background loop:
  *   1. seed the full real WC2026 schedule if missing
@@ -53,20 +81,34 @@ export async function syncMatches(): Promise<Match[]> {
   const live = await provider.fetchResults();
 
   const slate = await update((db) => {
-    if (db.matches.length === 0 || (db.matchesSchema ?? 0) < MATCHES_SCHEMA_VERSION) {
-      const fresh = provider.loadFixtures();
-      const prev = new Map(db.matches.map((m) => [m.id, m]));
-      db.matches = fresh.map((m) => {
-        const old = prev.get(m.id);
-        return old?.status === "final"
-          ? { ...m, status: old.status, result: old.result, score: old.score, liveResult: old.liveResult }
-          : m;
-      });
-      db.matchesSchema = MATCHES_SCHEMA_VERSION;
+    // Merge the provider's current fixtures: add any we haven't seen and refresh
+    // the schedule of not-yet-final matches. A rolling feed (dummy) introduces
+    // new upcoming fixtures every sync so open markets never run dry; a static
+    // feed (worldcup) is idempotent after the first pass. Settled history — the
+    // final matches — is never dropped here.
+    const schemaStale = (db.matchesSchema ?? 0) < MATCHES_SCHEMA_VERSION;
+    const known = new Map(db.matches.map((m) => [m.id, m]));
+    for (const fx of provider.loadFixtures()) {
+      const old = known.get(fx.id);
+      if (!old) {
+        db.matches.push(fx);
+      } else if (old.status !== "final") {
+        old.kickoff = fx.kickoff;
+        old.date = fx.date;
+        if (schemaStale) {
+          old.home = fx.home;
+          old.away = fx.away;
+          old.stage = fx.stage;
+          old.venue = fx.venue;
+        }
+      }
     }
+    db.matchesSchema = MATCHES_SCHEMA_VERSION;
+
     db.matches = db.matches.map((m) => applyResult(m, live[m.id]));
     ensureMarketsForMatches(db);
     settleMarkets(db);
+    pruneStaleSimMarkets(db);
 
     const slateDate = currentSlateDate(db.matches, today);
     return db.matches
