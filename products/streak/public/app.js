@@ -71,6 +71,13 @@ function fmtDateTime(iso) {
   const d = new Date(iso);
   return d.toLocaleString([], { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
+function localDateKey(v = new Date()) {
+  const d = v instanceof Date ? v : new Date(v);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function timeUntil(iso) {
   const ms = new Date(iso).getTime() - Date.now();
   if (ms <= 0) return "0m";
@@ -939,7 +946,7 @@ function betPanelHtml(m) {
         <span class="l">Escrow balance</span><span class="v">${fmtCkb(state.user?.escrowCkb)} CKB</span>
       </div>
 
-      ${state.user?.streak.status === "active" && state.user?.streak.lastPickDate !== new Date().toISOString().slice(0, 10) ? `
+      ${state.user?.streak.status === "active" && state.user?.streak.lastPickDate !== localDateKey() ? `
         <label class="opt"><input type="checkbox" id="bet-streak"/>Lock as today's streak pick (+1 streak if it wins)</label>
       ` : ""}
 
@@ -1060,12 +1067,13 @@ async function renderStreak() {
   const view = $("#view");
   const u = state.user;
   await refreshDashboard();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateKey();
   const canPick = u.streak.status === "active" && u.streak.lastPickDate !== today;
 
   // Find today's headline market (first open market of the day).
   const { markets } = await api("/markets?status=open");
-  const todays = (markets || []).filter((m) => m.closesAt.slice(0, 10) === today);
+  const todays = (markets || []).filter((m) => localDateKey(m.closesAt) === today);
+  const visibleMarkets = todays.length ? todays : (markets || []).slice(0, 8);
 
   view.innerHTML = `
     <div class="page-h">
@@ -1095,11 +1103,11 @@ async function renderStreak() {
 
     <div class="panel" style="margin-top:14px">
       <div class="panel-h"><span class="title">Today's Markets</span><span class="meta">${todays.length} open</span></div>
-      ${todays.length === 0
-        ? `<div class="panel-b dim mono center" style="padding:30px;font-size:11px;letter-spacing:0.14em">NO OPEN MATCHES TODAY — CHECK THE SCHEDULE</div>`
+      ${visibleMarkets.length === 0
+        ? `<div class="panel-b dim mono center" style="padding:30px;font-size:11px;letter-spacing:0.14em">NO OPEN MATCHES AVAILABLE — CHECK THE SCHEDULE</div>`
         : `<table class="tbl">
             <thead><tr><th>Match</th><th>Stage</th><th class="right">Home</th><th class="right">Draw</th><th class="right">Away</th><th class="right">Closes</th><th></th></tr></thead>
-            <tbody>${todays.map((m) => `
+            <tbody>${visibleMarkets.map((m) => `
               <tr class="mkt-row" data-go="${m.id}">
                 <td class="tm"><span class="flag">${m.match.home.flag}</span><span class="code">${m.match.home.code}</span><span class="vs">vs</span><span class="code">${m.match.away.code}</span><span class="flag">${m.match.away.flag}</span></td>
                 <td class="small">${esc(m.match.stage)}</td>
@@ -1111,6 +1119,10 @@ async function renderStreak() {
               </tr>`).join("")}
             </tbody>
            </table>`
+      }
+      ${todays.length === 0 && visibleMarkets.length > 0
+        ? `<div class="panel-b dim mono" style="font-size:10.5px;padding-top:0">No open matches fall on your local date right now. Showing next open markets instead.</div>`
+        : ""
       }
     </div>
   `;
@@ -1595,7 +1607,7 @@ async function renderFixtures() {
   const byDate = {};
   for (const m of matches) (byDate[m.date] ||= []).push(m);
   const dates = Object.keys(byDate).sort();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateKey();
 
   view.innerHTML = `
     <div class="page-h"><h1>Schedule</h1><span class="sub">${esc(state.liveStatus?.league ?? "Fixtures")} · ${matches.length} fixtures</span></div>
