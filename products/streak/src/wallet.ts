@@ -17,9 +17,9 @@ import { randomUUID } from "crypto";
 
 import {
   ckbToShannons,
-  getBalanceShannons,
   shannonsToCkb,
   transferFrom,
+  verifyPaymentToTreasury,
 } from "./chain";
 import { MIN_ONCHAIN_CKB } from "./config";
 import { read, update } from "./store";
@@ -91,39 +91,43 @@ export interface DepositResult {
 }
 
 /**
- * Move `amountCkb` from the user's on-chain wallet to the platform treasury
- * and credit their virtual escrow.
+ * Credit a user's escrow from a deposit they already signed and broadcast in
+ * their own wallet. The client sends the transaction hash; the server verifies
+ * it is a committed payment to the treasury from the user's address, then
+ * credits the exact amount that reached the treasury.
  */
-export async function deposit(userId: string, amountCkb: number): Promise<DepositResult> {
-  if (!Number.isFinite(amountCkb) || amountCkb < MIN_ONCHAIN_CKB) {
-    throw new WalletError(
-      "min",
-      `Deposit must be at least ${MIN_ONCHAIN_CKB} CKB (cell-floor minimum).`,
-    );
+export async function deposit(userId: string, txHash: string): Promise<DepositResult> {
+  if (typeof txHash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    throw new WalletError("bad_tx", "A valid transaction hash is required.");
   }
   const user = await read((db) => db.users.find((u) => u.id === userId));
   if (!user) throw new WalletError("no_user", "User not found.");
 
-  const balance = await getBalanceShannons(user.wallet.address);
-  const need = ckbToShannons(amountCkb) + ckbToShannons(1);
-  if (balance < need) {
-    throw new WalletError(
-      "insufficient_chain",
-      `Wallet balance too low — need at least ${amountCkb + 1} CKB.`,
-    );
-  }
+  const already = await read((db) => db.deposits.some((d) => d.txHash === txHash));
+  if (already) throw new WalletError("dup", "This deposit was already credited.");
 
   const treasury = await getTreasury();
-  const txHash = await transferFrom(user.wallet.privateKey, treasury.address, amountCkb);
+  let paid: bigint;
+  try {
+    paid = await verifyPaymentToTreasury(
+      txHash,
+      user.wallet.address,
+      treasury.address,
+      MIN_ONCHAIN_CKB,
+    );
+  } catch (err) {
+    throw new WalletError("verify", (err as Error).message || "Could not verify the deposit.");
+  }
 
   const newEscrowShannons = await update((db) => {
     const u = db.users.find((x) => x.id === userId);
     if (!u) throw new WalletError("no_user", "User vanished mid-deposit.");
-    u.escrowShannons = asString(asBig(u.escrowShannons) + ckbToShannons(amountCkb));
+    if (db.deposits.some((d) => d.txHash === txHash)) return u.escrowShannons; // race guard
+    u.escrowShannons = asString(asBig(u.escrowShannons) + paid);
     const rec: Deposit = {
       id: randomUUID(),
       userId,
-      amountShannons: asString(ckbToShannons(amountCkb)),
+      amountShannons: asString(paid),
       txHash,
       at: new Date().toISOString(),
     };
@@ -133,7 +137,7 @@ export async function deposit(userId: string, amountCkb: number): Promise<Deposi
 
   return {
     txHash,
-    amountCkb: shannonsToCkb(ckbToShannons(amountCkb)),
+    amountCkb: shannonsToCkb(paid),
     newEscrowCkb: shannonsToCkb(asBig(newEscrowShannons)),
   };
 }

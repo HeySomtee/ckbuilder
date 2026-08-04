@@ -178,15 +178,19 @@ export interface UserStats {
 
 export interface User {
   id: string;
-  username: string;
+  /** Verified wallet identity from the login signature — the stable account key. */
+  walletIdentity: string;
+  /** CCC signer type that produced the identity (e.g. "ckb", "evm", "joyId"). */
+  walletType: string;
+  /** Optional display handle, set after signup; used for leaderboard/feeds. */
+  username?: string;
   /** Optional Telegram chat id or @username for direct notifications */
   telegramChatId?: string;
   /** Optional Telegram username captured during bot connect flow */
   telegramUsername?: string;
-  passwordHash: string;
-  passwordSalt: string;
   createdAt: string;
-  wallet: UserWallet;
+  /** The user's connected on-chain wallet (deposit source / withdrawal target). */
+  wallet: { address: string };
   escrowShannons: string;
   creatorFeesShannons: string;
   streak: UserStreak;
@@ -249,6 +253,8 @@ export interface StreakDB {
   dummyAnchorIso?: string;
   /** Pending Telegram deep-link connect tokens keyed to users. */
   telegramLinks?: TelegramLink[];
+  /** On-chain tx hashes already consumed by streak renewals (replay guard). */
+  renewalTxs?: string[];
 }
 
 export interface TelegramLink {
@@ -270,11 +276,15 @@ export interface LiveScoresAuth {
 
 export interface PublicUser {
   id: string;
+  /** Display name — the chosen username, or an abbreviated address if unset. */
   username: string;
+  /** Whether the user has set a real username (vs. the address fallback). */
+  hasUsername: boolean;
   telegramConnected?: boolean;
   telegramUsername?: string;
   createdAt: string;
   walletAddress: string;
+  walletType?: string;
   escrowCkb: string;
   creatorFeesCkb: string;
   streak: UserStreak;

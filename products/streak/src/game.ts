@@ -21,10 +21,10 @@ import {
 } from "./matches";
 import { provider } from "./providers";
 import {
-  canAffordRenewal,
+  abbrevAddress,
   getBalanceShannons,
   shannonsToCkb,
-  transferFrom,
+  verifyPaymentToTreasury,
 } from "./chain";
 import { RENEW_FEE_CKB } from "./config";
 import { asBig, asString, getTreasury } from "./wallet";
@@ -184,23 +184,26 @@ export interface RenewResult {
   coPickers: string[];
 }
 
-/** Pay the on-chain renewal fee (wallet → treasury) and revive the streak. */
-export async function renewStreak(userId: string): Promise<RenewResult> {
+/** Confirm the user's on-chain renewal payment (wallet → treasury) and revive. */
+export async function renewStreak(userId: string, txHash: string): Promise<RenewResult> {
+  if (typeof txHash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    throw new GameError("bad_tx", "A valid renewal transaction hash is required.");
+  }
   const user = await read((db) => db.users.find((u) => u.id === userId));
   if (!user) throw new GameError("no_user", "User not found.");
   if (user.streak.status !== "failed") {
     throw new GameError("not_failed", "Your streak is not in a failed state.");
   }
 
-  const treasury = await getTreasury();
-  if (!(await canAffordRenewal(user.wallet.address))) {
-    throw new GameError(
-      "insufficient",
-      `Not enough wallet balance. Renewal costs ${RENEW_FEE_CKB} CKB (plus a small network fee).`,
-    );
-  }
+  const usedAlready = await read((db) => (db.renewalTxs ?? []).includes(txHash));
+  if (usedAlready) throw new GameError("dup", "This renewal transaction was already used.");
 
-  const txHash = await transferFrom(user.wallet.privateKey, treasury.address, RENEW_FEE_CKB);
+  const treasury = await getTreasury();
+  try {
+    await verifyPaymentToTreasury(txHash, user.wallet.address, treasury.address, RENEW_FEE_CKB);
+  } catch (err) {
+    throw new GameError("verify", (err as Error).message || "Could not verify the renewal transaction.");
+  }
 
   const { newEscrowShannons, rebateCkb, coPickers } = await update((db) => {
     const u = db.users.find((x) => x.id === userId);
@@ -216,6 +219,7 @@ export async function renewStreak(userId: string): Promise<RenewResult> {
     if (rebate.rebateShannons > 0n) {
       u.escrowShannons = asString(asBig(u.escrowShannons) + rebate.rebateShannons);
     }
+    db.renewalTxs = [...(db.renewalTxs ?? []), txHash];
     return {
       newEscrowShannons: u.escrowShannons,
       rebateCkb: shannonsToCkb(rebate.rebateShannons),
@@ -228,7 +232,12 @@ export async function renewStreak(userId: string): Promise<RenewResult> {
   if (Number(rebateCkb) > 0) {
     (async () => {
       try {
-        await notifyRevive({ username: user.username, rebateCkb, coPickers, chatId: user.telegramChatId });
+        await notifyRevive({
+          username: user.username ?? abbrevAddress(user.wallet.address),
+          rebateCkb,
+          coPickers,
+          chatId: user.telegramChatId,
+        });
       } catch (e) {}
     })();
   }
@@ -265,11 +274,13 @@ export async function rankOf(userId: string): Promise<number> {
 export async function toPublicUser(user: User): Promise<PublicUser> {
   return {
     id: user.id,
-    username: user.username,
+    username: user.username ?? abbrevAddress(user.wallet.address),
+    hasUsername: !!user.username,
     telegramConnected: !!user.telegramChatId,
     telegramUsername: user.telegramUsername,
     createdAt: user.createdAt,
     walletAddress: user.wallet.address,
+    walletType: user.walletType,
     escrowCkb: shannonsToCkb(asBig(user.escrowShannons)),
     creatorFeesCkb: shannonsToCkb(asBig(user.creatorFeesShannons)),
     streak: user.streak,
@@ -293,7 +304,7 @@ export async function leaderboard(meId?: string): Promise<LeaderboardRow[]> {
   });
   return sorted.map((u, i) => ({
     rank: i + 1,
-    username: u.username,
+    username: u.username ?? abbrevAddress(u.wallet.address),
     current: u.streak.current,
     best: u.streak.best,
     winRate: winRate(u),

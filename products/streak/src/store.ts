@@ -118,13 +118,13 @@ export async function loadDB(): Promise<StreakDB> {
 function upgradeUser(u: any): any {
   return {
     id: u.id,
+    walletIdentity: u.walletIdentity ?? "",
+    walletType: u.walletType ?? "",
     username: u.username,
     telegramChatId: u.telegramChatId,
     telegramUsername: u.telegramUsername,
-    passwordHash: u.passwordHash,
-    passwordSalt: u.passwordSalt,
     createdAt: u.createdAt,
-    wallet: u.wallet,
+    wallet: { address: u.wallet?.address },
     escrowShannons: u.escrowShannons ?? "0",
     creatorFeesShannons: u.creatorFeesShannons ?? "0",
     streak: {

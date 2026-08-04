@@ -10,6 +10,8 @@
 
 // ───────────────────────────────────────────────────────────── helpers ─────
 
+import { ccc } from "https://esm.sh/@ckb-ccc/connector@1";
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const root = $("#app");
 const overlay = $("#overlay");
@@ -101,6 +103,75 @@ async function api(path, { method = "GET", body } = {}) {
 }
 
 // ─────────────────────────────────────────────────────── app-wide state ────
+
+// CCC wallet login + client-signed treasury payments.
+let cccConnector = null;
+function getConnector() {
+  if (cccConnector) return cccConnector;
+  const el = document.createElement("ccc-connector");
+  el.style.display = "none";
+  el.style.zIndex = "999";
+  document.body.appendChild(el);
+  try { el.setClient(new ccc.ClientPublicTestnet()); } catch (e) { console.warn("ccc client", e); }
+  el.addEventListener("close", () => { el.style.display = "none"; });
+  cccConnector = el;
+  return el;
+}
+
+function currentSigner() {
+  return cccConnector?.signer?.signer ?? null;
+}
+
+/** Open the wallet picker; resolve with the connected signer. */
+function connectWallet() {
+  return new Promise((resolve, reject) => {
+    const el = getConnector();
+    if (el.signer?.signer) { resolve(el.signer.signer); return; }
+    const cleanup = () => {
+      el.removeEventListener("willUpdate", onUpdate);
+      el.removeEventListener("close", onClose);
+      el.style.display = "none";
+    };
+    const onUpdate = () => { if (el.signer?.signer) { cleanup(); resolve(el.signer.signer); } };
+    const onClose = () => { cleanup(); if (!el.signer?.signer) reject(new Error("Wallet connection cancelled.")); };
+    el.addEventListener("willUpdate", onUpdate);
+    el.addEventListener("close", onClose);
+    el.style.display = "";
+  });
+}
+
+async function ensureSigner() {
+  return currentSigner() ?? (await connectWallet());
+}
+
+function disconnectWallet() {
+  try { cccConnector?.disconnect?.(); } catch {}
+}
+
+/** Sign the server-issued login nonce and establish a session. */
+async function walletLogin() {
+  const signer = await connectWallet();
+  const address = await signer.getRecommendedAddress();
+  const { message } = await api("/auth/nonce", { method: "POST", body: { address } });
+  const signature = await signer.signMessage(message);
+  return api("/auth/verify", { method: "POST", body: { address, signature } });
+}
+
+/** Build, sign, and broadcast a transfer of `amountCkb` to the treasury. */
+async function payTreasury(amountCkb) {
+  const signer = await ensureSigner();
+  const client = signer.client;
+  const w = await api("/wallet");
+  const { script: toLock } = await ccc.Address.fromString(w.treasuryAddress, client);
+  const tx = ccc.Transaction.from({
+    outputs: [{ lock: toLock, capacity: ccc.fixedPointFrom(String(amountCkb)) }],
+  });
+  await tx.completeInputsByCapacity(signer);
+  await tx.completeFeeBy(signer);
+  const txHash = await signer.sendTransaction(tx);
+  try { await client.waitTransaction(txHash); } catch (e) { /* server re-checks status */ }
+  return txHash;
+}
 
 const state = {
   user: null,
@@ -292,6 +363,7 @@ function ensureNavDelegation() {
       e.preventDefault();
       closeMobileNav();
       try { await api("/logout", { method: "POST" }); } catch {}
+      disconnectWallet();
       state.user = null;
       location.hash = "";
       teardownShell();
@@ -1078,7 +1150,9 @@ function confirmRenew() {
     const btn = $("#renew-go");
     btn.disabled = true; btn.textContent = "Signing…";
     try {
-      const r = await api("/renew", { method: "POST" });
+      const txHash = await payTreasury(fee);
+      btn.textContent = "Confirming…";
+      const r = await api("/renew", { method: "POST", body: { txHash } });
       closeModal();
       const extra = Number(r.rebateCkb) > 0 ? ` · +${fmtCkb(r.rebateCkb)} CKB crew rebate` : "";
       toast(`Streak revived · tx ${r.txHash.slice(0, 10)}…${extra}`, "ok");
@@ -1184,7 +1258,7 @@ async function renderWallet() {
     <div class="page-h">
       <h1>Account</h1>
       <span class="sub">Funding, custody, and Telegram notifications for your Streak account</span>
-      <div class="right"><a class="btn btn-ghost" href="${w.faucet}" target="_blank" rel="noopener">FAUCET ↗</a></div>
+      <div class="right"><button class="btn btn-ghost" id="edit-username">DISPLAY NAME</button><a class="btn btn-ghost" href="${w.faucet}" target="_blank" rel="noopener">FAUCET ↗</a></div>
     </div>
 
     <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
@@ -1258,9 +1332,11 @@ async function renderWallet() {
   $("#dep-go").onclick = async () => {
     const amt = Number($("#dep-amt").value);
     if (!amt || amt < w.minOnchainCkb) { toast(`Minimum deposit is ${w.minOnchainCkb} CKB.`, "err"); return; }
-    const btn = $("#dep-go"); btn.disabled = true; btn.textContent = "SIGNING…";
+    const btn = $("#dep-go"); btn.disabled = true; btn.textContent = "SIGN IN WALLET…";
     try {
-      const r = await api("/wallet/deposit", { method: "POST", body: { amountCkb: amt } });
+      const txHash = await payTreasury(amt);
+      btn.textContent = "CONFIRMING…";
+      const r = await api("/wallet/deposit", { method: "POST", body: { txHash } });
       toast(`Deposited ${r.amountCkb} CKB · tx ${r.txHash.slice(0, 10)}…`, "ok");
       await refreshUser();
       renderWallet();
@@ -1277,6 +1353,9 @@ async function renderWallet() {
       renderWallet();
     } catch (err) { btn.disabled = false; btn.textContent = "SIGN & WITHDRAW"; toast(err.message, "err"); }
   };
+
+  const eu = $("#edit-username");
+  if (eu) eu.onclick = () => promptSetUsername(false);
 
   const tgConnect = $("#tg-connect");
   if (tgConnect) {
@@ -1551,11 +1630,9 @@ async function renderFixtures() {
 
 // ──────────────────────────────────────────────────── auth (landing) ─────
 
-function renderAuth(r) {
+function renderAuth() {
   teardownShell();
-  const mode = location.hash.startsWith("#/signup") ? "signup" : location.hash.startsWith("#/signin") ? "signin" : "landing";
-  if (mode === "landing") return renderLanding();
-  renderSignForm(mode);
+  renderLanding();
 }
 
 function renderLanding() {
@@ -1565,8 +1642,7 @@ function renderLanding() {
       <span class="sep">|</span>
       <span>ON-CHAIN PREDICTION MARKETS · CKB PUDGE</span>
       <span class="right">
-        <a class="btn btn-ghost btn-sm" href="#/signin">SIGN IN</a>
-        <a class="btn btn-amber btn-sm" href="#/signup">CREATE WALLET</a>
+        <button class="btn btn-amber btn-sm" id="connect-top">CONNECT WALLET</button>
       </span>
     </header>
     <div class="land">
@@ -1574,15 +1650,14 @@ function renderLanding() {
       <div class="tag">PREDICTION-MARKET TERMINAL · CKB PUDGE TESTNET</div>
       <p class="pitch">
         A parimutuel sports prediction market modelled on Polymarket and built on
-        <span class="amber">Nervos CKB</span>. Open a market on any World Cup 2026
-        fixture, take any side, settle on the live oracle feed. Win the day's
-        market and your streak grows. Lose it and pay to revive — all in real
-        Pudge testnet CKB.
+        <span class="amber">Nervos CKB</span>. Connect a CKB wallet to sign in — no
+        email, no password. Your wallet is your account: you sign your own
+        deposits and streak renewals on the Pudge testnet.
       </p>
       <div class="cta">
-        <a class="btn btn-amber" href="#/signup">CREATE TERMINAL ACCOUNT</a>
-        <a class="btn btn-ghost" href="#/signin">SIGN IN</a>
+        <button class="btn btn-amber" id="connect-main">CONNECT WALLET</button>
       </div>
+      <div class="dim mono" id="connect-status" style="margin-top:14px;font-size:11px;min-height:16px"></div>
       <pre class="ascii">
    ┌─────────────────────────────────────────────────────────────────┐
    │  MKT     SIDE   ODDS   POOL     CLOSES                          │
@@ -1593,56 +1668,61 @@ function renderLanding() {
       </pre>
     </div>
   `;
-}
-
-function renderSignForm(mode) {
-  const title = mode === "signup" ? "Create Terminal Account" : "Sign In";
-  const cta = mode === "signup" ? "CREATE & GENERATE WALLET" : "SIGN IN";
-  root.innerHTML = `
-    <header class="status-bar">
-      <span class="brand">STREAK · TERM</span>
-      <span class="sep">|</span>
-      <span>${title.toUpperCase()}</span>
-      <span class="right"><a class="btn btn-ghost btn-sm" href="#">← LANDING</a></span>
-    </header>
-    <div class="auth-shell">
-      <div class="auth-card">
-        <h2>${title}</h2>
-        <div class="sub">${mode === "signup" ? "A fresh Pudge wallet is generated for you on signup." : "Welcome back."}</div>
-        <form id="auth-form">
-          <div class="field"><label>Username</label><input class="input" name="username" autocomplete="username" required minlength="3" maxlength="20"/></div>
-          <div class="field"><label>Password</label><input class="input" name="password" type="password" autocomplete="${mode === "signup" ? "new-password" : "current-password"}" required minlength="6"/></div>
-          <button class="btn btn-amber btn-block" type="submit">${cta}</button>
-        </form>
-        <div class="swap">
-          ${mode === "signup"
-            ? `Already have an account? <a href="#/signin">Sign in</a>`
-            : `New here? <a href="#/signup">Create account</a>`}
-        </div>
-      </div>
-    </div>
-  `;
-  $("#auth-form").onsubmit = async (e) => {
-    e.preventDefault();
-    const f = e.target;
-    const body = { username: f.username.value, password: f.password.value };
-    const btn = f.querySelector("button");
-    btn.disabled = true; btn.textContent = "WORKING…";
+  const go = async (btn) => {
+    const status = $("#connect-status");
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = "CONNECTING…";
+    if (status) status.textContent = "Approve the connection and signature in your wallet…";
     try {
-      const r = await api(mode === "signup" ? "/signup" : "/login", { method: "POST", body });
+      const r = await walletLogin();
       state.user = r.user;
-      if (r.justCreated) {
-        toast(`Wallet created · ${shortAddr(r.walletAddress)}`, "ok");
-      } else {
-        toast("Signed in", "ok");
-      }
+      toast(r.justCreated ? `Welcome · ${shortAddr(r.walletAddress)}` : "Signed in", "ok");
       location.hash = "#/dashboard";
       navigate();
+      if (r.user && !r.user.hasUsername) setTimeout(() => promptSetUsername(true), 400);
     } catch (err) {
-      btn.disabled = false; btn.textContent = cta;
-      toast(err.message, "err");
+      btn.disabled = false; btn.textContent = label;
+      if (status) status.textContent = "";
+      toast(err.message || "Connection failed", "err");
     }
   };
+  const b1 = $("#connect-top"), b2 = $("#connect-main");
+  if (b1) b1.onclick = () => go(b1);
+  if (b2) b2.onclick = () => go(b2);
+}
+
+/** Optional display-name prompt (post-signup) and editor. */
+function promptSetUsername(firstTime = false) {
+  openModal(`
+    <div class="modal">
+      <div class="m-h">${firstTime ? "Pick a display name" : "Change display name"} <span class="close" data-close>×</span></div>
+      <div class="m-b">
+        <div class="field"><label>Username (optional)</label><input class="input" id="uname" maxlength="20" placeholder="3–20 letters, numbers or _"/></div>
+        <div class="dim mono" style="font-size:10.5px">Shown on the leaderboard and crew feeds. You can skip this — your address is used until you set one.</div>
+      </div>
+      <div class="m-f">
+        <button class="btn btn-ghost" data-close>${firstTime ? "Skip" : "Cancel"}</button>
+        <button class="btn btn-amber" id="uname-go">Save</button>
+      </div>
+    </div>
+  `);
+  const go = $("#uname-go");
+  const input = $("#uname");
+  if (input && state.user?.hasUsername) input.value = state.user.username;
+  go.onclick = async () => {
+    const username = (input.value || "").trim();
+    if (!username) { closeModal(); return; }
+    go.disabled = true; go.textContent = "Saving…";
+    try {
+      const r = await api("/me/username", { method: "POST", body: { username } });
+      state.user = r.user;
+      closeModal();
+      toast("Display name set", "ok");
+      updateStatusBar();
+      if (state.route?.name === "wallet") renderWallet();
+    } catch (err) { go.disabled = false; go.textContent = "Save"; toast(err.message, "err"); }
+  };
+  if (input) input.focus();
 }
 
 // ──────────────────────────────────────────────────────── data sync ───────

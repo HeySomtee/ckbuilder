@@ -18,7 +18,7 @@
 import { randomBytes } from "crypto";
 import { ccc } from "@ckb-ccc/core";
 
-import { RENEW_FEE_CKB, SHANNONS_PER_CKB } from "./config";
+import { SHANNONS_PER_CKB } from "./config";
 import type { UserWallet } from "./types";
 
 /** Minimum capacity (CKB) for a standard lock-only cell. */
@@ -93,12 +93,68 @@ export async function transferFrom(
   return await signer.sendTransaction(tx);
 }
 
-/** Does a wallet hold enough to cover the renewal fee + a little headroom? */
-export async function canAffordRenewal(address: string): Promise<boolean> {
-  const bal = await getBalanceShannons(address);
-  // need the fee plus ~1 CKB for the network fee / change dust
-  const needed = ckbToShannons(RENEW_FEE_CKB) + SHANNONS_PER_CKB;
-  return bal >= needed;
+/** Verify a wallet-login signature (from CCC's signMessage) against a message. */
+export async function verifyWalletSignature(
+  message: string,
+  signature: { signature: string; identity: string; signer: string },
+): Promise<boolean> {
+  try {
+    return await ccc.Signer.verifyMessage(message, signature as unknown as ccc.Signature);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Verify that `txHash` is a committed Pudge tx paying at least `minCkb` to the
+ * treasury, with at least one input from `fromAddress`. Returns the total
+ * shannons paid to the treasury. Backs non-custodial deposits and streak
+ * renewals: the user signs the transfer in their own wallet, and the server
+ * only credits escrow / revives a streak once the payment is confirmed.
+ */
+export async function verifyPaymentToTreasury(
+  txHash: string,
+  fromAddress: string,
+  treasuryAddress: string,
+  minCkb: number,
+): Promise<bigint> {
+  const c = getClient();
+  const res = await c.getTransaction(txHash);
+  if (!res || !res.transaction) throw new Error("Transaction not found on-chain yet.");
+  const status = String((res as { status?: string }).status ?? "");
+  if (status !== "committed") {
+    throw new Error(`Transaction not committed yet (status: ${status || "unknown"}).`);
+  }
+  const tx = res.transaction;
+  const { script: treasuryLock } = await ccc.Address.fromString(treasuryAddress, c);
+  const { script: userLock } = await ccc.Address.fromString(fromAddress, c);
+  const treasuryHash = treasuryLock.hash();
+
+  let paid = 0n;
+  for (const out of tx.outputs) {
+    if (out.lock.hash() === treasuryHash) paid += out.capacity;
+  }
+  if (paid < ckbToShannons(minCkb)) {
+    throw new Error(
+      `Transaction pays ${shannonsToCkb(paid)} CKB to the treasury; need at least ${minCkb} CKB.`,
+    );
+  }
+
+  const userHash = userLock.hash();
+  let fromUser = false;
+  for (const input of tx.inputs) {
+    const prev = input.previousOutput;
+    if (!prev) continue;
+    const prevRes = await c.getTransaction(prev.txHash);
+    const prevOut = prevRes?.transaction?.outputs?.[Number(prev.index)];
+    if (prevOut && prevOut.lock.hash() === userHash) {
+      fromUser = true;
+      break;
+    }
+  }
+  if (!fromUser) throw new Error("This transaction was not sent from your connected wallet.");
+
+  return paid;
 }
 
 export const PUDGE_EXPLORER = "https://pudge.explorer.nervos.org";
@@ -107,4 +163,10 @@ export function txUrl(hash: string): string {
 }
 export function addressUrl(address: string): string {
   return `${PUDGE_EXPLORER}/address/${address}`;
+}
+
+/** Short, human display of a CKB address (used when a username is unset). */
+export function abbrevAddress(a: string): string {
+  if (!a) return "player";
+  return a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
 }

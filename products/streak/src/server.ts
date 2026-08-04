@@ -24,10 +24,9 @@ import {
   createSession,
   destroySession,
   getSessionUserId,
-  hashPassword,
-  validatePassword,
+  issueChallenge,
+  takeChallenge,
   validateUsername,
-  verifyPassword,
 } from "./auth";
 import {
   GameError,
@@ -63,7 +62,7 @@ import {
   getTreasury,
   withdraw,
 } from "./wallet";
-import { addressUrl, createWallet, getBalanceShannons, shannonsToCkb, txUrl } from "./chain";
+import { abbrevAddress, addressUrl, getBalanceShannons, shannonsToCkb, txUrl, verifyWalletSignature } from "./chain";
 import { provider } from "./providers";
 import { initNotifications } from "./notifications";
 import { supaEnsureTable } from "./store_supabase";
@@ -166,68 +165,94 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: 
 
 // ── Auth handlers ───────────────────────────────────────────────────────────
 
-async function handleSignup(req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handleAuthNonce(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const body = await readJson(req);
-  const username = validateUsername(body.username);
-  const password = validatePassword(body.password);
-  if (!username) return sendJson(res, 400, { error: "Username must be 3–20 letters, numbers or _." });
-  if (!password) return sendJson(res, 400, { error: "Password must be at least 6 characters." });
+  const address = typeof body.address === "string" ? body.address.trim() : "";
+  if (!address) return sendJson(res, 400, { error: "A wallet address is required." });
+  const message = issueChallenge(address);
+  sendJson(res, 200, { message });
+}
 
-  const exists = await read((db) =>
-    db.users.some((u) => u.username.toLowerCase() === username.toLowerCase()),
-  );
-  if (exists) return sendJson(res, 409, { error: "That username is taken." });
+async function handleAuthVerify(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJson(req);
+  const address = typeof body.address === "string" ? body.address.trim() : "";
+  const signature = body.signature;
+  if (!address || !signature || typeof signature !== "object") {
+    return sendJson(res, 400, { error: "Address and signature are required." });
+  }
 
-  const wallet = await createWallet();
-  const { hash, salt } = hashPassword(password);
+  const message = takeChallenge(address);
+  if (!message) return sendJson(res, 400, { error: "Login challenge expired — please reconnect." });
 
-  const user: User = {
-    id: randomUUID(),
-    username,
-    passwordHash: hash,
-    passwordSalt: salt,
-    createdAt: new Date().toISOString(),
-    wallet,
-    escrowShannons: "0",
-    creatorFeesShannons: "0",
-    streak: { current: 0, best: 0, status: "active" },
-    stats: {
-      totalBets: 0,
-      wonBets: 0,
-      lostBets: 0,
-      renews: 0,
-      netPnlShannons: "0",
-      turnoverShannons: "0",
-    },
-  };
-  await (await import("./store")).update((db) => {
-    db.users.push(user);
+  const ok = await verifyWalletSignature(message, signature);
+  if (!ok) return sendJson(res, 401, { error: "Signature verification failed." });
+
+  const identity = String(signature.identity ?? "");
+  const walletType = String(signature.signType ?? signature.signer ?? "");
+  if (!identity) return sendJson(res, 400, { error: "Signature is missing an identity." });
+
+  const { user, created } = await (await import("./store")).update((db) => {
+    let u = db.users.find((x) => x.walletIdentity === identity);
+    let created = false;
+    if (!u) {
+      u = {
+        id: randomUUID(),
+        walletIdentity: identity,
+        walletType,
+        createdAt: new Date().toISOString(),
+        wallet: { address },
+        escrowShannons: "0",
+        creatorFeesShannons: "0",
+        streak: { current: 0, best: 0, status: "active" },
+        stats: {
+          totalBets: 0,
+          wonBets: 0,
+          lostBets: 0,
+          renews: 0,
+          netPnlShannons: "0",
+          turnoverShannons: "0",
+        },
+      };
+      db.users.push(u);
+      created = true;
+    } else {
+      u.wallet.address = address; // refresh in case a different address is connected
+      if (!u.walletType) u.walletType = walletType;
+    }
+    return { user: u, created };
   });
 
   const token = createSession(user.id);
   setSessionCookie(res, token);
-  sendJson(res, 201, {
+  sendJson(res, created ? 201 : 200, {
     user: await toPublicUser(user),
-    walletAddress: wallet.address,
-    walletExplorer: addressUrl(wallet.address),
-    justCreated: true,
+    walletAddress: user.wallet.address,
+    walletExplorer: addressUrl(user.wallet.address),
+    justCreated: created,
   });
 }
 
-async function handleLogin(req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handleSetUsername(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const user = await requireUser(req, res);
+  if (!user) return;
   const body = await readJson(req);
-  const username = typeof body.username === "string" ? body.username.trim() : "";
-  const password = typeof body.password === "string" ? body.password : "";
-
-  const user = await read((db) =>
-    db.users.find((u) => u.username.toLowerCase() === username.toLowerCase()),
-  );
-  if (!user || !verifyPassword(password, user.passwordHash, user.passwordSalt)) {
-    return sendJson(res, 401, { error: "Invalid username or password." });
+  const username = validateUsername(body.username);
+  if (!username) {
+    return sendJson(res, 400, { error: "Username must be 3–20 letters, numbers or _." });
   }
-  const token = createSession(user.id);
-  setSessionCookie(res, token);
-  sendJson(res, 200, { user: await toPublicUser(user) });
+  const taken = await read((db) =>
+    db.users.some(
+      (u) => u.id !== user.id && (u.username ?? "").toLowerCase() === username.toLowerCase(),
+    ),
+  );
+  if (taken) return sendJson(res, 409, { error: "That username is taken." });
+
+  await (await import("./store")).update((db) => {
+    const u = db.users.find((x) => x.id === user.id);
+    if (u) u.username = username;
+  });
+  const fresh = await read((db) => db.users.find((x) => x.id === user.id))!;
+  sendJson(res, 200, { user: await toPublicUser(fresh!) });
 }
 
 async function handleLogout(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -381,7 +406,7 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
         const u = db.users.find((x) => x.id === b.userId);
         const m = db.matches.find((x) => x.id === b.matchId);
         return {
-          user: u?.username ?? "—",
+          user: u ? (u.username ?? abbrevAddress(u.wallet.address)) : "—",
           outcome: b.outcome,
           amountCkb: shannonsToCkb(asBig(b.amount)),
           matchLabel: m ? `${m.home.code}–${m.away.code}` : b.matchId,
@@ -559,7 +584,7 @@ async function handleDeposit(req: IncomingMessage, res: ServerResponse): Promise
   if (!user) return;
   const body = await readJson(req);
   try {
-    const r = await deposit(user.id, Number(body.amountCkb));
+    const r = await deposit(user.id, String(body.txHash));
     sendJson(res, 200, { ...r, explorer: txUrl(r.txHash) });
   } catch (err) {
     if (err instanceof WalletError) return sendJson(res, 400, { error: err.message, code: err.code });
@@ -585,8 +610,9 @@ async function handleWithdraw(req: IncomingMessage, res: ServerResponse): Promis
 async function handleRenew(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const user = await requireUser(req, res);
   if (!user) return;
+  const body = await readJson(req);
   try {
-    const r = await renewStreak(user.id);
+    const r = await renewStreak(user.id, String(body.txHash));
     sendJson(res, 200, { ...r, explorer: txUrl(r.txHash) });
   } catch (err) {
     if (err instanceof GameError) return sendJson(res, 400, { error: err.message, code: err.code });
@@ -827,10 +853,11 @@ async function handleReceiptProof(
 type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
 
 const staticRoutes: Record<string, Handler> = {
-  "POST /api/signup": (req, res) => handleSignup(req, res),
-  "POST /api/login": (req, res) => handleLogin(req, res),
+  "POST /api/auth/nonce": (req, res) => handleAuthNonce(req, res),
+  "POST /api/auth/verify": (req, res) => handleAuthVerify(req, res),
   "POST /api/logout": (req, res) => handleLogout(req, res),
   "GET /api/me": (req, res) => handleMe(req, res),
+  "POST /api/me/username": (req, res) => handleSetUsername(req, res),
   "POST /api/me/notify": (req, res) => handleSetNotify(req, res),
   "POST /api/integrations/telegram/connect": (req, res) => handleTelegramConnect(req, res),
   "POST /api/integrations/telegram/disconnect": (req, res) => handleTelegramDisconnect(req, res),

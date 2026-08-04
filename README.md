@@ -180,9 +180,10 @@ npm run streak
 MATCH_PROVIDER=dummy npm run streak
 ```
 
-Sign up (a Pudge wallet is generated automatically), fund the printed address
-from the [Pudge faucet](https://faucet.nervos.org/), then **Deposit** to credit
-your escrow and start betting. The data feed is selectable: `MATCH_PROVIDER=dummy`
+Connect a CKB wallet (JoyID, MetaMask, UniSat, OKX…) to sign in — no email or
+password. Fund it from the [Pudge faucet](https://faucet.nervos.org/), then
+**Deposit** (you sign the transfer in your own wallet) to credit your escrow
+and start betting. The data feed is selectable: `MATCH_PROVIDER=dummy`
 runs a self-contained EPL simulator (matches live at boot), while the default
 `worldcup` provider uses the worldcup26.ir oracle when `WC_API_EMAIL` +
 `WC_API_PASSWORD` (or `WC_API_TOKEN`) are set, falling back to a deterministic

@@ -29,7 +29,7 @@
 import { randomUUID } from "crypto";
 
 import { CREATOR_FEE_BPS, MARKET_HISTORY_CAP, MAX_BET_CKB, MIN_BET_CKB, PROTOCOL_FEE_BPS } from "./config";
-import { ckbToShannons, shannonsToCkb } from "./chain";
+import { abbrevAddress, ckbToShannons, shannonsToCkb } from "./chain";
 import { matchLabel } from "./matches";
 import { read, update } from "./store";
 import { asBig, asString } from "./wallet";
@@ -486,7 +486,7 @@ export async function getMarketDetail(
     return {
       ...summary,
       createdAt: market.createdAt,
-      creator: creator ? { id: creator.id, username: creator.username } : null,
+      creator: creator ? { id: creator.id, username: creator.username ?? abbrevAddress(creator.wallet.address) } : null,
       history: market.history,
       feeBps: market.feeBps,
       payout: market.payout,

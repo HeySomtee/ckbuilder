@@ -32,9 +32,11 @@ npm start
 
 Open <http://localhost:4100>.
 
-Sign up → a Pudge wallet is generated automatically. Fund it from the
-[Nervos Pudge faucet](https://faucet.nervos.org/) (address is on the **Account**
-page), then **Deposit** to credit your platform escrow and start betting.
+**Connect Wallet** → pick a CKB wallet (JoyID, MetaMask, UniSat, OKX…) and sign
+the login challenge. Your wallet is your account — no email, no password.
+Optionally set a display name for the leaderboard. Fund your wallet from the
+[Nervos Pudge faucet](https://faucet.nervos.org/), then **Deposit** (you sign
+the transfer yourself) to credit your platform escrow and start betting.
 
 Independently verify any settled market:
 
@@ -157,15 +159,17 @@ accrues to the protocol pot instead.
 Bets are virtual ledger ops against a per-user **escrow balance**, but every
 CKB on the platform corresponds to a real on-chain Pudge transaction:
 
-- **Deposit** = real Pudge tx `wallet → treasury`, credits escrow.
+- **Deposit** = real Pudge tx `wallet → treasury`, **signed by the user** in
+  their own wallet; the server verifies the tx before crediting escrow.
 - **Bet / claim** = fast virtual ops against escrow.
-- **Withdraw** = real Pudge tx `treasury → wallet`, debits escrow.
-- **Streak revive** = real Pudge tx `wallet → treasury` (63 CKB).
+- **Withdraw** = real Pudge tx `treasury → wallet`, signed by the treasury,
+  paid to the user's connected address.
+- **Streak revive** = real Pudge tx `wallet → treasury` (63 CKB), user-signed.
 
-This mirrors how Polymarket actually works (USDC into a custodial smart
-account) and keeps betting snappy without paying a cell-floor on every micro
-stake. Minimum on-chain transfer is **100 CKB** (cell floor + fee headroom);
-minimum single bet against escrow is **10 CKB**.
+Betting stays snappy (virtual escrow) without paying a cell-floor on every
+micro stake, while every deposit and renewal is a real, user-signed transfer
+the server confirms on-chain. Minimum on-chain transfer is **100 CKB** (cell
+floor + fee headroom); minimum single bet against escrow is **10 CKB**.
 
 ---
 
@@ -200,7 +204,7 @@ Browser (vanilla SPA)                       Node http server (no framework)
                                               src/matches.ts     — applyResult (oracle ↔ simulator)
                                               src/livescores.ts  — worldcup26.ir client (oracle role)
                                               src/wcdata.ts      — real WC2026 fixture loader
-                                              src/auth.ts        — scrypt + session tokens
+                                              src/auth.ts        — wallet-login challenges + sessions
                                               src/chain.ts       — CCC: wallets, balances, transfers
                                               src/store.ts       — atomic JSON store (data/db.json)
                                                       │
@@ -386,10 +390,11 @@ anchor once the whole schedule has finished. Tunables:
 ## API surface
 
 ```
-POST /api/signup                 → create user + Pudge wallet
-POST /api/login                  → start session
+POST /api/auth/nonce             → { address }     login challenge to sign
+POST /api/auth/verify            → { address, signature }  verify + start session
 POST /api/logout
 GET  /api/me                     → current user (public view)
+POST /api/me/username            → { username }    set/change display name
 GET  /api/dashboard              → one-shot terminal payload (user, headline,
                                    counts, leaderboard top, tape)
 GET  /api/markets[?status=open]  → market list
@@ -397,9 +402,9 @@ GET  /api/markets/:id            → market detail (chart, feed, my positions)
 POST /api/markets/:id/bet        → { outcome, amountCkb, asStreakPick? }
 GET  /api/portfolio              → all my positions + open stake + realised P&L
 GET  /api/wallet                 → on-chain + escrow balances, recent ledger
-POST /api/wallet/deposit         → { amountCkb }   real Pudge tx wallet→treasury
+POST /api/wallet/deposit         → { txHash }      credit escrow from a user-signed tx
 POST /api/wallet/withdraw        → { amountCkb }   real Pudge tx treasury→wallet
-POST /api/renew                  → revive a failed streak (on-chain fee)
+POST /api/renew                  → { txHash }      revive from a user-signed 63 CKB tx
 POST /api/reset                  → abandon a failed streak (zero, free)
 GET  /api/crews                  → my crews (H2H streaks, co-picks, feed)
 POST /api/crews                  → { name }        create a crew
@@ -415,16 +420,24 @@ GET  /api/receipts/:id/proof     → merkle inclusion proof(s) for ?bet= or ?min
 
 ---
 
-## Security model (read before reusing)
+## Security model
 
-This is a **custodial testnet** design: each user's private key is generated
-server-side and stored in `data/db.json` so the terminal can sign deposit,
-withdraw, and revival transactions on the user's behalf (one-tap UX). This is
-acceptable because Pudge testnet coins have **no monetary value**.
+Login and on-chain actions are **non-custodial**. Users connect their own CKB
+wallet through [CCC](https://docs.ckbccc.com/)'s multi-wallet connector and sign
+a login challenge; the server verifies the signature with
+`ccc.Signer.verifyMessage` and keys the account by the verified wallet
+identity. The server never holds user keys.
 
-**Do not reuse this pattern on mainnet.** For real funds, hand the key to the
-user or integrate a non-custodial wallet connector (e.g. CCC's signer /
-connectors) so the server never holds keys.
+Deposits and streak renewals are transfers the **user signs in their own
+wallet**; the server confirms the on-chain tx (committed, paid to the treasury,
+from the user's address) before crediting escrow or reviving a streak.
+Withdrawals are the only treasury-signed leg, paying out to the user's
+connected address.
+
+The one server-held key is the **treasury** wallet (`TREASURY_PRIVATE_KEY`),
+used to pay out withdrawals and publish settlement receipts. On testnet its
+coins have no monetary value; on mainnet you would run the treasury behind
+appropriate key management.
 
 ---
 

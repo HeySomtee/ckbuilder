@@ -21,7 +21,7 @@ import {
   CREW_REVIVE_REBATE_CAP_CKB,
   CREW_REVIVE_REBATE_CKB,
 } from "./config";
-import { ckbToShannons, shannonsToCkb } from "./chain";
+import { abbrevAddress, ckbToShannons, shannonsToCkb } from "./chain";
 import { matchLabel } from "./matches";
 import { read, update } from "./store";
 import { winRate } from "./markets";
@@ -142,7 +142,7 @@ export function reviveRebate(
     );
     if (picked) {
       const mate = db.users.find((u) => u.id === mateId);
-      if (mate) coPickers.push(mate.username);
+      if (mate) coPickers.push(mate.username ?? abbrevAddress(mate.wallet.address));
     }
   }
 
@@ -169,7 +169,7 @@ function buildCrewView(db: StreakDB, crew: Crew, meId: string): CrewView {
       const pick = todayStreakPick(db, u.id);
       return {
         userId: u.id,
-        username: u.username,
+        username: u.username ?? abbrevAddress(u.wallet.address),
         current: u.streak.current,
         best: u.streak.best,
         status: u.streak.status,
