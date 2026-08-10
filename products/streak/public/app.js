@@ -164,8 +164,10 @@ async function walletLogin() {
   return api("/auth/verify", { method: "POST", body: { address, signature } });
 }
 
-/** Build, sign, and broadcast a transfer of `amountCkb` to the treasury. */
-async function payTreasury(amountCkb) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Sign + broadcast a transfer to the treasury; returns the tx hash (no wait). */
+async function broadcastTransfer(amountCkb) {
   const signer = await ensureSigner();
   const client = signer.client;
   const w = await api("/wallet");
@@ -175,9 +177,21 @@ async function payTreasury(amountCkb) {
   });
   await tx.completeInputsByCapacity(signer);
   await tx.completeFeeBy(signer);
-  const txHash = await signer.sendTransaction(tx);
-  try { await client.waitTransaction(txHash); } catch (e) { /* server re-checks status */ }
-  return txHash;
+  return signer.sendTransaction(tx);
+}
+
+/** POST a treasury-confirm endpoint, retrying until the tx commits server-side. */
+async function confirmTreasuryTx(path, txHash) {
+  const deadline = Date.now() + 180_000;
+  for (;;) {
+    try {
+      return await api(path, { method: "POST", body: { txHash } });
+    } catch (err) {
+      const pending = /not committed|not found/i.test(err.message || "");
+      if (pending && Date.now() < deadline) { await sleep(4000); continue; }
+      throw err;
+    }
+  }
 }
 
 const state = {
@@ -187,9 +201,56 @@ const state = {
   pollTimer: null,
   clockTimer: null,
   route: null,
+  activities: [],
+  nextActivityId: 1,
+  onboardingShown: false,
 };
 
 function isAuthed() { return !!state.user; }
+
+// ── Background activity indicator (non-blocking on-chain actions) ────────────
+
+function activityHost() {
+  let host = document.getElementById("activity-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "activity-host";
+    host.className = "activity-host";
+    document.body.appendChild(host);
+  }
+  return host;
+}
+function renderActivities() {
+  const host = activityHost();
+  host.innerHTML = state.activities.map((a) => `
+    <div class="activity ${a.status}">
+      <span class="a-spin">${a.status === "run" ? "\u27f3" : a.status === "ok" ? "\u2713" : "\u2715"}</span>
+      <span class="a-label">${esc(a.label)}</span>
+    </div>
+  `).join("");
+  host.style.display = state.activities.length ? "" : "none";
+}
+function beginActivity(label) {
+  const id = state.nextActivityId++;
+  state.activities.push({ id, label, status: "run" });
+  renderActivities();
+  return id;
+}
+function endActivity(id, ok, label) {
+  const a = state.activities.find((x) => x.id === id);
+  if (a) { a.status = ok ? "ok" : "err"; if (label) a.label = label; renderActivities(); }
+  setTimeout(() => {
+    state.activities = state.activities.filter((x) => x.id !== id);
+    renderActivities();
+  }, 3200);
+}
+/** Run an async task in the background with a global indicator + toasts. */
+function runBackground(label, fn) {
+  const id = beginActivity(label);
+  return fn()
+    .then((res) => { endActivity(id, true, `${label} \u00b7 done`); return res; })
+    .catch((err) => { endActivity(id, false, `${label} failed`); toast(err.message || `${label} failed`, "err"); });
+}
 
 // ───────────────────────────────────────────────────────────── toasts ──────
 
@@ -365,6 +426,14 @@ function ensureNavDelegation() {
       return;
     }
 
+    // How-it-works / onboarding
+    if (t.closest("#help-btn")) {
+      e.preventDefault();
+      closeMobileNav();
+      showOnboarding(true);
+      return;
+    }
+
     // Sign out
     if (t.closest("#signout")) {
       e.preventDefault();
@@ -444,6 +513,7 @@ function updateStatusBar() {
     ${liveDot}
     <span class="dim" style="font-size:10px">${liveText}</span>
     <span class="right">
+      <button class="statusbtn" id="help-btn" title="How it works">?</button>
       <span>BAL <span class="amber mono-num">${fmtCkb(u?.escrowCkb)}</span></span>
       <span>WALLET <span class="mono-num">${fmtCkb(state.dashboard?.walletBalanceCkb)}</span></span>
       <span>STREAK <span class="amber mono-num">${u?.streak.current ?? 0}</span></span>
@@ -598,6 +668,14 @@ async function renderDashboard() {
       </div>
     </div>
 
+    ${Number(u?.escrowCkb || 0) <= 0 ? `
+      <div class="fund-hint">
+        <span class="fh-ico">◆</span>
+        <span class="fh-txt"><b>Fund your account to start betting.</b> Deposit CKB into escrow — you sign it in your own wallet.</span>
+        <a class="btn btn-amber btn-sm" href="#/wallet">Deposit CKB ›</a>
+      </div>
+    ` : ""}
+
     <div class="kpis">
       <div class="kpi"><span class="l">Net P&L</span><span class="v ${pnlClass(u?.stats.netPnlShannons)}">${fmtPnl(Number(u?.stats.netPnlShannons || 0) / 1e8)}</span><span class="d dim">CKB realised</span></div>
       <div class="kpi"><span class="l">Win Rate</span><span class="v">${u?.winRate ?? 0}%</span><span class="d dim">${u?.stats.wonBets}W / ${u?.stats.lostBets}L</span></div>
@@ -637,6 +715,7 @@ async function renderDashboard() {
   `;
   bindHeadline();
   startPolling(renderDashboard);
+  if (!state.onboardingShown) { state.onboardingShown = true; showOnboarding(false); }
 }
 
 function headlineCard(m) {
@@ -1164,21 +1243,25 @@ function confirmRenew() {
   `);
   $("#renew-go").onclick = async () => {
     const btn = $("#renew-go");
-    btn.disabled = true; btn.textContent = "Signing…";
+    btn.disabled = true; btn.textContent = "Approve in wallet…";
+    let txHash;
     try {
-      const txHash = await payTreasury(fee);
-      btn.textContent = "Confirming…";
-      const r = await api("/renew", { method: "POST", body: { txHash } });
-      closeModal();
-      const extra = Number(r.rebateCkb) > 0 ? ` · +${fmtCkb(r.rebateCkb)} CKB crew rebate` : "";
-      toast(`Streak revived · tx ${r.txHash.slice(0, 10)}…${extra}`, "ok");
-      await refreshDashboard();
-      await refreshUser();
-      renderStreak();
+      txHash = await broadcastTransfer(fee);
     } catch (err) {
       btn.disabled = false; btn.textContent = "Sign & Send";
       toast(err.message, "err");
+      return;
     }
+    closeModal();
+    toast("Revive submitted — confirming on-chain…", "ok");
+    runBackground(`Reviving streak · ${fee} CKB`, async () => {
+      const r = await confirmTreasuryTx("/renew", txHash);
+      const extra = Number(r.rebateCkb) > 0 ? ` · +${fmtCkb(r.rebateCkb)} CKB crew rebate` : "";
+      toast(`Streak revived${extra}`, "ok");
+      await refreshDashboard();
+      await refreshUser();
+      if (state.route?.name === "streak") renderStreak();
+    });
   };
 }
 
@@ -1348,15 +1431,21 @@ async function renderWallet() {
   $("#dep-go").onclick = async () => {
     const amt = Number($("#dep-amt").value);
     if (!amt || amt < w.minOnchainCkb) { toast(`Minimum deposit is ${w.minOnchainCkb} CKB.`, "err"); return; }
-    const btn = $("#dep-go"); btn.disabled = true; btn.textContent = "SIGN IN WALLET…";
+    const btn = $("#dep-go"); btn.disabled = true; btn.textContent = "APPROVE IN WALLET…";
+    let txHash;
     try {
-      const txHash = await payTreasury(amt);
-      btn.textContent = "CONFIRMING…";
-      const r = await api("/wallet/deposit", { method: "POST", body: { txHash } });
-      toast(`Deposited ${r.amountCkb} CKB · tx ${r.txHash.slice(0, 10)}…`, "ok");
+      txHash = await broadcastTransfer(amt);
+    } catch (err) { btn.disabled = false; btn.textContent = "SIGN & DEPOSIT"; toast(err.message, "err"); return; }
+    // Broadcast done — confirm in the background so the user can keep navigating.
+    $("#dep-amt").value = "";
+    btn.disabled = false; btn.textContent = "SIGN & DEPOSIT";
+    toast("Deposit submitted — confirming on-chain…", "ok");
+    runBackground(`Depositing ${amt} CKB`, async () => {
+      const r = await confirmTreasuryTx("/wallet/deposit", txHash);
+      toast(`Deposited ${r.amountCkb} CKB · escrow updated`, "ok");
       await refreshUser();
-      renderWallet();
-    } catch (err) { btn.disabled = false; btn.textContent = "SIGN & DEPOSIT"; toast(err.message, "err"); }
+      if (state.route?.name === "wallet") renderWallet();
+    });
   };
   $("#wd-go").onclick = async () => {
     const amt = Number($("#wd-amt").value);
@@ -1695,7 +1784,7 @@ function renderLanding() {
       toast(r.justCreated ? `Welcome · ${shortAddr(r.walletAddress)}` : "Signed in", "ok");
       location.hash = "#/dashboard";
       navigate();
-      if (r.user && !r.user.hasUsername) setTimeout(() => promptSetUsername(true), 400);
+      if (r.justCreated) setTimeout(() => showOnboarding(true), 500);
     } catch (err) {
       btn.disabled = false; btn.textContent = label;
       if (status) status.textContent = "";
@@ -1741,6 +1830,38 @@ function promptSetUsername(firstTime = false) {
   if (input) input.focus();
 }
 
+/** First-run onboarding / how-to. Shows once unless forced. */
+function showOnboarding(force = false) {
+  if (!force) {
+    try { if (localStorage.getItem("streak_onboarded") === "1") return; } catch {}
+    if (overlay.classList.contains("on")) return;
+  }
+  const done = () => { try { localStorage.setItem("streak_onboarded", "1"); } catch {} };
+  openModal(`
+    <div class="modal">
+      <div class="m-h">Welcome to Streak <span class="close" data-close>×</span></div>
+      <div class="m-b">
+        <div class="dim" style="font-size:12px;line-height:1.6">A parimutuel prediction market on CKB Pudge. Three steps to your first pick:</div>
+        <ol class="onboard-steps">
+          <li><span class="on-num">1</span><div><b>Wallet connected</b><div class="dim">Your CKB wallet is your account — no email or password.</div></div></li>
+          <li><span class="on-num">2</span><div><b>Fund your account</b><div class="dim">Deposit CKB into escrow (you sign it in your wallet). Get testnet CKB from the <a href="https://faucet.nervos.org/" target="_blank" rel="noopener">Pudge faucet</a> first.</div></div></li>
+          <li><span class="on-num">3</span><div><b>Make a pick</b><div class="dim">Back a side on any market, or lock one streak pick a day and keep the run alive.</div></div></li>
+        </ol>
+      </div>
+      <div class="m-f">
+        <button class="btn btn-ghost" id="onboard-skip">Explore first</button>
+        <button class="btn btn-amber" id="onboard-fund">Fund my account ›</button>
+      </div>
+    </div>
+  `);
+  const skip = $("#onboard-skip");
+  if (skip) skip.onclick = () => { done(); closeModal(); };
+  const fund = $("#onboard-fund");
+  if (fund) fund.onclick = () => { done(); closeModal(); location.hash = "#/wallet"; navigate(); };
+  const x = overlay.querySelector(".close[data-close]");
+  if (x) x.onclick = () => { done(); closeModal(); };
+}
+
 // ──────────────────────────────────────────────────────── data sync ───────
 
 async function refreshUser() {
@@ -1770,9 +1891,13 @@ async function refreshDashboard(force = false) {
 // Periodically re-run the current view so prices, ticker and status stay fresh.
 function startPolling(viewFn) {
   if (state.pollTimer) clearInterval(state.pollTimer);
+  const armedRoute = state.route; // this poll belongs to the current route
   state.pollTimer = setInterval(async () => {
     try {
       await refreshDashboard();
+      // Bail if the user navigated away mid-await, so a stale poll can't
+      // re-render the old view on top of the new page.
+      if (state.route !== armedRoute) return;
       await viewFn(state.route);
     } catch (err) { /* swallow */ }
   }, 12_000);

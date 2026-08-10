@@ -752,6 +752,78 @@ button.outcome.away:hover { border-color: var(--down); }
 .toast.ok { border-left: 3px solid var(--up); }
 .toast.err { border-left: 3px solid var(--down); color: var(--down); }
 
+/* ── Background activity indicator (non-blocking on-chain actions) ───────── */
+.activity-host {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 210;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.activity {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  max-width: calc(100vw - 28px);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--amber);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-0);
+  box-shadow: var(--shadow-soft);
+}
+.activity.ok { border-left-color: var(--up); }
+.activity.err { border-left-color: var(--down); color: var(--down); }
+.activity .a-spin { color: var(--amber); display: inline-block; }
+.activity.run .a-spin { animation: aspin 1s linear infinite; }
+.activity.ok .a-spin { color: var(--up); }
+.activity.err .a-spin { color: var(--down); }
+@keyframes aspin { to { transform: rotate(360deg); } }
+
+/* ── Fund hint banner + onboarding ──────────────────────────────────────── */
+.fund-hint {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber);
+  border-radius: 4px;
+}
+.fund-hint .fh-ico { color: var(--amber); font-size: 14px; }
+.fund-hint .fh-txt { flex: 1; min-width: 200px; font-size: 12.5px; color: var(--ink-1); line-height: 1.5; }
+.fund-hint .fh-txt b { color: var(--ink-0); }
+.fund-hint .btn { flex: 0 0 auto; }
+
+.onboard-steps { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.onboard-steps li { display: flex; gap: 12px; align-items: flex-start; font-size: 12.5px; color: var(--ink-1); }
+.onboard-steps .on-num {
+  flex: 0 0 22px; width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--amber); color: var(--amber); border-radius: 50%;
+  font-family: var(--mono); font-size: 11px;
+}
+.onboard-steps b { color: var(--ink-0); }
+.onboard-steps a { color: var(--amber); }
+
+/* Status-bar help button */
+.statusbtn {
+  width: 18px; height: 18px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line-bright);
+  background: var(--bg-2);
+  color: var(--ink-1);
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.statusbtn:hover { border-color: var(--amber); color: var(--amber); }
+
 /* Helpers */
 .hide { display: none !important; }
 .tag-streak {
