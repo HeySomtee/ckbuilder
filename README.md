@@ -34,6 +34,7 @@ reports/
   week-10.md         # Streak Terminal — one-tap Telegram alerts + Supabase state
   week-11.md         # Streak Terminal — responsive/mobile UI + Render deploy
   week-12.md         # Streak Terminal — wallet-native login (self-custody) + non-blocking on-chain UX
+  week-13.md         # First on-chain CKB script — a hash-lock in TypeScript (ckb-js-vm)
 ```
 
 ## Weekly Index
@@ -52,6 +53,7 @@ reports/
 | 10 | Streak Terminal — one-tap Telegram alerts + Supabase state | [reports/week-10.md](reports/week-10.md) | [products/streak](products/streak) |
 | 11 | Streak Terminal — responsive/mobile UI + Render deploy | [reports/week-11.md](reports/week-11.md) | [products/streak](products/streak) |
 | 12 | Streak Terminal — wallet-native login (self-custody) + non-blocking on-chain UX | [reports/week-12.md](reports/week-12.md) | [products/streak](products/streak) |
+| 13 | First on-chain CKB script — a hash-lock in TypeScript (ckb-js-vm) | [reports/week-13.md](reports/week-13.md) | [src/week13/vault-lock](src/week13/vault-lock) |
 
 ## Setup
 
@@ -194,6 +196,29 @@ runs a self-contained EPL simulator (matches live at boot), while the default
 `WC_API_PASSWORD` (or `WC_API_TOKEN`) are set, falling back to a deterministic
 simulator otherwise. See
 [products/streak/README.md](products/streak/README.md) for full configuration.
+
+### Week 13 — Vault Lock (a CKB script in TypeScript)
+
+My first on-chain CKB **lock script**: a hash-lock written in TypeScript and run
+by [ckb-js-vm](https://github.com/nervosnetwork/ckb-js-vm) on the CKB-VM. A cell
+unlocks only when the spender reveals a preimage whose CKB blake2b hash matches
+the commitment in the lock args — the atom of an HTLC, and the first step toward
+replacing the Streak treasury's server-held custody with custody enforced by code.
+
+```bash
+cd src/week13/vault-lock
+npm install
+
+# One-time: put ckb-debugger on PATH (ckb-testtool spawns it). See the project
+# README for the prebuilt-binary download for your OS.
+export PATH="$PWD/.tools:$PATH"
+
+npm run build   # esbuild bundle + compile to ckb-js-vm bytecode
+npm test        # runs the lock on the real CKB-VM (unlock + reject cases)
+```
+
+See [src/week13/vault-lock/README.md](src/week13/vault-lock/README.md) for the
+toolchain setup and [reports/week-13.md](reports/week-13.md) for the writeup.
 
 ## Stack
 

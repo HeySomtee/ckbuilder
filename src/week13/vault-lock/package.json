@@ -1,0 +1,23 @@
+{
+  "name": "week13-vault-lock",
+  "version": "1.0.0",
+  "description": "Week 13 — a hash-lock (HTLC atom) CKB lock script written in TypeScript on ckb-js-vm.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json && esbuild --platform=neutral --minify --bundle --external:@ckb-js-std/bindings --target=es2022 src/index.ts --outfile=dist/index.js && ckb-debugger --read-file dist/index.js --bin node_modules/ckb-testtool/src/unittest/defaultScript/ckb-js-vm -- -c dist/index.bc",
+    "test": "tsx test/run.cts"
+  },
+  "dependencies": {
+    "@ckb-js-std/bindings": "~1.0.0",
+    "@ckb-js-std/core": "~1.0.0"
+  },
+  "devDependencies": {
+    "@ckb-ccc/core": "^1.11.0",
+    "@types/node": "^22.13.0",
+    "ckb-testtool": "^1.0.5",
+    "esbuild": "~0.25.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
