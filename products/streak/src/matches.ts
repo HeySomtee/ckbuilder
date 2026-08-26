@@ -79,12 +79,45 @@ export function applyResult(
   match: Match,
   live?: LiveResult,
   now: Date = new Date(),
+  allowSimulatedFallback = true,
 ): Match {
-  if (match.status === "final") return match;
+  if (match.status === "final" || match.status === "cancelled") return match;
 
   const kickoff = new Date(match.kickoff).getTime();
   const end = kickoff + MATCH_DURATION_MIN * 60_000;
   const t = now.getTime();
+
+  const oracle = live?.source
+    ? {
+        ...(match.oracle ?? {
+          provider: "unknown",
+          fixtureId: match.id,
+          source: live.source,
+        }),
+        source: live.source,
+        status: live.providerStatus,
+        confirmedAt: live.confirmedAt ?? match.oracle?.confirmedAt,
+      }
+    : match.oracle;
+
+  // A confirmed cancellation/abandonment voids the market. There is no winner.
+  if (live?.voided) {
+    return { ...match, status: "cancelled", liveResult: true, oracle };
+  }
+
+  if (live?.postponed) {
+    return { ...match, status: "postponed", liveResult: true, oracle };
+  }
+
+  if (live?.suspended) {
+    return {
+      ...match,
+      status: "suspended",
+      score: { home: live.home, away: live.away },
+      liveResult: true,
+      oracle,
+    };
+  }
 
   // Real result wins if the API says the match has finished.
   if (live?.finished && live.result) {
@@ -94,6 +127,7 @@ export function applyResult(
       result: live.result,
       score: { home: live.home, away: live.away },
       liveResult: true,
+      oracle,
     };
   }
 
@@ -104,10 +138,19 @@ export function applyResult(
       status: "live",
       score: { home: live.home, away: live.away },
       liveResult: true,
+      oracle,
     };
   }
 
-  if (t < kickoff) return { ...match, status: "scheduled" };
+  if (t < kickoff) {
+    return match.status === "postponed" ? match : { ...match, status: "scheduled" };
+  }
+
+  // An authoritative provider outage must never fabricate a score or winner.
+  // The market closes by its timestamp and remains pending until the feed
+  // supplies a confirmed terminal state.
+  if (!allowSimulatedFallback) return match;
+
   if (t < end) return { ...match, status: "live" };
 
   // Past full time with no live data → deterministic simulated result.

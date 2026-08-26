@@ -71,6 +71,25 @@ function fmtDateTime(iso) {
   const d = new Date(iso);
   return d.toLocaleString([], { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
+
+function teamMark(team) {
+  if (team?.logo) {
+    return `<span class="flag"><img src="${esc(team.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
+  }
+  return `<span class="flag">${esc(team?.flag || "⚽")}</span>`;
+}
+
+function competitionName(match) {
+  return match?.competition?.name || "Football";
+}
+
+function competitionOptions(competitions, selected = "") {
+  return (competitions || []).map((competition) => `
+    <option value="${esc(competition.id)}" ${String(competition.id) === String(selected) ? "selected" : ""}>
+      ${esc(competition.name)}
+    </option>
+  `).join("");
+}
 function localDateKey(v = new Date()) {
   const d = v instanceof Date ? v : new Date(v);
   const y = d.getFullYear();
@@ -499,9 +518,12 @@ function updateStatusBar() {
     ? `<span class="pulse sim"></span><span class="amber">SIM</span>`
     : live?.enabled
       ? `<span class="pulse"></span><span class="up">LIVE</span>`
-      : `<span class="pulse off"></span><span class="dim">SIM</span>`;
+      : `<span class="pulse off"></span><span class="dim">OFF</span>`;
+  const quotaText = live?.quota?.requestsRemaining !== undefined
+    ? ` · ${fmtInt(live.quota.requestsRemaining)} req left`
+    : "";
   const liveText = live
-    ? `${esc(live.league || live.base.replace(/^https?:\/\//, ""))} · ${live.matchCount} fx · ${live.liveMatches} live · ${live.finishedMatches} final`
+    ? `${esc(live.league || live.base.replace(/^https?:\/\//, ""))} · ${live.matchCount} fx · ${live.liveMatches} live · ${live.finishedMatches} final${quotaText}`
     : `connecting…`;
   const u = state.user;
   bar.innerHTML = `
@@ -722,18 +744,18 @@ function headlineCard(m) {
   return `
     <div class="match-card" style="margin:0">
       <div class="side">
-        <span class="flag">${m.match.home.flag}</span>
+        ${teamMark(m.match.home)}
         <div class="meta"><span class="code">${m.match.home.code}</span><span class="nm">${esc(m.match.home.name)}</span></div>
       </div>
       <div class="center">
         ${m.match.status === "final" || m.match.status === "live"
           ? `<span class="score">${m.match.score?.home ?? 0} : ${m.match.score?.away ?? 0}</span>`
           : `<span class="vs">vs</span>`}
-        <span class="kick">${esc(m.match.stage)} · ${fmtDateTime(m.closesAt)}</span>
+        <span class="kick">${esc(competitionName(m.match))} · ${esc(m.match.stage)} · ${fmtDateTime(m.closesAt)}</span>
       </div>
       <div class="side away">
         <div class="meta" style="align-items:flex-end"><span class="code">${m.match.away.code}</span><span class="nm">${esc(m.match.away.name)}</span></div>
-        <span class="flag">${m.match.away.flag}</span>
+        ${teamMark(m.match.away)}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px">
@@ -757,6 +779,14 @@ function bindHeadline() {
 
 async function renderMarkets(r) {
   const view = $("#view");
+  if (!state.liveStatus?.competitions) {
+    try {
+      const status = await api("/status");
+      state.liveStatus = status.live;
+      updateStatusBar();
+    } catch { /* market list still works without provider metadata */ }
+  }
+  const competitions = state.liveStatus?.competitions || [];
   view.innerHTML = `
     <div class="page-h">
       <h1>Markets</h1>
@@ -768,19 +798,29 @@ async function renderMarkets(r) {
           <option value="closed">Closed</option>
           <option value="resolved">Resolved</option>
         </select>
+        <select class="input" id="cmp-flt" style="width:auto;font-size:11px">
+          <option value="">All competitions</option>
+          ${competitionOptions(competitions)}
+        </select>
       </div>
     </div>
     <div id="mkt-body">${spinner()}</div>
   `;
   $("#flt").onchange = async (e) => {
-    await loadMarkets(e.target.value || undefined);
+    await loadMarkets(e.target.value || undefined, $("#cmp-flt")?.value || undefined);
+  };
+  $("#cmp-flt").onchange = async (e) => {
+    await loadMarkets($("#flt")?.value || undefined, e.target.value || undefined);
   };
   await loadMarkets("open");
-  startPolling(() => loadMarkets($("#flt")?.value || undefined));
+  startPolling(() => loadMarkets($("#flt")?.value || undefined, $("#cmp-flt")?.value || undefined));
 }
 
-async function loadMarkets(status) {
-  const data = await api(`/markets${status ? `?status=${status}` : ""}`);
+async function loadMarkets(status, competition) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (competition) params.set("competition", competition);
+  const data = await api(`/markets${params.size ? `?${params}` : ""}`);
   const ms = data.markets || [];
   const body = $("#mkt-body");
   if (!body) return;
@@ -794,6 +834,7 @@ async function loadMarkets(status) {
         <thead>
           <tr>
             <th>Match</th>
+            <th>Competition</th>
             <th>Stage</th>
             <th>Status</th>
             <th class="right">Home</th>
@@ -809,11 +850,12 @@ async function loadMarkets(status) {
           ${ms.map((m) => `
             <tr class="mkt-row" data-go="${m.id}">
               <td class="tm">
-                <span class="flag">${m.match.home.flag}</span><span class="code">${m.match.home.code}</span>
+                ${teamMark(m.match.home)}<span class="code">${m.match.home.code}</span>
                 <span class="vs">vs</span>
-                <span class="code">${m.match.away.code}</span><span class="flag">${m.match.away.flag}</span>
+                <span class="code">${m.match.away.code}</span>${teamMark(m.match.away)}
                 ${m.match.status === "final" ? `<span class="mono dim" style="margin-left:8px">${m.match.score?.home ?? 0}–${m.match.score?.away ?? 0}</span>` : ""}
               </td>
+              <td class="small">${esc(competitionName(m.match))}</td>
               <td class="small">${esc(m.match.stage)}</td>
               <td>${marketStatusChip(m)}</td>
               <td class="num"><span class="price-cell"><span class="pp home">${fmtPct(m.prices.home)}</span><span class="od">${fmtOdds(m.prices.home)}×</span></span></td>
@@ -846,6 +888,15 @@ function marketStatusChip(m) {
   return `<span class="chip">${esc(m.status)}</span>`;
 }
 
+function fixtureStatusChip(match) {
+  if (match.status === "live") return `<span class="chip live">LIVE</span>`;
+  if (match.status === "final") return `<span class="chip resolved">FINAL</span>`;
+  if (match.status === "suspended") return `<span class="chip closed">SUSPENDED</span>`;
+  if (match.status === "postponed") return `<span class="chip closed">POSTPONED</span>`;
+  if (match.status === "cancelled") return `<span class="chip void">CANCELLED</span>`;
+  return `<span class="chip">SCHEDULED</span>`;
+}
+
 // ──────────────────────────────────────────────────────── market detail ────
 
 async function renderMarketDetail(r) {
@@ -858,13 +909,13 @@ async function renderMarketDetail(r) {
   view.innerHTML = `
     <div class="page-h">
       <h1>${esc(m.match.home.name)} <span class="dim" style="font-weight:400">vs</span> ${esc(m.match.away.name)}</h1>
-      <span class="sub">${esc(m.match.stage)} · kickoff ${fmtDateTime(m.closesAt)}</span>
+      <span class="sub">${esc(competitionName(m.match))} · ${esc(m.match.stage)} · kickoff ${fmtDateTime(m.closesAt)}</span>
       <div class="right">${marketStatusChip(m)}<a class="btn btn-ghost" href="#/markets">← Back</a></div>
     </div>
 
     <div class="match-card">
       <div class="side">
-        <span class="flag">${m.match.home.flag}</span>
+        ${teamMark(m.match.home)}
         <div class="meta"><span class="code">${m.match.home.code}</span><span class="nm">${esc(m.match.home.name)}</span></div>
       </div>
       <div class="center">
@@ -875,7 +926,7 @@ async function renderMarketDetail(r) {
       </div>
       <div class="side away">
         <div class="meta" style="align-items:flex-end"><span class="code">${m.match.away.code}</span><span class="nm">${esc(m.match.away.name)}</span></div>
-        <span class="flag">${m.match.away.flag}</span>
+        ${teamMark(m.match.away)}
       </div>
     </div>
 
@@ -1192,7 +1243,7 @@ async function renderStreak() {
             <thead><tr><th>Match</th><th>Stage</th><th class="right">Home</th><th class="right">Draw</th><th class="right">Away</th><th class="right">Closes</th><th></th></tr></thead>
             <tbody>${visibleMarkets.map((m) => `
               <tr class="mkt-row" data-go="${m.id}">
-                <td class="tm"><span class="flag">${m.match.home.flag}</span><span class="code">${m.match.home.code}</span><span class="vs">vs</span><span class="code">${m.match.away.code}</span><span class="flag">${m.match.away.flag}</span></td>
+                <td class="tm">${teamMark(m.match.home)}<span class="code">${m.match.home.code}</span><span class="vs">vs</span><span class="code">${m.match.away.code}</span>${teamMark(m.match.away)}</td>
                 <td class="small">${esc(m.match.stage)}</td>
                 <td class="num up">${fmtPct(m.prices.home)}</td>
                 <td class="num neutral">${fmtPct(m.prices.draw)}</td>
@@ -1695,42 +1746,61 @@ function confirmLeaveCrew(crewId, name) {
 async function renderFixtures() {
   const view = $("#view");
   view.innerHTML = spinner();
-  const { matches } = await api("/matches");
-  // Group by date
-  const byDate = {};
-  for (const m of matches) (byDate[m.date] ||= []).push(m);
-  const dates = Object.keys(byDate).sort();
-  const today = localDateKey();
+  const { matches, competitions = [] } = await api("/matches");
 
-  view.innerHTML = `
-    <div class="page-h"><h1>Schedule</h1><span class="sub">${esc(state.liveStatus?.league ?? "Fixtures")} · ${matches.length} fixtures</span></div>
-    ${dates.map((d) => `
-      <div class="panel" style="margin-bottom:10px">
-        <div class="panel-h">
-          <span class="title">${new Date(d + "T00:00:00Z").toUTCString().slice(0, 16)}</span>
-          ${d === today ? `<span class="chip live" style="margin-left:8px">TODAY</span>` : ""}
-          <span class="meta">${byDate[d].length} matches</span>
+  const draw = (selectedCompetition = "") => {
+    const visible = selectedCompetition
+      ? matches.filter((match) => String(match.competition?.id) === String(selectedCompetition))
+      : matches;
+    const byDate = {};
+    for (const match of visible) (byDate[match.date] ||= []).push(match);
+    const dates = Object.keys(byDate).sort();
+    const today = localDateKey();
+
+    view.innerHTML = `
+      <div class="page-h">
+        <h1>Schedule</h1>
+        <span class="sub">${visible.length} fixtures</span>
+        <div class="right">
+          <select class="input" id="fixture-cmp" style="width:auto;font-size:11px">
+            <option value="">All competitions</option>
+            ${competitionOptions(competitions, selectedCompetition)}
+          </select>
         </div>
-        <table class="tbl">
-          <thead><tr><th>Kickoff</th><th>Stage</th><th>Match</th><th>Venue</th><th>Status</th><th class="right">Score</th><th></th></tr></thead>
-          <tbody>${byDate[d].map((m) => `
-            <tr class="mkt-row" data-go="m-${m.id}">
-              <td class="small mono">${fmtTime(m.kickoff)}</td>
-              <td class="small">${esc(m.stage)}${m.group ? " · " + esc(m.group) : ""}</td>
-              <td class="tm"><span class="flag">${m.home.flag}</span><span class="code">${m.home.code}</span><span class="vs">vs</span><span class="code">${m.away.code}</span><span class="flag">${m.away.flag}</span></td>
-              <td class="small dim">${esc(m.venue ?? "—")}</td>
-              <td>${m.status === "live" ? `<span class="chip live">LIVE</span>` : m.status === "final" ? `<span class="chip resolved">FINAL</span>` : `<span class="chip">SCHEDULED</span>`}</td>
-              <td class="num mono">${m.score ? `${m.score.home}–${m.score.away}` : "—"}</td>
-              <td><a class="btn btn-sm">MARKET ›</a></td>
-            </tr>`).join("")}
-          </tbody>
-        </table>
       </div>
-    `).join("")}
-  `;
-  view.querySelectorAll("tr.mkt-row").forEach((tr) => {
-    tr.onclick = () => { location.hash = `#/market/${tr.dataset.go}`; };
-  });
+      ${dates.length ? dates.map((date) => `
+        <div class="panel" style="margin-bottom:10px">
+          <div class="panel-h">
+            <span class="title">${new Date(date + "T00:00:00Z").toUTCString().slice(0, 16)}</span>
+            ${date === today ? `<span class="chip live" style="margin-left:8px">TODAY</span>` : ""}
+            <span class="meta">${byDate[date].length} matches</span>
+          </div>
+          <table class="tbl">
+            <thead><tr><th>Kickoff</th><th>Competition</th><th>Stage</th><th>Match</th><th>Venue</th><th>Status</th><th class="right">Score</th><th></th></tr></thead>
+            <tbody>${byDate[date].map((match) => `
+              <tr class="mkt-row" data-go="m-${match.id}">
+                <td class="small mono">${fmtTime(match.kickoff)}</td>
+                <td class="small">${esc(competitionName(match))}</td>
+                <td class="small">${esc(match.stage)}${match.group ? " · " + esc(match.group) : ""}</td>
+                <td class="tm">${teamMark(match.home)}<span class="code">${match.home.code}</span><span class="vs">vs</span><span class="code">${match.away.code}</span>${teamMark(match.away)}</td>
+                <td class="small dim">${esc(match.venue ?? "—")}</td>
+                <td>${fixtureStatusChip(match)}</td>
+                <td class="num mono">${match.score ? `${match.score.home}–${match.score.away}` : "—"}</td>
+                <td><a class="btn btn-sm">MARKET ›</a></td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      `).join("") : `<div class="panel"><div class="panel-b dim mono center" style="padding:40px">NO FIXTURES FOR THIS COMPETITION</div></div>`}
+    `;
+
+    $("#fixture-cmp").onchange = (event) => draw(event.target.value);
+    view.querySelectorAll("tr.mkt-row").forEach((row) => {
+      row.onclick = () => { location.hash = `#/market/${row.dataset.go}`; };
+    });
+  };
+
+  draw();
 }
 
 // ──────────────────────────────────────────────────── auth (landing) ─────

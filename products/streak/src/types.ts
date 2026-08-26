@@ -6,12 +6,41 @@
  */
 
 export type Outcome = "home" | "draw" | "away";
-export type MatchStatus = "scheduled" | "live" | "final";
+export type MatchStatus =
+  | "scheduled"
+  | "live"
+  | "suspended"
+  | "postponed"
+  | "cancelled"
+  | "final";
 export type StreakStatus = "active" | "failed";
+
+/** Competition metadata shared by real multi-league and future sport feeds. */
+export interface Competition {
+  id: string;
+  name: string;
+  country?: string;
+  logo?: string;
+}
+
+/** Stable upstream identity used to audit how a fixture was resolved. */
+export interface OracleReference {
+  provider: string;
+  fixtureId: string;
+  source: string;
+  status?: string;
+  confirmedAt?: string;
+}
 
 /** A single World Cup fixture. */
 export interface Match {
   id: string;
+  /** Normalized sport id. Optional for legacy World Cup rows. */
+  sport?: string;
+  /** League/cup metadata for filtering and receipt context. */
+  competition?: Competition;
+  /** Upstream provider identity; never contains credentials. */
+  oracle?: OracleReference;
   /** Stadium-local calendar day (YYYY-MM-DD). */
   date: string;
   stage: string;
@@ -30,9 +59,11 @@ export interface Match {
 }
 
 export interface Team {
+  id?: string;
   code: string;
   name: string;
   flag: string;
+  logo?: string;
 }
 
 // ── Prediction market ──────────────────────────────────────────────────────
@@ -111,6 +142,8 @@ export interface SettlementReceipt {
   match: {
     home: { code: string; name: string };
     away: { code: string; name: string };
+    sport?: string;
+    competition?: { id: string; name: string };
     stage: string;
     kickoff: string;
     score?: { home: number; away: number };
@@ -124,7 +157,14 @@ export interface SettlementReceipt {
   creatorFeeShannons: string;
   winnerCount: number;
   totalPaidShannons: string;
-  oracle: { source: string; live: boolean };
+  oracle: {
+    source: string;
+    live: boolean;
+    provider?: string;
+    fixtureId?: string;
+    status?: string;
+    confirmedAt?: string;
+  };
   bets: {
     count: number;
     /** sha256 root of per-bet leaves (see settlement.ts). */
@@ -312,6 +352,8 @@ export interface MarketSummary {
     kickoff: string;
     stage: string;
     status: MatchStatus;
+    sport?: string;
+    competition?: Competition;
     home: Team;
     away: Team;
     score?: { home: number; away: number };

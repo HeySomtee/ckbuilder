@@ -8,7 +8,8 @@
     "dev": "ts-node src/server.ts",
     "build": "tsc",
     "serve": "node dist/server.js",
-    "verify": "ts-node src/verify.ts"
+    "verify": "ts-node src/verify.ts",
+    "test:football": "ts-node src/providers/football.test.ts"
   },
   "engines": {
     "node": ">=20"

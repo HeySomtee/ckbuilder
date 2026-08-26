@@ -144,6 +144,11 @@ export function settleMarkets(db: StreakDB): Market[] {
   for (const market of db.markets) {
     if (market.status === "resolved" || market.status === "void") continue;
     const match = matchById.get(market.matchId);
+    if (match?.status === "cancelled") {
+      voidMarket(db, market);
+      justResolved.push(market);
+      continue;
+    }
     if (!match || match.status !== "final" || !match.result) continue;
 
     const winner = match.result;
@@ -417,6 +422,8 @@ export function toMarketSummary(market: Market, match: Match): MarketSummary {
       kickoff: match.kickoff,
       stage: match.stage,
       status: match.status,
+      sport: match.sport,
+      competition: match.competition,
       home: match.home,
       away: match.away,
       score: match.score,
@@ -436,6 +443,8 @@ export function toMarketSummary(market: Market, match: Match): MarketSummary {
 export async function listMarkets(opts: {
   status?: MarketStatus;
   matchId?: string;
+  competitionId?: string;
+  matchFilter?: (match: Match) => boolean;
 } = {}): Promise<MarketSummary[]> {
   return read((db) => {
     const matchById = new Map(db.matches.map((m) => [m.id, m]));
@@ -444,6 +453,8 @@ export async function listMarkets(opts: {
       .filter((m) => (opts.matchId ? m.matchId === opts.matchId : true))
       .map((m) => {
         const match = matchById.get(m.matchId);
+        if (match && opts.matchFilter && !opts.matchFilter(match)) return null;
+        if (opts.competitionId && match?.competition?.id !== opts.competitionId) return null;
         return match ? toMarketSummary(m, match) : null;
       })
       .filter((x): x is MarketSummary => x !== null)

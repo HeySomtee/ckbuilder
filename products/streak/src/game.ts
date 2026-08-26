@@ -38,7 +38,7 @@ export { winRate } from "./markets";
 
 // ── Match slate management ──────────────────────────────────────────────────
 
-const MATCHES_SCHEMA_VERSION = 2;
+const MATCHES_SCHEMA_VERSION = 3;
 
 /** How long a settled, untouched simulated market is kept before pruning. */
 const SIM_RETENTION_MS = 2 * 24 * 60 * 60_000;
@@ -86,26 +86,49 @@ export async function syncMatches(): Promise<Match[]> {
     // new upcoming fixtures every sync so open markets never run dry; a static
     // feed (worldcup) is idempotent after the first pass. Settled history — the
     // final matches — is never dropped here.
-    const schemaStale = (db.matchesSchema ?? 0) < MATCHES_SCHEMA_VERSION;
     const known = new Map(db.matches.map((m) => [m.id, m]));
     for (const fx of provider.loadFixtures()) {
       const old = known.get(fx.id);
       if (!old) {
         db.matches.push(fx);
       } else if (old.status !== "final") {
+        const kickoffChanged = old.kickoff !== fx.kickoff;
         old.kickoff = fx.kickoff;
         old.date = fx.date;
-        if (schemaStale) {
-          old.home = fx.home;
-          old.away = fx.away;
-          old.stage = fx.stage;
-          old.venue = fx.venue;
+        old.home = fx.home;
+        old.away = fx.away;
+        old.stage = fx.stage;
+        old.venue = fx.venue;
+        old.matchday = fx.matchday;
+        old.sport = fx.sport;
+        old.competition = fx.competition;
+        old.oracle = fx.oracle
+          ? { ...fx.oracle, confirmedAt: old.oracle?.confirmedAt }
+          : old.oracle;
+        if (fx.status === "scheduled" || fx.status === "postponed") {
+          old.status = fx.status;
+        }
+        if (kickoffChanged) {
+          const market = db.markets.find((candidate) => candidate.matchId === old.id);
+          if (market?.status === "open") market.closesAt = fx.kickoff;
+          // A bet-free market that closed only because a fixture was postponed
+          // can safely reopen after the API publishes its new future kickoff.
+          if (
+            market?.status === "closed" &&
+            market.totalBets === 0 &&
+            Date.parse(fx.kickoff) > Date.now()
+          ) {
+            market.status = "open";
+            market.closesAt = fx.kickoff;
+          }
         }
       }
     }
     db.matchesSchema = MATCHES_SCHEMA_VERSION;
 
-    db.matches = db.matches.map((m) => applyResult(m, live[m.id]));
+    db.matches = db.matches.map((m) =>
+      applyResult(m, live[m.id], new Date(), provider.allowSimulatedFallback !== false),
+    );
     ensureMarketsForMatches(db);
     settleMarkets(db);
     pruneStaleSimMarkets(db);

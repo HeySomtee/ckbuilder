@@ -1,10 +1,10 @@
 # STREAK TERMINAL
 
-> _On-chain parimutuel prediction-market terminal for the FIFA World Cup 2026,
+> _On-chain multi-league football prediction-market terminal,
 > settled on the **Nervos CKB Pudge testnet**._
 
 Streak is a Polymarket-style prediction market with a Bloomberg-flavoured
-terminal UI. Anyone can open a market on a World Cup fixture, anyone can take
+terminal UI. Anyone can open a market on a football fixture, anyone can take
 any side, and every market settles automatically against the live oracle feed
 at full-time. The original daily-pick streak game is preserved as one feature
 on top of the new market engine.
@@ -366,24 +366,45 @@ Fixtures + results come through a single seam, `MatchDataProvider`
 
 | `MATCH_PROVIDER` | Feed                                                                 |
 | ---------------- | -------------------------------------------------------------------- |
-| `worldcup` (default) | Real WC2026 fixtures + the worldcup26.ir oracle above.           |
+| `football` (default when `API_SPORTS_KEY` is set) | Real API-SPORTS fixtures and confirmed results across configurable leagues. |
+| `worldcup` | Real WC2026 fixtures + the worldcup26.ir oracle above.           |
 | `dummy`          | A self-contained simulator: 20 Premier League clubs, round-robin gameweeks, matches that kick off / run / finish on a real clock. |
 
-The `dummy` provider exists so the full lifecycle (open → live → resolved →
-on-chain receipt) stays testable after the World Cup ends, and doubles as the
-template for the next real feed — when the Premier League resumes, drop in an
-`eplProvider` implementing the same interface and register it in
-[src/providers/index.ts](src/providers/index.ts).
+The real football provider loads a rolling fixture window for the Premier
+League, La Liga, Bundesliga, Serie A, Ligue 1 and Champions League by default.
+It batches concurrent live fixtures, caches schedules, exposes remaining quota
+in `/api/status`, and requires two identical terminal responses before a market
+can settle. If the API is unavailable, real markets stay pending; the engine
+never substitutes a simulated winner. If one competition request fails while
+the others succeed, its successful caches remain available and the missing
+competition is retried after one minute rather than waiting for the six-hour
+schedule refresh.
+
+### Active-feed provenance and legacy data
+
+API-Football fixtures are identifiable end to end: their internal ids begin
+with `api-football-`, their `oracle.provider` is `api-football`, and their team
+objects carry the provider's image-logo URLs. The active Schedule, Markets,
+dashboard headline, activity ticker and market totals accept only rows owned by
+the selected provider. Consequently, old simulator rows such as `epl-2-2` and
+their emoji placeholders can remain in a migrated database for historical
+bets/receipts without appearing as current paid-feed fixtures.
+
+Changing `MATCH_PROVIDER` requires a server restart. After restarting, confirm
+the boundary with `GET /api/status`: `provider` should be `football`, `enabled`
+should be `true`, and `simulated` should be `false`. A real fixture returned by
+`GET /api/matches` should also include `oracle.provider: "api-football"` and
+HTTP logo URLs for both teams.
 
 ```bash
 MATCH_PROVIDER=dummy npm run streak    # simulated EPL fixtures, live now
+MATCH_PROVIDER=football npm run streak # API-SPORTS multi-league feed
 ```
 
-The simulator anchors its schedule to a persisted timestamp
-(`dummyAnchorIso`) so kickoff times survive restarts, and auto-rolls to a fresh
-anchor once the whole schedule has finished. Tunables:
-`DUMMY_GAMEWEEKS` (30), `DUMMY_STAGGER_MIN` (20), `DUMMY_MATCH_MINUTES` (96),
-`DUMMY_ANCHOR` (pin the anchor explicitly).
+The simulator maps stable `epl-s<slot>` ids onto absolute wall-clock slots, so
+its rolling window survives restarts without a persisted anchor. Tunables:
+`DUMMY_STAGGER_MIN` (20), `DUMMY_MATCH_MINUTES` (96), `DUMMY_PAST_SLOTS` (6)
+and `DUMMY_AHEAD_SLOTS` (48).
 
 ---
 
@@ -397,7 +418,7 @@ GET  /api/me                     → current user (public view)
 POST /api/me/username            → { username }    set/change display name
 GET  /api/dashboard              → one-shot terminal payload (user, headline,
                                    counts, leaderboard top, tape)
-GET  /api/markets[?status=open]  → market list
+GET  /api/markets[?status=open&competition=39] → filterable market list
 GET  /api/markets/:id            → market detail (chart, feed, my positions)
 POST /api/markets/:id/bet        → { outcome, amountCkb, asStreakPick? }
 GET  /api/portfolio              → all my positions + open stake + realised P&L
@@ -411,7 +432,7 @@ POST /api/crews                  → { name }        create a crew
 POST /api/crews/join             → { code }        join by invite code
 POST /api/crews/:id/leave        → leave (ownership hands over / crew deleted)
 GET  /api/leaderboard            → top 100 by realised P&L
-GET  /api/matches                → full fixture schedule (active provider)
+GET  /api/matches[?competition=39] → filterable fixture schedule
 GET  /api/status                 → live-oracle status + economic constants
 GET  /api/receipts               → every published settlement receipt (public)
 GET  /api/receipts/:id           → full payload + fresh on-chain verification
@@ -462,8 +483,15 @@ Environment variables (all optional):
 | Var    | Default | Purpose   |
 | ------ | ------- | --------- |
 | `PORT` | `4100`  | HTTP port |
-| `MATCH_PROVIDER` | `worldcup` | Active fixture/result feed (`worldcup` or `dummy`). |
-| `DUMMY_GAMEWEEKS` / `DUMMY_STAGGER_MIN` / `DUMMY_MATCH_MINUTES` / `DUMMY_ANCHOR` | `30` / `20` / `96` / *now−2h* | Shape the simulated schedule (dummy provider). |
+| `MATCH_PROVIDER` | `football` when an API key exists, otherwise `worldcup` | Active fixture/result feed (`football`, `worldcup` or `dummy`). |
+| `API_SPORTS_KEY` | — | Server-only API-SPORTS credential. A paid football plan is required for the current season. |
+| `FOOTBALL_LEAGUE_IDS` | `39,140,78,135,61,2` | API-Football competition ids to load. |
+| `FOOTBALL_SEASON` | inferred | Season starting year (`2026` means 2026/27). |
+| `FOOTBALL_FIXTURE_PAST_DAYS` / `FOOTBALL_FIXTURE_FUTURE_DAYS` | `2` / `21` | Rolling schedule/recovery window. |
+| `FOOTBALL_LIVE_POLL_SECONDS` | `20` | Live and final-confirmation polling cadence (minimum 15 seconds). |
+| `FOOTBALL_FINAL_CONFIRMATIONS` | `2` | Matching terminal snapshots required before settlement. |
+| `FOOTBALL_SCHEDULE_REFRESH_MINUTES` | `360` | Long-lived schedule cache TTL. |
+| `DUMMY_STAGGER_MIN` / `DUMMY_MATCH_MINUTES` / `DUMMY_PAST_SLOTS` / `DUMMY_AHEAD_SLOTS` | `20` / `96` / `6` / `48` | Shape the rolling simulated schedule (dummy provider). |
 | `WC_API_TOKEN` / `WC_API_EMAIL` + `WC_API_PASSWORD` | — | Enable live oracle. |
 | `WC_API_BASE` | `https://worldcup26.ir` | Override oracle base URL. |
 | `WC_API_NAME` | `Streak Terminal` | Display name during auto-registration. |

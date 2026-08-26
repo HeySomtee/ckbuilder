@@ -11,7 +11,7 @@
  * providers/dummy.ts for the two implementations that ship today.
  */
 
-import type { Match, Outcome } from "../types";
+import type { Competition, Match, Outcome } from "../types";
 
 /**
  * A single fixture's live/final state, keyed by our internal match id in the
@@ -23,6 +23,15 @@ export interface LiveResult {
   home: number;
   away: number;
   result?: Outcome;
+  /** Cancelled/abandoned/awarded fixtures void their market after confirmation. */
+  voided?: boolean;
+  /** Temporarily interrupted fixture; never settles a market. */
+  suspended?: boolean;
+  /** Fixture has been postponed or its kickoff is still to be determined. */
+  postponed?: boolean;
+  providerStatus?: string;
+  source?: string;
+  confirmedAt?: string;
 }
 
 /** Snapshot of a provider for health checks and the status bar. */
@@ -46,6 +55,17 @@ export interface ProviderStatus {
   matchCount: number;
   liveMatches: number;
   finishedMatches: number;
+  competitions?: Competition[];
+  quota?: {
+    requestsLimit?: number;
+    requestsRemaining?: number;
+    requestsUsedThisProcess: number;
+  };
+  polling?: {
+    mode: string;
+    nextPollIso?: string;
+    scheduleRefreshIso?: string;
+  };
 }
 
 /**
@@ -58,6 +78,10 @@ export interface ProviderStatus {
  */
 export interface MatchDataProvider {
   readonly id: string;
+  /** Real-money style feeds must never invent a result when their API is down. */
+  readonly allowSimulatedFallback?: boolean;
+  /** True when a persisted match belongs to this provider's active catalogue. */
+  ownsMatch?(match: Match): boolean;
   /** Optional one-time async setup, awaited at boot before any sync. */
   init?(): Promise<void>;
   /** Full ordered fixture list. Must be pure/sync (called under write lock). */

@@ -11,9 +11,13 @@ services:
       # Render sets PORT at runtime; Streak reads process.env.PORT.
       - key: PORT
         value: 10000
-      # Simulated Premier League feed so the demo runs any day of the year.
+      # Real multi-league API-SPORTS football feed.
       - key: MATCH_PROVIDER
-        value: dummy
+        value: football
+      - key: FOOTBALL_LEAGUE_IDS
+        value: 39,140,78,135,61,2
+      - key: API_SPORTS_KEY
+        sync: false
       - key: NOTIFY_PROVIDER
         value: telegram
       - key: SUPABASE_TABLE

@@ -35,6 +35,7 @@ reports/
   week-11.md         # Streak Terminal — responsive/mobile UI + Render deploy
   week-12.md         # Streak Terminal — wallet-native login (self-custody) + non-blocking on-chain UX
   week-13.md         # First on-chain CKB script — a hash-lock in TypeScript (ckb-js-vm)
+  week-14.md         # Real multi-league football oracle — API-SPORTS + safe settlement
 ```
 
 ## Weekly Index
@@ -54,6 +55,7 @@ reports/
 | 11 | Streak Terminal — responsive/mobile UI + Render deploy | [reports/week-11.md](reports/week-11.md) | [products/streak](products/streak) |
 | 12 | Streak Terminal — wallet-native login (self-custody) + non-blocking on-chain UX | [reports/week-12.md](reports/week-12.md) | [products/streak](products/streak) |
 | 13 | First on-chain CKB script — a hash-lock in TypeScript (ckb-js-vm) | [reports/week-13.md](reports/week-13.md) | [src/week13/vault-lock](src/week13/vault-lock) |
+| 14 | Real multi-league football oracle — API-SPORTS + safe settlement | [reports/week-14.md](reports/week-14.md) | [products/streak](products/streak) |
 
 ## Setup
 
@@ -177,7 +179,9 @@ Telegram alerts and moves state to Supabase (with local fallback); week 11
 makes the terminal fully responsive for mobile and deploys it on Render; week 12
 replaces passwords and server-held keys with wallet login (sign in with CKB) so
 identity and deposits are self-custodied, and processes on-chain payments in the
-background.
+background; week 14 adds a paid API-Football provider for the Premier League,
+La Liga, Bundesliga, Serie A, Ligue 1 and Champions League, including real club
+logos, competition filters and oracle-safe settlement.
 
 ```bash
 # Start the terminal — open http://localhost:4100
@@ -190,11 +194,12 @@ MATCH_PROVIDER=dummy npm run streak
 Connect a CKB wallet (JoyID, MetaMask, UniSat, OKX…) to sign in — no email or
 password. Fund it from the [Pudge faucet](https://faucet.nervos.org/), then
 **Deposit** (you sign the transfer in your own wallet) to credit your escrow
-and start betting. The data feed is selectable: `MATCH_PROVIDER=dummy`
-runs a self-contained EPL simulator (matches live at boot), while the default
-`worldcup` provider uses the worldcup26.ir oracle when `WC_API_EMAIL` +
-`WC_API_PASSWORD` (or `WC_API_TOKEN`) are set, falling back to a deterministic
-simulator otherwise. See
+and start betting. When `API_SPORTS_KEY` is configured, the default
+`MATCH_PROVIDER=football` loads the real multi-league API-Football feed;
+persisted dummy or World Cup rows are retained only as history and are excluded
+from active fixtures and markets. `MATCH_PROVIDER=dummy` remains available for
+offline lifecycle testing, while `MATCH_PROVIDER=worldcup` selects the older
+World Cup feed. See
 [products/streak/README.md](products/streak/README.md) for full configuration.
 
 ### Week 13 — Vault Lock (a CKB script in TypeScript)

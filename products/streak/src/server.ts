@@ -74,7 +74,12 @@ import {
   listCrews,
   reviveHint,
 } from "./crews";
-import type { Outcome, User } from "./types";
+import type { Match, Outcome, User } from "./types";
+
+/** Keep legacy/demo history stored, but never mix it into the active feed UI. */
+function isActiveProviderMatch(match: Match): boolean {
+  return provider.ownsMatch ? provider.ownsMatch(match) : true;
+}
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 
@@ -393,7 +398,7 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
   const live = await provider.status();
 
   // Headline (next or current featured market): first open market closing soonest.
-  const all = await listMarkets();
+  const all = await listMarkets({ matchFilter: isActiveProviderMatch });
   const headline = all.find((m) => m.status === "open") ?? all.find((m) => m.status === "closed");
 
   // Recent bets across the platform for the ticker.
@@ -401,6 +406,10 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
     db.bets
       .slice()
       .sort((a, b) => b.placedAt.localeCompare(a.placedAt))
+      .filter((bet) => {
+        const match = db.matches.find((candidate) => candidate.id === bet.matchId);
+        return !!match && isActiveProviderMatch(match);
+      })
       .slice(0, 12)
       .map((b) => {
         const u = db.users.find((x) => x.id === b.userId);
@@ -422,18 +431,24 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
     /* chain may be unreachable */
   }
 
-  const counts = await read((db) => ({
-    openMarkets: db.markets.filter((m) => m.status === "open").length,
-    closedMarkets: db.markets.filter((m) => m.status === "closed").length,
-    resolvedMarkets: db.markets.filter((m) => m.status === "resolved").length,
-    totalPoolCkb: shannonsToCkb(
-      db.markets.reduce(
+  const counts = await read((db) => {
+    const activeMatchIds = new Set(
+      db.matches.filter(isActiveProviderMatch).map((match) => match.id),
+    );
+    const activeMarkets = db.markets.filter((market) => activeMatchIds.has(market.matchId));
+    return {
+      openMarkets: activeMarkets.filter((m) => m.status === "open").length,
+      closedMarkets: activeMarkets.filter((m) => m.status === "closed").length,
+      resolvedMarkets: activeMarkets.filter((m) => m.status === "resolved").length,
+      totalPoolCkb: shannonsToCkb(
+        activeMarkets.reduce(
         (acc, m) =>
           acc + asBig(m.pools.home) + asBig(m.pools.draw) + asBig(m.pools.away),
         0n,
       ),
-    ),
-  }));
+      ),
+    };
+  });
 
   const crewRevive = await reviveHint(user.id);
 
@@ -466,9 +481,12 @@ async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL
   await syncMatches();
   const status = url.searchParams.get("status") as any;
   const matchId = url.searchParams.get("matchId") ?? undefined;
+  const competitionId = url.searchParams.get("competition") ?? undefined;
   const markets = await listMarkets({
     status: status === "open" || status === "closed" || status === "resolved" || status === "void" ? status : undefined,
     matchId,
+    competitionId,
+    matchFilter: isActiveProviderMatch,
   });
   sendJson(res, 200, { markets });
 }
@@ -686,12 +704,22 @@ async function handleLeaderboard(req: IncomingMessage, res: ServerResponse): Pro
   sendJson(res, 200, { leaderboard: board.slice(0, 100) });
 }
 
-async function handleMatchesList(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handleMatchesList(_req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   await syncMatches();
+  const competitionId = url.searchParams.get("competition");
   const matches = await read((db) =>
-    db.matches.slice().sort((a, b) => a.kickoff.localeCompare(b.kickoff)),
+    db.matches
+      .filter(isActiveProviderMatch)
+      .filter((match) => !competitionId || match.competition?.id === competitionId)
+      .slice()
+      .sort((a, b) => a.kickoff.localeCompare(b.kickoff)),
   );
-  sendJson(res, 200, { matches });
+  const competitions = [...new Map(
+    matches
+      .filter((match) => match.competition)
+      .map((match) => [match.competition!.id, match.competition!]),
+  ).values()];
+  sendJson(res, 200, { matches, competitions });
 }
 
 async function handleStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -873,7 +901,7 @@ const staticRoutes: Record<string, Handler> = {
   "GET /api/crews": (req, res) => handleCrewsList(req, res),
   "POST /api/crews": (req, res) => handleCrewCreate(req, res),
   "POST /api/crews/join": (req, res) => handleCrewJoin(req, res),
-  "GET /api/matches": (req, res) => handleMatchesList(req, res),
+  "GET /api/matches": (req, res, url) => handleMatchesList(req, res, url),
   "GET /api/status": (req, res) => handleStatus(req, res),
   "GET /api/receipts": (req, res) => handleReceiptsList(req, res),
 };
@@ -974,7 +1002,7 @@ async function boot(): Promise<void> {
         `     live data: ${live.base} (${live.source}${live.email ? ", " + live.email : ""})`,
       );
     } else {
-      console.log(`     live data: off — using simulated results`);
+      console.log(`     live data: unavailable${live.lastError ? " — " + live.lastError : ""}`);
     }
     console.log(`     treasury:  ${treasury.address}`);
     if (treasuryBalCkb !== null) {

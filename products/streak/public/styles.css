@@ -508,6 +508,7 @@ a:hover { color: var(--ink-0); }
 /* Markets table specific */
 .mkt-row .tm { display: flex; align-items: center; gap: 8px; }
 .mkt-row .tm .flag { font-size: 16px; line-height: 1; }
+.flag img { width: 20px; height: 20px; display: block; object-fit: contain; }
 .mkt-row .tm .code { font-family: var(--mono); font-weight: 600; color: var(--ink-0); }
 .mkt-row .tm .vs { color: var(--ink-3); font-family: var(--mono); margin: 0 4px; }
 .mkt-row .price-cell {
@@ -543,6 +544,7 @@ a:hover { color: var(--ink-0); }
   display: flex; align-items: center; gap: 12px;
 }
 .match-card .side .flag { font-size: 32px; line-height: 1; }
+.match-card .side .flag img { width: 38px; height: 38px; }
 .match-card .side .meta { display: flex; flex-direction: column; }
 .match-card .side .code { font-family: var(--mono); font-size: 11px; color: var(--ink-2); letter-spacing: 0.12em; }
 .match-card .side .nm { font-size: 18px; font-weight: 700; color: var(--ink-0); }

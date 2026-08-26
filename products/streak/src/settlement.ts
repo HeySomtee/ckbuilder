@@ -220,15 +220,19 @@ export function buildReceiptPayload(
     asBig(market.payout?.creatorFeeShannons ?? "0");
 
   const payload: SettlementReceipt = {
-    v: 1,
+    v: match.competition || match.oracle ? 2 : 1,
     marketId: market.id,
     matchId: market.matchId,
     match: {
       home: { code: match.home.code, name: match.home.name },
       away: { code: match.away.code, name: match.away.name },
+      ...(match.sport ? { sport: match.sport } : {}),
+      ...(match.competition
+        ? { competition: { id: match.competition.id, name: match.competition.name } }
+        : {}),
       stage: match.stage,
       kickoff: match.kickoff,
-      score: match.score,
+      ...(match.score ? { score: match.score } : {}),
     },
     winner: market.resolvedOutcome ?? "void",
     pools: market.pools,
@@ -240,8 +244,12 @@ export function buildReceiptPayload(
     winnerCount: market.payout?.winnerCount ?? 0,
     totalPaidShannons: market.payout?.totalPaidShannons ?? "0",
     oracle: {
-      source: match.liveResult ? liveScoresBase() : "simulated",
+      source: match.oracle?.source ?? (match.liveResult ? liveScoresBase() : "simulated"),
       live: !!match.liveResult,
+      ...(match.oracle?.provider ? { provider: match.oracle.provider } : {}),
+      ...(match.oracle?.fixtureId ? { fixtureId: match.oracle.fixtureId } : {}),
+      ...(match.oracle?.status ? { status: match.oracle.status } : {}),
+      ...(match.oracle?.confirmedAt ? { confirmedAt: match.oracle.confirmedAt } : {}),
     },
     bets: { count: leaves.length, merkleRoot: root },
     treasuryAddress: treasury.address,
