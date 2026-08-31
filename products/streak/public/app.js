@@ -324,6 +324,21 @@ function parseRoute() {
   return { name: h[0] || "", params: h.slice(1) };
 }
 
+function mountRouteView() {
+  const current = $("#view");
+  if (!current) return null;
+  const next = document.createElement("div");
+  next.className = "view";
+  next.id = "view";
+  next.innerHTML = spinner();
+  current.replaceWith(next);
+  return next;
+}
+
+function isActiveView(view) {
+  return !!view && view.isConnected && view === $("#view");
+}
+
 async function navigate() {
   closeMobileNav();
   const r = parseRoute();
@@ -344,13 +359,28 @@ async function navigate() {
   if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
   renderShell();
   const view = routes[r.name] || routes["dashboard"];
+  // Every navigation gets a fresh DOM target. Requests from a previous route
+  // may still finish, but they can only update their now-detached target and
+  // can never paint over the page the user most recently selected.
+  r.view = mountRouteView();
+  const activeRouteName = routes[r.name] ? (r.name || "dashboard") : "dashboard";
+  highlightNav(activeRouteName);
   try {
     await view(r);
   } catch (err) {
+    if (state.route !== r || !isActiveView(r.view)) return;
     console.error(err);
     toast(err.message, "err");
+    r.view.innerHTML = `
+      <div class="panel">
+        <div class="panel-b dim mono center" style="padding:40px">
+          COULD NOT LOAD THIS PAGE · ${esc(err.message)}<br/><br/>
+          <button class="btn btn-ghost btn-sm" id="route-retry">RETRY</button>
+        </div>
+      </div>
+    `;
+    r.view.querySelector("#route-retry").onclick = () => navigate();
   }
-  highlightNav(r.name || "dashboard");
 }
 
 window.addEventListener("hashchange", () => navigate());
@@ -503,9 +533,7 @@ function teardownShell() {
 }
 
 function highlightNav(name) {
-  const rail = $("#rail");
-  if (!rail) return;
-  rail.querySelectorAll("a[data-route]").forEach((a) => {
+  document.querySelectorAll("#rail a[data-route], #mobile-nav-drawer a[data-route]").forEach((a) => {
     a.classList.toggle("active", a.dataset.route === name || (name === "dashboard" && a.dataset.route === "dashboard"));
   });
 }
@@ -673,10 +701,11 @@ function chartSvg(ticks, w = 720, h = 260) {
 
 // ──────────────────────────────────────────────────────────── views ────────
 
-async function renderDashboard() {
+async function renderDashboard(r = state.route) {
+  const view = r?.view ?? $("#view");
   await refreshDashboard(true);
+  if (!isActiveView(view)) return;
   const d = state.dashboard;
-  const view = $("#view");
   const u = state.user;
   const headline = d?.headline;
 
@@ -786,6 +815,7 @@ async function renderMarkets(r) {
       updateStatusBar();
     } catch { /* market list still works without provider metadata */ }
   }
+  if (!isActiveView(view)) return;
   const competitions = state.liveStatus?.competitions || [];
   view.innerHTML = `
     <div class="page-h">
@@ -806,23 +836,30 @@ async function renderMarkets(r) {
     </div>
     <div id="mkt-body">${spinner()}</div>
   `;
-  $("#flt").onchange = async (e) => {
-    await loadMarkets(e.target.value || undefined, $("#cmp-flt")?.value || undefined);
+  view.querySelector("#flt").onchange = async (e) => {
+    await loadMarkets(e.target.value || undefined, view.querySelector("#cmp-flt")?.value || undefined, view);
   };
-  $("#cmp-flt").onchange = async (e) => {
-    await loadMarkets($("#flt")?.value || undefined, e.target.value || undefined);
+  view.querySelector("#cmp-flt").onchange = async (e) => {
+    await loadMarkets(view.querySelector("#flt")?.value || undefined, e.target.value || undefined, view);
   };
-  await loadMarkets("open");
-  startPolling(() => loadMarkets($("#flt")?.value || undefined, $("#cmp-flt")?.value || undefined));
+  await loadMarkets("open", undefined, view);
+  if (!isActiveView(view)) return;
+  startPolling(() => loadMarkets(
+    view.querySelector("#flt")?.value || undefined,
+    view.querySelector("#cmp-flt")?.value || undefined,
+    view,
+  ));
 }
 
-async function loadMarkets(status, competition) {
+async function loadMarkets(status, competition, view = $("#view")) {
+  if (!isActiveView(view)) return;
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   if (competition) params.set("competition", competition);
   const data = await api(`/markets${params.size ? `?${params}` : ""}`);
+  if (!isActiveView(view)) return;
   const ms = data.markets || [];
-  const body = $("#mkt-body");
+  const body = view.querySelector("#mkt-body");
   if (!body) return;
   if (!ms.length) {
     body.innerHTML = `<div class="panel"><div class="panel-b dim mono center" style="padding:40px;font-size:11px;letter-spacing:0.14em">NO MARKETS — TRY ANOTHER FILTER</div></div>`;
@@ -992,19 +1029,20 @@ function marketInsightsHtml(insights, market) {
   `;
 }
 
-async function loadMarketInsights(market) {
-  const body = $("#insights-body");
+async function loadMarketInsights(market, view = $("#view")) {
+  const body = view?.querySelector("#insights-body");
+  const meta = view?.querySelector("#insights-meta");
   if (!body) return;
   try {
     const data = await api(`/markets/${encodeURIComponent(market.id)}/insights`);
-    if (!$("#insights-body")) return;
-    $("#insights-meta").innerHTML = data.insights.frozen
+    if (!isActiveView(view) || !body.isConnected || !meta?.isConnected) return;
+    meta.innerHTML = data.insights.frozen
       ? `<span class="chip resolved">FROZEN</span>`
       : `<span class="chip live">PRE-MATCH</span>`;
-    $("#insights-body").innerHTML = marketInsightsHtml(data.insights, market);
+    body.innerHTML = marketInsightsHtml(data.insights, market);
   } catch (error) {
-    if ($("#insights-body")) {
-      $("#insights-body").innerHTML = `<div class="dim mono center" style="padding:24px">ANALYTICS UNAVAILABLE · ${esc(error.message)}</div>`;
+    if (isActiveView(view) && body.isConnected) {
+      body.innerHTML = `<div class="dim mono center" style="padding:24px">ANALYTICS UNAVAILABLE · ${esc(error.message)}</div>`;
     }
   }
 }
@@ -1018,6 +1056,7 @@ async function renderMarketDetail(r) {
   view.innerHTML = spinner();
 
   const { market: m } = await api(`/markets/${encodeURIComponent(id)}`);
+  if (!isActiveView(view)) return;
   view.innerHTML = `
     <div class="page-h">
       <h1>${esc(m.match.home.name)} <span class="dim" style="font-weight:400">vs</span> ${esc(m.match.away.name)}</h1>
@@ -1139,8 +1178,8 @@ async function renderMarketDetail(r) {
     </div>
   `;
   if (m.status === "open") bindBetPanel(m);
-  if (m.status === "resolved" || m.status === "void") loadSettlementPanel(m);
-  loadMarketInsights(m);
+  if (m.status === "resolved" || m.status === "void") loadSettlementPanel(m, view);
+  loadMarketInsights(m, view);
   startPolling(renderMarketDetail);
 }
 
@@ -1314,7 +1353,7 @@ function confirmBet({ market, side, amount, asStreakPick }) {
 
 // ──────────────────────────────────────────────────────── streak page ─────
 
-async function renderStreak() {
+async function renderStreak(r = state.route) {
   const view = $("#view");
   let u = state.user;
   const today = localDateKey();
@@ -1324,6 +1363,7 @@ async function renderStreak() {
     refreshDashboard(),
     api("/markets?status=open"),
   ]);
+  if (!isActiveView(view)) return;
   u = state.user || u;
   const canPick = u.streak.status === "active" && u.streak.lastPickDate !== today;
   const { markets } = marketsResp;
@@ -1382,7 +1422,7 @@ async function renderStreak() {
     </div>
   `;
 
-  $("#view").querySelectorAll("tr.mkt-row").forEach((tr) => {
+  view.querySelectorAll("tr.mkt-row").forEach((tr) => {
     tr.onclick = () => { location.hash = `#/market/${tr.dataset.go}`; };
   });
   if ($("#renew")) $("#renew").onclick = confirmRenew;
@@ -1467,6 +1507,7 @@ async function renderPortfolio() {
   const view = $("#view");
   view.innerHTML = spinner();
   const data = await api("/portfolio");
+  if (!isActiveView(view)) return;
   const u = state.user;
 
   view.innerHTML = `
@@ -1524,6 +1565,7 @@ async function renderWallet() {
   const view = $("#view");
   view.innerHTML = spinner();
   const w = await api("/wallet");
+  if (!isActiveView(view)) return;
 
   view.innerHTML = `
     <div class="page-h">
@@ -1672,6 +1714,7 @@ async function renderLeaderboard() {
   const view = $("#view");
   view.innerHTML = spinner();
   const { leaderboard: lb } = await api("/leaderboard");
+  if (!isActiveView(view)) return;
   view.innerHTML = `
     <div class="page-h"><h1>Leaderboard</h1><span class="sub">Top 100 by realised P&L</span></div>
     <div class="panel">
@@ -1699,6 +1742,7 @@ async function renderCrews() {
   const view = $("#view");
   view.innerHTML = spinner();
   const { crews } = await api("/crews");
+  if (!isActiveView(view)) return;
   const u = state.user;
 
   view.innerHTML = `
@@ -1868,6 +1912,7 @@ async function renderFixtures() {
   const view = $("#view");
   view.innerHTML = spinner();
   const { matches, competitions = [] } = await api("/matches");
+  if (!isActiveView(view)) return;
 
   const draw = (selectedCompetition = "") => {
     const visible = selectedCompetition
@@ -1915,7 +1960,7 @@ async function renderFixtures() {
       `).join("") : `<div class="panel"><div class="panel-b dim mono center" style="padding:40px">NO FIXTURES FOR THIS COMPETITION</div></div>`}
     `;
 
-    $("#fixture-cmp").onchange = (event) => draw(event.target.value);
+    view.querySelector("#fixture-cmp").onchange = (event) => draw(event.target.value);
     view.querySelectorAll("tr.mkt-row").forEach((row) => {
       row.onclick = () => { location.hash = `#/market/${row.dataset.go}`; };
     });
@@ -2102,20 +2147,22 @@ function startPolling(viewFn) {
  * Loads the on-chain settlement panel on the market-detail page and, if the
  * user has any bets in this market, appends "prove my bet" affordances.
  */
-async function loadSettlementPanel(m) {
-  const body = document.getElementById("settlement-body");
-  const badge = document.getElementById("settlement-badge");
+async function loadSettlementPanel(m, view = $("#view")) {
+  const body = view?.querySelector("#settlement-body");
+  const badge = view?.querySelector("#settlement-badge");
   if (!body || !badge) return;
   let d;
   try {
     d = await api(`/receipts/${encodeURIComponent(m.id)}`);
   } catch (err) {
+    if (!isActiveView(view) || !body.isConnected || !badge.isConnected) return;
     body.innerHTML = `<div class="dim mono" style="font-size:11.5px">
       Receipt not yet published. The engine writes an on-chain fingerprint to Pudge shortly after settlement.
     </div>`;
     badge.innerHTML = `<span class="chip">PENDING</span>`;
     return;
   }
+  if (!isActiveView(view) || !body.isConnected || !badge.isConnected) return;
   const p = d.payload;
   const rec = d.receipt;
   const oc = d.onChain || {};
@@ -2164,7 +2211,7 @@ async function loadSettlementPanel(m) {
       catch { toast("copy failed", "err"); }
     };
   });
-  const prove = document.getElementById("prove-mine");
+  const prove = view.querySelector("#prove-mine");
   if (prove) prove.onclick = () => showInclusionProof(m.id, { mine: true });
 }
 
@@ -2211,6 +2258,7 @@ async function renderReceipts() {
   const view = $("#view");
   view.innerHTML = spinner();
   const { receipts } = await api("/receipts");
+  if (!isActiveView(view)) return;
   view.innerHTML = `
     <div class="page-h">
       <h1>Settlement Receipts</h1>
@@ -2249,6 +2297,7 @@ async function renderReceiptPublic(r) {
   if (!id) throw new Error("Missing market id.");
   document.title = `Receipt · Streak`;
   const d = await api(`/receipts/${encodeURIComponent(id)}`);
+  if (state.route !== r) return;
   const p = d.payload;
   const rec = d.receipt;
   const oc = d.onChain || {};
