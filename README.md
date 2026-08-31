@@ -36,6 +36,7 @@ reports/
   week-12.md         # Streak Terminal — wallet-native login (self-custody) + non-blocking on-chain UX
   week-13.md         # First on-chain CKB script — a hash-lock in TypeScript (ckb-js-vm)
   week-14.md         # Real multi-league football oracle — API-SPORTS + safe settlement
+  week-15.md         # Market vs Machine — crowd, model and bookmaker intelligence
 ```
 
 ## Weekly Index
@@ -56,6 +57,7 @@ reports/
 | 12 | Streak Terminal — wallet-native login (self-custody) + non-blocking on-chain UX | [reports/week-12.md](reports/week-12.md) | [products/streak](products/streak) |
 | 13 | First on-chain CKB script — a hash-lock in TypeScript (ckb-js-vm) | [reports/week-13.md](reports/week-13.md) | [src/week13/vault-lock](src/week13/vault-lock) |
 | 14 | Real multi-league football oracle — API-SPORTS + safe settlement | [reports/week-14.md](reports/week-14.md) | [products/streak](products/streak) |
+| 15 | Market vs Machine — crowd, model and bookmaker intelligence | [reports/week-15.md](reports/week-15.md) | [products/streak](products/streak) |
 
 ## Setup
 

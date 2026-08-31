@@ -16,6 +16,10 @@ services:
         value: football
       - key: FOOTBALL_LEAGUE_IDS
         value: 39,140,78,135,61,2
+      - key: FOOTBALL_INSIGHT_PREFETCH_MINUTES
+        value: 90
+      - key: FOOTBALL_INSIGHT_PREFETCH_BATCH
+        value: 4
       - key: API_SPORTS_KEY
         sync: false
       - key: NOTIFY_PROVIDER

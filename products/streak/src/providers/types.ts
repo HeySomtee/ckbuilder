@@ -7,11 +7,12 @@
  * (or the built-in simulator) by implementing this interface and selecting it
  * with the `MATCH_PROVIDER` env var — no engine code changes.
  *
- * See providers/index.ts for selection and providers/worldcup.ts /
- * providers/dummy.ts for the two implementations that ship today.
+ * See providers/index.ts for selection and providers/worldcup.ts,
+ * providers/dummy.ts and providers/football.ts for the implementations that
+ * ship today.
  */
 
-import type { Competition, Match, Outcome } from "../types";
+import type { Competition, Match, Outcome, ProviderMatchInsights } from "../types";
 
 /**
  * A single fixture's live/final state, keyed by our internal match id in the
@@ -82,6 +83,12 @@ export interface MatchDataProvider {
   readonly allowSimulatedFallback?: boolean;
   /** True when a persisted match belongs to this provider's active catalogue. */
   ownsMatch?(match: Match): boolean;
+  /** Cached/on-demand pre-match analytics for providers that support them. */
+  fetchInsights?(match: Match): Promise<ProviderMatchInsights | null>;
+  /** Quota-aware near-kickoff warming; implementations choose their own batch. */
+  prefetchInsights?(matches: Match[]): Promise<void>;
+  /** Synchronous cache read used while the DB write lock is held. */
+  peekInsights?(match: Match): ProviderMatchInsights | undefined;
   /** Optional one-time async setup, awaited at boot before any sync. */
   init?(): Promise<void>;
   /** Full ordered fixture list. Must be pure/sync (called under write lock). */

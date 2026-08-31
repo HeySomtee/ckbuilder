@@ -6,6 +6,7 @@
  */
 
 export type Outcome = "home" | "draw" | "away";
+export type OutcomeProbabilities = Record<Outcome, number>;
 export type MatchStatus =
   | "scheduled"
   | "live"
@@ -66,6 +67,96 @@ export interface Team {
   logo?: string;
 }
 
+// ── Match analytics / Market vs Machine ───────────────────────────────────
+
+export interface InsightCoverage {
+  predictions?: boolean;
+  odds?: boolean;
+  standings?: boolean;
+  injuries?: boolean;
+  events?: boolean;
+  lineups?: boolean;
+  fixtureStatistics?: boolean;
+  playerStatistics?: boolean;
+}
+
+export interface MachineInsight {
+  probabilities: OutcomeProbabilities;
+  predictedWinner?: { id?: string; name: string; comment?: string };
+  advice?: string;
+  expectedGoals?: { home?: string; away?: string };
+  comparisons?: Record<string, { home: number; away: number }>;
+  capturedAt: string;
+}
+
+export interface BookmakerInsight {
+  probabilities: OutcomeProbabilities;
+  bookmakerCount: number;
+  bookmakerNames: string[];
+  market: "Match Winner";
+  /** Mean amount by which raw implied probabilities exceed 100%. */
+  averageMargin: number;
+  updatedAt?: string;
+  capturedAt: string;
+}
+
+export interface TeamTableInsight {
+  teamId: string;
+  name: string;
+  rank: number;
+  points: number;
+  form?: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+}
+
+export interface HeadToHeadInsight {
+  fixtureId: string;
+  date: string;
+  home: string;
+  away: string;
+  homeGoals: number;
+  awayGoals: number;
+  status: string;
+}
+
+/** Provider-owned, cached analytics. It deliberately contains no crowd data. */
+export interface ProviderMatchInsights {
+  v: 1;
+  matchId: string;
+  fixtureId: string;
+  provider: string;
+  source: string;
+  fetchedAt: string;
+  coverage: InsightCoverage;
+  machine?: MachineInsight;
+  bookmakers?: BookmakerInsight;
+  table?: { home?: TeamTableInsight; away?: TeamTableInsight };
+  headToHead?: HeadToHeadInsight[];
+  warnings: string[];
+}
+
+export interface CrowdInsight {
+  probabilities: OutcomeProbabilities;
+  totalBets: number;
+  uniqueBettors: number;
+  totalPoolShannons: string;
+}
+
+/** Auditable comparison returned to the UI and frozen on a Market at kickoff. */
+export interface MarketInsights extends ProviderMatchInsights {
+  capturedAt: string;
+  frozen: boolean;
+  crowd: CrowdInsight;
+  /** sha256 of the canonical snapshot without this field; present when frozen. */
+  snapshotHash?: string;
+}
+
 // ── Prediction market ──────────────────────────────────────────────────────
 
 export type MarketStatus = "open" | "closed" | "resolved" | "void";
@@ -95,6 +186,10 @@ export interface Market {
   payout?: PayoutSummary;
   /** Set once the on-chain settlement receipt for this market has been published. */
   receipt?: MarketReceiptRef;
+  /** Latest cached external analytics, persisted so restarts do not lose them. */
+  insightsLatest?: ProviderMatchInsights;
+  /** Crowd + external probabilities frozen at the first sync after kickoff. */
+  insightSnapshot?: MarketInsights;
 }
 
 export interface PriceTick {
@@ -165,6 +260,8 @@ export interface SettlementReceipt {
     status?: string;
     confirmedAt?: string;
   };
+  /** Frozen pre-match crowd, model and bookmaker comparison (schema v3+). */
+  insights?: MarketInsights;
   bets: {
     count: number;
     /** sha256 root of per-bet leaves (see settlement.ts). */

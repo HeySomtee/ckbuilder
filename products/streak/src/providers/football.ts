@@ -15,7 +15,19 @@
  *   FOOTBALL_FINAL_CONFIRMATIONS   identical terminal reads required (default 2)
  */
 
-import type { Competition, Match, Outcome, Team } from "../types";
+import type {
+  BookmakerInsight,
+  Competition,
+  HeadToHeadInsight,
+  InsightCoverage,
+  MachineInsight,
+  Match,
+  Outcome,
+  OutcomeProbabilities,
+  ProviderMatchInsights,
+  Team,
+  TeamTableInsight,
+} from "../types";
 import type { LiveResult, MatchDataProvider, ProviderStatus } from "./types";
 
 export const API_FOOTBALL_BASE = "https://v3.football.api-sports.io";
@@ -44,6 +56,219 @@ const SUSPENDED_STATUSES = new Set(["SUSP", "INT"]);
 const POSTPONED_STATUSES = new Set(["PST", "TBD"]);
 
 type ApiFixture = any;
+
+interface TimedEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+/** Small promise-sharing TTL cache so concurrent page loads spend quota once. */
+class TimedMemo<T> {
+  private readonly values = new Map<string, TimedEntry<T>>();
+  private readonly inFlight = new Map<string, Promise<T>>();
+
+  isFresh(key: string, now = Date.now()): boolean {
+    return (this.values.get(key)?.expiresAt ?? 0) > now;
+  }
+
+  peek(key: string): T | undefined {
+    return this.values.get(key)?.value;
+  }
+
+  async get(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+    const cached = this.values.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    const pending = this.inFlight.get(key);
+    if (pending) return pending;
+
+    const request = load()
+      .then((value) => {
+        this.values.set(key, { value, expiresAt: Date.now() + ttlMs });
+        return value;
+      })
+      .finally(() => this.inFlight.delete(key));
+    this.inFlight.set(key, request);
+    return request;
+  }
+}
+
+function roundProbability(value: number): number {
+  return Number(value.toFixed(6));
+}
+
+export function parseApiPercent(value: unknown): number | undefined {
+  const parsed = Number(String(value ?? "").replace("%", "").trim());
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed / 100 : undefined;
+}
+
+function normalizeProbabilities(
+  home: number | undefined,
+  draw: number | undefined,
+  away: number | undefined,
+): OutcomeProbabilities | undefined {
+  if (home === undefined || draw === undefined || away === undefined) return undefined;
+  const total = home + draw + away;
+  if (!(total > 0)) return undefined;
+  return {
+    home: roundProbability(home / total),
+    draw: roundProbability(draw / total),
+    away: roundProbability(away / total),
+  };
+}
+
+export function mapApiPrediction(value: any, capturedAt: string): MachineInsight | undefined {
+  const prediction = value?.predictions;
+  const probabilities = normalizeProbabilities(
+    parseApiPercent(prediction?.percent?.home),
+    parseApiPercent(prediction?.percent?.draw),
+    parseApiPercent(prediction?.percent?.away),
+  );
+  if (!probabilities) return undefined;
+
+  const winnerName = String(prediction?.winner?.name ?? "").trim();
+  const advice = String(prediction?.advice ?? "").trim();
+  const homeGoals = String(prediction?.goals?.home ?? "").trim();
+  const awayGoals = String(prediction?.goals?.away ?? "").trim();
+  const comparisons: Record<string, { home: number; away: number }> = {};
+  for (const [name, sides] of Object.entries(value?.comparison ?? {})) {
+    const home = parseApiPercent((sides as any)?.home);
+    const away = parseApiPercent((sides as any)?.away);
+    if (home !== undefined && away !== undefined) comparisons[name] = { home, away };
+  }
+
+  return {
+    probabilities,
+    ...(winnerName
+      ? {
+          predictedWinner: {
+            ...(prediction?.winner?.id === undefined
+              ? {}
+              : { id: String(prediction.winner.id) }),
+            name: winnerName,
+            ...(prediction?.winner?.comment
+              ? { comment: String(prediction.winner.comment) }
+              : {}),
+          },
+        }
+      : {}),
+    ...(advice ? { advice } : {}),
+    ...(homeGoals || awayGoals
+      ? {
+          expectedGoals: {
+            ...(homeGoals ? { home: homeGoals } : {}),
+            ...(awayGoals ? { away: awayGoals } : {}),
+          },
+        }
+      : {}),
+    ...(Object.keys(comparisons).length ? { comparisons } : {}),
+    capturedAt,
+  };
+}
+
+export function consensusFromApiOdds(
+  rows: any[],
+  capturedAt: string,
+): BookmakerInsight | undefined {
+  const samples: OutcomeProbabilities[] = [];
+  const margins: number[] = [];
+  const names = new Set<string>();
+  const updates: string[] = [];
+
+  for (const row of rows) {
+    if (typeof row?.update === "string") updates.push(row.update);
+    for (const bookmaker of row?.bookmakers ?? []) {
+      const bet = (bookmaker?.bets ?? []).find(
+        (candidate: any) => Number(candidate?.id) === 1 || candidate?.name === "Match Winner",
+      );
+      if (!bet) continue;
+      const odds = new Map<string, number>();
+      for (const item of bet.values ?? []) {
+        const odd = Number(item?.odd);
+        if (Number.isFinite(odd) && odd > 1) odds.set(String(item?.value ?? "").toLowerCase(), odd);
+      }
+      const home = odds.get("home");
+      const draw = odds.get("draw");
+      const away = odds.get("away");
+      if (!home || !draw || !away) continue;
+      const rawHome = 1 / home;
+      const rawDraw = 1 / draw;
+      const rawAway = 1 / away;
+      const normalized = normalizeProbabilities(rawHome, rawDraw, rawAway);
+      if (!normalized) continue;
+      samples.push(normalized);
+      margins.push(rawHome + rawDraw + rawAway - 1);
+      names.add(String(bookmaker?.name ?? `Bookmaker ${bookmaker?.id ?? names.size + 1}`));
+    }
+  }
+  if (!samples.length) return undefined;
+
+  const average = (outcome: Outcome) =>
+    roundProbability(samples.reduce((sum, sample) => sum + sample[outcome], 0) / samples.length);
+  const probabilities = normalizeProbabilities(average("home"), average("draw"), average("away"))!;
+  updates.sort();
+  return {
+    probabilities,
+    bookmakerCount: samples.length,
+    bookmakerNames: [...names],
+    market: "Match Winner",
+    averageMargin: roundProbability(
+      margins.reduce((sum, margin) => sum + margin, 0) / margins.length,
+    ),
+    ...(updates.length ? { updatedAt: updates[updates.length - 1] } : {}),
+    capturedAt,
+  };
+}
+
+function mapTableRow(row: any): TeamTableInsight | undefined {
+  const id = row?.team?.id;
+  if (id === undefined || id === null) return undefined;
+  const all = row?.all ?? {};
+  const form = String(row?.form ?? "").trim();
+  return {
+    teamId: String(id),
+    name: String(row?.team?.name ?? "Unknown"),
+    rank: Number(row?.rank ?? 0),
+    points: Number(row?.points ?? 0),
+    ...(form ? { form } : {}),
+    played: Number(all?.played ?? 0),
+    won: Number(all?.win ?? 0),
+    drawn: Number(all?.draw ?? 0),
+    lost: Number(all?.lose ?? 0),
+    goalsFor: Number(all?.goals?.for ?? 0),
+    goalsAgainst: Number(all?.goals?.against ?? 0),
+    goalDifference: Number(row?.goalsDiff ?? 0),
+  };
+}
+
+export function mapApiStandings(
+  response: any[],
+  homeTeamId: string,
+  awayTeamId: string,
+): { home?: TeamTableInsight; away?: TeamTableInsight } | undefined {
+  const rows = (response[0]?.league?.standings ?? []).flat();
+  const home = mapTableRow(rows.find((row: any) => String(row?.team?.id) === homeTeamId));
+  const away = mapTableRow(rows.find((row: any) => String(row?.team?.id) === awayTeamId));
+  if (!home && !away) return undefined;
+  return { ...(home ? { home } : {}), ...(away ? { away } : {}) };
+}
+
+export function mapApiHeadToHead(response: any[]): HeadToHeadInsight[] {
+  return response.slice(0, 5).flatMap((fixture: any) => {
+    const id = fixture?.fixture?.id;
+    const date = fixture?.fixture?.date;
+    if (id === undefined || !date) return [];
+    const finalScore = fixture?.score?.fulltime ?? fixture?.goals ?? {};
+    return [{
+      fixtureId: String(id),
+      date: new Date(date).toISOString(),
+      home: String(fixture?.teams?.home?.name ?? "Home"),
+      away: String(fixture?.teams?.away?.name ?? "Away"),
+      homeGoals: Number(finalScore?.home ?? fixture?.goals?.home ?? 0),
+      awayGoals: Number(finalScore?.away ?? fixture?.goals?.away ?? 0),
+      status: String(fixture?.fixture?.status?.short ?? "FT"),
+    }];
+  });
+}
 
 export interface TerminalObservation {
   signature: string;
@@ -253,6 +478,25 @@ export function isApiFootballMatch(match: Match): boolean {
   return match.oracle?.provider === "api-football" || match.id.startsWith("api-football-");
 }
 
+export function mapApiCoverage(response: any[], season: number): InsightCoverage {
+  const seasonRow = (response[0]?.seasons ?? []).find((value: any) => Number(value?.year) === season);
+  const raw = seasonRow?.coverage ?? {};
+  const fixture = raw?.fixtures ?? {};
+  const coverage: InsightCoverage = {};
+  const assign = (key: keyof InsightCoverage, value: unknown) => {
+    if (typeof value === "boolean") coverage[key] = value;
+  };
+  assign("predictions", raw?.predictions);
+  assign("odds", raw?.odds);
+  assign("standings", raw?.standings);
+  assign("injuries", raw?.injuries);
+  assign("events", fixture?.events);
+  assign("lineups", fixture?.lineups);
+  assign("fixtureStatistics", fixture?.statistics_fixtures);
+  assign("playerStatistics", fixture?.statistics_players);
+  return coverage;
+}
+
 class ApiFootballProvider implements MatchDataProvider {
   readonly id = "football";
   readonly allowSimulatedFallback = false;
@@ -275,6 +519,18 @@ class ApiFootballProvider implements MatchDataProvider {
   private readonly finalConfirmations = clampInt(process.env.FOOTBALL_FINAL_CONFIRMATIONS, 2, 2, 5);
   private readonly scheduleTtlMs = clampInt(process.env.FOOTBALL_SCHEDULE_REFRESH_MINUTES, 360, 30, 1440) * 60_000;
   private readonly requestTimeoutMs = clampInt(process.env.FOOTBALL_REQUEST_TIMEOUT_MS, 12_000, 3_000, 30_000);
+  private readonly insightPrefetchMs = clampInt(
+    process.env.FOOTBALL_INSIGHT_PREFETCH_MINUTES,
+    90,
+    15,
+    360,
+  ) * 60_000;
+  private readonly insightPrefetchBatch = clampInt(
+    process.env.FOOTBALL_INSIGHT_PREFETCH_BATCH,
+    4,
+    1,
+    12,
+  );
 
   private fixtures = new Map<string, ApiFixture>();
   private trackedFixtureIds = new Set<string>();
@@ -291,6 +547,12 @@ class ApiFootballProvider implements MatchDataProvider {
   private initialized = false;
   private scheduleInFlight: Promise<void> | null = null;
   private resultsInFlight: Promise<Record<string, LiveResult>> | null = null;
+  private readonly coverageMemo = new TimedMemo<InsightCoverage>();
+  private readonly predictionMemo = new TimedMemo<MachineInsight | undefined>();
+  private readonly oddsMemo = new TimedMemo<BookmakerInsight | undefined>();
+  private readonly standingsMemo = new TimedMemo<any[]>();
+  private readonly headToHeadMemo = new TimedMemo<HeadToHeadInsight[]>();
+  private readonly insightMemo = new TimedMemo<ProviderMatchInsights>();
 
   async init(): Promise<void> {
     if (!this.apiKey) {
@@ -305,6 +567,154 @@ class ApiFootballProvider implements MatchDataProvider {
       .filter((fixture) => this.trackedFixtureIds.has(fixtureId(fixture)))
       .map(mapApiFixture)
       .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
+  }
+
+  async fetchInsights(match: Match): Promise<ProviderMatchInsights | null> {
+    if (!this.apiKey || !isApiFootballMatch(match) || !match.oracle?.fixtureId) return null;
+    const untilKickoff = Date.parse(match.kickoff) - Date.now();
+    const aggregateTtl = untilKickoff <= 2 * 60 * 60_000 ? 10 * 60_000 : 60 * 60_000;
+    return this.insightMemo.get(match.id, aggregateTtl, () => this.loadInsights(match));
+  }
+
+  peekInsights(match: Match): ProviderMatchInsights | undefined {
+    return this.insightMemo.peek(match.id);
+  }
+
+  async prefetchInsights(matches: Match[]): Promise<void> {
+    const now = Date.now();
+    const due = matches
+      .filter((match) => {
+        if (!isApiFootballMatch(match) || match.status !== "scheduled") return false;
+        const kickoff = Date.parse(match.kickoff);
+        return Number.isFinite(kickoff) &&
+          kickoff >= now - 2 * 60_000 &&
+          kickoff <= now + this.insightPrefetchMs &&
+          !this.insightMemo.isFresh(match.id, now);
+      })
+      .sort((a, b) => a.kickoff.localeCompare(b.kickoff))
+      .slice(0, this.insightPrefetchBatch);
+    await Promise.allSettled(due.map((match) => this.fetchInsights(match)));
+  }
+
+  private async loadInsights(match: Match): Promise<ProviderMatchInsights> {
+    const fetchedAt = new Date().toISOString();
+    const fixture = match.oracle!.fixtureId;
+    const league = match.competition?.id;
+    const homeTeam = match.home.id;
+    const awayTeam = match.away.id;
+    const warnings: string[] = [];
+
+    let coverage: InsightCoverage = {};
+    if (league) {
+      try {
+        coverage = await this.coverageMemo.get(
+          `${league}:${this.season}`,
+          24 * 60 * 60_000,
+          async () => mapApiCoverage(
+            await this.request("/leagues", { id: league, season: String(this.season) }),
+            this.season,
+          ),
+        );
+      } catch {
+        warnings.push("Competition coverage could not be refreshed; cached endpoint rules may be incomplete.");
+      }
+    } else {
+      warnings.push("Competition id is missing, so table and coverage data are unavailable.");
+    }
+
+    const safe = async <T>(label: string, load: () => Promise<T | undefined>): Promise<T | undefined> => {
+      try {
+        const value = await load();
+        if (value === undefined) warnings.push(`${label} returned no data for this fixture.`);
+        return value;
+      } catch {
+        warnings.push(`${label} is temporarily unavailable.`);
+        return undefined;
+      }
+    };
+
+    if (coverage.predictions === false) warnings.push("Predictions are not covered for this competition season.");
+    if (coverage.odds === false) warnings.push("Odds are not covered for this competition season.");
+    if (coverage.standings === false) warnings.push("Standings are not covered for this competition season.");
+
+    const kickoff = Date.parse(match.kickoff);
+    const untilKickoff = kickoff - Date.now();
+    const beforeKickoff = Number.isFinite(kickoff) && untilKickoff > 0;
+    const insideOddsWindow = beforeKickoff && untilKickoff <= 7 * 24 * 60 * 60_000;
+    if (!beforeKickoff) {
+      warnings.push("Kickoff passed before a fresh pre-match prediction or odds snapshot could be requested.");
+    }
+    if (beforeKickoff && !insideOddsWindow) {
+      warnings.push("Bookmaker consensus is fetched during the final seven days before kickoff.");
+    }
+
+    const machinePromise = coverage.predictions === false || !beforeKickoff
+      ? Promise.resolve(undefined)
+      : safe("Machine prediction", () => this.predictionMemo.get(
+          fixture,
+          60 * 60_000,
+          async () => {
+            const response = await this.request("/predictions", { fixture });
+            return mapApiPrediction(response[0], new Date().toISOString());
+          },
+        ));
+
+    const bookmakersPromise = coverage.odds === false || !insideOddsWindow
+      ? Promise.resolve(undefined)
+      : safe("Bookmaker odds", () => this.oddsMemo.get(
+          fixture,
+          3 * 60 * 60_000,
+          async () => consensusFromApiOdds(
+            await this.request("/odds", { fixture, bet: "1" }),
+            new Date().toISOString(),
+          ),
+        ));
+
+    const tablePromise = !league || !homeTeam || !awayTeam || coverage.standings === false
+      ? Promise.resolve(undefined)
+      : safe("League table", async () => {
+          const response = await this.standingsMemo.get(
+            `${league}:${this.season}`,
+            60 * 60_000,
+            () => this.request("/standings", { league, season: String(this.season) }),
+          );
+          return mapApiStandings(response, homeTeam, awayTeam);
+        });
+
+    const headToHeadPromise = !homeTeam || !awayTeam
+      ? Promise.resolve(undefined)
+      : safe("Head-to-head history", () => {
+          const pair = [homeTeam, awayTeam].sort().join("-");
+          return this.headToHeadMemo.get(
+            pair,
+            12 * 60 * 60_000,
+            async () => mapApiHeadToHead(
+              await this.request("/fixtures/headtohead", { h2h: pair, last: "5" }),
+            ),
+          );
+        });
+
+    const [machine, bookmakers, table, headToHead] = await Promise.all([
+      machinePromise,
+      bookmakersPromise,
+      tablePromise,
+      headToHeadPromise,
+    ]);
+
+    return {
+      v: 1,
+      matchId: match.id,
+      fixtureId: fixture,
+      provider: "api-football",
+      source: API_FOOTBALL_BASE,
+      fetchedAt,
+      coverage,
+      ...(machine ? { machine } : {}),
+      ...(bookmakers ? { bookmakers } : {}),
+      ...(table ? { table } : {}),
+      ...(headToHead?.length ? { headToHead } : {}),
+      warnings: [...new Set(warnings)],
+    };
   }
 
   async fetchResults(): Promise<Record<string, LiveResult>> {

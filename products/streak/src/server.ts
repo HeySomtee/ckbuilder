@@ -19,7 +19,7 @@ import { URL } from "url";
 
 import { PORT, PUBLIC_DIR, RENEW_FEE_CKB, SESSION_COOKIE, SETTLE_INTERVAL_MS,
   MIN_BET_CKB, MAX_BET_CKB, MIN_ONCHAIN_CKB, PROTOCOL_FEE_BPS, CREATOR_FEE_BPS } from "./config";
-import { read } from "./store";
+import { read, update } from "./store";
 import {
   createSession,
   destroySession,
@@ -64,6 +64,7 @@ import {
 } from "./wallet";
 import { abbrevAddress, addressUrl, getBalanceShannons, shannonsToCkb, txUrl, verifyWalletSignature } from "./chain";
 import { provider } from "./providers";
+import { composeMarketInsights } from "./insights";
 import { initNotifications } from "./notifications";
 import { supaEnsureTable } from "./store_supabase";
 import {
@@ -499,6 +500,60 @@ async function handleMarketDetail(req: IncomingMessage, res: ServerResponse, id:
   sendJson(res, 200, { market: detail });
 }
 
+async function handleMarketInsights(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  marketId: string,
+): Promise<void> {
+  let context = await read((db) => {
+    const market = db.markets.find((candidate) => candidate.id === marketId);
+    const match = market
+      ? db.matches.find((candidate) => candidate.id === market.matchId)
+      : undefined;
+    return market && match ? { market, match } : null;
+  });
+  if (!context || !isActiveProviderMatch(context.match)) {
+    return sendJson(res, 404, { error: "Market not found." });
+  }
+  if (context.market.insightSnapshot) {
+    return sendJson(res, 200, { insights: context.market.insightSnapshot });
+  }
+
+  let external = context.market.insightsLatest;
+  if (provider.fetchInsights) {
+    try {
+      external = (await provider.fetchInsights(context.match)) ?? external;
+    } catch {
+      // A stale cached snapshot is more useful than failing the whole market page.
+    }
+  }
+  if (
+    external &&
+    context.market.insightsLatest?.fetchedAt !== external.fetchedAt
+  ) {
+    const latest = external;
+    await update((db) => {
+      const market = db.markets.find((candidate) => candidate.id === marketId);
+      if (market && !market.insightSnapshot) market.insightsLatest = latest;
+    });
+  }
+
+  context = await read((db) => {
+    const market = db.markets.find((candidate) => candidate.id === marketId);
+    const match = market
+      ? db.matches.find((candidate) => candidate.id === market.matchId)
+      : undefined;
+    return market && match ? { market, match } : null;
+  });
+  if (!context) return sendJson(res, 404, { error: "Market not found." });
+  const insights = context.market.insightSnapshot ?? composeMarketInsights(
+    context.market,
+    context.match,
+    context.market.insightsLatest,
+  );
+  sendJson(res, 200, { insights });
+}
+
 async function handleBet(req: IncomingMessage, res: ServerResponse, marketId: string): Promise<void> {
   const user = await requireUser(req, res);
   if (!user) return;
@@ -915,12 +970,15 @@ const server = createServer(async (req, res) => {
       const direct = staticRoutes[key];
       if (direct) return await direct(req, res, url);
 
-      // /api/markets/:id and /api/markets/:id/bet
-      const m = url.pathname.match(/^\/api\/markets\/([^\/]+)(?:\/(bet))?$/);
+      // /api/markets/:id, /api/markets/:id/bet and /api/markets/:id/insights
+      const m = url.pathname.match(/^\/api\/markets\/([^\/]+)(?:\/(bet|insights))?$/);
       if (m) {
         const id = m[1];
         const sub = m[2];
         if (req.method === "GET" && !sub) return await handleMarketDetail(req, res, id);
+        if (req.method === "GET" && sub === "insights") {
+          return await handleMarketInsights(req, res, id);
+        }
         if (req.method === "POST" && sub === "bet") return await handleBet(req, res, id);
       }
 

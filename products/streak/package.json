@@ -9,7 +9,8 @@
     "build": "tsc",
     "serve": "node dist/server.js",
     "verify": "ts-node src/verify.ts",
-    "test:football": "ts-node src/providers/football.test.ts"
+    "test:football": "ts-node src/providers/football.test.ts",
+    "test:insights": "ts-node src/insights.test.ts"
   },
   "engines": {
     "node": ">=20"

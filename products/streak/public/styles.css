@@ -533,6 +533,69 @@ a:hover { color: var(--ink-0); }
   .detail-grid { grid-template-columns: 1fr; }
 }
 
+.insight-table { border: 1px solid var(--line); font-family: var(--mono); }
+.insight-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.5fr) repeat(3, minmax(64px, 0.7fr));
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+.insight-row:last-child { border-bottom: 0; }
+.insight-row > span:not(:first-child) { text-align: right; }
+.insight-head {
+  color: var(--ink-2);
+  background: var(--bg-2);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.insight-team { color: var(--ink-1); }
+.insight-lead { color: var(--amber); font-weight: 700; }
+.insight-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.insight-summary > div,
+.insight-team-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-1);
+}
+.insight-summary .label,
+.insight-h2h .label {
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+.insight-context-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.insight-team-card > div:first-child { display: flex; justify-content: space-between; }
+.insight-team-card .rank { color: var(--amber); font-family: var(--mono); }
+.insight-statline { display: flex; flex-wrap: wrap; gap: 10px; color: var(--ink-1); font-size: 11px; }
+.insight-h2h { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.insight-h2h > div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; color: var(--ink-1); font-family: var(--mono); font-size: 10px; }
+.insight-warnings { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; color: var(--amber); font-family: var(--mono); font-size: 9.5px; }
+.insight-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--ink-2); font-family: var(--mono); font-size: 9px; letter-spacing: 0.06em; }
+@media (max-width: 620px) {
+  .insight-summary,
+  .insight-context-grid { grid-template-columns: 1fr; }
+  .insight-row { grid-template-columns: minmax(90px, 1.3fr) repeat(3, minmax(50px, 0.7fr)); padding: 7px 6px; gap: 4px; }
+  .insight-h2h > div,
+  .insight-foot { flex-direction: column; }
+}
+
 .match-card {
   display: flex; align-items: center; justify-content: space-between;
   padding: 18px 22px;

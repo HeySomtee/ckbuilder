@@ -396,6 +396,34 @@ should be `true`, and `simulated` should be `false`. A real fixture returned by
 `GET /api/matches` should also include `oracle.provider: "api-football"` and
 HTTP logo URLs for both teams.
 
+### Market vs Machine analytics
+
+Week 15 adds an auditable comparison between three probability sources on each
+market detail page:
+
+- **Crowd** — the live Streak pool split;
+- **Machine** — API-Football's home/draw/away prediction;
+- **Books** — the vig-free mean probability across available `Match Winner`
+  bookmakers.
+
+The same response includes table rank, points, form and the last five
+head-to-head meetings. It is intentionally partial-data tolerant: coverage is
+checked through `/leagues` first, and a missing prediction, odds row or table
+becomes a visible warning rather than a made-up value.
+
+Quota is protected by endpoint-specific caches: coverage 24 hours, standings
+and predictions one hour, bookmaker odds three hours, and head-to-head history
+12 hours. Concurrent requests share the same in-flight promise. During the
+final 90 minutes before kickoff, the background loop warms at most four stale
+fixtures per pass; those limits are configurable with
+`FOOTBALL_INSIGHT_PREFETCH_MINUTES` and `FOOTBALL_INSIGHT_PREFETCH_BATCH`.
+
+At kickoff the engine combines the latest provider data with the exact crowd
+pool, freezes it on the market, and computes a canonical SHA-256 snapshot hash.
+Settlement receipt schema v3 embeds the full frozen comparison, so later model
+or bookmaker updates cannot rewrite what participants saw before betting
+closed.
+
 ```bash
 MATCH_PROVIDER=dummy npm run streak    # simulated EPL fixtures, live now
 MATCH_PROVIDER=football npm run streak # API-SPORTS multi-league feed
@@ -420,6 +448,7 @@ GET  /api/dashboard              → one-shot terminal payload (user, headline,
                                    counts, leaderboard top, tape)
 GET  /api/markets[?status=open&competition=39] → filterable market list
 GET  /api/markets/:id            → market detail (chart, feed, my positions)
+GET  /api/markets/:id/insights   → crowd/model/books comparison + context
 POST /api/markets/:id/bet        → { outcome, amountCkb, asStreakPick? }
 GET  /api/portfolio              → all my positions + open stake + realised P&L
 GET  /api/wallet                 → on-chain + escrow balances, recent ledger
@@ -491,6 +520,8 @@ Environment variables (all optional):
 | `FOOTBALL_LIVE_POLL_SECONDS` | `20` | Live and final-confirmation polling cadence (minimum 15 seconds). |
 | `FOOTBALL_FINAL_CONFIRMATIONS` | `2` | Matching terminal snapshots required before settlement. |
 | `FOOTBALL_SCHEDULE_REFRESH_MINUTES` | `360` | Long-lived schedule cache TTL. |
+| `FOOTBALL_INSIGHT_PREFETCH_MINUTES` | `90` | Begin warming analytics this many minutes before kickoff. |
+| `FOOTBALL_INSIGHT_PREFETCH_BATCH` | `4` | Maximum stale fixtures warmed during one settlement pass. |
 | `DUMMY_STAGGER_MIN` / `DUMMY_MATCH_MINUTES` / `DUMMY_PAST_SLOTS` / `DUMMY_AHEAD_SLOTS` | `20` / `96` / `6` / `48` | Shape the rolling simulated schedule (dummy provider). |
 | `WC_API_TOKEN` / `WC_API_EMAIL` + `WC_API_PASSWORD` | — | Enable live oracle. |
 | `WC_API_BASE` | `https://worldcup26.ir` | Override oracle base URL. |

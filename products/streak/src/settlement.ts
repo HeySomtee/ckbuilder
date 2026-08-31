@@ -220,7 +220,7 @@ export function buildReceiptPayload(
     asBig(market.payout?.creatorFeeShannons ?? "0");
 
   const payload: SettlementReceipt = {
-    v: match.competition || match.oracle ? 2 : 1,
+    v: market.insightSnapshot ? 3 : match.competition || match.oracle ? 2 : 1,
     marketId: market.id,
     matchId: market.matchId,
     match: {
@@ -251,6 +251,7 @@ export function buildReceiptPayload(
       ...(match.oracle?.status ? { status: match.oracle.status } : {}),
       ...(match.oracle?.confirmedAt ? { confirmedAt: match.oracle.confirmedAt } : {}),
     },
+    ...(market.insightSnapshot ? { insights: market.insightSnapshot } : {}),
     bets: { count: leaves.length, merkleRoot: root },
     treasuryAddress: treasury.address,
     settledAt: market.resolvedAt ?? new Date().toISOString(),

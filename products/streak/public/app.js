@@ -897,6 +897,118 @@ function fixtureStatusChip(match) {
   return `<span class="chip">SCHEDULED</span>`;
 }
 
+function insightPct(source, outcome, hasSample = true) {
+  const value = source?.probabilities?.[outcome];
+  return hasSample && Number.isFinite(value) ? fmtPct(value) : "—";
+}
+
+function strongestOutcome(source) {
+  if (!source?.probabilities) return null;
+  return ["home", "draw", "away"].reduce(
+    (best, outcome) => source.probabilities[outcome] > source.probabilities[best] ? outcome : best,
+    "home",
+  );
+}
+
+function insightComparisonHtml(insights, market) {
+  const outcomes = [
+    ["home", market.match.home.name],
+    ["draw", "Draw"],
+    ["away", market.match.away.name],
+  ];
+  const crowdHasSample = insights.crowd.totalBets > 0;
+  const leaders = {
+    crowd: crowdHasSample ? strongestOutcome(insights.crowd) : null,
+    machine: strongestOutcome(insights.machine),
+    books: strongestOutcome(insights.bookmakers),
+  };
+  return `
+    <div class="insight-table">
+      <div class="insight-row insight-head">
+        <span>Outcome</span><span>Crowd</span><span>Machine</span><span>Books</span>
+      </div>
+      ${outcomes.map(([outcome, label]) => `
+        <div class="insight-row">
+          <span class="insight-team">${esc(label)}</span>
+          <span class="${leaders.crowd === outcome ? "insight-lead" : ""}">${insightPct(insights.crowd, outcome, crowdHasSample)}</span>
+          <span class="${leaders.machine === outcome ? "insight-lead" : ""}">${insightPct(insights.machine, outcome)}</span>
+          <span class="${leaders.books === outcome ? "insight-lead" : ""}">${insightPct(insights.bookmakers, outcome)}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function teamTableCard(team, side) {
+  if (!team) return `<div class="insight-team-card dim">${esc(side)} table data unavailable</div>`;
+  return `
+    <div class="insight-team-card">
+      <div><span class="code">${esc(team.name)}</span><span class="rank">#${team.rank}</span></div>
+      <div class="insight-statline"><span>${team.points} pts</span><span>${team.played} played</span><span>${team.goalsFor}:${team.goalsAgainst} goals</span></div>
+      <div class="dim mono" style="font-size:10px">FORM · ${esc(team.form || "—")} · ${team.won}W ${team.drawn}D ${team.lost}L</div>
+    </div>
+  `;
+}
+
+function marketInsightsHtml(insights, market) {
+  const machine = insights.machine;
+  const books = insights.bookmakers;
+  const h2h = insights.headToHead || [];
+  return `
+    ${insightComparisonHtml(insights, market)}
+    <div class="insight-summary">
+      <div>
+        <span class="label">MODEL READ</span>
+        <span>${machine?.advice ? esc(machine.advice) : "Prediction unavailable"}</span>
+        ${machine?.predictedWinner?.comment ? `<span class="dim">${esc(machine.predictedWinner.comment)}</span>` : ""}
+      </div>
+      <div>
+        <span class="label">BOOK CONSENSUS</span>
+        <span>${books ? `${books.bookmakerCount} bookmakers · ${(books.averageMargin * 100).toFixed(1)}% mean margin` : "Not available yet"}</span>
+        ${books?.updatedAt ? `<span class="dim">Updated ${fmtDateTime(books.updatedAt)}</span>` : ""}
+      </div>
+    </div>
+    ${(insights.table?.home || insights.table?.away) ? `
+      <div class="insight-context-grid">
+        ${teamTableCard(insights.table?.home, "Home")}
+        ${teamTableCard(insights.table?.away, "Away")}
+      </div>
+    ` : ""}
+    ${h2h.length ? `
+      <div class="insight-h2h">
+        <span class="label">LAST ${h2h.length} MEETINGS</span>
+        ${h2h.map((item) => `
+          <div><span>${fmtDateTime(item.date)}</span><span>${esc(item.home)} <b>${item.homeGoals}–${item.awayGoals}</b> ${esc(item.away)}</span></div>
+        `).join("")}
+      </div>
+    ` : ""}
+    ${(insights.warnings || []).length ? `
+      <div class="insight-warnings">${insights.warnings.map((warning) => `<span>△ ${esc(warning)}</span>`).join("")}</div>
+    ` : ""}
+    <div class="insight-foot">
+      <span>${insights.frozen ? "FROZEN AT KICKOFF" : `LIVE PRE-MATCH · fetched ${fmtDateTime(insights.fetchedAt)}`}</span>
+      ${insights.snapshotHash ? `<span title="${esc(insights.snapshotHash)}">SHA256 · ${esc(insights.snapshotHash.slice(0, 12))}…</span>` : ""}
+    </div>
+  `;
+}
+
+async function loadMarketInsights(market) {
+  const body = $("#insights-body");
+  if (!body) return;
+  try {
+    const data = await api(`/markets/${encodeURIComponent(market.id)}/insights`);
+    if (!$("#insights-body")) return;
+    $("#insights-meta").innerHTML = data.insights.frozen
+      ? `<span class="chip resolved">FROZEN</span>`
+      : `<span class="chip live">PRE-MATCH</span>`;
+    $("#insights-body").innerHTML = marketInsightsHtml(data.insights, market);
+  } catch (error) {
+    if ($("#insights-body")) {
+      $("#insights-body").innerHTML = `<div class="dim mono center" style="padding:24px">ANALYTICS UNAVAILABLE · ${esc(error.message)}</div>`;
+    }
+  }
+}
+
 // ──────────────────────────────────────────────────────── market detail ────
 
 async function renderMarketDetail(r) {
@@ -938,6 +1050,14 @@ async function renderMarketDetail(r) {
             <span class="meta">Total pool · ${fmtCkb(m.totalPoolCkb)} CKB · ${m.totalBets} bets · ${m.uniqueBettors} traders</span>
           </div>
           ${chartSvg(m.history)}
+        </div>
+
+        <div class="panel" id="market-insights">
+          <div class="panel-h">
+            <span class="title">Market vs Machine</span>
+            <span class="meta" id="insights-meta">${spinnerInline()}</span>
+          </div>
+          <div class="panel-b" id="insights-body">${spinner()}</div>
         </div>
 
         <div class="panel">
@@ -1020,6 +1140,7 @@ async function renderMarketDetail(r) {
   `;
   if (m.status === "open") bindBetPanel(m);
   if (m.status === "resolved" || m.status === "void") loadSettlementPanel(m);
+  loadMarketInsights(m);
   startPolling(renderMarketDetail);
 }
 

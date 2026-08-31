@@ -31,6 +31,7 @@ import { asBig, asString, getTreasury } from "./wallet";
 import { reviveRebate } from "./crews";
 import { ensureMarketsForMatches, settleMarkets, winRate } from "./markets";
 import { buildReceiptPayload, publishReceipt } from "./settlement";
+import { syncMarketInsightSnapshots } from "./insights";
 import { notifyReceipt, notifyRevive } from "./notifications";
 import type { LeaderboardRow, Match, PublicUser, StreakDB, User } from "./types";
 
@@ -79,6 +80,8 @@ function pruneStaleSimMarkets(db: StreakDB): void {
 export async function syncMatches(): Promise<Match[]> {
   const today = dayKey();
   const live = await provider.fetchResults();
+  const fixtures = provider.loadFixtures();
+  await provider.prefetchInsights?.(fixtures);
 
   const slate = await update((db) => {
     // Merge the provider's current fixtures: add any we haven't seen and refresh
@@ -87,7 +90,7 @@ export async function syncMatches(): Promise<Match[]> {
     // feed (worldcup) is idempotent after the first pass. Settled history — the
     // final matches — is never dropped here.
     const known = new Map(db.matches.map((m) => [m.id, m]));
-    for (const fx of provider.loadFixtures()) {
+    for (const fx of fixtures) {
       const old = known.get(fx.id);
       if (!old) {
         db.matches.push(fx);
@@ -130,6 +133,13 @@ export async function syncMatches(): Promise<Match[]> {
       applyResult(m, live[m.id], new Date(), provider.allowSimulatedFallback !== false),
     );
     ensureMarketsForMatches(db);
+    if (provider.peekInsights) {
+      syncMarketInsightSnapshots(
+        db,
+        provider.ownsMatch ? (match) => provider.ownsMatch!(match) : () => true,
+        (match) => provider.peekInsights!(match),
+      );
+    }
     settleMarkets(db);
     pruneStaleSimMarkets(db);
 
