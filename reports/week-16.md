@@ -12,6 +12,12 @@ football ledger**. The result combines committed snapshots, independent
 background work and a bookkeeper-inspired interface built around paper, ink
 and readable records.
 
+It also replaces the storage layer underneath all of it. Streak had been
+keeping its entire state as a single JSON document in one database row, which
+made the unit of every read and every write the whole ledger. That store is now
+a relational schema, and the section below records what it cost and what it
+changed.
+
 **Code:** [products/streak](../products/streak)  
 **Operational notes:** [PERFORMANCE.md](../products/streak/PERFORMANCE.md)  
 **Preview gallery:** [24 desktop and mobile screenshots](assets/week-16/README.md)  
@@ -78,6 +84,82 @@ results. Measured runs are serialized to avoid the benchmark processes
 competing with each other.
 
 <!-- BENCHMARK_RESULTS -->
+
+## The store migration: one JSON row to relational tables
+
+Streak's persistence began as `data/db.json`, a single file loaded and rewritten
+in full on every mutation. When the app needed hosted storage it kept that shape
+and moved it behind an API, storing the whole `StreakDB` object in one `jsonb`
+column. The hosted database was being used as a file host with an HTTP
+interface, not as a database.
+
+That works while the file is small. By week 16 the document had reached **3.1 MB**
+and was growing by one market and one on-chain receipt for every settled fixture:
+
+| Part of the blob | Rows | Size |
+| --- | ---: | ---: |
+| Settlement receipts | 1,436 | 1.49 MB |
+| Markets resolved as void, each holding a published receipt | 1,431 | 941 KB |
+| Matches already final | 1,436 | 398 KB |
+| Price-tick history for archived markets | 1,441 | 377 KB |
+| The actual working set: open markets, live fixtures, users, open positions | | **162 KB** |
+
+Every read transferred all 3.1 MB regardless of what the endpoint needed, and
+every write upserted all 3.1 MB regardless of how little had changed. Placing a
+bet, which touches one user balance, one market pool and one new position,
+rewrote the entire ledger. Fetching a single receipt payload did too.
+
+The cost was not theoretical. With a 20-second settlement loop and a 1.5-second
+read cache, the floor was roughly 13 GB of transfer per day before a single
+browser connected. The hosting project exceeded its monthly egress allowance
+and was restricted mid-week, taking the deployed service offline.
+
+### What the schema looks like now
+
+Thirteen tables ([001_schema.sql](../products/streak/scripts/sql/001_schema.sql)):
+`users`, `matches`, `markets`, `bets`, `deposits`, `withdraws`, `receipts`,
+`crews`, `telegram_links`, `renewal_txs`, the `market_history` and
+`market_insights` side tables, and a small `streak_meta` singleton.
+
+| Change | Result | Main files |
+| --- | --- | --- |
+| Write only what changed | Mutations are diffed against the last committed snapshot and sent as row upserts inside one transaction, instead of replacing the whole document. | [store_pg.ts](../products/streak/src/store_pg.ts) |
+| Move receipts off the read path | `loadDB()` no longer materializes 1.49 MB of receipt payloads. The two endpoints that need them fetch by primary key. | [store.ts](../products/streak/src/store.ts), [server.ts](../products/streak/src/server.ts) |
+| Never infer a delete from absence | Callers reassign whole collections, which a diffed write would otherwise read as mass deletion. Removals are named explicitly, and market deletion refuses anything holding bets or a receipt. | [store_pg.ts](../products/streak/src/store_pg.ts), [game.ts](../products/streak/src/game.ts) |
+| Read a consistent snapshot | The twelve table reads run in one round trip under `REPEATABLE READ`, so a snapshot cannot pair a balance from before a commit with a position from after it. | [store_pg.ts](../products/streak/src/store_pg.ts) |
+| Let the database enforce replay guards | `renewal_txs.tx_hash` and `deposits.tx_hash` are unique keys rather than arrays scanned in application code. | [001_schema.sql](../products/streak/scripts/sql/001_schema.sql) |
+| Keep exact money | Amounts are `numeric(40,0)`, which the driver returns as a string, matching the shannon-string convention the code already used. No precision loss and no integer rounding. | [001_schema.sql](../products/streak/scripts/sql/001_schema.sql) |
+
+| Operation | Before | After |
+| --- | ---: | ---: |
+| A read, any endpoint | 3.1 MB | 1.6 MB, cached, about 20 ms warm |
+| A write, for example placing a bet | 3.1 MB upsert | only the changed rows |
+| One receipt payload | 3.1 MB | about 1 KB by primary key |
+
+### Migrating without losing a balance
+
+The financial state was 10 users, 12 positions, 1,436 receipts and 53,980 CKB of
+escrow claims. Escrow is the record of who owns what inside a single custodial
+treasury; it exists nowhere else, so the migration was written to make silent
+loss impossible rather than unlikely.
+
+[migrate-to-tables.cjs](../products/streak/scripts/migrate-to-tables.cjs) is
+insert-only and never modifies or deletes the source document, which remains a
+rollback. It refuses to run against a source with orphaned references, duplicate
+identifiers or amounts that do not parse as exact integers, because a malformed
+amount must fail rather than default to zero. After loading, it re-materializes
+the tables back into the original `StreakDB` shape and compares them record by
+record, committing only when every field round-trips exactly and the escrow
+total reconciles to the shannon.
+
+Receipts needed one extra check. `jsonb` does not preserve key order, and each
+receipt's hash is recorded on-chain. Reading a migrated payload back and
+re-canonicalizing it reproduces the stored `payloadHash`, so on-chain receipt
+verification survives the move unchanged.
+
+Because the original project stayed restricted, the ledger was migrated to a
+separate Postgres instance in the same region as the application server, and
+the original document is retained for reconciliation once its quota resets.
 
 ## Refactor inventory
 
@@ -174,8 +256,14 @@ waits through a live poll with a typed stake, reviews and confirms one test bet,
 and opens a public receipt without authentication. The test never signs a real
 transaction or changes a live account.
 
-The architecture still assumes **one writer per database state**. This is not
-a migration to a distributed transaction database. Fixture freshness follows
+The architecture still assumes **one writer per database state**. Moving to a
+relational schema did not change that: mutations are still serialized by an
+in-process queue rather than by row-level locking, so this is not yet a
+multi-instance deployment. Reads still materialize the full working set minus
+receipts; narrowing them further needs a lifecycle window rather than a status
+filter, because excluding finished fixtures would stop the settlement loop from
+seeing a match that just ended. The receipt gallery currently returns its most
+recent 200 entries and needs pagination to show the full archive. Fixture freshness follows
 the background sync cadence, optional data can briefly show its last successful
 value, and the app still needs a working external feed and CKB network for live
 results and payments. Faster page rendering does not shorten wallet approval,
@@ -184,6 +272,13 @@ network propagation or block confirmation.
 ## Reproduce the checks
 
 <!-- REPRODUCTION_COMMANDS -->
+
+The store migration has its own checks. `npm run test:store:pg` exercises the
+relational store against a real database, covering the archive split, partial
+writes, the refusal to infer deletes and rollback on a rejected write, and skips
+when no database is reachable. Running `migrate-to-tables.cjs` without `--apply`
+performs the full integrity check, money reconciliation and round-trip
+comparison, then rolls back without writing.
 
 The report records one measured run, with raw samples kept alongside the
 screenshots. Rerunning the harnesses may produce different timings because of
