@@ -24,14 +24,17 @@ services:
         sync: false
       - key: NOTIFY_PROVIDER
         value: telegram
-      - key: SUPABASE_TABLE
-        value: streak_state
+      # Shared snapshot freshness. The old 1500ms default made the 20s settle
+      # loop refetch almost every tick; with a relational store that is waste.
+      - key: STORE_READ_TTL_MS
+        value: 5000
       # Secrets — set these values in the Render dashboard, never commit them.
-      # Free tier has no persistent disk, so Supabase is the durable store:
-      # SUPABASE_URL + SUPABASE_KEY are required for data to survive restarts.
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_KEY
+      # Free tier has no persistent disk, so Postgres is the durable store:
+      # DATABASE_URL is required for data to survive a restart. Use the POOLED
+      # connection string (its host contains "-pooler"), and keep the database
+      # in the same region as this service — `region: oregon` here pairs with
+      # a us-west-2 database. See products/streak/README.md.
+      - key: DATABASE_URL
         sync: false
       - key: TREASURY_PRIVATE_KEY
         sync: false
