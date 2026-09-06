@@ -83,7 +83,59 @@ responses. Source fingerprints and individual timing samples accompany the
 results. Measured runs are serialized to avoid the benchmark processes
 competing with each other.
 
-<!-- BENCHMARK_RESULTS -->
+### Page reads
+
+Each route is served from a committed snapshot instead of triggering a fixture
+refresh, a settlement pass and a database write before responding. The I/O
+column is the storage traffic a single request caused.
+
+| Route | Before | After | Faster | Storage I/O per request |
+| --- | ---: | ---: | ---: | --- |
+| Overview | 32.4 ms | 3.7 ms | 8.8x | 4.29 MB -> none |
+| Markets list | 40.3 ms | 8.2 ms | 4.9x | 4.29 MB -> none |
+| Market detail | 31.8 ms | 1.6 ms | 20.4x | 4.29 MB -> none |
+| Portfolio | 28.1 ms | 1.6 ms | 17.2x | 4.29 MB -> none |
+| Crews | 28.0 ms | 6.5 ms | 4.3x | 4.29 MB -> none |
+
+The I/O column is the substantive result. A page read previously loaded and
+rewrote 4.29 MB of state before it could answer; it now touches storage not at
+all. The background loop owns that work.
+
+### Settlement
+
+Settling 500 markets holding 20,000 positions across 2,000 users, in memory,
+with no external I/O. Thirty measured samples per version in alternating pairs,
+with financial outputs compared as identical on every pair.
+
+| | Before | After | Faster |
+| --- | ---: | ---: | ---: |
+| Median | 391.6 ms | 14.5 ms | 27.0x |
+| p95 | 506.7 ms | 22.5 ms | 22.6x |
+
+Repeated full-array scans over matches, users and bets were replaced with
+reusable indexes, and unique-bettor counts are maintained incrementally rather
+than rebuilt for every bet.
+
+### Payment paths
+
+Payments were not the target and did not get faster. They are recorded here
+because the same harness measured them.
+
+| Operation | Before | After | Storage I/O per request |
+| --- | ---: | ---: | --- |
+| Place a bet | 31.1 ms | 32.3 ms | 4.29 MB -> 1.44 MB |
+| Confirm a deposit | 26.1 ms | 30.6 ms | 4.29 MB -> 1.44 MB |
+| Withdraw | 24.8 ms | 69.8 ms | 4.29 MB -> 4.33 MB |
+
+Bets and deposits are unchanged within noise while writing a third of the
+previous data. Withdrawals are slower on purpose: the signed transaction is now
+persisted before broadcast so an unacknowledged send can be recovered rather
+than lost, which costs a durable write on a path measured in block times
+anyway.
+
+These figures come from the file-backed store on one Windows machine, and were
+measured before the relational store landed. They isolate the request and
+settlement refactors, not the storage migration described above.
 
 ## The store migration: one JSON row to relational tables
 
@@ -271,7 +323,26 @@ network propagation or block confirmation.
 
 ## Reproduce the checks
 
-<!-- REPRODUCTION_COMMANDS -->
+```bash
+cd products/streak
+npm install
+
+npm test                  # every regression suite
+npm run test:backend      # HTTP server against a temporary database
+npm run test:browser      # Playwright, desktop and mobile routes
+npm run test:store        # store contract: coalescing, durability, races
+npm run test:store:pg     # relational store, skips without a database
+npm run test:markets      # settlement, fees, refunds, concurrent bets
+
+node scripts/benchmark-backend.cjs     # per-route before/after
+node scripts/benchmark-settlement.cjs  # settlement before/after
+node scripts/benchmark-client.cjs      # browser runtime
+```
+
+Comparisons use `00d4b8f` as the baseline. The harnesses check out the old
+sources into a scratch directory rather than resetting the working tree, block
+external network requests, and run the versions in alternating pairs against
+identical synthetic state.
 
 The store migration has its own checks. `npm run test:store:pg` exercises the
 relational store against a real database, covering the archive split, partial
