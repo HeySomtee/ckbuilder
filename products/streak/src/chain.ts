@@ -20,6 +20,7 @@ import { ccc } from "@ckb-ccc/core";
 
 import { SHANNONS_PER_CKB } from "./config";
 import type { UserWallet } from "./types";
+import { AsyncSnapshotCache } from "./async-cache";
 
 /** Minimum capacity (CKB) for a standard lock-only cell. */
 const MIN_CELL_CKB = 61n;
@@ -50,16 +51,22 @@ export async function createWallet(): Promise<UserWallet> {
 
 /** Live available balance for an address, in shannons. */
 const BALANCE_TTL_MS = Number(process.env.BALANCE_CACHE_TTL_MS) || 10_000;
-const balanceCache = new Map<string, { value: bigint; at: number }>();
+const balanceCache = new AsyncSnapshotCache<string, bigint>(BALANCE_TTL_MS);
 
-export async function getBalanceShannons(address: string): Promise<bigint> {
-  const cached = balanceCache.get(address);
-  if (cached && Date.now() - cached.at < BALANCE_TTL_MS) return cached.value;
+async function fetchBalance(address: string): Promise<bigint> {
   const c = getClient();
   const { script } = await ccc.Address.fromString(address, c);
-  const value = await c.getBalanceSingle(script);
-  balanceCache.set(address, { value, at: Date.now() });
-  return value;
+  return c.getBalanceSingle(script);
+}
+
+export function getBalanceShannons(address: string): Promise<bigint> {
+  if (balanceCache.isFresh(address)) return Promise.resolve(balanceCache.peek(address)!);
+  return balanceCache.refresh(address, () => fetchBalance(address));
+}
+
+/** Display-only balance. Never used to authorize or credit a payment. */
+export function cachedBalance(address: string): { value: bigint | undefined; refreshing: boolean } {
+  return balanceCache.read(address, () => fetchBalance(address));
 }
 
 /** Pretty CKB string from shannons. */
@@ -85,6 +92,16 @@ export async function transferFrom(
   toAddress: string,
   amountCkb: number,
 ): Promise<string> {
+  const transfer = await prepareTransfer(fromPrivateKey, toAddress, amountCkb);
+  return transfer.broadcast();
+}
+
+/** Prepare first so the ledger can durably record the hash before broadcasting. */
+export async function prepareTransfer(
+  fromPrivateKey: string,
+  toAddress: string,
+  amountCkb: number,
+): Promise<{ txHash: string; signedTransaction: string; broadcast: () => Promise<string> }> {
   if (BigInt(Math.floor(amountCkb)) < MIN_CELL_CKB) {
     throw new Error(`Transfer must be at least ${MIN_CELL_CKB} CKB.`);
   }
@@ -97,7 +114,15 @@ export async function transferFrom(
   });
   await tx.completeInputsByCapacity(signer);
   await tx.completeFeeBy(signer, 1000n);
-  return await signer.sendTransaction(tx);
+  const signed = await signer.signTransaction(tx);
+  return { txHash: signed.hash(), signedTransaction: ccc.hexFrom(signed.toBytes()), broadcast: () => c.sendTransaction(signed) };
+}
+
+/** Retry the exact signed transaction after a crash; never construct a new spend. */
+export async function rebroadcastTransfer(bytes: string, expectedHash: string): Promise<string> {
+  const transaction = ccc.Transaction.fromBytes(bytes);
+  if (transaction.hash() !== expectedHash) throw new Error("Stored withdrawal transaction hash does not match.");
+  return getClient().sendTransaction(transaction);
 }
 
 /** Verify a wallet-login signature (from CCC's signMessage) against a message. */

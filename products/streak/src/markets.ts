@@ -65,8 +65,7 @@ function totalPool(m: Market): bigint {
   return asBig(m.pools.home) + asBig(m.pools.draw) + asBig(m.pools.away);
 }
 
-function priceMap(m: Market): Record<Outcome, number> {
-  const total = totalPool(m);
+function priceMap(m: Market, total = totalPool(m)): Record<Outcome, number> {
   if (total === 0n) return { home: 0, draw: 0, away: 0 };
   const t = Number(total);
   return {
@@ -109,18 +108,19 @@ export function ensureMarketsForMatches(db: StreakDB): void {
   for (const match of db.matches) {
     if (seen.has(match.id)) continue;
     db.markets.push(freshMarket(match.id, match.kickoff, "system"));
+    seen.add(match.id);
   }
 }
 
 /** Sync market.status against match.status (transitions open→closed at kickoff). */
-function syncStatuses(db: StreakDB): void {
-  const matchById = new Map(db.matches.map((m) => [m.id, m]));
+function syncStatuses(db: StreakDB, matchById: Map<string, Match>): void {
+  const now = Date.now();
   for (const market of db.markets) {
     if (market.status !== "open" && market.status !== "closed") continue;
     const match = matchById.get(market.matchId);
     if (!match) continue;
     if (market.status === "open") {
-      const closed = Date.now() >= new Date(market.closesAt).getTime() || match.status !== "scheduled";
+      const closed = now >= Date.parse(market.closesAt) || match.status !== "scheduled";
       if (closed) {
         market.status = "closed";
         pushTick(market);
@@ -137,15 +137,23 @@ function syncStatuses(db: StreakDB): void {
  */
 export function settleMarkets(db: StreakDB): Market[] {
   const matchById = new Map(db.matches.map((m) => [m.id, m]));
+  const userById = new Map(db.users.map((u) => [u.id, u]));
+  const pendingByMarket = new Map<string, Bet[]>();
+  for (const bet of db.bets) {
+    if (bet.settled) continue;
+    const pending = pendingByMarket.get(bet.marketId);
+    if (pending) pending.push(bet);
+    else pendingByMarket.set(bet.marketId, [bet]);
+  }
   const justResolved: Market[] = [];
 
-  syncStatuses(db);
+  syncStatuses(db, matchById);
 
   for (const market of db.markets) {
     if (market.status === "resolved" || market.status === "void") continue;
     const match = matchById.get(market.matchId);
     if (match?.status === "cancelled") {
-      voidMarket(db, market);
+      voidMarket(market, pendingByMarket.get(market.id) ?? [], userById);
       justResolved.push(market);
       continue;
     }
@@ -161,7 +169,7 @@ export function settleMarkets(db: StreakDB): Market[] {
 
     // Empty-side void: no bets on the winning outcome → refund every bet.
     if (winnerPool === 0n) {
-      voidMarket(db, market);
+      voidMarket(market, pendingByMarket.get(market.id) ?? [], userById);
       justResolved.push(market);
       continue;
     }
@@ -173,11 +181,10 @@ export function settleMarkets(db: StreakDB): Market[] {
     let winnerCount = 0;
     let totalPaid = 0n;
 
-    for (const bet of db.bets) {
-      if (bet.marketId !== market.id || bet.settled) continue;
+    for (const bet of pendingByMarket.get(market.id) ?? []) {
       bet.settled = true;
       const stake = asBig(bet.amount);
-      const user = db.users.find((u) => u.id === bet.userId);
+      const user = userById.get(bet.userId);
       if (bet.outcome === winner) {
         const share = (distributable * stake) / winnerPool;
         const payout = stake + share;
@@ -203,7 +210,7 @@ export function settleMarkets(db: StreakDB): Market[] {
     // Pay protocol + creator fees.
     db.protocolFeesShannons = asString(asBig(db.protocolFeesShannons) + protocolFee);
     if (creatorFee > 0n) {
-      const creator = db.users.find((u) => u.id === market.creatorId);
+      const creator = userById.get(market.creatorId);
       if (creator) {
         creator.escrowShannons = asString(asBig(creator.escrowShannons) + creatorFee);
         creator.creatorFeesShannons = asString(asBig(creator.creatorFeesShannons) + creatorFee);
@@ -230,13 +237,12 @@ export function settleMarkets(db: StreakDB): Market[] {
   return justResolved;
 }
 
-function voidMarket(db: StreakDB, market: Market): void {
+function voidMarket(market: Market, pendingBets: Bet[], userById: Map<string, User>): void {
   // Refund every bet.
-  for (const bet of db.bets) {
-    if (bet.marketId !== market.id || bet.settled) continue;
+  for (const bet of pendingBets) {
     bet.settled = true;
     bet.payout = bet.amount;
-    const user = db.users.find((u) => u.id === bet.userId);
+    const user = userById.get(bet.userId);
     if (user) {
       user.escrowShannons = asString(asBig(user.escrowShannons) + asBig(bet.amount));
       // Streak pick on a voided market: leave streak unchanged (clear the date so they can re-pick today).
@@ -332,7 +338,7 @@ export async function placeBet(input: PlaceBetInput): Promise<PlaceBetResult> {
     }
 
     // Streak pick rules: one tagged bet per UTC day, only when streak is active.
-    let isStreakPick = !!input.asStreakPick;
+    const isStreakPick = !!input.asStreakPick;
     let streakAtPick: number | undefined;
     const today = new Date().toISOString().slice(0, 10);
     if (isStreakPick) {
@@ -361,12 +367,9 @@ export async function placeBet(input: PlaceBetInput): Promise<PlaceBetResult> {
       user.streak.lastPickDate = today;
     }
 
-    // Unique-bettor count: cheap recomputation (datasets are small in this product).
-    const bettorIds = new Set<string>(
-      db.bets.filter((b) => b.marketId === market!.id).map((b) => b.userId),
-    );
-    bettorIds.add(user.id);
-    market.uniqueBettors = bettorIds.size;
+    if (!db.bets.some((b) => b.marketId === market!.id && b.userId === user.id)) {
+      market.uniqueBettors += 1;
+    }
     market.totalBets += 1;
 
     const bet: Bet = {
@@ -412,6 +415,14 @@ export async function placeBet(input: PlaceBetInput): Promise<PlaceBetResult> {
 
 // ── View models ─────────────────────────────────────────────────────────────
 
+/** Read-time closure stays accurate while a remote oracle sync is delayed. */
+export function effectiveMarketStatus(market: Market, match?: Match, now = Date.now()): MarketStatus {
+  if (market.status !== "open") return market.status;
+  return now >= Date.parse(market.closesAt) || (match && match.status !== "scheduled")
+    ? "closed"
+    : "open";
+}
+
 export function toMarketSummary(market: Market, match: Match): MarketSummary {
   const total = totalPool(market);
   return {
@@ -428,8 +439,8 @@ export function toMarketSummary(market: Market, match: Match): MarketSummary {
       away: match.away,
       score: match.score,
     },
-    status: market.status,
-    prices: priceMap(market),
+    status: effectiveMarketStatus(market, match),
+    prices: priceMap(market, total),
     pools: market.pools,
     totalPoolCkb: shannonsToCkb(total),
     totalBets: market.totalBets,
@@ -440,6 +451,38 @@ export function toMarketSummary(market: Market, match: Match): MarketSummary {
   };
 }
 
+// Committed store arrays are immutable. Reuse their indexes across requests;
+// WeakMaps release the previous indexes when a new database snapshot commits.
+const idIndexes = new WeakMap<object, Map<string, { id: string }>>();
+function byId<T extends { id: string }>(rows: T[]): Map<string, T> {
+  let index = idIndexes.get(rows) as Map<string, T> | undefined;
+  if (!index) {
+    index = new Map(rows.map((row) => [row.id, row]));
+    idIndexes.set(rows, index);
+  }
+  return index;
+}
+
+const betIndexes = new WeakMap<Bet[], { market: Map<string, Bet[]>; user: Map<string, Bet[]> }>();
+function indexedBets(bets: Bet[], kind: "market" | "user", id: string): Bet[] {
+  let indexes = betIndexes.get(bets);
+  if (!indexes) {
+    indexes = { market: new Map(), user: new Map() };
+    // Sort once per snapshot, preserving the public reverse-chronological order
+    // even when legacy imports were not appended in placement order.
+    const ordered = [...bets].sort((a, b) => b.placedAt.localeCompare(a.placedAt));
+    for (const bet of ordered) {
+      for (const [index, key] of [[indexes.market, bet.marketId], [indexes.user, bet.userId]] as const) {
+        const group = index.get(key);
+        if (group) group.push(bet);
+        else index.set(key, [bet]);
+      }
+    }
+    betIndexes.set(bets, indexes);
+  }
+  return indexes[kind].get(id) ?? [];
+}
+
 export async function listMarkets(opts: {
   status?: MarketStatus;
   matchId?: string;
@@ -447,12 +490,12 @@ export async function listMarkets(opts: {
   matchFilter?: (match: Match) => boolean;
 } = {}): Promise<MarketSummary[]> {
   return read((db) => {
-    const matchById = new Map(db.matches.map((m) => [m.id, m]));
+    const matchById = byId(db.matches);
     return db.markets
-      .filter((m) => (opts.status ? m.status === opts.status : true))
       .filter((m) => (opts.matchId ? m.matchId === opts.matchId : true))
       .map((m) => {
         const match = matchById.get(m.matchId);
+        if (opts.status && effectiveMarketStatus(m, match) !== opts.status) return null;
         if (match && opts.matchFilter && !opts.matchFilter(match)) return null;
         if (opts.competitionId && match?.competition?.id !== opts.competitionId) return null;
         return match ? toMarketSummary(m, match) : null;
@@ -474,25 +517,18 @@ export async function getMarketDetail(
   meId?: string,
 ): Promise<MarketDetail | null> {
   return read((db) => {
-    const market = db.markets.find((m) => m.id === marketId);
+    const market = byId(db.markets).get(marketId);
     if (!market) return null;
-    const match = db.matches.find((m) => m.id === market.matchId);
+    const match = byId(db.matches).get(market.matchId);
     if (!match) return null;
 
     const summary = toMarketSummary(market, match);
-    const userById = new Map(db.users.map((u) => [u.id, u]));
+    const userById = byId(db.users);
     const creator = userById.get(market.creatorId) ?? null;
 
-    const myBets = meId
-      ? db.bets
-          .filter((b) => b.marketId === market.id && b.userId === meId)
-          .sort((a, b) => b.placedAt.localeCompare(a.placedAt))
-      : [];
-
-    const feedBets = db.bets
-      .filter((b) => b.marketId === market.id)
-      .sort((a, b) => b.placedAt.localeCompare(a.placedAt))
-      .slice(0, 50);
+    const marketBets = indexedBets(db.bets, "market", market.id);
+    const myBets = meId ? marketBets.filter((b) => b.userId === meId) : [];
+    const feedBets = marketBets.slice(0, 50);
 
     return {
       ...summary,
@@ -546,11 +582,9 @@ export interface PortfolioPosition {
 
 export async function portfolio(userId: string): Promise<PortfolioPosition[]> {
   return read((db) => {
-    const marketById = new Map(db.markets.map((m) => [m.id, m]));
-    const matchById = new Map(db.matches.map((m) => [m.id, m]));
-    return db.bets
-      .filter((b) => b.userId === userId)
-      .sort((a, b) => b.placedAt.localeCompare(a.placedAt))
+    const marketById = byId(db.markets);
+    const matchById = byId(db.matches);
+    return indexedBets(db.bets, "user", userId)
       .map((b): PortfolioPosition => {
         const market = marketById.get(b.marketId);
         const match = matchById.get(b.matchId);
@@ -558,6 +592,7 @@ export async function portfolio(userId: string): Promise<PortfolioPosition[]> {
         const payout = b.payout ? asBig(b.payout) : 0n;
         let result: "won" | "lost" | "void" | undefined;
         if (b.settled && market?.resolvedOutcome === "void") result = "void";
+        else if (b.settled && market?.resolvedOutcome === b.outcome) result = "won";
         else if (b.settled && payout === 0n) result = "lost";
         else if (b.settled && payout > stake) result = "won";
         else if (b.settled && payout === stake) result = "void";
@@ -575,7 +610,7 @@ export async function portfolio(userId: string): Promise<PortfolioPosition[]> {
           pnlCkb: b.settled ? shannonsToCkb(payout - stake) : undefined,
           result,
           isStreakPick: b.isStreakPick,
-          marketStatus: market?.status ?? "open",
+          marketStatus: market ? effectiveMarketStatus(market, match) : "open",
           resolvedOutcome: market?.resolvedOutcome,
           kickoff: match?.kickoff ?? "",
         };

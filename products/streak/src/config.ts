@@ -10,8 +10,12 @@ import { resolve } from "path";
 
 export const PORT = Number(process.env.PORT ?? 4100);
 
-export const DATA_DIR = resolve(__dirname, "..", "data");
-export const DB_FILE = resolve(DATA_DIR, "db.json");
+export const DATA_DIR = process.env.STREAK_DATA_DIR
+  ? resolve(process.env.STREAK_DATA_DIR)
+  : resolve(__dirname, "..", "data");
+export const DB_FILE = process.env.STREAK_DB_FILE
+  ? resolve(process.env.STREAK_DB_FILE)
+  : resolve(DATA_DIR, "db.json");
 export const PUBLIC_DIR = resolve(__dirname, "..", "public");
 
 /** 1 CKB = 10^8 shannons. */

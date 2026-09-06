@@ -13,7 +13,7 @@
  *   - leaderboard + public user view-models
  */
 
-import { read, update } from "./store";
+import { purge, read, update } from "./store";
 import {
   applyResult,
   currentSlateDate,
@@ -22,7 +22,7 @@ import {
 import { provider } from "./providers";
 import {
   abbrevAddress,
-  getBalanceShannons,
+  cachedBalance,
   shannonsToCkb,
   verifyPaymentToTreasury,
 } from "./chain";
@@ -44,13 +44,21 @@ const MATCHES_SCHEMA_VERSION = 3;
 /** How long a settled, untouched simulated market is kept before pruning. */
 const SIM_RETENTION_MS = 2 * 24 * 60 * 60_000;
 
+/** Rows a prune pass dropped from the draft, to be deleted after the commit. */
+interface PrunedIds {
+  markets: string[];
+  matches: string[];
+}
+
 /**
  * Keep the rolling simulated feed from growing without bound: drop old,
  * fully-settled sim markets (and their orphaned matches) that nobody bet on.
  * Bets, on-chain receipts and the real World Cup history are always preserved.
  */
-function pruneStaleSimMarkets(db: StreakDB): void {
+function pruneStaleSimMarkets(db: StreakDB): PrunedIds {
   const cutoff = Date.now() - SIM_RETENTION_MS;
+  const beforeMarkets = new Set(db.markets.map((m) => m.id));
+  const beforeMatches = new Set(db.matches.map((m) => m.id));
   const kickoffById = new Map(db.matches.map((m) => [m.id, Date.parse(m.kickoff)]));
   const betMarketIds = new Set(db.bets.map((b) => b.marketId));
 
@@ -67,6 +75,13 @@ function pruneStaleSimMarkets(db: StreakDB): void {
   db.matches = db.matches.filter(
     (m) => !m.id.startsWith("epl-s") || referenced.has(m.id),
   );
+
+  // The file store persists the filtered arrays directly, but a relational
+  // store never infers a delete from absence — report the ids so the caller
+  // can remove them explicitly once the write has committed.
+  for (const m of db.markets) beforeMarkets.delete(m.id);
+  for (const m of db.matches) beforeMatches.delete(m.id);
+  return { markets: [...beforeMarkets], matches: [...beforeMatches] };
 }
 
 /**
@@ -78,11 +93,27 @@ function pruneStaleSimMarkets(db: StreakDB): void {
  *   5. return today's slate (with rest-day fallbacks)
  */
 export async function syncMatches(): Promise<Match[]> {
+  if (syncing) return syncing;
+  syncing = performSync().finally(() => { syncing = null; });
+  return syncing;
+}
+
+let syncing: Promise<Match[]> | null = null;
+let warmingInsights: Promise<void> | null = null;
+
+async function performSync(): Promise<Match[]> {
   const today = dayKey();
   const live = await provider.fetchResults();
   const fixtures = provider.loadFixtures();
-  await provider.prefetchInsights?.(fixtures);
+  // Analytics can take several remote requests. Never let them delay closing
+  // or settling markets; freeze whatever was available before kickoff.
+  if (provider.prefetchInsights && !warmingInsights) {
+    warmingInsights = provider.prefetchInsights(fixtures)
+      .catch((error) => console.warn("[insights] warm failed:", (error as Error).message))
+      .finally(() => { warmingInsights = null; });
+  }
 
+  let pruned: PrunedIds = { markets: [], matches: [] };
   const slate = await update((db) => {
     // Merge the provider's current fixtures: add any we haven't seen and refresh
     // the schedule of not-yet-final matches. A rolling feed (dummy) introduces
@@ -90,6 +121,7 @@ export async function syncMatches(): Promise<Match[]> {
     // feed (worldcup) is idempotent after the first pass. Settled history — the
     // final matches — is never dropped here.
     const known = new Map(db.matches.map((m) => [m.id, m]));
+    const marketByMatch = new Map(db.markets.map((m) => [m.matchId, m]));
     for (const fx of fixtures) {
       const old = known.get(fx.id);
       if (!old) {
@@ -112,7 +144,7 @@ export async function syncMatches(): Promise<Match[]> {
           old.status = fx.status;
         }
         if (kickoffChanged) {
-          const market = db.markets.find((candidate) => candidate.matchId === old.id);
+          const market = marketByMatch.get(old.id);
           if (market?.status === "open") market.closesAt = fx.kickoff;
           // A bet-free market that closed only because a fixture was postponed
           // can safely reopen after the API publishes its new future kickoff.
@@ -129,8 +161,9 @@ export async function syncMatches(): Promise<Match[]> {
     }
     db.matchesSchema = MATCHES_SCHEMA_VERSION;
 
+    const now = new Date();
     db.matches = db.matches.map((m) =>
-      applyResult(m, live[m.id], new Date(), provider.allowSimulatedFallback !== false),
+      applyResult(m, live[m.id], now, provider.allowSimulatedFallback !== false),
     );
     ensureMarketsForMatches(db);
     if (provider.peekInsights) {
@@ -141,13 +174,20 @@ export async function syncMatches(): Promise<Match[]> {
       );
     }
     settleMarkets(db);
-    pruneStaleSimMarkets(db);
+    pruned = pruneStaleSimMarkets(db);
 
     const slateDate = currentSlateDate(db.matches, today);
     return db.matches
       .filter((m) => m.date === slateDate)
       .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
   });
+
+  // Deletions are explicit under a relational store; the write above only
+  // upserts. Best-effort: a failure here just leaves stale sim rows behind.
+  if (pruned.markets.length || pruned.matches.length) {
+    await purge(pruned).catch((e) =>
+      console.warn("[game] prune failed:", (e as Error).message));
+  }
 
   // Publish on-chain receipts for any newly-settled markets. Runs outside the
   // write lock because the CCC tx round-trip takes seconds. Failures are
@@ -172,8 +212,6 @@ let lastUnderfundedWarn = 0;
 export async function publishPendingReceipts(): Promise<void> {
   if (publishing) return publishing;
   publishing = (async () => {
-    const treasury = await getTreasury();
-
     // Snapshot the outstanding work outside a write lock.
     const pending = await read((db) =>
       db.markets
@@ -181,6 +219,7 @@ export async function publishPendingReceipts(): Promise<void> {
         .map((m) => m.id),
     );
     if (pending.length === 0) return;
+    const treasury = await getTreasury();
 
     for (const marketId of pending) {
       try {
@@ -264,13 +303,14 @@ export async function renewStreak(userId: string, txHash: string): Promise<Renew
   if (typeof txHash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
     throw new GameError("bad_tx", "A valid renewal transaction hash is required.");
   }
+  txHash = txHash.toLowerCase();
   const user = await read((db) => db.users.find((u) => u.id === userId));
   if (!user) throw new GameError("no_user", "User not found.");
   if (user.streak.status !== "failed") {
     throw new GameError("not_failed", "Your streak is not in a failed state.");
   }
 
-  const usedAlready = await read((db) => (db.renewalTxs ?? []).includes(txHash));
+  const usedAlready = await read((db) => (db.renewalTxs ?? []).some((hash) => hash.toLowerCase() === txHash));
   if (usedAlready) throw new GameError("dup", "This renewal transaction was already used.");
 
   const treasury = await getTreasury();
@@ -283,6 +323,16 @@ export async function renewStreak(userId: string, txHash: string): Promise<Renew
   const { newEscrowShannons, rebateCkb, coPickers } = await update((db) => {
     const u = db.users.find((x) => x.id === userId);
     if (!u) throw new GameError("no_user", "User not found.");
+    if ((db.renewalTxs ?? []).some((hash) => hash.toLowerCase() === txHash) ||
+      db.deposits.some((d) => d.txHash.toLowerCase() === txHash)) {
+      throw new GameError("dup", "This payment transaction was already used.");
+    }
+    if (u.streak.status !== "failed") {
+      throw new GameError("not_failed", "Your streak is not in a failed state.");
+    }
+    if (u.wallet.address !== user.wallet.address) {
+      throw new GameError("wallet_changed", "Your connected wallet changed. Please retry.");
+    }
     // Compute the crew rebate BEFORE clearing the failed streak (it reads it).
     const rebate = reviveRebate(db, userId);
     u.streak.status = "active";
@@ -302,7 +352,7 @@ export async function renewStreak(userId: string, txHash: string): Promise<Renew
     };
   });
 
-  const bal = await getBalanceShannons(user.wallet.address);
+  const bal = cachedBalance(user.wallet.address).value;
   // best-effort notify about revive rebate
   if (Number(rebateCkb) > 0) {
     (async () => {
@@ -318,7 +368,7 @@ export async function renewStreak(userId: string, txHash: string): Promise<Renew
   }
   return {
     txHash,
-    newBalanceCkb: shannonsToCkb(bal),
+    newBalanceCkb: bal === undefined ? "—" : shannonsToCkb(bal),
     newEscrowCkb: shannonsToCkb(asBig(newEscrowShannons)),
     streak: user.streak.current,
     rebateCkb,
@@ -341,12 +391,25 @@ export async function resetStreak(userId: string): Promise<void> {
 // ── View-models ─────────────────────────────────────────────────────────────
 
 export async function rankOf(userId: string): Promise<number> {
-  const board = await leaderboard(userId);
-  const row = board.find((r) => r.isMe);
-  return row?.rank ?? board.length + 1;
+  return read((db) => {
+    const index = db.users.findIndex((u) => u.id === userId);
+    if (index < 0) return db.users.length + 1;
+    const user = db.users[index];
+    return 1 + db.users.reduce((ahead, candidate, candidateIndex) => {
+      const order = compareUsers(candidate, user);
+      return ahead + (order < 0 || (order === 0 && candidateIndex < index) ? 1 : 0);
+    }, 0);
+  });
 }
 
-export async function toPublicUser(user: User): Promise<PublicUser> {
+function compareUsers(a: User, b: User): number {
+  const pa = asBig(a.stats.netPnlShannons);
+  const pb = asBig(b.stats.netPnlShannons);
+  if (pa !== pb) return pa > pb ? -1 : 1;
+  return b.streak.current - a.streak.current || b.streak.best - a.streak.best;
+}
+
+export async function toPublicUser(user: User, knownRank?: number): Promise<PublicUser> {
   return {
     id: user.id,
     username: user.username ?? abbrevAddress(user.wallet.address),
@@ -361,7 +424,7 @@ export async function toPublicUser(user: User): Promise<PublicUser> {
     streak: user.streak,
     stats: user.stats,
     winRate: winRate(user),
-    rank: await rankOf(user.id),
+    rank: knownRank ?? await rankOf(user.id),
   };
 }
 
@@ -370,13 +433,7 @@ export async function toPublicUser(user: User): Promise<PublicUser> {
  */
 export async function leaderboard(meId?: string): Promise<LeaderboardRow[]> {
   const users = await read((db) => db.users);
-  const sorted = [...users].sort((a, b) => {
-    const pa = asBig(a.stats.netPnlShannons);
-    const pb = asBig(b.stats.netPnlShannons);
-    if (pa !== pb) return pa > pb ? -1 : 1;
-    if (b.streak.current !== a.streak.current) return b.streak.current - a.streak.current;
-    return b.streak.best - a.streak.best;
-  });
+  const sorted = [...users].sort(compareUsers);
   return sorted.map((u, i) => ({
     rank: i + 1,
     username: u.username ?? abbrevAddress(u.wallet.address),

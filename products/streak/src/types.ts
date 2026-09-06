@@ -348,6 +348,10 @@ export interface Withdraw {
   amountShannons: string;
   txHash: string;
   at: string;
+  /** Legacy records are submitted. Pending funds stay reserved until reconciled. */
+  status?: "pending" | "submitted" | "failed";
+  /** Signed bytes permit safe idempotent recovery after a lost broadcast. */
+  signedTransaction?: string;
 }
 
 // ── Social (crews) ───────────────────────────────────────────────────────────

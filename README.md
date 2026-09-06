@@ -20,7 +20,7 @@ src/
   week5/
     scroll/          # Permanent on-chain microblog: every post is a real CKB cell
 products/
-  streak/            # Parimutuel prediction-market terminal (weeks 6–11)
+  streak/            # Football prediction ledger (weeks 6–16)
 reports/
   week-1.md          # Cell Model + Consensus + Address fundamentals
   week-2.md          # First real testnet transaction
@@ -37,6 +37,7 @@ reports/
   week-13.md         # First on-chain CKB script — a hash-lock in TypeScript (ckb-js-vm)
   week-14.md         # Real multi-league football oracle — API-SPORTS + safe settlement
   week-15.md         # Market vs Machine — crowd, model and bookmaker intelligence
+  week-16.md         # The football ledger — performance refactor, mobile redesign and benchmarks
 ```
 
 ## Weekly Index
@@ -58,6 +59,7 @@ reports/
 | 13 | First on-chain CKB script — a hash-lock in TypeScript (ckb-js-vm) | [reports/week-13.md](reports/week-13.md) | [src/week13/vault-lock](src/week13/vault-lock) |
 | 14 | Real multi-league football oracle — API-SPORTS + safe settlement | [reports/week-14.md](reports/week-14.md) | [products/streak](products/streak) |
 | 15 | Market vs Machine — crowd, model and bookmaker intelligence | [reports/week-15.md](reports/week-15.md) | [products/streak](products/streak) |
+| 16 | The football ledger — performance refactor, mobile redesign and benchmarks | [reports/week-16.md](reports/week-16.md) | [products/streak](products/streak) |
 
 ## Setup
 

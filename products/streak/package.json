@@ -2,7 +2,7 @@
   "name": "streak",
   "version": "1.0.0",
   "private": true,
-  "description": "Streak — an old-school on-chain prediction terminal. One pick a day. Keep the run alive.",
+  "description": "Streak - The football ledger. One pick a day. Keep the run alive.",
   "scripts": {
     "start": "ts-node src/server.ts",
     "dev": "ts-node src/server.ts",
@@ -10,7 +10,14 @@
     "serve": "node dist/server.js",
     "verify": "ts-node src/verify.ts",
     "test:football": "ts-node src/providers/football.test.ts",
-    "test:insights": "ts-node src/insights.test.ts"
+    "test:insights": "ts-node src/insights.test.ts",
+    "test:client": "node --test src/client-runtime.test.mjs",
+    "test:store": "ts-node src/store.test.ts",
+    "test:markets": "ts-node src/markets.test.ts",
+    "test:backend": "ts-node src/backend-performance.test.ts",
+    "test": "npm run test:football && npm run test:insights && npm run test:store && npm run test:store:pg && npm run test:markets && npm run test:backend && npm run test:client",
+    "test:browser": "npm run build && node scripts/browser-smoke.cjs",
+    "test:store:pg": "ts-node src/store_pg.test.ts"
   },
   "engines": {
     "node": ">=20"
@@ -22,6 +29,7 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/pg": "^8.20.0",
+    "playwright": "^1.63.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.0"
   }

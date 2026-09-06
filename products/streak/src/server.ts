@@ -10,16 +10,17 @@
 
 import "./env";
 
-import { createReadStream } from "fs";
-import { stat } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
-import { extname, join, normalize, resolve } from "path";
+import { extname, join, relative, resolve, sep } from "path";
 import { randomBytes, randomUUID } from "crypto";
 import { URL } from "url";
+import { gzip } from "zlib";
+import { promisify } from "util";
 
 import { PORT, PUBLIC_DIR, RENEW_FEE_CKB, SESSION_COOKIE, SETTLE_INTERVAL_MS,
   MIN_BET_CKB, MAX_BET_CKB, MIN_ONCHAIN_CKB, PROTOCOL_FEE_BPS, CREATOR_FEE_BPS } from "./config";
-import { read, update } from "./store";
+import { read, readReceipt, readReceipts, update } from "./store";
 import {
   createSession,
   destroySession,
@@ -39,6 +40,7 @@ import {
 import {
   MarketError,
   OUTCOMES,
+  effectiveMarketStatus,
   getMarketDetail,
   listMarkets,
   placeBet,
@@ -60,10 +62,14 @@ import {
   asBig,
   deposit,
   getTreasury,
+  recoverUnsentWithdrawals,
+  reconcilePendingWithdrawals,
   withdraw,
 } from "./wallet";
-import { abbrevAddress, addressUrl, getBalanceShannons, shannonsToCkb, txUrl, verifyWalletSignature } from "./chain";
+import { abbrevAddress, addressUrl, cachedBalance, getBalanceShannons, shannonsToCkb, txUrl, verifyWalletSignature } from "./chain";
 import { provider } from "./providers";
+import type { ProviderStatus } from "./providers";
+import { AsyncSnapshotCache, within } from "./async-cache";
 import { composeMarketInsights } from "./insights";
 import { initNotifications } from "./notifications";
 import { supaEnsureTable } from "./store_supabase";
@@ -82,6 +88,16 @@ function isActiveProviderMatch(match: Match): boolean {
   return provider.ownsMatch ? provider.ownsMatch(match) : true;
 }
 
+const statusCache = new AsyncSnapshotCache<string, ProviderStatus>(5_000, 1);
+function providerStatus(): ProviderStatus {
+  return statusCache.read(provider.id, () => provider.status()).value ?? {
+    provider: provider.id,
+    league: provider.id === "football" ? "Top Football" : provider.id === "dummy" ? "Premier League" : "FIFA World Cup 2026",
+    enabled: false, simulated: provider.id === "dummy", source: "initializing", base: "",
+    detail: "Refreshing the fixture feed", matchCount: 0, liveMatches: 0, finishedMatches: 0,
+  };
+}
+
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 
 const MIME: Record<string, string> = {
@@ -95,12 +111,32 @@ const MIME: Record<string, string> = {
   ".json": "application/json; charset=utf-8",
 };
 
+function acceptsGzip(req: IncomingMessage): boolean {
+  return (req.headers["accept-encoding"] ?? "").split(",").some((entry) => {
+    const [coding, ...parameters] = entry.trim().toLowerCase().split(";");
+    if (coding !== "gzip") return false;
+    const quality = parameters.find((parameter) => parameter.trim().startsWith("q="));
+    return !quality || Number(quality.trim().slice(2)) > 0;
+  });
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, {
+  const json = JSON.stringify(body);
+  const headers: Record<string, string> = {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
-  });
-  res.end(JSON.stringify(body));
+    "Vary": "Accept-Encoding",
+  };
+  if (json.length > 2_048 && acceptsGzip(res.req)) {
+    gzip(json, (error, compressed) => {
+      if (!error) headers["Content-Encoding"] = "gzip";
+      res.writeHead(status, headers);
+      res.end(error ? json : compressed);
+    });
+  } else {
+    res.writeHead(status, headers);
+    res.end(json);
+  }
 }
 
 function parseCookies(req: IncomingMessage): Record<string, string> {
@@ -143,29 +179,58 @@ function currentUserId(req: IncomingMessage): string | null {
 
 // ── Static files ────────────────────────────────────────────────────────────
 
+const compress = promisify(gzip);
+const assetCache = new Map<string, { stamp: string; body: Promise<Buffer>; gzip?: Promise<Buffer> }>();
+
 async function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
-  let rel = decodeURIComponent(pathname);
-  if (rel === "/" || rel === "") rel = "/index.html";
-  const filePath = normalize(join(PUBLIC_DIR, rel));
-  if (!filePath.startsWith(resolve(PUBLIC_DIR))) {
+  const rel = decodeURIComponent(pathname);
+  let filePath = resolve(PUBLIC_DIR, `.${rel === "/" || !rel ? "/index.html" : rel}`);
+  const inside = relative(PUBLIC_DIR, filePath);
+  if (inside === ".." || inside.startsWith(`..${sep}`) || resolve(PUBLIC_DIR, inside) !== filePath) {
     res.writeHead(403).end("Forbidden");
     return;
   }
   try {
-    const s = await stat(filePath);
+    let s;
+    try {
+      s = await stat(filePath);
+    } catch (error: any) {
+      // Only extensionless application routes fall back to the shell.
+      if (error?.code !== "ENOENT" || extname(filePath)) throw error;
+      filePath = join(PUBLIC_DIR, "index.html");
+      s = await stat(filePath);
+    }
     if (!s.isFile()) throw new Error("not a file");
-    res.writeHead(200, {
+    const stamp = `${s.size}-${s.mtimeMs}`;
+    const etag = `W/"${stamp}"`;
+    const headers: Record<string, string> = {
       "Content-Type": MIME[extname(filePath)] ?? "application/octet-stream",
       "Cache-Control": "no-cache",
-    });
-    createReadStream(filePath).pipe(res);
-  } catch {
-    try {
-      res.writeHead(200, { "Content-Type": MIME[".html"] });
-      createReadStream(join(PUBLIC_DIR, "index.html")).pipe(res);
-    } catch {
-      res.writeHead(404).end("Not found");
+      "ETag": etag,
+      "Vary": "Accept-Encoding",
+    };
+    if (req.headers["if-none-match"]?.split(",").map((tag) => tag.trim()).includes(etag)) {
+      res.writeHead(304, headers).end();
+      return;
     }
+    let cached = assetCache.get(filePath);
+    if (!cached || cached.stamp !== stamp) {
+      if (assetCache.size >= 64) assetCache.delete(assetCache.keys().next().value!);
+      cached = { stamp, body: readFile(filePath) };
+      assetCache.set(filePath, cached);
+    }
+    const zipped = s.size > 1_024 && acceptsGzip(req) &&
+      /\.(html|css|js|svg|json)$/.test(filePath);
+    if (zipped) {
+      cached.gzip ??= cached.body.then((body) => compress(body));
+      headers["Content-Encoding"] = "gzip";
+    }
+    const body = await (zipped ? cached.gzip! : cached.body);
+    headers["Content-Length"] = String(body.length);
+    res.writeHead(200, headers).end(req.method === "HEAD" ? undefined : body);
+  } catch {
+    assetCache.delete(filePath);
+    res.writeHead(404).end("Not found");
   }
 }
 
@@ -393,28 +458,28 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
   const user = await requireUser(req, res);
   if (!user) return;
 
-  await syncMatches();
-  const fresh = await read((db) => db.users.find((u) => u.id === user.id))!;
-  const board = await leaderboard(user.id);
-  const live = await provider.status();
+  const live = providerStatus();
+  const [board, all, crewRevive] = await Promise.all([
+    leaderboard(user.id),
+    listMarkets({ matchFilter: isActiveProviderMatch }),
+    reviveHint(user.id),
+  ]);
 
   // Headline (next or current featured market): first open market closing soonest.
-  const all = await listMarkets({ matchFilter: isActiveProviderMatch });
   const headline = all.find((m) => m.status === "open") ?? all.find((m) => m.status === "closed");
 
   // Recent bets across the platform for the ticker.
-  const recentBets = await read((db) =>
-    db.bets
+  const recentBets = await read((db) => {
+    const matches = new Map(db.matches.filter(isActiveProviderMatch).map((m) => [m.id, m]));
+    const users = new Map(db.users.map((u) => [u.id, u]));
+    return db.bets
       .slice()
       .sort((a, b) => b.placedAt.localeCompare(a.placedAt))
-      .filter((bet) => {
-        const match = db.matches.find((candidate) => candidate.id === bet.matchId);
-        return !!match && isActiveProviderMatch(match);
-      })
+      .filter((bet) => matches.has(bet.matchId))
       .slice(0, 12)
       .map((b) => {
-        const u = db.users.find((x) => x.id === b.userId);
-        const m = db.matches.find((x) => x.id === b.matchId);
+        const u = users.get(b.userId);
+        const m = matches.get(b.matchId);
         return {
           user: u ? (u.username ?? abbrevAddress(u.wallet.address)) : "—",
           outcome: b.outcome,
@@ -422,25 +487,22 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
           matchLabel: m ? `${m.home.code}–${m.away.code}` : b.matchId,
           placedAt: b.placedAt,
         };
-      }),
-  );
+      });
+  });
 
-  let walletBalanceCkb = "—";
-  try {
-    walletBalanceCkb = shannonsToCkb(await getBalanceShannons(user.wallet.address));
-  } catch {
-    /* chain may be unreachable */
-  }
+  const balance = cachedBalance(user.wallet.address);
+  const walletBalanceCkb = balance.value === undefined ? "—" : shannonsToCkb(balance.value);
 
   const counts = await read((db) => {
-    const activeMatchIds = new Set(
-      db.matches.filter(isActiveProviderMatch).map((match) => match.id),
+    const activeMatches = new Map(
+      db.matches.filter(isActiveProviderMatch).map((match) => [match.id, match]),
     );
-    const activeMarkets = db.markets.filter((market) => activeMatchIds.has(market.matchId));
+    const activeMarkets = db.markets.filter((market) => activeMatches.has(market.matchId));
+    const statuses = activeMarkets.map((market) => effectiveMarketStatus(market, activeMatches.get(market.matchId)));
     return {
-      openMarkets: activeMarkets.filter((m) => m.status === "open").length,
-      closedMarkets: activeMarkets.filter((m) => m.status === "closed").length,
-      resolvedMarkets: activeMarkets.filter((m) => m.status === "resolved").length,
+      openMarkets: statuses.filter((status) => status === "open").length,
+      closedMarkets: statuses.filter((status) => status === "closed").length,
+      resolvedMarkets: statuses.filter((status) => status === "resolved").length,
       totalPoolCkb: shannonsToCkb(
         activeMarkets.reduce(
         (acc, m) =>
@@ -451,11 +513,10 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
     };
   });
 
-  const crewRevive = await reviveHint(user.id);
-
   sendJson(res, 200, {
-    user: await toPublicUser(fresh!),
+    user: await toPublicUser(user, board.find((r) => r.isMe)?.rank),
     walletBalanceCkb,
+    balanceRefreshing: balance.refreshing,
     walletAddress: user.wallet.address,
     walletExplorer: addressUrl(user.wallet.address),
     headline: headline ?? null,
@@ -479,7 +540,6 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
 // ── Markets ─────────────────────────────────────────────────────────────────
 
 async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
-  await syncMatches();
   const status = url.searchParams.get("status") as any;
   const matchId = url.searchParams.get("matchId") ?? undefined;
   const competitionId = url.searchParams.get("competition") ?? undefined;
@@ -493,19 +553,20 @@ async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL
 }
 
 async function handleMarketDetail(req: IncomingMessage, res: ServerResponse, id: string): Promise<void> {
-  await syncMatches();
   const meId = currentUserId(req) ?? undefined;
   const detail = await getMarketDetail(id, meId);
   if (!detail) return sendJson(res, 404, { error: "Market not found." });
   sendJson(res, 200, { market: detail });
 }
 
+const insightRefreshes = new AsyncSnapshotCache<string, boolean>(60_000);
+
 async function handleMarketInsights(
   _req: IncomingMessage,
   res: ServerResponse,
   marketId: string,
 ): Promise<void> {
-  let context = await read((db) => {
+  const context = await read((db) => {
     const market = db.markets.find((candidate) => candidate.id === marketId);
     const match = market
       ? db.matches.find((candidate) => candidate.id === market.matchId)
@@ -519,39 +580,27 @@ async function handleMarketInsights(
     return sendJson(res, 200, { insights: context.market.insightSnapshot });
   }
 
-  let external = context.market.insightsLatest;
-  if (provider.fetchInsights) {
-    try {
-      external = (await provider.fetchInsights(context.match)) ?? external;
-    } catch {
-      // A stale cached snapshot is more useful than failing the whole market page.
-    }
+  let refreshing = false;
+  if (provider.fetchInsights && Date.now() < Date.parse(context.market.closesAt)) {
+    refreshing = insightRefreshes.read(marketId, async () => {
+      const latest = await provider.fetchInsights!(context.match);
+      if (latest && context.market.insightsLatest?.fetchedAt !== latest.fetchedAt) {
+        await update((db) => {
+          const market = db.markets.find((candidate) => candidate.id === marketId);
+          if (market && !market.insightSnapshot && Date.now() < Date.parse(market.closesAt)) {
+            market.insightsLatest = latest;
+          }
+        });
+      }
+      return true;
+    }).refreshing;
   }
-  if (
-    external &&
-    context.market.insightsLatest?.fetchedAt !== external.fetchedAt
-  ) {
-    const latest = external;
-    await update((db) => {
-      const market = db.markets.find((candidate) => candidate.id === marketId);
-      if (market && !market.insightSnapshot) market.insightsLatest = latest;
-    });
-  }
-
-  context = await read((db) => {
-    const market = db.markets.find((candidate) => candidate.id === marketId);
-    const match = market
-      ? db.matches.find((candidate) => candidate.id === market.matchId)
-      : undefined;
-    return market && match ? { market, match } : null;
-  });
-  if (!context) return sendJson(res, 404, { error: "Market not found." });
   const insights = context.market.insightSnapshot ?? composeMarketInsights(
     context.market,
     context.match,
     context.market.insightsLatest,
   );
-  sendJson(res, 200, { insights });
+  sendJson(res, 200, { insights, refreshing });
 }
 
 async function handleBet(req: IncomingMessage, res: ServerResponse, marketId: string): Promise<void> {
@@ -587,7 +636,6 @@ async function handleBet(req: IncomingMessage, res: ServerResponse, marketId: st
 async function handlePortfolio(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const user = await requireUser(req, res);
   if (!user) return;
-  await syncMatches();
   const positions = await portfolio(user.id);
   // Aggregate exposure: still-open stake, settled wins, settled losses.
   let openStakeShannons = 0n;
@@ -608,12 +656,8 @@ async function handlePortfolio(req: IncomingMessage, res: ServerResponse): Promi
 async function handleWallet(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const user = await requireUser(req, res);
   if (!user) return;
-  let chainBalanceCkb = "—";
-  try {
-    chainBalanceCkb = shannonsToCkb(await getBalanceShannons(user.wallet.address));
-  } catch {
-    /* ignore */
-  }
+  const balance = cachedBalance(user.wallet.address);
+  const chainBalanceCkb = balance.value === undefined ? "—" : shannonsToCkb(balance.value);
   const treasury = await getTreasury();
   const recent = await read((db) => ({
     deposits: db.deposits
@@ -633,7 +677,8 @@ async function handleWallet(req: IncomingMessage, res: ServerResponse): Promise<
       .map((d) => ({
         amountCkb: shannonsToCkb(asBig(d.amountShannons)),
         txHash: d.txHash,
-        explorer: txUrl(d.txHash),
+        explorer: d.txHash ? txUrl(d.txHash) : null,
+        status: d.status ?? "submitted",
         at: d.at,
       })),
   }));
@@ -642,6 +687,7 @@ async function handleWallet(req: IncomingMessage, res: ServerResponse): Promise<
     explorer: addressUrl(user.wallet.address),
     faucet: "https://faucet.nervos.org/",
     chainBalanceCkb,
+    balanceRefreshing: balance.refreshing,
     escrowCkb: shannonsToCkb(asBig(user.escrowShannons)),
     creatorFeesCkb: shannonsToCkb(asBig(user.creatorFeesShannons)),
     treasuryAddress: treasury.address,
@@ -650,6 +696,21 @@ async function handleWallet(req: IncomingMessage, res: ServerResponse): Promise<
     renewFeeCkb: RENEW_FEE_CKB,
     recent,
   });
+}
+
+async function handleWalletBalance(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  try {
+    const balance = await within(getBalanceShannons(user.wallet.address), 8_000);
+    sendJson(res, 200, { chainBalanceCkb: shannonsToCkb(balance), balanceRefreshing: false });
+  } catch {
+    const balance = cachedBalance(user.wallet.address);
+    sendJson(res, 200, {
+      chainBalanceCkb: balance.value === undefined ? "—" : shannonsToCkb(balance.value),
+      balanceRefreshing: false, balanceUnavailable: true,
+    });
+  }
 }
 
 async function handleDeposit(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -705,7 +766,6 @@ async function handleReset(req: IncomingMessage, res: ServerResponse): Promise<v
 async function handleCrewsList(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const user = await requireUser(req, res);
   if (!user) return;
-  await syncMatches();
   sendJson(res, 200, { crews: await listCrews(user.id) });
 }
 
@@ -760,7 +820,6 @@ async function handleLeaderboard(req: IncomingMessage, res: ServerResponse): Pro
 }
 
 async function handleMatchesList(_req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
-  await syncMatches();
   const competitionId = url.searchParams.get("competition");
   const matches = await read((db) =>
     db.matches
@@ -779,7 +838,7 @@ async function handleMatchesList(_req: IncomingMessage, res: ServerResponse, url
 
 async function handleStatus(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   sendJson(res, 200, {
-    live: await provider.status(),
+    live: providerStatus(),
     constants: {
       minBetCkb: MIN_BET_CKB,
       maxBetCkb: MAX_BET_CKB,
@@ -795,11 +854,10 @@ async function handleStatus(_req: IncomingMessage, res: ServerResponse): Promise
 
 /** Compact list of every published receipt — powers the /#/receipts gallery. */
 async function handleReceiptsList(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const payloads = await readReceipts();
   const items = await read((db) => {
     const marketById = new Map(db.markets.map((m) => [m.id, m]));
-    return db.receipts
-      .slice()
-      .sort((a, b) => b.settledAt.localeCompare(a.settledAt))
+    return payloads
       .map((r) => {
         const m = marketById.get(r.marketId);
         return {
@@ -821,44 +879,57 @@ async function handleReceiptsList(_req: IncomingMessage, res: ServerResponse): P
   sendJson(res, 200, { receipts: items });
 }
 
-/**
- * Full receipt for one market: the canonical payload, its hash, the on-chain
- * reference, and a fresh live verification against Pudge RPC (source of truth).
- */
+type ReceiptVerification = Awaited<ReturnType<typeof verifyReceiptOnChain>> & { checkedAt?: string };
+const receiptChecks = new AsyncSnapshotCache<string, ReceiptVerification>(60_000);
+
+/** Receipt payload is local; ?verify=1 awaits the independently refreshed RPC check. */
 async function handleReceiptDetail(
   _req: IncomingMessage,
   res: ServerResponse,
   marketId: string,
+  verify = false,
 ): Promise<void> {
+  const payload = await readReceipt(marketId);
   const data = await read((db) => {
     const market = db.markets.find((m) => m.id === marketId);
-    const payload = db.receipts.find((r) => r.marketId === marketId);
     const match = market ? db.matches.find((m) => m.id === market.matchId) : undefined;
-    return { market, payload, match };
+    return { market, match };
   });
-  if (!data.market || !data.payload) {
+  if (!data.market || !payload) {
     return sendJson(res, 404, { error: "Receipt not found." });
   }
-  const canonicalStr = canonicalize(data.payload);
+  const canonicalStr = canonicalize(payload);
   const payloadHash = sha256Hex(canonicalStr);
 
   let onChain:
-    | Awaited<ReturnType<typeof verifyReceiptOnChain>>
-    | { ok: false; reason: string } = {
+    | ReceiptVerification
+    | { ok: false; reason: string; pending?: boolean } = {
     ok: false,
     reason: "receipt not yet published on-chain",
   };
   if (data.market.receipt) {
-    try {
+    const receipt = data.market.receipt;
+    const key = `${receipt.txHash}:${receipt.index}:${payloadHash}`;
+    const check = async (): Promise<ReceiptVerification> => {
       const treasury = await getTreasury();
-      onChain = await verifyReceiptOnChain(data.market.receipt, payloadHash, treasury);
-    } catch (err: any) {
-      onChain = { ok: false, reason: `rpc error: ${err?.message || err}` };
+      const result = await verifyReceiptOnChain(receipt, payloadHash, treasury);
+      if (!result.ok && result.reason?.startsWith("rpc error:")) throw new Error(result.reason);
+      return { ...result, checkedAt: new Date().toISOString() };
+    };
+    const cached = receiptChecks.read(key, check);
+    onChain = cached.value ?? { ok: false, pending: true, reason: "On-chain verification is in progress." };
+    if (verify) {
+      try {
+        onChain = receiptChecks.isFresh(key) ? receiptChecks.peek(key)! :
+          await within(receiptChecks.refresh(key, check), 8_000);
+      } catch (err: any) {
+        onChain = { ok: false, pending: true, reason: `Verification unavailable: ${err?.message || err}` };
+      }
     }
   }
 
   sendJson(res, 200, {
-    payload: data.payload,
+    payload,
     canonical: canonicalStr,
     payloadHash,
     receipt: data.market.receipt ?? null,
@@ -887,9 +958,9 @@ async function handleReceiptProof(
   const mine = url.searchParams.get("mine") === "1";
   const meId = currentUserId(req);
 
+  const payload = await readReceipt(marketId);
   const built = await read((db) => {
     const market = db.markets.find((m) => m.id === marketId);
-    const payload = db.receipts.find((r) => r.marketId === marketId);
     if (!market || !payload) return null;
     const leaves = betsToLeaves(db.bets, marketId);
     const hashes = leaves.map(leafHash);
@@ -949,6 +1020,7 @@ const staticRoutes: Record<string, Handler> = {
   "GET /api/portfolio": (req, res) => handlePortfolio(req, res),
   "GET /api/leaderboard": (req, res) => handleLeaderboard(req, res),
   "GET /api/wallet": (req, res) => handleWallet(req, res),
+  "GET /api/wallet/balance": (req, res) => handleWalletBalance(req, res),
   "POST /api/wallet/deposit": (req, res) => handleDeposit(req, res),
   "POST /api/wallet/withdraw": (req, res) => handleWithdraw(req, res),
   "POST /api/renew": (req, res) => handleRenew(req, res),
@@ -961,7 +1033,7 @@ const staticRoutes: Record<string, Handler> = {
   "GET /api/receipts": (req, res) => handleReceiptsList(req, res),
 };
 
-const server = createServer(async (req, res) => {
+export const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
     const key = `${req.method} ${url.pathname}`;
@@ -987,7 +1059,7 @@ const server = createServer(async (req, res) => {
       if (rec && req.method === "GET") {
         const id = rec[1];
         const sub = rec[2];
-        if (!sub) return await handleReceiptDetail(req, res, id);
+        if (!sub) return await handleReceiptDetail(req, res, id, url.searchParams.get("verify") === "1");
         if (sub === "proof") return await handleReceiptProof(req, res, id, url);
       }
 
@@ -1016,61 +1088,60 @@ const server = createServer(async (req, res) => {
 
 async function boot(): Promise<void> {
   await supaEnsureTable();
+  // Establish durable wallet identity before accepting money-related requests.
+  const treasury = await getTreasury();
+  await recoverUnsentWithdrawals();
+  server.listen(PORT, () => {
+    console.log(`\n  STREAK online · http://localhost:${PORT}`);
+    console.log(`     network: CKB Pudge testnet · provider: ${provider.id}`);
+    console.log(`     treasury: ${treasury.address}\n`);
+  });
+
+  // A slow oracle or notification service must not hold the listener offline.
+  let initialized = false;
+  let ticking = false;
+  const tick = async () => {
+    void reconcilePendingWithdrawals().catch((error) => console.warn("[wallet] reconciliation failed:", error.message));
+    if (ticking) return;
+    ticking = true;
+    try {
+      if (!initialized) {
+        await provider.init?.();
+        initialized = true;
+      }
+      await syncMatches();
+      providerStatus();
+    } catch (error) {
+      console.error("[streak] settle loop:", (error as Error).message);
+    } finally {
+      ticking = false;
+    }
+  };
+  void tick();
+  const interval = setInterval(() => { void tick(); }, SETTLE_INTERVAL_MS);
+  interval.unref();
+  server.once("close", () => clearInterval(interval));
+  void initNotifications().catch((error) => console.warn("[notifications] setup failed:", (error as Error).message));
+
   // Best-effort Telegram webhook auto-setup for deep-link connect flow.
   const appUrl = process.env.APP_PUBLIC_URL;
   const tgToken = process.env.TELEGRAM_BOT_TOKEN;
   const tgSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (appUrl && tgToken && tgSecret) {
     const hookUrl = `${appUrl.replace(/\/$/, "")}/api/integrations/telegram/webhook/${tgSecret}`;
-    try {
-      await fetch(`https://api.telegram.org/bot${tgToken}/setWebhook`, {
+    void fetch(`https://api.telegram.org/bot${tgToken}/setWebhook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: hookUrl }),
-      });
-      console.log("[telegram] webhook configured");
-    } catch (e) {
-      console.warn("[telegram] webhook setup failed", e);
-    }
+        signal: AbortSignal.timeout(10_000),
+      }).then(() => console.log("[telegram] webhook configured"))
+        .catch((error) => console.warn("[telegram] webhook setup failed:", error.message));
   }
-  const treasury = await getTreasury();
-  await provider.init?.();
-  await initNotifications();
-  await syncMatches();
-
-  setInterval(() => {
-    syncMatches().catch((e) => console.error("[streak] settle loop:", e.message));
-  }, SETTLE_INTERVAL_MS);
-
-  const live = await provider.status();
-  let treasuryBalCkb: string | null = null;
-  try {
-    treasuryBalCkb = shannonsToCkb(await getBalanceShannons(treasury.address));
-  } catch { /* rpc may be flaky at boot; skip */ }
-
-  server.listen(PORT, () => {
-    console.log(`\n  STREAK TERMINAL online`);
-    console.log(`     http://localhost:${PORT}`);
-    console.log(`     network: CKB Pudge testnet`);
-    console.log(`     provider: ${live.provider} · ${live.league}`);
-    if (live.simulated) {
-      console.log(`     live data: simulated (${live.detail ?? live.base})`);
-    } else if (live.enabled) {
-      console.log(
-        `     live data: ${live.base} (${live.source}${live.email ? ", " + live.email : ""})`,
-      );
-    } else {
-      console.log(`     live data: unavailable${live.lastError ? " — " + live.lastError : ""}`);
-    }
-    console.log(`     treasury:  ${treasury.address}`);
-    if (treasuryBalCkb !== null) {
-      console.log(`               ${treasuryBalCkb} CKB (need ≥100 per on-chain receipt)`);
-    }
-    console.log();
-  });
 }
 
-boot().catch((err) => {
-  console.error("[streak] failed to boot:", err);
-  process.exit(1);
-});
+if (require.main === module) {
+  boot().catch((err) => {
+    console.error("[streak] failed to boot:", err);
+    process.exit(1);
+  });
+}

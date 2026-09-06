@@ -1,10 +1,10 @@
-# STREAK TERMINAL
+# Streak — The football ledger
 
 > _On-chain multi-league football prediction-market terminal,
 > settled on the **Nervos CKB Pudge testnet**._
 
-Streak is a Polymarket-style prediction market with a Bloomberg-flavoured
-terminal UI. Anyone can open a market on a football fixture, anyone can take
+Streak is a football prediction market presented as an elegant bookmaker's
+ledger. Anyone can open a market on a football fixture, anyone can take
 any side, and every market settles automatically against the live oracle feed
 at full-time. The original daily-pick streak game is preserved as one feature
 on top of the new market engine.
@@ -31,6 +31,10 @@ npm start
 ```
 
 Open <http://localhost:4100>.
+
+For a compiled server, run `npm run build` followed by `npm run serve`.
+See [PERFORMANCE.md](PERFORMANCE.md) for the request architecture, measurements,
+cache freshness, and withdrawal recovery behavior.
 
 **Connect Wallet** → pick a CKB wallet (JoyID, MetaMask, UniSat, OKX…) and sign
 the login challenge. Your wallet is your account — no email, no password.
@@ -74,13 +78,112 @@ API to receive direct messages. POST `/api/me/notify` with JSON `{ "telegramChat
 
 ---
 
-## Optional: Supabase-backed persistence
+## Persistence: relational Postgres store
 
-Streak supports using Supabase as the primary store instead of the local
-`data/db.json`. To enable, create a table (suggested schema) and set the
-environment variables below. When Supabase is configured the app will upsert
-the entire state into a single row — the existing file store remains as a
-fallback when Supabase is unavailable.
+Streak's state used to live as a **single JSON blob** — one `jsonb` column in one
+row (`streak_state.data`), which was itself just the old `data/db.json` moved
+behind an HTTP API. That shape made the unit of both reading and writing the
+*entire ledger*, so cost scaled with total history rather than with what a
+request actually needed:
+
+| | before (single row) | after (tables) |
+|---|---|---|
+| a read (any endpoint) | ~3.1 MB | ~1.6 MB, cached; ~20 ms warm |
+| a write (e.g. placing a bet) | ~3.1 MB upsert | only the changed rows |
+| fetching one receipt | ~3.1 MB | ~1 KB by primary key |
+
+The blob was 3.1 MB and growing by one market plus one receipt per settled
+fixture. Roughly half of it — 1.5 MB of settlement receipts — was archive data
+that only two endpoints ever read, always by `marketId`, yet it rode along with
+every single read. Meanwhile a 100-byte balance change rewrote all 3.1 MB.
+
+### What the migration changed
+
+State now lives in thirteen tables (see `scripts/sql/001_schema.sql`):
+`users`, `matches`, `markets`, `bets`, `deposits`, `withdraws`, `receipts`,
+`crews`, `telegram_links`, `renewal_txs`, plus `market_history` /
+`market_insights` side tables and a small `streak_meta` singleton.
+
+Four properties matter:
+
+- **Diffed writes.** `update()` compares the mutated draft against the last
+  committed snapshot and sends only changed rows, in one transaction. This is
+  where nearly all the speed-up comes from — writes are no longer proportional
+  to the size of the ledger.
+- **Receipts are archive data.** `loadDB()` leaves `receipts` empty; they are
+  read through `readReceipt(marketId)` / `readReceipts(limit)`. Writing is
+  unchanged — push onto `db.receipts` inside `update()` and the diff upserts it.
+- **Deletes are never inferred from absence.** Callers reassign whole
+  collections (`pruneStaleSimMarkets` does), which under a diffed write would
+  otherwise read as "delete everything missing". Removals must be named
+  explicitly via `store.purge({ markets, matches })`, and `deleteMarkets`
+  refuses to drop anything carrying bets or an on-chain receipt.
+- **Constraints the blob could not enforce.** `renewal_txs.tx_hash` and
+  `deposits.tx_hash` are now unique keys, so replay guards are enforced by the
+  database instead of by scanning an array. Money is `numeric(40,0)`, which
+  node-postgres returns as a string — exactly the shannon-string convention the
+  code already uses, with no precision loss.
+
+Reads are still a full materialisation of the working set minus receipts.
+Narrowing them further needs a lifecycle window (recent kickoffs plus anything
+unresolved) rather than a status filter, because excluding `status = 'final'`
+matches would stop the settle loop from ever seeing a fixture that just ended.
+
+### Configuration
+
+```
+DATABASE_URL=postgresql://user:pass@host:5432/db   # pooled connection string
+STORE_READ_TTL_MS=5000     # shared snapshot freshness; 0 disables TTL caching
+PG_POOL_MAX=5              # optional (default: 5)
+PG_CONNECT_TIMEOUT_MS=20000 # optional (default: 20000)
+```
+
+`DATABASE_URL` takes precedence over the Supabase and file backends. As with
+Supabase, a failed read or write surfaces an error rather than silently falling
+back to a different balance ledger.
+
+### Migrating an existing blob
+
+```bash
+# dry run: integrity check, row counts, money reconciliation, round-trip diff
+node scripts/migrate-to-tables.cjs --from data/db.json --to "$DATABASE_URL"
+
+# commit (only proceeds if the round-trip comparison is identical)
+node scripts/migrate-to-tables.cjs --from data/db.json --to "$DATABASE_URL" --apply
+```
+
+The migration is insert-only: it never modifies or deletes the source, so the
+blob remains a rollback. It refuses to run against a source with orphaned rows,
+duplicate ids or malformed amounts, then re-materialises the tables back into
+`StreakDB` shape and deep-compares them against the source — committing only if
+every record round-trips exactly and escrow reconciles to the shannon.
+
+`scripts/dump-state.cjs` pulls the authoritative blob straight from Postgres,
+bypassing PostgREST (useful when a project is API-gated but the database is
+reachable), and falls back to the Supavisor pooler when the direct host is
+IPv6-only.
+
+Regression checks live in `src/store_pg.test.ts` (`npm run test:store:pg`) and
+skip cleanly when no database is reachable.
+
+
+## Legacy: Supabase-backed persistence (single JSON row)
+
+Superseded by the relational store above; kept for reference and as a fallback
+when `DATABASE_URL` is unset. Streak can use Supabase as the primary store
+instead of the local `data/db.json`, persisting the whole state as one `jsonb`
+row. To enable, create a table (suggested schema) and set the environment
+variables below. When Supabase is configured the app upserts
+the state into a single row and requests an empty write response. A failed
+remote read or write surfaces an error; the app does not switch to a different
+local balance ledger during an outage. Without Supabase it uses the JSON file.
+
+Run one Streak server process per state file or Supabase row. The mutation queue
+serializes writes within that process; it is not a distributed database lock.
+Readers share immutable committed snapshots and concurrent cache misses share
+one fetch. Writes use isolated drafts, acknowledge after durable persistence,
+and skip storage when the serialized state has not changed. Invalid local JSON
+raises an error and is left intact for recovery.
 
 Required `.env` variables:
 
@@ -90,7 +193,14 @@ SUPABASE_KEY=eyJ...your-service-role-or-anon-key
 SUPABASE_DB_URL=postgres://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres
 SUPABASE_TABLE=streak_state   # optional (default: streak_state)
 SUPABASE_ROW_ID=singleton     # optional (default: singleton)
+STORE_READ_TTL_MS=1500       # shared snapshot freshness; 0 disables TTL caching
+STORE_REQUEST_TIMEOUT_MS=8000 # Supabase HTTP deadline in milliseconds
 ```
+
+For isolated development and tests, set `STREAK_DATA_DIR` to a separate data
+directory, or set `STREAK_DB_FILE` to the exact JSON file to use. The explicit
+file setting takes precedence. Neither setting disables Supabase: unset
+`SUPABASE_URL` and `SUPABASE_KEY` when a local test must use the file backend.
 
 Table layout (example SQL):
 
@@ -212,7 +322,12 @@ Browser (vanilla SPA)                       Node http server (no framework)
 ```
 
 - **No build step to run** — `ts-node` executes the TypeScript directly.
-- **No external services** — state lives in `data/db.json` (git-ignored).
+- **Local persistence by default** — state lives in `data/db.json` (git-ignored),
+  with optional Supabase persistence. Football feeds and chain operations use
+  their configured external services.
+- **Small browser runtime** — `public/runtime.js` owns bounded request caching,
+  deduplication, invalidation and completion-based polling. The wallet connector
+  loads only on connection intent; no wallet SDK or remote fonts block startup.
 - **Inline SVG charts** — no chart library; the implied-probability lines and
   sparklines are rendered as `<svg><polyline>` directly in `app.js`.
 
@@ -220,22 +335,21 @@ Browser (vanilla SPA)                       Node http server (no framework)
 
 ## UI / design language
 
-Strict financial-terminal aesthetic. Solid graphite surfaces, 1px hairline
-borders, IBM Plex Mono numerals, restrained two-tone accents (green / red for
-P&L, amber for highlights and odds, soft blue for draw / neutral data). No
-gradient walls, no neon glow, no scanlines, no grain.
+Warm parchment, oxblood ink, forest green and muted blue. Serif headings and
+tabular figures sit alongside numbered pages, fine ruled dividers, a daily
+journal and a CSS-rendered book cover. System fonts render immediately.
 
 Layout:
 
-- **Top status bar** — brand, network, live-oracle indicator, balance, streak,
-  clock.
-- **Ticker tape** — live marquee of the most recent platform bets.
-- **Left rail** — Overview · Markets · Schedule · Receipts · Portfolio · Streak
-  · Account · Leaderboard.
-- **Main pane** — page content.
-- **Footer bar** — aggregate pool size and market state counts.
+- **Book spine** — numbered navigation, account link and sign-out.
+- **Edition header** — date, feed status, testnet label and available balance.
+- **Activity strip** — recent entries without a continuously animated marquee.
+- **Overview** — four ledger totals, featured fixture, daily streak journal,
+  recent entries and standings.
+- **Responsive pages** — compact market odds and an early bet form on phones,
+  keyboard controls, focus-managed dialogs and reduced-motion support.
 
-Pages: `Overview`, `Markets` (sortable table with price-cells and sparklines),
+Pages: `Overview`, `Markets` (filterable table with price-cells and sparklines),
 `Market detail` (large implied-prob chart, order-book-style bet feed, place-bet
 panel, pool composition, **on-chain settlement panel with share links**),
 `Schedule`, `Streak`, `Portfolio`, `Account` (`#/wallet`), `Leaderboard`, `Receipts`
