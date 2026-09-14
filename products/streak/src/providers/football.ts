@@ -29,6 +29,7 @@ import type {
   TeamTableInsight,
 } from "../types";
 import type { LiveResult, MatchDataProvider, ProviderStatus } from "./types";
+import { MatchdayFeed, emptyMatchday } from "../matchday";
 
 export const API_FOOTBALL_BASE = "https://v3.football.api-sports.io";
 
@@ -553,6 +554,23 @@ class ApiFootballProvider implements MatchDataProvider {
   private readonly standingsMemo = new TimedMemo<any[]>();
   private readonly headToHeadMemo = new TimedMemo<HeadToHeadInsight[]>();
   private readonly insightMemo = new TimedMemo<ProviderMatchInsights>();
+  private readonly matchdayFeed = new MatchdayFeed(
+    (path, params) => this.request(path, params),
+    (match) => this.coverageMemo.get(
+      `${match.competition?.id}:${this.season}`, 24 * 60 * 60_000,
+      async () => {
+        if (!match.competition?.id) throw new Error("Missing competition");
+        return mapApiCoverage(await this.request("/leagues", {
+          id: match.competition.id, season: String(this.season),
+        }), this.season);
+      },
+    ),
+  );
+
+  async fetchMatchday(match: Match) {
+    if (!this.apiKey || !isApiFootballMatch(match)) return emptyMatchday(match.id, false);
+    return this.matchdayFeed.load(match);
+  }
 
   async init(): Promise<void> {
     if (!this.apiKey) {

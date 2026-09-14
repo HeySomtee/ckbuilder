@@ -11,6 +11,7 @@
 // ───────────────────────────────────────────────────────────── helpers ─────
 
 import { createApiClient, createPoller } from "./runtime.js";
+import { createMatchdayView } from "./matchday.js";
 
 // Reading a ledger never needs the wallet SDK. Load its remote dependency graph
 // only when the user connects or signs, keeping startup independent of the CDN.
@@ -108,7 +109,8 @@ function teamMark(team) {
   if (team?.logo) {
     return `<span class="flag"><img src="${esc(team.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer"></span>`;
   }
-  return `<span class="flag">${esc(team?.flag || "⚽")}</span>`;
+  const mark = team?.flag || team?.code || "⚽";
+  return `<span class="flag${/^[A-Z]{2,5}$/.test(mark) ? " team-monogram" : ""}">${esc(mark)}</span>`;
 }
 
 function competitionName(match) {
@@ -466,11 +468,13 @@ function closeModal() {
 
 // ──────────────────────────────────────────────────────────── routing ──────
 
+const renderMatchday = createMatchdayView({ api, esc, teamMark, fmtCkb, fmtDateTime, isActiveView, startPolling });
 const routes = {
   "": renderDashboard,
   dashboard: renderDashboard,
   markets: renderMarkets,
   market: renderMarketDetail, // #market/<id>
+  matchday: renderMatchday,
   streak: renderStreak,
   portfolio: renderPortfolio,
   wallet: renderWallet,
@@ -541,6 +545,7 @@ async function navigate() {
   // may still finish, but they can only update their now-detached target and
   // can never paint over the page the user most recently selected.
   r.view = mountRouteView();
+  window.scrollTo({ top: 0, behavior: "instant" });
   const activeRouteName = routes[r.name] ? r.name || "dashboard" : "dashboard";
   highlightNav(activeRouteName);
   document.title = `${activeRouteName.charAt(0).toUpperCase() + activeRouteName.slice(1)} · Streak`;
@@ -577,6 +582,7 @@ window.addEventListener("hashchange", () => {
 const routeRequests = {
   dashboard: ["/dashboard"],
   markets: ["/markets?status=open", "/status"],
+  matchday: ["/markets"],
   streak: ["/dashboard", "/markets?status=open"],
   portfolio: ["/portfolio"],
   wallet: ["/wallet"],
@@ -622,11 +628,11 @@ function renderShell() {
   if (root.dataset.shell === "1") return;
   root.innerHTML = `
     <div class="shell">
-      <aside class="rail" id="rail" aria-label="Main navigation">${navHtml()}</aside>
       <header class="status-bar" id="status-bar"></header>
-      <div class="tape" id="tape"><div class="tape-label">From the book <span>↗</span></div><div class="tape-track" id="tape-track">—</div></div>
+      <div class="tape" id="tape"><div class="tape-label">Market activity <span>↗</span></div><div class="tape-track" id="tape-track">—</div></div>
       <main class="main" id="main"><div class="view" id="view">${spinner()}</div></main>
       <footer class="foot" id="foot"></footer>
+      <nav class="mobile-dock" id="mobile-dock" aria-label="Main navigation">${primaryNavHtml(true)}<button data-nav-toggle aria-label="More navigation" aria-controls="mobile-nav-drawer" aria-expanded="false"><span class="dock-more" aria-hidden="true">···</span><span>More</span></button></nav>
       <div class="mobile-nav-drawer" id="mobile-nav-drawer" aria-hidden="true"></div>
     </div>
   `;
@@ -634,42 +640,53 @@ function renderShell() {
   updateStatusBar();
   updateFootBar();
   bindNav();
+  void refreshDashboard().catch(() => {});
+}
+
+function primaryNavHtml(mobile = false) {
+  const items = mobile
+    ? [["dashboard", "dash", "Home"], ["markets", "mkt", "Markets"], ["matchday", "live", "Matchday"], ["portfolio", "pf", "My picks"]]
+    : [["dashboard", "dash", "Overview"], ["markets", "mkt", "Markets"], ["matchday", "live", "Matchday"], ["portfolio", "pf", "My picks"], ["streak", "st", "Streak"]];
+  return items.map(([route, glyph, label]) => `<a href="#/${route}" data-route="${route}">${mobile ? `<span class="icon" aria-hidden="true">${icon(glyph)}</span>` : ""}<span>${label}</span></a>`).join("");
 }
 
 function navHtml() {
   const links = (items) =>
     items
       .map(
-        ([route, glyph, label, number]) =>
-          `<a href="#/${route}" data-route="${route}"><span class="icon">${icon(glyph)}</span><span>${label}</span><span class="nav-number">${number}</span></a>`,
+        ([route, glyph, label]) =>
+          `<a href="#/${route}" data-route="${route}"><span class="icon">${icon(glyph)}</span><span>${label}</span></a>`,
       )
       .join("");
   return `
-    <a class="ledger-brand" href="#/dashboard" data-route="dashboard"><span class="brand-mark">S.</span><span class="wordmark">Streak<span>The football ledger</span></span></a>
-    <div class="rail-section">The book <span>Vol. 01</span></div>
+    <a class="ledger-brand" href="#/dashboard" data-route="dashboard"><img class="brand-mark" src="/mark.svg" alt=""><span class="wordmark">Streak<span>Football predictions</span></span></a>
+    <div class="rail-section">Match centre</div>
     ${links([
       ["dashboard", "dash", "Overview", "01"],
       ["markets", "mkt", "Markets", "02"],
+      ["matchday", "live", "Matchday"],
       ["fixtures", "cal", "Schedule", "03"],
       ["receipts", "rc", "Receipts", "04"],
     ])}
-    <div class="rail-section">Your pages</div>
+    <div class="rail-section">Your game</div>
     ${links([
       ["portfolio", "pf", "Portfolio", "05"],
       ["streak", "st", "Daily streak", "06"],
       ["crews", "crew", "Crews", "07"],
       ["leaderboard", "lb", "Leaderboard", "08"],
     ])}
-    <div class="rail-note"><span class="little-star">✳</span><p>Good instincts.<br>Better records.</p><span>Every pick has a paper trail.</span></div>
+    <div class="rail-note"><span class="little-star">↗</span><p>Your game.<br>Your call.</p><span>Every result. Verifiable on-chain.</span></div>
+    <button class="btn btn-glass menu-help" id="help-btn">How Streak works <span>?</span></button>
     <div class="rail-foot">
       <a href="#/wallet" data-route="wallet" class="account-link"><span class="account-monogram">${esc((state.user?.username || "S").slice(0, 1).toUpperCase())}</span><span><strong>${esc(state.user?.username || "Your account")}</strong><small>${esc(shortAddr(state.user?.walletAddress))}</small></span><span>↗</span></a>
-      <button class="signout-link" id="signout">Close the book <span>↗</span></button>
+      <button class="signout-link" id="signout">Sign out <span>↗</span></button>
     </div>
   `;
 }
 
 function icon(k) {
   const paths = {
+    live: '<circle cx="8" cy="8" r="2" fill="currentColor"/><path d="M4.5 4.5a5 5 0 0 0 0 7m7-7a5 5 0 0 1 0 7M2 2a8.5 8.5 0 0 0 0 12M14 2a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor"/>',
     dash: '<rect x="2" y="2" width="5" height="5" stroke="currentColor" fill="none"/><rect x="9" y="2" width="5" height="5" stroke="currentColor" fill="none"/><rect x="2" y="9" width="5" height="5" stroke="currentColor" fill="none"/><rect x="9" y="9" width="5" height="5" stroke="currentColor" fill="none"/>',
     mkt: '<polyline points="2,12 5,8 9,10 14,3" stroke="currentColor" fill="none" stroke-linejoin="round"/>',
     cal: '<rect x="2" y="3" width="12" height="11" stroke="currentColor" fill="none"/><line x1="2" y1="6" x2="14" y2="6" stroke="currentColor"/>',
@@ -686,7 +703,7 @@ function icon(k) {
 function bindNav() {
   const drawer = $("#mobile-nav-drawer");
   if (drawer && !drawer.dataset.ready) {
-    drawer.innerHTML = `<div class="mobile-nav-panel">${navHtml()}</div>`;
+    drawer.innerHTML = `<nav class="mobile-nav-panel rail" id="rail" aria-label="All navigation"><button class="nav-close" data-nav-close aria-label="Close navigation">×</button>${navHtml()}</nav>`;
     drawer.dataset.ready = "1";
   }
   ensureNavDelegation();
@@ -723,9 +740,13 @@ function ensureNavDelegation() {
     if (!t || !t.closest) return;
 
     // Hamburger toggle
-    if (t.closest("#mobile-nav-toggle")) {
+    if (t.closest("[data-nav-toggle]")) {
       e.preventDefault();
-      toggleMobileNav();
+      toggleMobileNav(t.closest("[data-nav-toggle]"));
+      return;
+    }
+    if (t.closest("[data-nav-close]")) {
+      closeMobileNav(true);
       return;
     }
 
@@ -774,13 +795,18 @@ function ensureNavDelegation() {
   });
 }
 
-function toggleMobileNav() {
+let navReturnFocus = null;
+let navOverflow = "";
+function toggleMobileNav(trigger) {
   const drawer = $("#mobile-nav-drawer");
   if (!drawer) return;
-  const open = drawer.classList.toggle("on");
-  drawer.setAttribute("aria-hidden", open ? "false" : "true");
-  $("#mobile-nav-toggle")?.setAttribute("aria-expanded", String(open));
-  if (open) {
+  if (drawer.classList.contains("on")) return closeMobileNav(true);
+  navReturnFocus = trigger || document.activeElement;
+  navOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+  drawer.classList.add("on");
+  drawer.setAttribute("aria-hidden", "false");
+  document.querySelectorAll("[data-nav-toggle]").forEach(button => button.setAttribute("aria-expanded", "true"));
     drawer.setAttribute("role", "dialog");
     drawer.setAttribute("aria-modal", "true");
     drawer.setAttribute("aria-label", "Navigation");
@@ -790,16 +816,17 @@ function toggleMobileNav() {
       drawer.querySelector("a") ||
       drawer
     ).focus();
-  } else closeMobileNav(true);
 }
 
 function closeMobileNav(restoreFocus = false) {
   const drawer = $("#mobile-nav-drawer");
   if (!drawer) return;
+  if (drawer.classList.contains("on")) document.body.style.overflow = navOverflow;
   drawer.classList.remove("on");
   drawer.setAttribute("aria-hidden", "true");
-  $("#mobile-nav-toggle")?.setAttribute("aria-expanded", "false");
-  if (restoreFocus) $("#mobile-nav-toggle")?.focus();
+  document.querySelectorAll("[data-nav-toggle]").forEach(button => button.setAttribute("aria-expanded", "false"));
+  if (restoreFocus) (navReturnFocus?.isConnected ? navReturnFocus : $("#mobile-nav-toggle"))?.focus();
+  navReturnFocus = null;
 }
 
 function teardownShell() {
@@ -815,7 +842,7 @@ function teardownShell() {
 function highlightNav(name) {
   const active = name === "market" ? "markets" : name;
   document
-    .querySelectorAll("#rail a[data-route], #mobile-nav-drawer a[data-route]")
+    .querySelectorAll(".shell a[data-route]")
     .forEach((a) => {
       const current = a.dataset.route === active;
       a.classList.toggle("active", current);
@@ -870,11 +897,11 @@ function updateStatusBar() {
   if (bar.dataset.signature !== signature) {
     bar.dataset.signature = signature;
     bar.innerHTML = `
-      <button class="mobile-nav-btn" id="mobile-nav-toggle" aria-label="Open navigation" aria-controls="mobile-nav-drawer" aria-expanded="${$("#mobile-nav-drawer")?.classList.contains("on") ? "true" : "false"}">☰</button>
-      <span class="edition-label">Football, on the record.</span>
-      <span class="header-date">${new Date().toLocaleDateString([], { weekday: "short", day: "numeric", month: "long", year: "numeric" })}</span>
-      <span class="right"><span class="feed-status"><span class="pulse ${live?.simulated ? "sim" : live?.enabled ? "" : "off"}"></span>${live?.simulated ? "Simulated feed" : live?.enabled ? "Live feed" : "Feed offline"}</span><span class="network-tag">CKB testnet</span><a class="header-balance" href="#/wallet">${fmtCkb(u?.escrowCkb)} <small>CKB</small> <span>↗</span></a><button class="statusbtn" id="help-btn" title="How Streak works" aria-label="How Streak works">?</button></span>
+      <a class="app-brand" href="#/dashboard" data-route="dashboard" aria-label="Streak home"><img class="brand-mark" src="/mark.svg" alt=""><span>streak</span></a>
+      <nav class="desktop-nav" id="desktop-nav" aria-label="Main navigation">${primaryNavHtml()}</nav>
+      <span class="right"><span class="feed-status ${live?.enabled ? "" : "muted"}"><span class="pulse ${live?.simulated ? "sim" : live?.enabled ? "" : "off"}"></span>${live?.simulated ? "Simulated" : live?.enabled ? "Live feed" : "Offline"}</span><a class="header-balance" href="#/wallet" data-route="wallet">${fmtCkb(u?.escrowCkb)} <small>CKB</small> <span>↗</span></a><button class="mobile-nav-btn" id="mobile-nav-toggle" data-nav-toggle aria-label="Open navigation" aria-controls="mobile-nav-drawer" aria-expanded="${$("#mobile-nav-drawer")?.classList.contains("on") ? "true" : "false"}">☰</button></span>
     `;
+    highlightNav(state.route?.name || "dashboard");
   }
 }
 
@@ -894,12 +921,12 @@ function updateFootBar() {
   const f = $("#foot");
   if (!f) return;
   const c = state.dashboard?.counts;
-  const html = `<span class="footer-mark">S.</span><span>Kept on Nervos CKB</span><span class="footer-stats">${fmtInt(c?.openMarkets)} open markets <span>·</span> ${fmtCkb(c?.totalPoolCkb)} CKB in the book</span><span class="right">2% protocol · 1% creator</span>`;
+  const html = `<span class="footer-mark">S</span><span>Settled on Nervos CKB</span><span class="footer-stats">${fmtInt(c?.openMarkets)} open markets <span>·</span> ${fmtCkb(c?.totalPoolCkb)} CKB in pools</span><span class="right">2% protocol · 1% creator</span>`;
   if (f.innerHTML !== html) f.innerHTML = html;
 }
 
 function spinner() {
-  return `<div class="loading-ledger" role="status" style="padding:60px;text-align:center;color:var(--ink-2);font-family:var(--mono);font-size:11px;letter-spacing:0.08em">Opening the ledger…</div>`;
+  return `<div class="loading-ledger" role="status" style="padding:60px;text-align:center;color:var(--ink-2);font-family:var(--mono);font-size:11px;letter-spacing:0.08em">Loading Streak…</div>`;
 }
 
 function spinnerInline() {
@@ -1040,20 +1067,20 @@ async function renderDashboard(r = state.route) {
     headline = d?.headline;
   const streak = u?.streak?.current ?? 0;
   view.innerHTML = `
-    <div class="ledger-heading"><div><div class="eyebrow">Your daily edition <span>—</span> No. 01</div><h1>A good day to<br><em>back your instinct.</em></h1><p>The fixtures, the figures, and your next chapter.</p></div><div class="edition-stamp"><span>STREAK & CO.</span><strong>THE<br>DAILY BOOK</strong><span>FOOTBALL · ON RECORD</span></div></div>
-    <div class="kpis overview-kpis">
-      <div class="kpi"><span class="l">01 / Available balance</span><span class="v">${fmtCkb(u?.escrowCkb)} <small>CKB</small></span><a class="d" href="#/wallet">Manage your funds ↗</a></div>
-      <div class="kpi"><span class="l">02 / Net returns</span><span class="v ${pnlClass(u?.stats.netPnlShannons)}">${fmtPnl(Number(u?.stats.netPnlShannons || 0) / 1e8)} <small>CKB</small></span><span class="d">Your settled positions</span></div>
-      <div class="kpi"><span class="l">03 / Win rate</span><span class="v">${u?.winRate ?? 0}<small>%</small></span><span class="d">${u?.stats.wonBets ?? 0} won · ${u?.stats.lostBets ?? 0} lost</span></div>
-      <div class="kpi"><span class="l">04 / The current run</span><span class="v">${streak}<small> in a row</small><span class="streak-spark">✳</span></span><span class="d">Personal best: ${u?.streak.best ?? 0}</span></div>
+    <div class="ledger-heading"><div><div class="eyebrow">Your matchday overview</div><h1>Read the game. <em>Make your call.</em></h1><p>Follow the fixtures, compare the odds and track your picks.</p></div><a class="btn btn-amber" href="#/markets">Explore markets ↗</a></div>
+    <div class="kpis overview-kpis" tabindex="0" role="region" aria-label="Your performance statistics">
+      <div class="kpi"><span class="l">Available balance</span><span class="v">${fmtCkb(u?.escrowCkb)} <small>CKB</small></span><a class="d" href="#/wallet">Manage funds ↗</a></div>
+      <div class="kpi"><span class="l">Net returns</span><span class="v ${pnlClass(u?.stats.netPnlShannons)}">${fmtPnl(Number(u?.stats.netPnlShannons || 0) / 1e8)} <small>CKB</small></span><span class="d">Your settled positions</span></div>
+      <div class="kpi"><span class="l">Win rate</span><span class="v">${u?.winRate ?? 0}<small>%</small></span><span class="d">${u?.stats.wonBets ?? 0} won · ${u?.stats.lostBets ?? 0} lost</span></div>
+      <div class="kpi"><span class="l">Current streak</span><span class="v">${streak}<small> in a row</small><span class="streak-spark">↗</span></span><span class="d">Personal best: ${u?.streak.best ?? 0}</span></div>
     </div>
-    <div class="section-heading"><h2>On the desk today</h2><a class="text-link" href="#/markets">All markets <span>↗</span></a></div>
+    <div class="section-heading"><h2>Match centre</h2><a class="text-link" href="#/fixtures">Full schedule <span>↗</span></a></div>
     <div class="grid-2 desk-grid">
-      <section class="panel featured-market"><div class="panel-h"><span class="title"><span class="red-dot"></span> The featured fixture</span><span class="meta">${headline ? esc(competitionName(headline.match)) : "The fixture book"}</span></div><div class="panel-b">${headline ? headlineCard(headline) : '<div class="empty-ledger"><span>↗</span><h3>A quiet page, for now.</h3><p>Fresh fixtures will appear here when markets open.</p><a class="text-link" href="#/fixtures">See the schedule →</a></div>'}</div></section>
-      <section class="journal-card"><div class="journal-top"><span class="eyebrow">A little, every day.</span><span>06 /</span></div><h2>Keep the<br><em>story going.</em></h2><p>One considered pick a day.<br>Let a good run write itself.</p><div class="streak-dots" aria-label="Current streak: ${streak}">${Array.from({ length: 7 }, (_, i) => `<span class="${i < Math.min(streak, 7) ? "done" : ""}">${i < Math.min(streak, 7) ? "✓" : String(i + 1).padStart(2, "0")}</span>`).join("")}</div><a class="btn journal-cta" href="#/streak">${u?.streak?.status === "failed" ? "Review your streak" : "Your daily streak"} <span>↗</span></a><span class="journal-note">${streak ? streak + " chapters and counting." : "Every streak begins with one."}</span></section>
+      <section class="panel featured-market"><div class="panel-h"><span class="title"><span class="red-dot"></span> Featured match</span><span class="meta">${headline ? esc(competitionName(headline.match)) : "Football"}</span></div><div class="panel-b">${headline ? headlineCard(headline) : '<div class="empty-ledger"><span>↗</span><h3>No open fixtures yet.</h3><p>New matches will appear here when markets open.</p><a class="text-link" href="#/fixtures">See the schedule →</a></div>'}</div></section>
+      <section class="journal-card"><div class="journal-top"><span class="eyebrow">Daily streak</span><span>↗</span></div><h2>Your picks.<br><em>Your form.</em></h2><p>One football pick a day.<br>Track your run, result by result.</p><div class="streak-dots" aria-label="Current streak: ${streak}">${Array.from({ length: 7 }, (_, i) => `<span class="${i < Math.min(streak, 7) ? "done" : ""}">${i < Math.min(streak, 7) ? "✓" : String(i + 1).padStart(2, "0")}</span>`).join("")}</div><a class="btn journal-cta" href="#/streak">${u?.streak?.status === "failed" ? "Review your streak" : "View your streak"} <span>↗</span></a><span class="journal-note">${streak ? streak + " correct picks in a row." : "Your next pick starts here."}</span></section>
     </div>
-    ${Number(u?.escrowCkb || 0) <= 0 ? '<div class="fund-hint"><span class="fh-ico">↗</span><span class="fh-txt"><b>Your first entry starts here.</b> Add CKB to your account when you’re ready to make a pick.</span><a class="text-link" href="#/wallet">Add funds →</a></div>' : ""}
-    <div class="grid-2 desk-bottom"><section class="panel"><div class="panel-h"><span class="title">Recent entries</span><span class="meta">From across the book</span></div><div class="entry-list">${
+    ${Number(u?.escrowCkb || 0) <= 0 ? '<div class="fund-hint"><span class="fh-ico">↗</span><span class="fh-txt"><b>Ready to make a pick?</b> Add CKB to your account to get started.</span><a class="text-link" href="#/wallet">Add funds →</a></div>' : ""}
+    <div class="grid-2 desk-bottom"><section class="panel"><div class="panel-h"><span class="title">Recent picks</span><span class="meta">Across all markets</span></div><div class="entry-list">${
       (d?.recentBets ?? [])
         .slice(0, 4)
         .map(
@@ -1061,10 +1088,10 @@ async function renderDashboard(r = state.route) {
             `<div class="ledger-entry"><span class="entry-no">${String(i + 1).padStart(2, "0")}</span><div><strong>${esc(b.matchLabel)}</strong><small>@${esc(b.user)} <span>·</span> ${esc(b.outcome)} pick</small></div><span class="entry-amount">${fmtCkb(b.amountCkb)} <small>CKB</small></span></div>`,
         )
         .join("") ||
-      '<div class="quiet-note">The book is open. The first entry is still to come.</div>'
+      '<div class="quiet-note">No picks yet. Market activity will appear here.</div>'
     }</div></section>
-    <section class="panel"><div class="panel-h"><span class="title">Names to follow</span><a class="text-link" href="#/leaderboard">The standings ↗</a></div><table class="tbl"><thead><tr><th>No.</th><th>Bookkeeper</th><th class="right">Run</th><th class="right">Return</th></tr></thead><tbody>${(d?.leaderboardTop ?? []).map((row) => `<tr class="${row.isMe ? "me" : ""}"><td class="mono">${String(row.rank).padStart(2, "0")}</td><td>@${esc(row.username)}</td><td class="num">${row.current}</td><td class="num ${pnlClass(row.netPnlCkb)}">${fmtPnl(row.netPnlCkb)}</td></tr>`).join("") || '<tr><td colspan="4" class="quiet-note">Room for a name. Perhaps yours.</td></tr>'}</tbody></table></section></div>
-    <div class="page-colophon"><span>Streak — The football ledger</span><span>Keep a good record.</span><span>01</span></div>
+    <section class="panel"><div class="panel-h"><span class="title">Leaderboard</span><a class="text-link" href="#/leaderboard">Full standings ↗</a></div><table class="tbl"><thead><tr><th>Rank</th><th>Player</th><th class="right">Streak</th><th class="right">Return</th></tr></thead><tbody>${(d?.leaderboardTop ?? []).map((row) => `<tr class="${row.isMe ? "me" : ""}"><td class="mono">${String(row.rank).padStart(2, "0")}</td><td>@${esc(row.username)}</td><td class="num">${row.current}</td><td class="num ${pnlClass(row.netPnlCkb)}">${fmtPnl(row.netPnlCkb)}</td></tr>`).join("") || '<tr><td colspan="4" class="quiet-note">Standings appear after the first settled picks.</td></tr>'}</tbody></table></section></div>
+    <div class="page-colophon"><span>Streak — Football predictions</span><span>Your game. Your call.</span><a class="text-link" href="#/receipts">View settled results ↗</a></div>
   `;
   bindHeadline();
   startPolling(renderDashboard);
@@ -1077,7 +1104,7 @@ async function renderDashboard(r = state.route) {
 function headlineCard(m) {
   return `
     <div class="fixture-dateline"><span>${esc(m.match.stage || "Match winner")}</span><span>${fmtDateTime(m.closesAt)} <span class="dim">·</span> ${m.status === "open" ? "Closes in " + timeUntil(m.closesAt) : esc(m.status)}</span></div>
-    <div class="feature-teams"><div class="feature-team">${teamMark(m.match.home)}<h3>${esc(m.match.home.name)}</h3><span>HOME</span></div><div class="feature-versus">${m.match.status === "final" || m.match.status === "live" ? `<strong>${m.match.score?.home ?? 0} : ${m.match.score?.away ?? 0}</strong>` : "<i>v.</i>"}</div><div class="feature-team">${teamMark(m.match.away)}<h3>${esc(m.match.away.name)}</h3><span>AWAY</span></div></div>
+    <div class="feature-teams"><div class="feature-team">${teamMark(m.match.home)}<h3>${esc(m.match.home.name)}</h3><span>HOME</span></div><div class="feature-versus">${m.match.status === "final" || m.match.status === "live" ? `<strong>${m.match.score?.home ?? 0} : ${m.match.score?.away ?? 0}</strong>` : "<i>VS</i>"}</div><div class="feature-team">${teamMark(m.match.away)}<h3>${esc(m.match.away.name)}</h3><span>AWAY</span></div></div>
     <div class="feature-outcomes">${["home", "draw", "away"].map((o) => `<button class="outcome ${o}" data-go="${esc(m.id)}"><span>${o === "home" ? "Home win" : o === "away" ? "Away win" : "The draw"}</span><strong>${fmtPct(m.prices[o])}</strong><small>${fmtOdds(m.prices[o])}×</small></button>`).join("")}</div>
     <div class="fixture-bottom"><span>${fmtCkb(m.totalPoolCkb)} CKB in the pool</span><a class="text-link" href="#/market/${encodeURIComponent(m.id)}">Open the market ↗</a></div>
   `;
@@ -1428,7 +1455,7 @@ async function renderMarketDetail(r) {
     <div class="page-h">
       <h1>${esc(m.match.home.name)} <span class="dim" style="font-weight:400">vs</span> ${esc(m.match.away.name)}</h1>
       <span class="sub">${esc(competitionName(m.match))} · ${esc(m.match.stage)} · kickoff ${fmtDateTime(m.closesAt)}</span>
-      <div class="right"><span id="market-state">${marketStatusChip(m)}</span><a class="btn btn-ghost" href="#/markets">← Back</a></div>
+      <div class="right"><span id="market-state">${marketStatusChip(m)}</span><a class="btn btn-amber" href="#/matchday/${encodeURIComponent(m.id)}">Follow match ↗</a><a class="btn btn-ghost" href="#/markets">← Back</a></div>
     </div>
 
     <div class="match-card">
@@ -2059,6 +2086,7 @@ async function renderPortfolio() {
     <div class="page-h">
       <h1>Portfolio</h1>
       <span class="sub">All positions across all markets</span>
+      <a class="btn btn-glass right" href="#/matchday">Open Matchday ↗</a>
     </div>
 
     <div class="kpis" style="grid-template-columns:repeat(2,1fr)">
@@ -2660,11 +2688,49 @@ function renderAuth() {
 function renderLanding() {
   root.innerHTML = `
     <div class="landing-page">
-      <header class="landing-header"><a class="landing-brand" href="#/"><span class="brand-mark">S.</span><span class="wordmark">Streak<span>The football ledger</span></span></a><span class="landing-header-note">For the love of the game.<br>And a well-kept record.</span><button class="btn btn-amber" id="connect-top">Open your ledger ↗</button></header>
-      <main class="landing-main"><section class="landing-copy"><div class="eyebrow"><span class="red-dot"></span> A new chapter in football predictions</div><h1>A good instinct<br>deserves a<br><em>good record.</em></h1><p>A home for your football picks. Follow the fixtures, back your reading of the game, and build a streak worth putting on paper.</p><button class="btn btn-amber landing-cta" id="connect-main">Connect wallet & begin <span>↗</span></button><div class="landing-caption">Your wallet is your account. Your story starts here.</div><div id="connect-status" class="connect-status" role="status"></div></section>
-      <section class="book-scene" aria-label="The Streak daily ledger"><div class="book-shadow"></div><div class="ledger-book"><div class="book-spine"></div><div class="book-cover"><div class="book-edition">VOLUME I <span>EST. 2026</span></div><div class="cover-rule"></div><span class="book-title">The<br>Streak<br><em>Ledger.</em></span><div class="cover-rule short"></div><span class="book-subtitle">A RECORD OF FOOTBALL<br>& GOOD INSTINCTS</span><div class="book-emblem">S.</div><div class="book-bottom">ONE PICK. EVERY DAY.</div></div></div><div class="book-slip"><span class="eyebrow">A note to the reader</span><p>Fortune favours<br>the <em>consistent.</em></p><span class="slip-signature">Keep the run alive. — S.</span></div></section></main>
-      <section class="landing-principles"><div><span>01 / FIND YOUR FIXTURE</span><h2>Read the game.</h2><p>Football markets, live pools, and the figures that help you find your angle.</p></div><div><span>02 / MAKE YOUR MARK</span><h2>Back your instinct.</h2><p>Choose an outcome. Make a daily pick. Give a good run somewhere to begin.</p></div><div><span>03 / KEEP THE RECEIPT</span><h2>It’s on the record.</h2><p>Settled results with verifiable receipts, recorded on Nervos CKB.</p></div></section>
-      <footer class="landing-footer"><span>Streak & Co. <span>—</span> The football ledger</span><span class="network-tag">Nervos CKB · Pudge testnet</span><span>A little, every day.</span></footer>
+      <header class="landing-header">
+        <a class="landing-brand" href="#/" aria-label="Streak home"><img class="brand-mark" src="/mark.svg" alt=""><span class="wordmark">streak<span>Football. In play.</span></span></a>
+        <nav class="landing-nav" aria-label="Explore Streak"><button data-scroll="market-preview">Match centre</button><button data-scroll="how-it-works">How it works</button><button data-scroll="streak-feature">Daily streak</button></nav>
+        <button class="btn btn-glass" id="connect-top">Connect wallet <span aria-hidden="true">↗</span></button>
+      </header>
+      <main>
+        <section class="landing-copy">
+          <div class="hero-badge"><span class="red-dot"></span> Football instinct. On-chain conviction.</div>
+          <h1>You know the game.<br><em>Make your call.</em></h1>
+          <p>Every fixture has a story. Find your angle, back your pick,<br class="desktop-break"> and follow it all the way to the final whistle.</p>
+          <div class="hero-actions"><button class="btn btn-amber landing-cta" id="connect-main">Get in the game <span aria-hidden="true">↗</span></button><button class="btn btn-glass" data-scroll="market-preview">Explore Streak <span aria-hidden="true">↓</span></button></div>
+          <div class="landing-caption"><span class="pulse"></span> Built on Nervos CKB <span>·</span> Pudge testnet</div>
+          <div id="connect-status" class="connect-status" role="status"></div>
+        </section>
+        <section class="market-preview" id="market-preview" aria-label="Interactive market example">
+          <div class="preview-toolbar"><span class="preview-brand">S<span>/</span></span><span>THE MATCH CENTRE</span><span class="preview-example">Interactive preview · example data</span></div>
+          <div class="preview-content">
+            <div class="preview-fixture">
+              <div class="preview-match-meta"><span class="preview-tag">MATCH WINNER</span><span>Illustrative fixture</span></div>
+              <div class="preview-teams"><div><span class="club-badge club-home">N<span>FC</span></span><h2>Northside</h2><span>HOME</span></div><div class="preview-vs"><span>FOOTBALL</span><strong>VS</strong><span>90 MINUTES. YOUR CALL.</span></div><div><span class="club-badge club-away">S<span>FC</span></span><h2>Southbank</h2><span>AWAY</span></div></div>
+              <div class="preview-odds" role="group" aria-label="Try selecting a match outcome">
+                <button data-demo-pick="home" class="selected" aria-pressed="true"><span>1 <small>Northside</small></span><strong>2.10<span>×</span></strong></button>
+                <button data-demo-pick="draw" aria-pressed="false"><span>X <small>Draw</small></span><strong>3.40<span>×</span></strong></button>
+                <button data-demo-pick="away" aria-pressed="false"><span>2 <small>Southbank</small></span><strong>3.90<span>×</span></strong></button>
+              </div>
+              <div class="preview-pool"><span>Explore the odds. Choose your side.</span><span>1 / X / 2</span></div>
+            </div>
+            <aside class="preview-slip" aria-label="Example bet slip"><div class="preview-slip-heading"><span>Your pick</span><span class="slip-count">1</span></div><div class="demo-selection"><span class="red-dot"></span><div><strong id="demo-selection">Northside to win</strong><small>Northside vs Southbank</small></div><span id="demo-odds">2.10×</span></div><div class="demo-stake"><span>Example stake</span><strong>100 <small>CKB</small></strong></div><div class="demo-return" aria-live="polite"><span>Illustrative return</span><strong id="demo-return">210.00 <small>CKB</small></strong></div><button class="btn btn-amber" id="connect-preview">Connect to make a pick ↗</button><p>Try the outcome buttons. This preview places no bets. Actual pool odds and returns vary.</p></aside>
+          </div>
+          <div class="preview-footer"><span><span class="pulse"></span> Your match. Your market.</span><span>Verifiable results. From kickoff to settlement.</span></div>
+        </section>
+        <div class="landing-strip"><span>THE GAME, FROM EVERY ANGLE</span><span>Live markets</span><i>✳</i><span>Daily streaks</span><i>✳</i><span>On-chain results</span><i>✳</i><span>Your crew</span></div>
+        <section class="how-section" id="how-it-works"><div class="landing-section-heading"><div><span class="eyebrow">A better way to back your instinct</span><h2>From first pick<br>to <em>final whistle.</em></h2></div><p>Football up front. The details within reach.<br>Three steps to get started.</p></div>
+          <div class="how-grid">
+            <article class="how-card"><div class="how-art wallet-art" aria-hidden="true"><div class="mini-wallet"><span>YOUR WALLET</span><strong>You're connected <span>↗</span></strong><div><i></i><i></i><i></i><i></i></div></div><span class="art-tag">One wallet. Your account.</span></div><span class="step-number">01</span><h3>Bring your wallet.</h3><p>Connect your CKB wallet and add testnet funds. Your picks, balance and results in one place.</p></article>
+            <article class="how-card"><div class="how-art picks-art" aria-hidden="true"><div class="mini-odds"><span>HOME<strong>2.10×</strong></span><span class="picked">DRAW<strong>3.40×</strong><b>✓</b></span><span>AWAY<strong>3.90×</strong></span></div><span class="art-tag">Read the match. Find your angle.</span></div><span class="step-number">02</span><h3>Make it your match.</h3><p>Compare outcomes, explore the data and review your stake before confirming your pick.</p></article>
+            <article class="how-card"><div class="how-art result-art" aria-hidden="true"><div class="mini-result"><span>FINAL WHISTLE <b>✓</b></span><strong>Result confirmed</strong><div>SETTLED ON CKB <span>↗</span></div></div><span class="art-tag">Every result has a receipt.</span></div><span class="step-number">03</span><h3>Follow it through.</h3><p>Track your position through the match, then inspect the settlement and its on-chain receipt.</p></article>
+          </div>
+        </section>
+        <section class="streak-feature" id="streak-feature"><div class="streak-feature-copy"><span class="eyebrow">More than a match</span><h2>A little instinct.<br><em>A streak of your own.</em></h2><p>One daily pick. A run that tells your story. Track your form, compare with your crew and see where you stand.</p><button class="btn btn-glass" id="connect-streak">Start your streak <span aria-hidden="true">↗</span></button></div><div class="streak-art" aria-label="Example of a five-pick streak"><span class="streak-orbit orbit-one"></span><span class="streak-orbit orbit-two"></span><div class="streak-medallion"><span>DAILY STREAK</span><strong>5<span>↗</span></strong><span>PICKS IN A ROW</span></div><div class="streak-form"><span>✓</span><span>✓</span><span>✓</span><span>✓</span><span>✓</span><span>6</span><span>7</span></div><small>Example streak</small></div></section>
+        <section class="landing-finale"><span class="eyebrow">The next call is yours</span><h2>Football feels different<br>when <em>you're in it.</em></h2><button class="btn btn-amber" id="connect-bottom">Connect wallet <span aria-hidden="true">↗</span></button><p>Live pools. Daily picks. Verifiable results.</p></section>
+      </main>
+      <footer class="landing-footer"><a class="landing-brand" href="#/"><img class="brand-mark" src="/mark.svg" alt=""><span class="wordmark">streak</span></a><span>Football predictions on Nervos CKB</span><span class="network-tag">Pudge testnet</span></footer>
     </div>
   `;
   const go = async (btn) => {
@@ -2692,10 +2758,28 @@ function renderLanding() {
       toast(err.message || "Connection failed", "err");
     }
   };
-  const b1 = $("#connect-top"),
-    b2 = $("#connect-main");
-  if (b1) b1.onclick = () => go(b1);
-  if (b2) b2.onclick = () => go(b2);
+  root.querySelectorAll('[id^="connect-"]:is(button)').forEach((button) => {
+    button.onclick = () => go(button);
+  });
+  root.querySelectorAll("[data-scroll]").forEach((button) => {
+    button.onclick = () => document.getElementById(button.dataset.scroll)?.scrollIntoView({
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+      block: "start",
+    });
+  });
+  const demoOutcomes = { home: ["Northside to win", 2.1], draw: ["Match to end in a draw", 3.4], away: ["Southbank to win", 3.9] };
+  root.querySelectorAll("[data-demo-pick]").forEach((button) => {
+    button.onclick = () => {
+      const [label, odds] = demoOutcomes[button.dataset.demoPick];
+      root.querySelectorAll("[data-demo-pick]").forEach((other) => {
+        other.classList.toggle("selected", other === button);
+        other.setAttribute("aria-pressed", String(other === button));
+      });
+      $("#demo-selection").textContent = label;
+      $("#demo-odds").textContent = odds.toFixed(2) + "×";
+      $("#demo-return").innerHTML = `${(100 * odds).toFixed(2)} <small>CKB</small>`;
+    };
+  });
 }
 
 /** Optional display-name prompt (post-signup) and editor. */

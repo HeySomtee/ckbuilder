@@ -20,7 +20,7 @@ src/
   week5/
     scroll/          # Permanent on-chain microblog: every post is a real CKB cell
 products/
-  streak/            # Football prediction ledger (weeks 6–16)
+  streak/            # Football predictions and Matchday (weeks 6–17)
 reports/
   week-1.md          # Cell Model + Consensus + Address fundamentals
   week-2.md          # First real testnet transaction
@@ -38,6 +38,7 @@ reports/
   week-14.md         # Real multi-league football oracle — API-SPORTS + safe settlement
   week-15.md         # Market vs Machine — crowd, model and bookmaker intelligence
   week-16.md         # The football ledger — performance refactor, mobile redesign and benchmarks
+  week-17.md         # Streak Matchday — live context, pick tracking and a vivid new interface
 ```
 
 ## Weekly Index
@@ -60,6 +61,7 @@ reports/
 | 14 | Real multi-league football oracle — API-SPORTS + safe settlement | [reports/week-14.md](reports/week-14.md) | [products/streak](products/streak) |
 | 15 | Market vs Machine — crowd, model and bookmaker intelligence | [reports/week-15.md](reports/week-15.md) | [products/streak](products/streak) |
 | 16 | The football ledger — performance refactor, mobile redesign and benchmarks | [reports/week-16.md](reports/week-16.md) | [products/streak](products/streak) |
+| 17 | Streak Matchday — live timeline, lineups, statistics and pick tracking | [reports/week-17.md](reports/week-17.md) | [products/streak](products/streak) |
 
 ## Setup
 

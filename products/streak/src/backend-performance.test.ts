@@ -24,7 +24,7 @@ async function main() {
   const temp = mkdtempSync(join(tmpdir(), "streak-backend-"));
   process.env.STREAK_DB_FILE = join(temp, "db.json");
   process.env.MATCH_PROVIDER = "worldcup";
-  for (const name of ["SUPABASE_URL", "SUPABASE_KEY", "SUPABASE_DB_URL", "TELEGRAM_BOT_TOKEN", "API_SPORTS_KEY"])
+  for (const name of ["DATABASE_URL", "SUPABASE_URL", "SUPABASE_KEY", "SUPABASE_DB_URL", "TELEGRAM_BOT_TOKEN", "API_SPORTS_KEY"])
     process.env[name] = "";
   // No test can reach a remote provider, chain, notification account or database.
   const realFetch = globalThis.fetch;
@@ -100,6 +100,21 @@ async function main() {
     await get(`/api/markets/${marketId}/insights`);
     assert.equal(insightCalls, 1, "Concurrent insight page loads must share remote work");
     insights.resolve(null);
+
+    const matchday = deferred<any>();
+    let matchdayCalls = 0;
+    provider.fetchMatchday = () => { matchdayCalls++; return matchday.promise; };
+    const firstMatchday = await get(`/api/markets/${marketId}/matchday`);
+    assert.equal(firstMatchday.refreshing, true);
+    assert.equal(firstMatchday.matchday.events.state, "loading");
+    await Promise.all(Array.from({ length: 6 }, () => get(`/api/markets/${marketId}/matchday`)));
+    assert.equal(matchdayCalls, 1, "Matchday returns immediately and shares a blocked provider request");
+    assert.equal(resultsCalls, 0, "Matchday reads never run settlement");
+    const { emptyMatchday } = require("./matchday");
+    matchday.resolve(emptyMatchday(fixture.id, false));
+    await nextTurn();
+    assert.equal((await get(`/api/markets/${marketId}/matchday`)).matchday.events.state, "unavailable");
+    assert.equal((await fetch(base + "/api/markets/not-a-market/matchday")).status, 404);
 
     await store.update((db) => {
       const built = settlement.buildReceiptPayload(db, db.markets[0], db.treasury!);

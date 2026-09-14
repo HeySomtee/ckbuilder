@@ -71,6 +71,7 @@ import { provider } from "./providers";
 import type { ProviderStatus } from "./providers";
 import { AsyncSnapshotCache, within } from "./async-cache";
 import { composeMarketInsights } from "./insights";
+import { emptyMatchday, withMatchdayFreshness, MatchdayData } from "./matchday";
 import { initNotifications } from "./notifications";
 import { supaEnsureTable } from "./store_supabase";
 import {
@@ -560,6 +561,26 @@ async function handleMarketDetail(req: IncomingMessage, res: ServerResponse, id:
 }
 
 const insightRefreshes = new AsyncSnapshotCache<string, boolean>(60_000);
+const matchdayRefreshes = new AsyncSnapshotCache<string, MatchdayData>(15_000, 128, 20_000);
+
+async function handleMatchday(_req: IncomingMessage, res: ServerResponse, marketId: string): Promise<void> {
+  const context = await read((db) => {
+    const market = db.markets.find((row) => row.id === marketId);
+    const match = market && db.matches.find((row) => row.id === market.matchId);
+    return market && match ? { match, receipt: market.receipt ?? null } : null;
+  });
+  if (!context || !isActiveProviderMatch(context.match)) return sendJson(res, 404, { error: "Market not found." });
+  const { match, receipt } = context;
+  // Lifecycle changes invalidate the aggregate immediately; no remote I/O holds this response.
+  const result = provider.fetchMatchday
+    ? matchdayRefreshes.read(`${match.id}:${match.status}`, () => provider.fetchMatchday!(match))
+    : { value: emptyMatchday(match.id, false), refreshing: false };
+  sendJson(res, 200, {
+    matchday: withMatchdayFreshness(result.value ?? emptyMatchday(match.id, !!provider.fetchMatchday)),
+    refreshing: result.refreshing,
+    receipt: receipt ? { txHash: receipt.txHash, publishedAt: receipt.publishedAt } : null,
+  });
+}
 
 async function handleMarketInsights(
   _req: IncomingMessage,
@@ -1043,11 +1064,12 @@ export const server = createServer(async (req, res) => {
       if (direct) return await direct(req, res, url);
 
       // /api/markets/:id, /api/markets/:id/bet and /api/markets/:id/insights
-      const m = url.pathname.match(/^\/api\/markets\/([^\/]+)(?:\/(bet|insights))?$/);
+      const m = url.pathname.match(/^\/api\/markets\/([^\/]+)(?:\/(bet|insights|matchday))?$/);
       if (m) {
         const id = m[1];
         const sub = m[2];
         if (req.method === "GET" && !sub) return await handleMarketDetail(req, res, id);
+        if (req.method === "GET" && sub === "matchday") return await handleMatchday(req, res, id);
         if (req.method === "GET" && sub === "insights") {
           return await handleMarketInsights(req, res, id);
         }

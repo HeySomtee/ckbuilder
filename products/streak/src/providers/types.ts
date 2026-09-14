@@ -13,6 +13,7 @@
  */
 
 import type { Competition, Match, Outcome, ProviderMatchInsights } from "../types";
+import type { MatchdayData } from "../matchday";
 
 /**
  * A single fixture's live/final state, keyed by our internal match id in the
@@ -85,6 +86,8 @@ export interface MatchDataProvider {
   ownsMatch?(match: Match): boolean;
   /** Cached/on-demand pre-match analytics for providers that support them. */
   fetchInsights?(match: Match): Promise<ProviderMatchInsights | null>;
+  /** Observational live context; never used to settle bets. */
+  fetchMatchday?(match: Match): Promise<MatchdayData>;
   /** Quota-aware near-kickoff warming; implementations choose their own batch. */
   prefetchInsights?(matches: Match[]): Promise<void>;
   /** Synchronous cache read used while the DB write lock is held. */

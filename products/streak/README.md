@@ -1,13 +1,34 @@
-# Streak — The football ledger
+# Streak — Your game. Your call.
 
 > _On-chain multi-league football prediction-market terminal,
 > settled on the **Nervos CKB Pudge testnet**._
 
-Streak is a football prediction market presented as an elegant bookmaker's
-ledger. Anyone can open a market on a football fixture, anyone can take
+Streak is a football prediction market with a vivid dark interface and a live
+Matchday centre. Anyone can open a market on a football fixture, anyone can take
 any side, and every market settles automatically against the live oracle feed
 at full-time. The original daily-pick streak game is preserved as one feature
 on top of the new market engine.
+
+**Week 17:** [Report and desktop/mobile screenshots](../../reports/week-17.md).
+Open **Matchday** in the main navigation to follow scores, goals, cards,
+substitutions, confirmed lineups and match statistics. Each match keeps your
+picks beside the action and links to its receipt once settlement is published.
+
+Matchday detail uses the existing API-Football configuration. It opens 90 minutes
+before kickoff, checks competition coverage and shares cached provider requests.
+Missing data is labelled; delayed updates retain their last successful timestamp.
+These observations do not modify the frozen pre-match forecast or settle bets.
+
+```bash
+npm run test:matchday       # offline mappings, coverage, caches and failure states
+npm run test:browser        # isolated browser flow and screenshots in data/qa
+npm run check:matchday:live  # optional: read-only provider check; consumes API quota
+```
+
+Public API: `GET /api/markets/:id/matchday` returns section data, refresh state and
+the published receipt reference. Personal picks remain in the existing
+session-aware `GET /api/markets/:id` response. UI routes are `#/matchday` and
+`#/matchday/:marketId`.
 
 The on-chain design is modelled after two CKB references:
 

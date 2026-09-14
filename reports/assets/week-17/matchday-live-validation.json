@@ -1,0 +1,95 @@
+{
+  "checkedAt": "2026-09-14T08:55:53.537Z",
+  "fixtureId": "1557404",
+  "match": "Manchester United vs Manchester City",
+  "kickoff": "2026-09-13T15:30:00.000Z",
+  "providerStatus": "FT",
+  "scoreboard": {
+    "state": "ready",
+    "data": {
+      "status": "FT",
+      "label": "Match Finished",
+      "minute": 90,
+      "extra": null,
+      "home": 0,
+      "away": 1,
+      "regulation": {
+        "home": 0,
+        "away": 1
+      },
+      "venue": "Old Trafford"
+    },
+    "updatedAt": "2026-09-14T08:55:53.286Z",
+    "maxAgeSeconds": 330
+  },
+  "events": {
+    "state": "ready",
+    "count": 11
+  },
+  "lineups": {
+    "state": "ready",
+    "teams": [
+      {
+        "teamId": "33",
+        "formation": "4-2-3-1",
+        "starters": 11,
+        "substitutes": 9
+      },
+      {
+        "teamId": "50",
+        "formation": "4-2-3-1",
+        "starters": 11,
+        "substitutes": 9
+      }
+    ]
+  },
+  "statistics": {
+    "state": "ready",
+    "data": [
+      {
+        "key": "Ball Possession",
+        "label": "Possession",
+        "percent": true,
+        "home": 55,
+        "away": 45
+      },
+      {
+        "key": "Shots on Goal",
+        "label": "Shots on target",
+        "percent": false,
+        "home": 3,
+        "away": 2
+      },
+      {
+        "key": "Total Shots",
+        "label": "Total shots",
+        "percent": false,
+        "home": 16,
+        "away": 6
+      },
+      {
+        "key": "Corner Kicks",
+        "label": "Corners",
+        "percent": false,
+        "home": 6,
+        "away": 7
+      },
+      {
+        "key": "Fouls",
+        "label": "Fouls",
+        "percent": false,
+        "home": 17,
+        "away": 10
+      },
+      {
+        "key": "Yellow Cards",
+        "label": "Yellow cards",
+        "percent": false,
+        "home": 1,
+        "away": 2
+      }
+    ],
+    "updatedAt": "2026-09-14T08:55:53.537Z",
+    "maxAgeSeconds": 330
+  }
+}
