@@ -10,6 +10,12 @@ at full-time. The original daily-pick streak game is preserved as one feature
 on top of the new market engine.
 
 **Week 17:** [Report and desktop/mobile screenshots](../../reports/week-17.md).
+
+**Week 18:** [Rust contract prototype, deadline tests and evidence](../../reports/week-18.md).
+The prototype runs on an isolated local devnet and is not the app's treasury.
+
+**Future smart contracts:** [Design requirements and Solidity-pattern research](CONTRACT_DESIGN_NOTES.md).
+
 Open **Matchday** in the main navigation to follow scores, goals, cards,
 substitutions, confirmed lineups and match statistics. Each match keeps your
 picks beside the action and links to its receipt once settlement is published.

@@ -1,0 +1,13 @@
+{
+  "recordedAt": "2026-09-23T10:03:45.909Z",
+  "rust": "1.97.1",
+  "ckb": "0.210.0",
+  "vmTestFunctions": 10,
+  "vmCases": 57,
+  "devnetChecks": 17,
+  "successfulVmCycles": {
+    "min": 40558,
+    "max": 68205
+  },
+  "scope": "Local prototype. No mainnet or public testnet deployment. No complete betting payout contract."
+}

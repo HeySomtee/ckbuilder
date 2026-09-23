@@ -1,0 +1,164 @@
+{
+  "kind": "local-devnet",
+  "ckbVersion": "0.210.0",
+  "startedAt": "2026-09-23T10:03:33.290Z",
+  "checks": [
+    {
+      "name": "Native Rust scripts deployed",
+      "transaction": "0x34ce9503c33ac828d63a442d38bf67c9f30d2a329490ea074f1be4d5bbd80878"
+    },
+    {
+      "name": "An unrelated old header cannot prove timely admission",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 10 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#10 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 10 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#10 } })"
+      }
+    },
+    {
+      "name": "A timely stake can be verified after kickoff",
+      "deposit": "0x2376ae7e42cef9b0550a9d1de9ea93bb4c819122e72b806ae48afdd6955f164a",
+      "admission": "0xbd74103c5fd9a66317f67ab9783f26dcf5ea6906d38cfcd5f9ef41889ad3c075",
+      "creationTimestamp": "0x1a0cc010246",
+      "cutoff": 1790129023310
+    },
+    {
+      "name": "A committed late stake cannot become accepted",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 7 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#7 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 7 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#7 } })"
+      }
+    },
+    {
+      "name": "Late stake principal and storage refunded",
+      "transaction": "0x37ec49997f774baa92a028c71b5855a7647bddbb24d6f0e641aa2424a7779c2b",
+      "refundedShannons": "80000000000"
+    },
+    {
+      "name": "The same refunded stake cannot be spent twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x6b98ea9b7f771ac0c37bf939d7d8c256df8ecf69a019d44109b1400780b21add00000000))",
+        "data": "Resolve(Unknown(OutPoint(0x6b98ea9b7f771ac0c37bf939d7d8c256df8ecf69a019d44109b1400780b21add00000000)))"
+      }
+    },
+    {
+      "name": "Node consensus rejects timeout before since matures",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Transaction(Immature(Inputs[0]): the transaction is immature because of the since requirement)",
+        "data": "Verification(Error { kind: Transaction, inner: Immature(Inputs[0]): the transaction is immature because of the since requirement })"
+      }
+    },
+    {
+      "name": "A real non-admin secp256k1 signature cannot report a result",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#6 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#6 } })"
+      }
+    },
+    {
+      "name": "A prebuilt result may commit late but remains provisional",
+      "transaction": "0xe9db31708d4f226535cd46be5f199effc9cd887fc1d163aed2668e20f8da275f"
+    },
+    {
+      "name": "Late result cannot finalize even before cancellation",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 7 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#7 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 7 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#7 } })"
+      }
+    },
+    {
+      "name": "Anyone can cancel a late report and collect operator-funded reward",
+      "transaction": "0xa7ead49e4fb7ba45a22d1c310d3617d540353a533824bdbfdacae8628677629d",
+      "rewardShannons": "10000000000"
+    },
+    {
+      "name": "Accepted stake refunded after void without market fees",
+      "transaction": "0x63be6123a6ab7da4df7dfa363a3ad73718804f07c845234b4cfaab0f59a079a7",
+      "refundedShannons": "80000000000"
+    },
+    {
+      "name": "Cancelled market cannot be finalized",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 8 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#8 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 8 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#8 } })"
+      }
+    },
+    {
+      "name": "Cancellation cannot ignore a timely canonical result",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 7 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#7 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 7 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#7 } })"
+      }
+    },
+    {
+      "name": "Timely result verified later and unused reward returned to operator",
+      "submission": "0xac6f9084225fd4eddbc0122ea158d4d5ca32cf21ed418f7836319f5eed109e75",
+      "finalization": "0xc9f4d5b87679c730a7f3d8d7041eab45c32d78da4022e82fc86b5c8eaf6cd9b9",
+      "resultCreationTimestamp": "0x1a0cd4ac471",
+      "deadline": 1790150634362
+    },
+    {
+      "name": "Resolved market cannot pay the cancellation reward",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 8 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#8 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 8 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/b220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b.html#8 } })"
+      }
+    },
+    {
+      "name": "Cancellation committed first invalidates the competing result",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x9422e412620da58f785fb605c4acf7f42c6c795c4181290d73aed80ecaeffe8b00000000))",
+        "data": "Resolve(Unknown(OutPoint(0x9422e412620da58f785fb605c4acf7f42c6c795c4181290d73aed80ecaeffe8b00000000)))"
+      }
+    }
+  ],
+  "genesisHash": "0xcbb76ba556f7eb60a8c3b2fddc623d71cfd6e3d4e306a0071c3e9f8bc1c95b75",
+  "binaries": [
+    {
+      "name": "streak-protocol",
+      "bytes": 24592,
+      "sha256": "e0bdf601d96b1d8884c1887cbbab15b02a0202674a6f853456d92bc978e4775a",
+      "codeHash": "0xb220c6f2a362f03399a37927e1c56285e824ea498acc64b7b58cc6d9678dfe6b"
+    },
+    {
+      "name": "streak-guard",
+      "bytes": 12664,
+      "sha256": "0a0e8cb84736ce1da2db1ea1e671ca6facc6f2f949cdcc12e0d08a433e09cae5",
+      "codeHash": "0x096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada"
+    }
+  ],
+  "finishedAt": "2026-09-23T10:03:45.909Z",
+  "tip": {
+    "compact_target": "0x20010000",
+    "dao": "0x95dffc52c34bb22e3ecee3fd198a23004d6f7153148b0300009e2f8c7dfffe06",
+    "epoch": "0xa0000000013",
+    "extra_hash": "0xd3e943fd477b6db06fdc29d3faa2a079069b6f491146a677fbc4e0ea92b24503",
+    "hash": "0x6e8764af94458914c5658cd6bd59c694a39e5259604883a0b49c9621a6eb51ce",
+    "nonce": "0x0",
+    "number": "0xbe",
+    "parent_hash": "0xd2c9c91c93f41ed408705ad7ed8264f890ac72c0315a6ad9f3dc5bf36f451772",
+    "proposals_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "timestamp": "0x1a0cd4aef96",
+    "transactions_root": "0x93f3f5f5beb547b3fb58587eb5cfae09df827a5a84569c7f1008e46c5d1492b3",
+    "version": "0x0"
+  }
+}
