@@ -1,0 +1,357 @@
+{
+  "kind": "local-devnet",
+  "ckbVersion": "0.210.0",
+  "startedAt": "2026-09-28T07:51:49.581Z",
+  "checks": [
+    {
+      "name": "Native Rust scripts deployed",
+      "transaction": "0x41644e1d69ceb49fded90669af7e58f960206f9b0a0f800e5d3c6e69a618f75e"
+    },
+    {
+      "name": "Market and all four unique shards created",
+      "transaction": "0x3854998e27193cd673fd5221ca578c19e763cf1b6794748fb8c054c757300f7b"
+    },
+    {
+      "name": "Independent wallets submitted deposits into two shards before either committed",
+      "transactions": [
+        "0xcc6ef7c124622ab3d1e663c19660a06ba2f9e70e134d13e2ed470cd0d77663da",
+        "0xbfe9faacb2150ba5c7b655762c3f557d47df7ebc73c442e73fd4122d4dd58d48"
+      ]
+    },
+    {
+      "name": "Competing builders cannot consume the same shard twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0xcc6ef7c124622ab3d1e663c19660a06ba2f9e70e134d13e2ed470cd0d77663da00000000))",
+        "data": "Resolve(Unknown(OutPoint(0xcc6ef7c124622ab3d1e663c19660a06ba2f9e70e134d13e2ed470cd0d77663da00000000)))"
+      }
+    },
+    {
+      "name": "Late deposit remains provisional and cannot change accepted totals"
+    },
+    {
+      "name": "Closure cannot omit a configured shard",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 5 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#5 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 5 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#5 } })"
+      }
+    },
+    {
+      "name": "Builder cannot invent the frozen winning denominator",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 8 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#8 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 8 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#8 } })"
+      }
+    },
+    {
+      "name": "Closure checks all shards, refunds the late stake and freezes global totals",
+      "totalsShannons": [
+        "50000000000",
+        "20000000000",
+        "10100000000"
+      ],
+      "shares": 5
+    },
+    {
+      "name": "Underpayment cannot release a share",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#9 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#9 } })"
+      }
+    },
+    {
+      "name": "Redemption cannot redirect the owner payment",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#6 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#6 } })"
+      }
+    },
+    {
+      "name": "Share burned and exact owner entitlement paid",
+      "id": 4,
+      "paidShannons": "50000000000",
+      "transaction": "0x474c75200e51fc396986e54018f2a886f176bcfd6baeb5020351634505f37b9e"
+    },
+    {
+      "name": "Consumed share cannot be redeemed twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x8f1a81dc637eb4faa745158a38f3d64184374987529b8b79021be4ad9732742500000000))",
+        "data": "Resolve(Unknown(OutPoint(0x8f1a81dc637eb4faa745158a38f3d64184374987529b8b79021be4ad9732742500000000)))"
+      }
+    },
+    {
+      "name": "Share burned and exact owner entitlement paid",
+      "id": 3,
+      "paidShannons": "97518200000",
+      "transaction": "0x730a74c04731e4e4734cc18a64fb6f76476a63fe587d19fbdef9bb69f72f4cc9"
+    },
+    {
+      "name": "Consumed share cannot be redeemed twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x474c75200e51fc396986e54018f2a886f176bcfd6baeb5020351634505f37b9e00000000))",
+        "data": "Resolve(Unknown(OutPoint(0x474c75200e51fc396986e54018f2a886f176bcfd6baeb5020351634505f37b9e00000000)))"
+      }
+    },
+    {
+      "name": "Share burned and exact owner entitlement paid",
+      "id": 2,
+      "paidShannons": "50000000000",
+      "transaction": "0x8fc36970024d0b4c7158c3dcd19fa97e84504482a6434abe0d6f39cd3ce45f7e"
+    },
+    {
+      "name": "Consumed share cannot be redeemed twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x730a74c04731e4e4734cc18a64fb6f76476a63fe587d19fbdef9bb69f72f4cc900000000))",
+        "data": "Resolve(Unknown(OutPoint(0x730a74c04731e4e4734cc18a64fb6f76476a63fe587d19fbdef9bb69f72f4cc900000000)))"
+      }
+    },
+    {
+      "name": "Share burned and exact owner entitlement paid",
+      "id": 1,
+      "paidShannons": "65839400000",
+      "transaction": "0x5fcf9e97361998c028d3af1560eb1fc67b47d074d9cdc8fa8cd0dacef0a8cedd"
+    },
+    {
+      "name": "Consumed share cannot be redeemed twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x8fc36970024d0b4c7158c3dcd19fa97e84504482a6434abe0d6f39cd3ce45f7e00000000))",
+        "data": "Resolve(Unknown(OutPoint(0x8fc36970024d0b4c7158c3dcd19fa97e84504482a6434abe0d6f39cd3ce45f7e00000000)))"
+      }
+    },
+    {
+      "name": "Share burned and exact owner entitlement paid",
+      "id": 0,
+      "paidShannons": "65839400000",
+      "transaction": "0x9a7c853b29831fd79d115c9866b46fe5421257c83349227d9534b5cb0dd14ac3"
+    },
+    {
+      "name": "Consumed share cannot be redeemed twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x5fcf9e97361998c028d3af1560eb1fc67b47d074d9cdc8fa8cd0dacef0a8cedd00000000))",
+        "data": "Resolve(Unknown(OutPoint(0x5fcf9e97361998c028d3af1560eb1fc67b47d074d9cdc8fa8cd0dacef0a8cedd00000000)))"
+      }
+    },
+    {
+      "name": "Only after all claims, reserve and rounding dust returned to sponsor",
+      "capacity": "480000000000",
+      "transaction": "0x69b9b3da909caecdd7e6bd86cea658a237f4852322d6479456cf9106663c69de"
+    },
+    {
+      "name": "Market and all four unique shards created",
+      "transaction": "0x2dca66d125118ec8de1e7143a5fad8d72f7502d1a29cea90192909af6073d2fa"
+    },
+    {
+      "name": "Consensus rejects a premature six-hour cancellation",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Transaction(Immature(Inputs[0]): the transaction is immature because of the since requirement)",
+        "data": "Verification(Error { kind: Transaction, inner: Immature(Inputs[0]): the transaction is immature because of the since requirement })"
+      }
+    },
+    {
+      "name": "Underpayment cannot release a share",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#9 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#9 } })"
+      }
+    },
+    {
+      "name": "Redemption cannot redirect the owner payment",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#6 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#6 } })"
+      }
+    },
+    {
+      "name": "Share burned and exact owner entitlement paid",
+      "id": 0,
+      "paidShannons": "60000000000",
+      "transaction": "0x80b20080b8ddbc966694af4386ddaa0a8bf96d190e103c2b1d65df531c024d84"
+    },
+    {
+      "name": "Consumed share cannot be redeemed twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x61f1cbc0c7623085e5b891134ecd17901a240f9cb7c6ea357adf23726c723c2a00000000))",
+        "data": "Resolve(Unknown(OutPoint(0x61f1cbc0c7623085e5b891134ecd17901a240f9cb7c6ea357adf23726c723c2a00000000)))"
+      }
+    },
+    {
+      "name": "Share burned and exact owner entitlement paid",
+      "id": 1,
+      "paidShannons": "70000000000",
+      "transaction": "0xb1dbc8f5e404c17336ad5a7bfe00c5eb23618ddd7d70d42f6cdbcff228653337"
+    },
+    {
+      "name": "Consumed share cannot be redeemed twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x80b20080b8ddbc966694af4386ddaa0a8bf96d190e103c2b1d65df531c024d8400000000))",
+        "data": "Resolve(Unknown(OutPoint(0x80b20080b8ddbc966694af4386ddaa0a8bf96d190e103c2b1d65df531c024d8400000000)))"
+      }
+    },
+    {
+      "name": "Only after all claims, reserve and rounding dust returned to sponsor",
+      "capacity": "490000000000",
+      "transaction": "0xbba8a28dc53564a614d82b557a0f6cbdaed8a0d877a4496b9ebc26c077b5719e"
+    },
+    {
+      "name": "Unresolved market voided with full principal and share storage refunds"
+    },
+    {
+      "name": "Market and all four unique shards created",
+      "transaction": "0x918023125c52b59d3690d83ff4add9fdebd975a3dae5e6b1b41cac6e8fb0aa65"
+    },
+    {
+      "name": "Underpayment cannot release a share",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#9 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#9 } })"
+      }
+    },
+    {
+      "name": "Redemption cannot redirect the owner payment",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#6 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#6 } })"
+      }
+    },
+    {
+      "name": "Share burned and exact owner entitlement paid",
+      "id": 0,
+      "paidShannons": "60000000000",
+      "transaction": "0xb8469d3d69ba1c4b7310448e6841dd7f6d72fbc1e0ad26357cd4215b227beb60"
+    },
+    {
+      "name": "Consumed share cannot be redeemed twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0xac063e6321c13e65488d7054e5cc7399a9227e3623742a1162d8ad9ba72c448600000000))",
+        "data": "Resolve(Unknown(OutPoint(0xac063e6321c13e65488d7054e5cc7399a9227e3623742a1162d8ad9ba72c448600000000)))"
+      }
+    },
+    {
+      "name": "Only after all claims, reserve and rounding dust returned to sponsor",
+      "capacity": "500000000000",
+      "transaction": "0x127f951b10798bca387bb106c10a64d10c9d720dd696f021c92b9f976d0e1b62"
+    },
+    {
+      "name": "An empty winning outcome refunds principal instead of dividing by zero"
+    },
+    {
+      "name": "Market and all four unique shards created",
+      "transaction": "0xb83e546b3c441a47e46b1a30460c4cc78c279ab05488f3a1f14b172cd4808a2f"
+    },
+    {
+      "name": "A late oracle report cannot resolve the market before someone voids it",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 7 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#7 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 7 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#7 } })"
+      }
+    },
+    {
+      "name": "Underpayment cannot release a share",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#9 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#9 } })"
+      }
+    },
+    {
+      "name": "Redemption cannot redirect the owner payment",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#6 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149.html#6 } })"
+      }
+    },
+    {
+      "name": "Share burned and exact owner entitlement paid",
+      "id": 0,
+      "paidShannons": "60000000000",
+      "transaction": "0x556c92058cf0a0bfed55905ae5ad653bdf5ea53c021d08eedbefed70729df5d9"
+    },
+    {
+      "name": "Consumed share cannot be redeemed twice",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x31ff2af1679aba20c36d9213d5757ea97d247c5ec01f7d0f9fd9b3c69d88f38400000000))",
+        "data": "Resolve(Unknown(OutPoint(0x31ff2af1679aba20c36d9213d5757ea97d247c5ec01f7d0f9fd9b3c69d88f38400000000)))"
+      }
+    },
+    {
+      "name": "Only after all claims, reserve and rounding dust returned to sponsor",
+      "capacity": "490000000000",
+      "transaction": "0x8fd33f8fc3bc4ac473cce58bd00ae2cf0066f2d0aa0d00400cc66c8f65402660"
+    },
+    {
+      "name": "Late oracle report takes the rewarded void path with no betting fees"
+    }
+  ],
+  "genesisHash": "0x12a7c0fd1971c46a68514fe811ac2598ed277f99b1d3d058bd517de283accbc7",
+  "binaries": [
+    {
+      "name": "streak-protocol",
+      "bytes": 30560,
+      "sha256": "566f1664e4bf92d55ca4b6c4667f8606edc8d02dcf9878d81eb46051ccca35cd",
+      "codeHash": "0x0e0195498fcd343b5940dc10065047aa52094c3f7516bc6ccc5265ef32d4c149"
+    },
+    {
+      "name": "streak-guard",
+      "bytes": 12664,
+      "sha256": "0a0e8cb84736ce1da2db1ea1e671ca6facc6f2f949cdcc12e0d08a433e09cae5",
+      "codeHash": "0x096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada"
+    }
+  ],
+  "finishedAt": "2026-09-28T07:52:13.849Z",
+  "tip": {
+    "compact_target": "0x20010000",
+    "dao": "0x1671768c83a3bc2e5f75b559028c230098400926d5ac050000132e05ae00ff06",
+    "epoch": "0xa000500001e",
+    "extra_hash": "0x5aa12ac5b9acf93a9f9f9dcbec1c546dbb75155118f6e48e48df4bd2f7ec7adc",
+    "hash": "0xb83778161c9018a270926b1b81d7509f4e45fc9c368c238f333ac865de0e8c8a",
+    "nonce": "0x0",
+    "number": "0x131",
+    "parent_hash": "0xbcbe421ae8584ac26260a257f8ad45dcc9b70644d55f048cb6d7268d0b0ca69b",
+    "proposals_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "timestamp": "0x1a0e7dc0f31",
+    "transactions_root": "0xf7557c37726364fd68efce641d0fd0f9ce284d6a230bb604f84b6421929d5212",
+    "version": "0x0"
+  }
+}

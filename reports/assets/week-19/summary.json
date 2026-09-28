@@ -1,0 +1,15 @@
+{
+  "recordedAt": "2026-09-28T07:52:13.849Z",
+  "rust": "1.97.1",
+  "ckb": "0.210.0",
+  "vmTestFunctions": 7,
+  "vmCases": 53,
+  "devnetChecks": 46,
+  "successfulVmCycles": {
+    "min": 57107,
+    "max": 705866
+  },
+  "scope": "Local prototype. No mainnet or public testnet deployment. Bounded sharded settlement prototype; no production deployment.",
+  "accountingTests": 4,
+  "deterministicPortfolios": 1000
+}

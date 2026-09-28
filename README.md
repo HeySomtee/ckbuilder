@@ -21,6 +21,8 @@ src/
     scroll/          # Permanent on-chain microblog: every post is a real CKB cell
   week18/
     contract-lab/    # Native Rust stake admission, result deadlines and refunds
+  week19/
+    contract-lab/    # Sharded admission, complete pool accounting and redemption
 products/
   streak/            # Football predictions and Matchday (weeks 6–17)
 reports/
@@ -42,6 +44,7 @@ reports/
   week-16.md         # The football ledger — performance refactor, mobile redesign and benchmarks
   week-17.md         # Streak Matchday — live context, pick tracking and a vivid new interface
   week-18.md         # Rust contract foundations: admission, deadlines and refunds
+  week-19.md         # Sharded parimutuel pools, backed shares and payouts
 ```
 
 ## Weekly Index
@@ -66,6 +69,7 @@ reports/
 | 16 | The football ledger — performance refactor, mobile redesign and benchmarks | [reports/week-16.md](reports/week-16.md) | [products/streak](products/streak) |
 | 17 | Streak Matchday — live timeline, lineups, statistics and pick tracking | [reports/week-17.md](reports/week-17.md) | [products/streak](products/streak) |
 | 18 | Rust contracts: stake admission, result deadlines and refunds | [reports/week-18.md](reports/week-18.md) | [src/week18/contract-lab](src/week18/contract-lab) |
+| 19 | Sharded parimutuel pools, backed shares and payouts | [reports/week-19.md](reports/week-19.md) | [src/week19/contract-lab](src/week19/contract-lab) |
 
 ## Setup
 
