@@ -1,0 +1,171 @@
+{
+  "kind": "local-devnet",
+  "ckbVersion": "0.210.0",
+  "startedAt": "2026-10-07T05:29:19.824Z",
+  "checks": [
+    {
+      "name": "Native Rust scripts deployed",
+      "transaction": "0x7ffbc746a89656a5745983cd5de3be3008d34260639a921b26bec055613368b5"
+    },
+    {
+      "name": "market-created",
+      "transaction": "0x922225266002cad691e85571a17ddf8b856849a2ae47b3bfe4ab1bec38a69e17",
+      "cutoff": 1791322169844
+    },
+    {
+      "name": "stake-committed",
+      "transaction": "0x0329fb8c255b06bc5d440d4cd6d933f1557151c69d7c037f0e6e4c647722715a",
+      "shard": 0,
+      "outcome": 0,
+      "principal": "10000000000",
+      "owner": "0xc219351b150b900e50a7039f1e448b844110927e5fd9bd30425806cb8ddff1fd"
+    },
+    {
+      "name": "stake-committed",
+      "transaction": "0xe1f26a4efa3fedd623f7b42108f2d04f6ef20c892f18cf6e30cdd80b66987eee",
+      "shard": 1,
+      "outcome": 0,
+      "principal": "30000000000",
+      "owner": "0x32e555f3ff8e135cece1351a6a2971518392c1e30375c1e006ad0ce8eac07947"
+    },
+    {
+      "name": "stake-committed",
+      "transaction": "0xec7bd8e5acd5f6a5886f8109ac5a71e9461311d1ce2c5de767f3412008847608",
+      "shard": 2,
+      "outcome": 1,
+      "principal": "20000000000",
+      "owner": "0xc219351b150b900e50a7039f1e448b844110927e5fd9bd30425806cb8ddff1fd"
+    },
+    {
+      "name": "oracle-report",
+      "transaction": "0xcd3002b34b4c2e906b2460a20a996f7667e9eaa972294d4a54e2df604f130fc2",
+      "outcome": 0
+    },
+    {
+      "name": "Settlement rejects an underfunded claim",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86.html#9 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86.html#9 } })"
+      }
+    },
+    {
+      "name": "All entitlements funded atomically",
+      "transaction": "0x9b0778054a6c1d43c1961e82106842b0a20d4ac530b6f611bb343912fbbd3847"
+    },
+    {
+      "name": "Reserve recovered while all claims remain unspent"
+    },
+    {
+      "name": "Claim cannot redirect payment",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86.html#6 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 6 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86.html#6 } })"
+      }
+    },
+    {
+      "name": "Claim must return its entire capacity",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Script(TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86.html#9 })",
+        "data": "Verification(Error { kind: Script, inner: TransactionScriptError { source: Inputs[0].Type, cause: ValidationFailure: see error code 9 on page https://nervosnetwork.github.io/ckb-script-error-codes/by-data-hash/5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86.html#9 } })"
+      }
+    },
+    {
+      "name": "Two independent winning claims submitted before either committed",
+      "transactions": [
+        "0xac7424420a766e11654235c6561adf3fdb3fa40c4969a547e4d3dc53ba9d2e1c",
+        "0x085257566734bf527c8d0fbe360a1dc24a352cf305cd308be1d9d87261d7b563"
+      ]
+    },
+    {
+      "name": "Claim replay rejected",
+      "rejected": true,
+      "error": {
+        "code": -301,
+        "message": "TransactionFailedToResolve: Resolve failed Unknown(OutPoint(0x9b0778054a6c1d43c1961e82106842b0a20d4ac530b6f611bb343912fbbd384701000000))",
+        "data": "Resolve(Unknown(OutPoint(0x9b0778054a6c1d43c1961e82106842b0a20d4ac530b6f611bb343912fbbd384701000000)))"
+      }
+    },
+    {
+      "name": "Losing claim returns exact storage"
+    },
+    {
+      "name": "market-created",
+      "transaction": "0x406139e739e1e97dc4dff01195538fd769a050f2dd5c14625d2da66c7a7f644d",
+      "cutoff": 1791322180903
+    },
+    {
+      "name": "stake-committed",
+      "transaction": "0x94f43233544f0ad7cca192c338a0ad48c7687963cb7bf2e8c60138a0cd457bfb",
+      "shard": 0,
+      "outcome": 1,
+      "principal": "10000000000",
+      "owner": "0xc219351b150b900e50a7039f1e448b844110927e5fd9bd30425806cb8ddff1fd"
+    },
+    {
+      "name": "Premature timeout rejected by consensus",
+      "rejected": true,
+      "error": {
+        "code": -302,
+        "message": "TransactionFailedToVerify: Verification failed Transaction(Immature(Inputs[0]): the transaction is immature because of the since requirement)",
+        "data": "Verification(Error { kind: Transaction, inner: Immature(Inputs[0]): the transaction is immature because of the since requirement })"
+      }
+    },
+    {
+      "name": "Six-hour timeout refund has no pool dependency or betting fees",
+      "transaction": "0xc7d7397d0c5b7f8a2394ec6e19c66697f7e22704e80c15d595dfbb8f7d995672"
+    },
+    {
+      "name": "market-created",
+      "transaction": "0xf69e0427b102c7b0a0a654c375df41ceb8401672a306466a34c44ede262756e5",
+      "cutoff": 1791343780950
+    },
+    {
+      "name": "stake-committed",
+      "transaction": "0xd025a381abf7e3825d0e62f1e79411cb304e378ac15322ea55957385e49c680b",
+      "shard": 0,
+      "outcome": 1,
+      "principal": "10000000000",
+      "owner": "0xc219351b150b900e50a7039f1e448b844110927e5fd9bd30425806cb8ddff1fd"
+    },
+    {
+      "name": "Unknown late bettor refund lock recovered from chain history without a database",
+      "transaction": "0xe036a91c07460428a6525e4d95585e480c2cd22fca45c0c66048f0a843edc491"
+    }
+  ],
+  "genesisHash": "0xde10347c6ccbb9ed1f270c6562ed7883cc8768c8fdf0263406de7f9c5ea151e8",
+  "binaries": [
+    {
+      "name": "streak-protocol",
+      "bytes": 30016,
+      "sha256": "a7f9007a92750816093eb9fb31a2cc045d2bc4e8c68be9a789c841fcd798c2a1",
+      "codeHash": "0x5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86"
+    },
+    {
+      "name": "streak-guard",
+      "bytes": 12664,
+      "sha256": "0a0e8cb84736ce1da2db1ea1e671ca6facc6f2f949cdcc12e0d08a433e09cae5",
+      "codeHash": "0x096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada"
+    }
+  ],
+  "finishedAt": "2026-10-07T05:29:37.562Z",
+  "tip": {
+    "compact_target": "0x20010000",
+    "dao": "0xe807f96ffa1ab32e76290139408a2300f4773090c9b503000079f2f80d00ff06",
+    "epoch": "0xa0009000013",
+    "extra_hash": "0x4373f829087cac52b5ccbfc808a422c96e41bfd60f4fad4ffef36cccac08ee19",
+    "hash": "0x1267b07ad3977c8c22a24861f290d6e0495e3570e3408b8c673bd3cfb5213173",
+    "nonce": "0x0",
+    "number": "0xc7",
+    "parent_hash": "0x5f367b5e48d994e81e1fede290cf74dcb090a46b0b5406a358ccf2a4475968b7",
+    "proposals_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "timestamp": "0x1a115b27f69",
+    "transactions_root": "0x7059a2f41a8a4394036cc92c0c5ee5130215ade4fcf09c92c665580875bfa072",
+    "version": "0x0"
+  }
+}

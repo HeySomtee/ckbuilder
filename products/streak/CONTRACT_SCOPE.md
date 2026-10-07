@@ -265,6 +265,31 @@ See the lab README for encodings, fixed transaction shapes, test boundaries,
 storage costs, admin identity pinning, and remaining production gaps. These
 contracts are not integrated into the deployed Streak app.
 
+## Week 19 and Week 20 implementation status
+
+The bounded Rust experiments now implement four shards, eight bets per shard,
+and atomic closure that checks every designated shard. Accepted ownership
+records remain in shards until closure. Redeemable cells are minted at closure,
+not immediately on deposit, and cannot transfer or split.
+
+Week 19 consolidated backing into one payout cell. Week 20 instead funds every
+claim for its exact entitlement plus storage during settlement. A claim spends
+only itself and separate wallet fee inputs; no shared pool cell or application
+database is required. Operator reserve recovery is separate from claims. Direct
+payments at closure remain a simpler alternative if deferred claiming is not
+needed by the product.
+
+Week 20's scripts and independent claims were exercised on public Pudge testnet.
+This is a synthetic contract fixture, not a production football oracle or a
+migration of Streak's custodial backend. The deadline policy remains actual
+result commitment before kickoff plus six hours, with later verification
+permitted. The 32-bet limit, per-market admin pinning, fee-beneficiary policy,
+wallet limits and trusted oracle remain explicit review items.
+
+See [the Week 20 report](../../reports/week-20.md) for confirmed settlement and
+claim transaction hashes, and [the lab](../../src/week20/contract-lab/README.md)
+for the layout, wallet demo and standalone claim command.
+
 ## Initial Solidity reference comparison
 
 These are design references for a Rust/CKB implementation, not selected EVM

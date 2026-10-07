@@ -1,0 +1,65 @@
+{
+  "network": "testnet",
+  "rpc": "https://testnet.ckb.dev/",
+  "protocolHash": "0x5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86",
+  "guardHash": "0x096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada",
+  "codeDeps": [
+    {
+      "outPoint": {
+        "txHash": "0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11",
+        "index": 0
+      },
+      "depType": "code"
+    },
+    {
+      "outPoint": {
+        "txHash": "0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11",
+        "index": 1
+      },
+      "depType": "code"
+    }
+  ],
+  "deployment": "0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11",
+  "markets": [
+    {
+      "label": "Week 20 settlement demonstration",
+      "cutoff": 1791350531570,
+      "type": {
+        "codeHash": "0x5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86",
+        "hashType": "data2",
+        "args": "0x76e7c62e09a429c2b32e5be178e9338f6115a9f61af91ea950420ab572137fab0100000024b752154da8dc3af990ba8b6d70f31de451c3c4660da8b92955a3acf14de81df2e5cf14a1010000096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada24b752154da8dc3af990ba8b6d70f31de451c3c4660da8b92955a3acf14de81d5d40d9cc280a1992077f94ed313e34171379e40c14cc80ad0fabbad8a5dfd689"
+      },
+      "creation": "0x7c63d1ecea9184896dae2ef8eb331813c84c1dab02c3188fb64aefc26dfb2fe8"
+    },
+    {
+      "label": "Expired empty market: public timeout check",
+      "cutoff": 1791264290037,
+      "type": {
+        "codeHash": "0x5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86",
+        "hashType": "data2",
+        "args": "0x4a1ab166afc26647d37ff0a156d5192144746e1f932d538f933807983ed27c070100000024b752154da8dc3af990ba8b6d70f31de451c3c4660da8b92955a3acf14de81df5f4ab0fa1010000096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada24b752154da8dc3af990ba8b6d70f31de451c3c4660da8b92955a3acf14de81d5d40d9cc280a1992077f94ed313e34171379e40c14cc80ad0fabbad8a5dfd689"
+      },
+      "creation": "0x3427f48effe7f72fc46aca7b57e18af1d9fdd3e336d53afe88c097eba31bb1ad"
+    },
+    {
+      "label": "Shared browser/CLI builders: public verification",
+      "cutoff": 1791351033465,
+      "type": {
+        "codeHash": "0x5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86",
+        "hashType": "data2",
+        "args": "0x3427f48effe7f72fc46aca7b57e18af1d9fdd3e336d53afe88c097eba31bb1ad0500000024b752154da8dc3af990ba8b6d70f31de451c3c4660da8b92955a3acf14de81d798ed714a1010000096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada24b752154da8dc3af990ba8b6d70f31de451c3c4660da8b92955a3acf14de81d5d40d9cc280a1992077f94ed313e34171379e40c14cc80ad0fabbad8a5dfd689"
+      },
+      "creation": "0x9b3cef9d3a821a119cd2511d044b7de7511d9fe064554d5b9e211a6437250874"
+    },
+    {
+      "label": "Reviewer sandbox / synthetic fixture",
+      "cutoff": 1791437754194,
+      "type": {
+        "codeHash": "0x5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86",
+        "hashType": "data2",
+        "args": "0x0842772caae670c817ee0ef33405ddab5cdd43b42532b6e18f5e28688c5269940100000024b752154da8dc3af990ba8b6d70f31de451c3c4660da8b92955a3acf14de81d52cf021aa1010000096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada24b752154da8dc3af990ba8b6d70f31de451c3c4660da8b92955a3acf14de81d5d40d9cc280a1992077f94ed313e34171379e40c14cc80ad0fabbad8a5dfd689"
+      },
+      "creation": "0xbedda214ac9d9349f67dff5315fc41e2e4fef82463c31db3517ca7c52504e568"
+    }
+  ]
+}

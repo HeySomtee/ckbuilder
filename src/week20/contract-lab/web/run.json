@@ -1,0 +1,253 @@
+{
+  "network": "CKB Pudge testnet",
+  "rpc": "https://testnet.ckb.dev/",
+  "startedAt": "2026-10-07T05:16:30.443Z",
+  "checks": [
+    {
+      "name": "broadcast",
+      "transaction": "0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11"
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0x76e7c62e09a429c2b32e5be178e9338f6115a9f61af91ea950420ab572137fab"
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0x7c63d1ecea9184896dae2ef8eb331813c84c1dab02c3188fb64aefc26dfb2fe8"
+    },
+    {
+      "name": "market-created",
+      "transaction": "0x7c63d1ecea9184896dae2ef8eb331813c84c1dab02c3188fb64aefc26dfb2fe8",
+      "cutoff": 1791350531570
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0xc88f0037931d608590bd75f5e636cb7672a4509d25b42ff1790e55ca81922d6c"
+    },
+    {
+      "name": "stake-committed",
+      "transaction": "0xc88f0037931d608590bd75f5e636cb7672a4509d25b42ff1790e55ca81922d6c",
+      "shard": 0,
+      "outcome": 0,
+      "principal": "10000000000",
+      "owner": "0x5d40d9cc280a1992077f94ed313e34171379e40c14cc80ad0fabbad8a5dfd689"
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0x601c6632dfe7c709d45b9fa5158e675a204a4a62e0498f458a5c2fadf91ac395"
+    },
+    {
+      "name": "stake-committed",
+      "transaction": "0x601c6632dfe7c709d45b9fa5158e675a204a4a62e0498f458a5c2fadf91ac395",
+      "shard": 1,
+      "outcome": 0,
+      "principal": "30000000000",
+      "owner": "0x24b752154da8dc3af990ba8b6d70f31de451c3c4660da8b92955a3acf14de81d"
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0x9a9f82685231b6bc45cb34fd0b6bd8f7fa48d545edb6eb902c341030b7200088"
+    },
+    {
+      "name": "stake-committed",
+      "transaction": "0x9a9f82685231b6bc45cb34fd0b6bd8f7fa48d545edb6eb902c341030b7200088",
+      "shard": 2,
+      "outcome": 1,
+      "principal": "20000000000",
+      "owner": "0x5d40d9cc280a1992077f94ed313e34171379e40c14cc80ad0fabbad8a5dfd689"
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0xd7da3ba21fa848671647ed1911974f8b06866ab51c66765f0b5ba48083c1dcfd"
+    },
+    {
+      "name": "oracle-report",
+      "transaction": "0xd7da3ba21fa848671647ed1911974f8b06866ab51c66765f0b5ba48083c1dcfd",
+      "outcome": 0
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0x71b73eafb37d82e2658aded58434bf9fc0b8d5e07c1dfe58fe991344710f23d7"
+    },
+    {
+      "name": "settlement-confirmed",
+      "transaction": "0x71b73eafb37d82e2658aded58434bf9fc0b8d5e07c1dfe58fe991344710f23d7",
+      "entitlements": [
+        "46950000000",
+        "76650000000",
+        "32100000000"
+      ],
+      "totals": [
+        "40000000000",
+        "20000000000",
+        "0"
+      ]
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0x25eb24b806aeb19daa85b5e1d52b6f1d48d107cfadce543377d99b6d33a0cc36"
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0x30bd3e742399b9690a646d28002b8209ebc7264245647d06cca3ff613d4f093d"
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0x4a1ab166afc26647d37ff0a156d5192144746e1f932d538f933807983ed27c07"
+    },
+    {
+      "name": "independent-winning-claims-confirmed",
+      "transactions": [
+        "0x30bd3e742399b9690a646d28002b8209ebc7264245647d06cca3ff613d4f093d",
+        "0x4a1ab166afc26647d37ff0a156d5192144746e1f932d538f933807983ed27c07"
+      ],
+      "commonInputs": 0,
+      "applicationBackendUsed": false
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0x724a61703a97869834447fa72c99248914fc0a651275074fd0d4dff47d1a8fae"
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0x3427f48effe7f72fc46aca7b57e18af1d9fdd3e336d53afe88c097eba31bb1ad"
+    },
+    {
+      "name": "market-created",
+      "transaction": "0x3427f48effe7f72fc46aca7b57e18af1d9fdd3e336d53afe88c097eba31bb1ad",
+      "cutoff": 1791264290037
+    },
+    {
+      "name": "broadcast",
+      "transaction": "0xf5d06f348d32ecfcb3374734c83e363701f374c852d1010700ca883ecfa9bcac"
+    },
+    {
+      "name": "public-timeout-confirmed",
+      "transaction": "0xf5d06f348d32ecfcb3374734c83e363701f374c852d1010700ca883ecfa9bcac",
+      "acceptedStakes": 0
+    }
+  ],
+  "transactions": [
+    {
+      "hash": "0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11",
+      "blockHash": "0x2d255d86511fe9c08d25721e48cd29d4b8e9cc3fbd7b5387daa742de830099e0",
+      "bytes": 43209,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11"
+    },
+    {
+      "hash": "0x76e7c62e09a429c2b32e5be178e9338f6115a9f61af91ea950420ab572137fab",
+      "blockHash": "0x675b412abef162b520b4ce168117b26990780bd26e55f25f35f3d7724eac0072",
+      "bytes": 534,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0x76e7c62e09a429c2b32e5be178e9338f6115a9f61af91ea950420ab572137fab"
+    },
+    {
+      "hash": "0x7c63d1ecea9184896dae2ef8eb331813c84c1dab02c3188fb64aefc26dfb2fe8",
+      "blockHash": "0xde5c69d96a7e33e3f7e24deda96f717c0713a9652d8684ed1169fde8e5338f51",
+      "bytes": 2174,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0x7c63d1ecea9184896dae2ef8eb331813c84c1dab02c3188fb64aefc26dfb2fe8"
+    },
+    {
+      "hash": "0xc88f0037931d608590bd75f5e636cb7672a4509d25b42ff1790e55ca81922d6c",
+      "blockHash": "0x2b2f717b102f23d535f64e4003a182793447de5a516d3962a780b03987ca1402",
+      "bytes": 937,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0xc88f0037931d608590bd75f5e636cb7672a4509d25b42ff1790e55ca81922d6c"
+    },
+    {
+      "hash": "0x601c6632dfe7c709d45b9fa5158e675a204a4a62e0498f458a5c2fadf91ac395",
+      "blockHash": "0xcb0a093c5c1666a295e66919c21ee97fe513573767d6b653adf52f410a77f3b0",
+      "bytes": 937,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0x601c6632dfe7c709d45b9fa5158e675a204a4a62e0498f458a5c2fadf91ac395"
+    },
+    {
+      "hash": "0x9a9f82685231b6bc45cb34fd0b6bd8f7fa48d545edb6eb902c341030b7200088",
+      "blockHash": "0x82369ca1d208811328ef4db0084fbdcfdf037fdc888a8ceed3cb586b568a8708",
+      "bytes": 937,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0x9a9f82685231b6bc45cb34fd0b6bd8f7fa48d545edb6eb902c341030b7200088"
+    },
+    {
+      "hash": "0xd7da3ba21fa848671647ed1911974f8b06866ab51c66765f0b5ba48083c1dcfd",
+      "blockHash": "0x2da7e6973dcdaea16e3b3bd2c2b3161c16aba4dbca90a24a5233ec81d8d5580a",
+      "bytes": 826,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0xd7da3ba21fa848671647ed1911974f8b06866ab51c66765f0b5ba48083c1dcfd"
+    },
+    {
+      "hash": "0x71b73eafb37d82e2658aded58434bf9fc0b8d5e07c1dfe58fe991344710f23d7",
+      "blockHash": "0x0d3346b30908755147399d0c1a6cf167cc55123791979c1e9dfe9b991e93910a",
+      "bytes": 2610,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0x71b73eafb37d82e2658aded58434bf9fc0b8d5e07c1dfe58fe991344710f23d7"
+    },
+    {
+      "hash": "0x25eb24b806aeb19daa85b5e1d52b6f1d48d107cfadce543377d99b6d33a0cc36",
+      "blockHash": "0x62fd5a1860829042d096be2462d0db7a58307753e27cab65c596a2db1bddfd6e",
+      "bytes": 586,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0x25eb24b806aeb19daa85b5e1d52b6f1d48d107cfadce543377d99b6d33a0cc36"
+    },
+    {
+      "hash": "0x30bd3e742399b9690a646d28002b8209ebc7264245647d06cca3ff613d4f093d",
+      "blockHash": "0x15d5ebc1da6f2a827c777bef02bc85bf1069cdd756ecd102ba833e9d26437885",
+      "bytes": 586,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0x30bd3e742399b9690a646d28002b8209ebc7264245647d06cca3ff613d4f093d"
+    },
+    {
+      "hash": "0x4a1ab166afc26647d37ff0a156d5192144746e1f932d538f933807983ed27c07",
+      "blockHash": "0x15d5ebc1da6f2a827c777bef02bc85bf1069cdd756ecd102ba833e9d26437885",
+      "bytes": 586,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0x4a1ab166afc26647d37ff0a156d5192144746e1f932d538f933807983ed27c07"
+    },
+    {
+      "hash": "0x724a61703a97869834447fa72c99248914fc0a651275074fd0d4dff47d1a8fae",
+      "blockHash": "0x6135c867a121c906efab27cf0a53eb7cc33fc7176d4a744b5465c9e45336f132",
+      "bytes": 586,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0x724a61703a97869834447fa72c99248914fc0a651275074fd0d4dff47d1a8fae"
+    },
+    {
+      "hash": "0x3427f48effe7f72fc46aca7b57e18af1d9fdd3e336d53afe88c097eba31bb1ad",
+      "blockHash": "0xc27d1cad4e9c4d2824f9f029e7ef607fe49b11ff8b583401332e827d4c4e9c69",
+      "bytes": 2174,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0x3427f48effe7f72fc46aca7b57e18af1d9fdd3e336d53afe88c097eba31bb1ad"
+    },
+    {
+      "hash": "0xf5d06f348d32ecfcb3374734c83e363701f374c852d1010700ca883ecfa9bcac",
+      "blockHash": "0xb1f83a747823541e6c331dd1250f01cf919490aec3dcbb59017e6563967c6cb4",
+      "bytes": 1206,
+      "status": "committed",
+      "explorer": "https://pudge.explorer.nervos.org/transaction/0xf5d06f348d32ecfcb3374734c83e363701f374c852d1010700ca883ecfa9bcac"
+    }
+  ],
+  "binaries": [
+    {
+      "name": "streak-protocol",
+      "bytes": 30016,
+      "codeHash": "0x5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86",
+      "sha256": "a7f9007a92750816093eb9fb31a2cc045d2bc4e8c68be9a789c841fcd798c2a1"
+    },
+    {
+      "name": "streak-guard",
+      "bytes": 12664,
+      "codeHash": "0x096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada",
+      "sha256": "0a0e8cb84736ce1da2db1ea1e671ca6facc6f2f949cdcc12e0d08a433e09cae5"
+    }
+  ],
+  "deployment": "0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11",
+  "settlement": "0x71b73eafb37d82e2658aded58434bf9fc0b8d5e07c1dfe58fe991344710f23d7",
+  "winningClaims": [
+    "0x30bd3e742399b9690a646d28002b8209ebc7264245647d06cca3ff613d4f093d",
+    "0x4a1ab166afc26647d37ff0a156d5192144746e1f932d538f933807983ed27c07"
+  ],
+  "losingStorageReturn": "0x724a61703a97869834447fa72c99248914fc0a651275074fd0d4dff47d1a8fae",
+  "timeout": "0xf5d06f348d32ecfcb3374734c83e363701f374c852d1010700ca883ecfa9bcac",
+  "finishedAt": "2026-10-07T05:26:02.551Z"
+}

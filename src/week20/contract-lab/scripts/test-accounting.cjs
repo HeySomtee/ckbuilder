@@ -1,0 +1,11 @@
+const fs=require('node:fs');
+const path=require('node:path');
+const {spawnSync}=require('node:child_process');
+const root=path.resolve(__dirname,'..');
+const result=spawnSync(process.execPath,['--test','--test-reporter=tap',path.join(__dirname,'accounting.test.cjs')],{encoding:'utf8'});
+if(result.error)throw result.error;
+const output=result.stdout+result.stderr;
+fs.mkdirSync(path.join(root,'artifacts'),{recursive:true});
+fs.writeFileSync(path.join(root,'artifacts/accounting-tests.txt'),output);
+process.stdout.write(output);
+process.exitCode=result.status??1;

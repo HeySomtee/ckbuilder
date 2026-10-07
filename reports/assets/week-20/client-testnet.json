@@ -1,0 +1,16 @@
+{
+  "finishedAt": "2026-10-07T05:33:23.120Z",
+  "network": "testnet",
+  "deposits": [
+    "0x24bb357155dc7ff14e67b52bf8e9e268d0fb139490c1e4889470889422bd283d",
+    "0xe095fd4445adafacd51ae68e5ab4df93375263324216d7a2f6bc61e4be66dc83"
+  ],
+  "settlement": "0x37b2217d842767a4bd98ddc5e82c2194e27fb8ac6d68b56834e4a300c49b2a5d",
+  "winningClaim": "0x755bfd02773fb85c98f40b29efcc8731183973bc36f90ed0a093e00e62a4b703",
+  "losingClaim": "0xfb839f359c3f0cb7c3a739643215185d9d3c822625e31743d8307fce1fee3d3e",
+  "winnerPrincipalCKB": 100,
+  "winningPayoutCKB": 294,
+  "returnedStorageCKB": 321,
+  "replayRejected": true,
+  "source": "web/client.mjs shared by browser and standalone CLI"
+}

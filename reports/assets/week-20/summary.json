@@ -1,0 +1,36 @@
+{
+  "recordedAt": "2026-10-07T05:26:02.551Z",
+  "vmScenarios": 49,
+  "vmFunctions": 8,
+  "devnetChecks": 21,
+  "publicConfirmedTransactions": 14,
+  "settlement": "0x71b73eafb37d82e2658aded58434bf9fc0b8d5e07c1dfe58fe991344710f23d7",
+  "winningClaims": [
+    "0x30bd3e742399b9690a646d28002b8209ebc7264245647d06cca3ff613d4f093d",
+    "0x4a1ab166afc26647d37ff0a156d5192144746e1f932d538f933807983ed27c07"
+  ],
+  "storageCKB": 321,
+  "maxBets": 32,
+  "cycles": {
+    "min": 56843,
+    "max": 713588
+  },
+  "timeoutScope": "Full accepted-stake refund on local devnet; expired empty-market cancellation on public testnet.",
+  "browser": "Desktop 1440 and mobile 390: live RPC read, six explorer links, expired-stake disabled, wallet picker opens and closes, no page errors or horizontal overflow",
+  "sharedBuilderPublicRun": {
+    "finishedAt": "2026-10-07T05:33:23.120Z",
+    "network": "testnet",
+    "deposits": [
+      "0x24bb357155dc7ff14e67b52bf8e9e268d0fb139490c1e4889470889422bd283d",
+      "0xe095fd4445adafacd51ae68e5ab4df93375263324216d7a2f6bc61e4be66dc83"
+    ],
+    "settlement": "0x37b2217d842767a4bd98ddc5e82c2194e27fb8ac6d68b56834e4a300c49b2a5d",
+    "winningClaim": "0x755bfd02773fb85c98f40b29efcc8731183973bc36f90ed0a093e00e62a4b703",
+    "losingClaim": "0xfb839f359c3f0cb7c3a739643215185d9d3c822625e31743d8307fce1fee3d3e",
+    "winnerPrincipalCKB": 100,
+    "winningPayoutCKB": 294,
+    "returnedStorageCKB": 321,
+    "replayRejected": true,
+    "source": "web/client.mjs shared by browser and standalone CLI"
+  }
+}
