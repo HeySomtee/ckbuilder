@@ -120,6 +120,36 @@ async function run(): Promise<void> {
       "The real store pool must stay in the disposable schema.",
     );
 
+    const { AUTH_SCHEMA, PgAuthStorage, tokenHash } = await import("./modules/identity/storage");
+    await pgStore.getPool().query(AUTH_SCHEMA);
+    const auth = new PgAuthStorage(pgStore.getPool());
+    await auth.issue("bound:one","audience","https://one.example",Date.now()+60000);
+    assert.equal(await auth.consume("bound:one","https://two.example"),null);
+    assert.equal(await auth.consume("bound:one","https://one.example"),"audience");
+    await auth.issue("delayed:one","already expired","https://one.example",Date.now()-1);
+    assert.equal(await auth.consume("delayed:one","https://one.example"),null);
+    await auth.issue("alice:one", "first challenge");
+    await auth.issue("alice:two", "independent challenge");
+    assert.equal(await auth.consume("alice:one"), "first challenge");
+    const consumed = await Promise.all(Array.from({length:20},()=>auth.consume("alice:two")));
+    assert.equal(consumed.filter(Boolean).length, 1);
+    const sessionHash = tokenHash("synthetic-pg-session");
+    await auth.saveSession(sessionHash,"alice",60000);
+    await pgStore.closePool();
+    const restartedAuth = new PgAuthStorage(pgStore.getPool());
+    assert.equal(await restartedAuth.session(sessionHash),"alice");
+    await restartedAuth.revoke(sessionHash);
+    assert.equal(await new PgAuthStorage(pgStore.getPool()).session(sessionHash),null);
+    await restartedAuth.saveSession(sessionHash,"alice",0);
+    assert.equal(await restartedAuth.session(sessionHash),null);
+    await restartedAuth.issue("expired:one","expired");
+    await probe.query("update auth_challenges set expires_at=clock_timestamp() where address_hash=$1",[tokenHash("expired:one")]);
+    assert.equal(await restartedAuth.consume("expired:one"),null);
+    const limited = await Promise.allSettled(Array.from({length:8},(_,i)=>restartedAuth.issue(`limited:${i}`,"message")));
+    assert.equal(limited.filter(row=>row.status==="fulfilled").length,5);
+    await probe.query("alter table auth_sessions rename to unavailable_sessions");
+    await assert.rejects(restartedAuth.session(sessionHash));
+    await probe.query("alter table unavailable_sessions rename to auth_sessions");
     await store.update((db) => {
       db.users = [fixtureUser("alice"), fixtureUser("bob")];
       db.treasury = { address: "synthetic-treasury", privateKey: "not-a-key" };

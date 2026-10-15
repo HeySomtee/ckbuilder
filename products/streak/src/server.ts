@@ -22,6 +22,7 @@ import { PORT, PUBLIC_DIR, RENEW_FEE_CKB, SESSION_COOKIE, SETTLE_INTERVAL_MS,
   MIN_BET_CKB, MAX_BET_CKB, MIN_ONCHAIN_CKB, PROTOCOL_FEE_BPS, CREATOR_FEE_BPS } from "./config";
 import { read, readReceipt, readReceipts, update } from "./store";
 import {
+  authStorage,
   createSession,
   destroySession,
   getSessionUserId,
@@ -83,6 +84,9 @@ import {
   reviveHint,
 } from "./crews";
 import type { Match, Outcome, User } from "./types";
+import { mutationAllowed, publicOrigin, sessionCookie } from "./modules/identity/http-policy";
+import { canonicalWalletAddress, signatureFrom, walletAddressMatches } from "./modules/identity/wallet-binding";
+import { AuthBusyError } from "./modules/identity/storage";
 
 /** Keep legacy/demo history stored, but never mix it into the active feed UI. */
 function isActiveProviderMatch(match: Match): boolean {
@@ -142,26 +146,21 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 
 function parseCookies(req: IncomingMessage): Record<string, string> {
   const header = req.headers.cookie ?? "";
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = Object.create(null);
   for (const part of header.split(";")) {
     const idx = part.indexOf("=");
     if (idx === -1) continue;
-    out[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+    try { out[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim()); } catch { /* Ignore malformed cookies. */ }
   }
   return out;
 }
 
 function setSessionCookie(res: ServerResponse, token: string): void {
-  res.setHeader(
-    "Set-Cookie",
-    `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 7}`,
-  );
+  res.setHeader("Set-Cookie", sessionCookie(token, res.req));
 }
-
 function clearSessionCookie(res: ServerResponse): void {
-  res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+  res.setHeader("Set-Cookie", sessionCookie("", res.req));
 }
-
 async function readJson(req: IncomingMessage): Promise<any> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -174,7 +173,7 @@ async function readJson(req: IncomingMessage): Promise<any> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-function currentUserId(req: IncomingMessage): string | null {
+async function currentUserId(req: IncomingMessage): Promise<string | null> {
   return getSessionUserId(parseCookies(req)[SESSION_COOKIE]);
 }
 
@@ -184,7 +183,13 @@ const compress = promisify(gzip);
 const assetCache = new Map<string, { stamp: string; body: Promise<Buffer>; gzip?: Promise<Buffer> }>();
 
 async function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
-  const rel = decodeURIComponent(pathname);
+  if (pathname === "/season" || pathname.startsWith("/season/")) {
+    res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-src https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "same-origin");
+  }
+  const decoded = decodeURIComponent(pathname);
+  const rel = decoded === "/season" || decoded === "/season/" ? "/season/index.html" : decoded;
   let filePath = resolve(PUBLIC_DIR, `.${rel === "/" || !rel ? "/index.html" : rel}`);
   const inside = relative(PUBLIC_DIR, filePath);
   if (inside === ".." || inside.startsWith(`..${sep}`) || resolve(PUBLIC_DIR, inside) !== filePath) {
@@ -239,32 +244,35 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: 
 
 async function handleAuthNonce(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const body = await readJson(req);
-  const address = typeof body.address === "string" ? body.address.trim() : "";
-  if (!address) return sendJson(res, 400, { error: "A wallet address is required." });
-  const message = issueChallenge(address);
-  sendJson(res, 200, { message });
+  const address = await canonicalWalletAddress(body.address);
+  if (!address) return sendJson(res, 400, { error: "A valid CKB testnet wallet address is required." });
+  const challenge = await issueChallenge(address, publicOrigin(req));
+  sendJson(res, 200, challenge);
 }
 
 async function handleAuthVerify(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const body = await readJson(req);
-  const address = typeof body.address === "string" ? body.address.trim() : "";
-  const signature = body.signature;
-  if (!address || !signature || typeof signature !== "object") {
-    return sendJson(res, 400, { error: "Address and signature are required." });
+  const address = await canonicalWalletAddress(body.address);
+  const signature = signatureFrom(body.signature);
+  if (!address || !signature || typeof body.challengeId !== "string") {
+    return sendJson(res, 400, { error: "Use a supported wallet, address and fresh login challenge. JoyID binding is not supported in this release." });
   }
 
-  const message = takeChallenge(address);
+  const message = await takeChallenge(address, body.challengeId, publicOrigin(req));
   if (!message) return sendJson(res, 400, { error: "Login challenge expired — please reconnect." });
 
   const ok = await verifyWalletSignature(message, signature);
   if (!ok) return sendJson(res, 401, { error: "Signature verification failed." });
 
-  const identity = String(signature.identity ?? "");
-  const walletType = String(signature.signType ?? signature.signer ?? "");
+  if (!await walletAddressMatches(address, signature)) return sendJson(res, 401, { error: "The signature does not control this CKB testnet address." });
+  const identity = signature.identity;
+  const walletType = signature.signType;
   if (!identity) return sendJson(res, 400, { error: "Signature is missing an identity." });
 
-  const { user, created } = await (await import("./store")).update((db) => {
+  const { user, created } = await (await import("./store")).update(async (db) => {
     let u = db.users.find((x) => x.walletIdentity === identity);
+    if (u && ((await canonicalWalletAddress(u.wallet.address)) !== address || (u.walletType && u.walletType !== signature.signType)))
+      throw new IdentityBindingError("Use the wallet address already linked to this account. Changing wallets needs a separate linking flow.");
     let created = false;
     if (!u) {
       u = {
@@ -288,13 +296,14 @@ async function handleAuthVerify(req: IncomingMessage, res: ServerResponse): Prom
       db.users.push(u);
       created = true;
     } else {
-      u.wallet.address = address; // refresh in case a different address is connected
+      // Existing wallet bindings stay pinned; this route does not link wallets.
       if (!u.walletType) u.walletType = walletType;
     }
     return { user: u, created };
   });
 
-  const token = createSession(user.id);
+  await destroySession(parseCookies(req)[SESSION_COOKIE]);
+  const token = await createSession(user.id);
   setSessionCookie(res, token);
   sendJson(res, created ? 201 : 200, {
     user: await toPublicUser(user),
@@ -328,13 +337,13 @@ async function handleSetUsername(req: IncomingMessage, res: ServerResponse): Pro
 }
 
 async function handleLogout(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  destroySession(parseCookies(req)[SESSION_COOKIE]);
+  await destroySession(parseCookies(req)[SESSION_COOKIE]);
   clearSessionCookie(res);
   sendJson(res, 200, { ok: true });
 }
 
 async function requireUser(req: IncomingMessage, res: ServerResponse): Promise<User | null> {
-  const id = currentUserId(req);
+  const id = await currentUserId(req);
   if (!id) {
     sendJson(res, 401, { error: "Not signed in." });
     return null;
@@ -550,11 +559,40 @@ async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL
     competitionId,
     matchFilter: isActiveProviderMatch,
   });
+  if (url.searchParams.has("limit")) {
+    const limit = Number(url.searchParams.get("limit"));
+    const offset = Number(url.searchParams.get("offset") ?? "0");
+    const query = (url.searchParams.get("q") ?? "").trim().toLowerCase();
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50 || !Number.isSafeInteger(offset) || offset < 0 || offset > 100000 || query.length > 80)
+      return sendJson(res, 400, { error: "Invalid market page." });
+    const from = url.searchParams.get("from");
+    const to = url.searchParams.get("to");
+    const start = from ? Date.parse(from) : null;
+    const end = to ? Date.parse(to) : null;
+    if ((from || to) && (start === null || end === null || !Number.isFinite(start) || !Number.isFinite(end) || end <= start || end-start > 8*86400000))
+      return sendJson(res, 400, { error: "Invalid fixture date range." });
+    // Schedule-only rows never create pools or enter settlement. Keep completed
+    // and postponed fixtures visible even if the app never opened their market.
+    const known = new Set(markets.map(m => m.match.id));
+    const schedule = url.searchParams.get('catalogue') === '1' && !status
+      ? (provider.scheduleFixtures?.() ?? []).filter(match => !known.has(match.id) &&
+          (!matchId || match.id === matchId) && (!competitionId || match.competition?.id === competitionId)).map(match => ({
+          id: `fixture:${match.id}`, available: false, status: 'closed', fixtureStatus: match.status,
+          match: { ...match, label: `${match.home.name} vs ${match.away.name}` },
+          prices: null, totalPoolCkb: null, totalBets: null,
+        })) : [];
+    const catalogue = [...markets, ...schedule].sort((a,b)=>a.match.kickoff.localeCompare(b.match.kickoff) || a.id.localeCompare(b.id));
+    const inWindow = start !== null && end !== null ? catalogue.filter(m => Date.parse(m.match.kickoff) >= start && Date.parse(m.match.kickoff) < end) : catalogue;
+    const filtered = query ? inWindow.filter(m => `${m.match.home.name} ${m.match.away.name} ${m.match.competition?.name ?? ""}`.toLowerCase().includes(query)) : inWindow;
+    const page = filtered.slice(offset, offset+limit);
+    return sendJson(res, 200, { markets: page, total: filtered.length, nextOffset: offset+limit < filtered.length ? offset+limit : null,
+      coverage: provider.scheduleCoverage?.() ?? null });
+  }
   sendJson(res, 200, { markets });
 }
 
 async function handleMarketDetail(req: IncomingMessage, res: ServerResponse, id: string): Promise<void> {
-  const meId = currentUserId(req) ?? undefined;
+  const meId = (await currentUserId(req)) ?? undefined;
   const detail = await getMarketDetail(id, meId);
   if (!detail) return sendJson(res, 404, { error: "Market not found." });
   sendJson(res, 200, { market: detail });
@@ -835,7 +873,7 @@ async function handleCrewLeave(
 // ── Misc ────────────────────────────────────────────────────────────────────
 
 async function handleLeaderboard(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const id = currentUserId(req);
+  const id = await currentUserId(req);
   const board = await leaderboard(id ?? undefined);
   sendJson(res, 200, { leaderboard: board.slice(0, 100) });
 }
@@ -977,7 +1015,7 @@ async function handleReceiptProof(
 ): Promise<void> {
   const betId = url.searchParams.get("bet") ?? undefined;
   const mine = url.searchParams.get("mine") === "1";
-  const meId = currentUserId(req);
+  const meId = await currentUserId(req);
 
   const payload = await readReceipt(marketId);
   const built = await read((db) => {
@@ -1054,12 +1092,18 @@ const staticRoutes: Record<string, Handler> = {
   "GET /api/receipts": (req, res) => handleReceiptsList(req, res),
 };
 
+class IdentityBindingError extends Error {}
+
 export const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
     const key = `${req.method} ${url.pathname}`;
 
     if (url.pathname.startsWith("/api/")) {
+      if (!["GET", "HEAD", "OPTIONS"].includes(req.method ?? "") &&
+          !/^\/api\/integrations\/telegram\/webhook\/[^/]+$/.test(url.pathname) && !mutationAllowed(req)) {
+        return sendJson(res, 403, { error: "Use this site's JSON API to submit this request." });
+      }
       const direct = staticRoutes[key];
       if (direct) return await direct(req, res, url);
 
@@ -1101,7 +1145,9 @@ export const server = createServer(async (req, res) => {
     }
     await serveStatic(req, res, url.pathname);
   } catch (err) {
-    console.error("[streak] error:", (err as Error).message);
+    if (err instanceof IdentityBindingError) return sendJson(res, 409, { error: err.message });
+    if (err instanceof AuthBusyError) return sendJson(res, 429, { error: err.message });
+    console.error("[streak] request failed");
     if (!res.headersSent) sendJson(res, 500, { error: "Internal server error." });
   }
 });
@@ -1109,6 +1155,8 @@ export const server = createServer(async (req, res) => {
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 async function boot(): Promise<void> {
+  publicOrigin();
+  await authStorage();
   await supaEnsureTable();
   // Establish durable wallet identity before accepting money-related requests.
   const treasury = await getTreasury();

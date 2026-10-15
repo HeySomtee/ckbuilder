@@ -76,7 +76,7 @@ async function main() {
   settlement.verifyReceiptOnChain = () => { verificationCalls++; return verification.promise; };
   const { server } = require("./server") as typeof import("./server");
   const { createSession } = require("./auth") as typeof import("./auth");
-  const cookie = `streak_sid=${createSession(user.id)}`;
+  const cookie = `streak_sid=${await createSession(user.id)}`;
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const get = async (path: string) => {

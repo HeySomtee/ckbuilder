@@ -12,7 +12,7 @@ Snapshot: **15 October 2026**, Africa/Lagos. Verify [status](../../status.md) an
 
 ## What exists
 
-The current Streak application is a vanilla frontend with a TypeScript Node API and custodial treasury-backed ledger. Relational PostgreSQL, changed-row writes and existing performance work already exist. Sessions/challenges are process-local, and writes still depend on a whole-working-set snapshot and single-process queue.
+The current Streak application is a vanilla frontend with a TypeScript Node API and custodial treasury-backed ledger. Relational PostgreSQL, changed-row writes and existing performance work already exist. The new `/season/` React shell reads API fixtures and logos across Friday through Monday. Sessions/challenges are durable; ledger writes still depend on a whole-working-set snapshot and single-process queue. Read the [Season milestone](../delivery/season-milestone.md) for identity, testing and rollout limits.
 
 The Week 20 Rust lab is a separate bounded market/claim implementation with its own browser and recovery tools. The Season preview is an isolated synthetic design study. React/Vite, durable workers, direct-market app integration and official Five entry/scoring are the approved target, not delivered production features.
 
@@ -20,7 +20,7 @@ The owner approved the UI and architecture, then requested this documentation/te
 
 ## Next implementation increment
 
-The full local foundation gate passed; see status for the 20 completed steps and regression evidence. Publish only within authorized Git scope and verify hosted checks/protection separately. Then take stage 1 from the roadmap: establish bounded persistence and durable identity/job correctness, repair TLS/cookie policy and define the legacy liability recovery boundary. Build one complete new frontend journey after its dependencies are ready, rather than moving every mock page into production at once.
+The full local foundation gate passed; see status for the 20 completed steps and regression evidence. The foundation is published as PR 1. Hosted CI work was stopped at the request of the owner after the billing lock; local verification remains required. The shell/identity increment follows it. Next establish bounded SQL mutations, durable jobs and restore evidence, then the complete direct stake-to-claim journey. Build one complete new frontend journey after its dependencies are ready, rather than moving every mock page into production at once.
 
 Use the accepted preview for visual detail and the architecture for authority. A generated sample receipt, local saved team or simulated combined payment must never be presented as real integration. Batch payment support, fixture/rules commitment, account linking and player-scoring coverage each need implementation evidence.
 

@@ -4,6 +4,8 @@ const https = require('node:https');
 const { urlToHttpOptions } = require('node:url');
 
 process.env.STREAK_SKIP_ENV_FILE = '1';
+process.env.NODE_ENV = 'test';
+delete process.env.STREAK_PUBLIC_ORIGIN;
 for (const name of Object.keys(process.env)) {
   if (
     /(?:SECRET|TOKEN|PRIVATE_KEY|API_KEY|PASSWORD|DATABASE_URL|SUPABASE|TELEGRAM|API_SPORTS|NOTIFY_PROVIDER)/i.test(

@@ -47,7 +47,7 @@ Run these from the repository root:
 
 The runner writes per-lane results and safe browser evidence to the ignored `.quality-artifacts/` directory. Preserve a dated result summary in status; artifacts alone are not hosted CI evidence. The local pre-commit and pre-push hooks both run the complete gate.
 
-Static checks currently cover scoped formatting, strict TypeScript builds, maintained JavaScript syntax, documentation links, sensitive paths and credential patterns, and direct browser/server import rules. They are not a full historical secret audit or a transitive dependency analysis. Add frontend linting and component checks alongside the React/Vite implementation. The unit runner discovers new `src/**/*.test.ts`, `.test.mjs` and `.test.cjs` files automatically; PostgreSQL remains in its own mandatory lane.
+Static checks currently cover scoped formatting, strict TypeScript builds, maintained JavaScript syntax, documentation links, sensitive paths and credential patterns, and direct browser/server import rules. They are not a full historical secret audit or a transitive dependency analysis. The React/Vite increment adds TypeScript/React-hook linting, strict browser compilation, a production build and integrated component journeys against the local API in Chromium and WebKit. The unit runner discovers new `src/**/*.test.ts`, `.test.mjs`, `.test.cjs` and `web/**/*.test.mjs` files automatically; PostgreSQL remains in its own mandatory lane.
 
 Inspect the current package scripts and runner when a lane changes. Keep this table synchronized in that change. While iterating, run the focused lane that can reveal the change's failure. Before each commit and after a major change, run the complete gate. Major changes include domain behavior, identity, persistence, financial handling, contracts/builders, dependencies, security, architecture, the application shell and delivery tooling.
 
@@ -94,3 +94,7 @@ Configure protected branches/rulesets to require the actual quality checks, disa
 Before inviting a cohort, require the implemented journey's tests, supported-wallet evidence, observable failures/recovery, a restore rehearsal, bounded workload evidence and a deployment rollback plan. Run real testnet settlement only as an explicitly scoped validation, recording actual network, contract version, transaction hashes and what the test covered. It is not a substitute for isolated regression tests.
 
 No test suite proves software cannot crash. Completion means known critical failures are fixed, invariants are protected, failures are recoverable, monitoring can find them and remaining limits are stated. Do not describe the grant pilot as production-ready or unrestricted based on a clean local run alone.
+
+## Hosted CI pause
+
+On 15 October 2026 GitHub refused to start the foundation jobs because the account was billing-locked. The owner explicitly instructed us to abort hosted CI work. The newly added main protection was removed; local commit/push verification remains active. Keep the workflow for later, but do not claim hosted checks or require billing-blocked status checks until the owner resumes that work.

@@ -96,6 +96,9 @@ export interface MatchDataProvider {
   init?(): Promise<void>;
   /** Full ordered fixture list. Must be pure/sync (called under write lock). */
   loadFixtures(): Match[];
+  /** Read-only schedule including finished/postponed fixtures never admitted to a pool. */
+  scheduleFixtures?(): Match[];
+  scheduleCoverage?(): { from: string; to: string; complete: boolean } | null;
   /** Current results keyed by match id. `{}` when nothing to report. */
   fetchResults(): Promise<Record<string, LiveResult>>;
   /** Provider health snapshot for the UI. */

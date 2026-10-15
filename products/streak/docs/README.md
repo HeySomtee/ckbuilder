@@ -2,6 +2,8 @@
 
 Canonical foundation approved **15 October 2026**. Start with [status](../status.md), then the document governing the task. [AGENTS.md](../AGENTS.md) is the single contributor contract; tool-specific guidance should link to it instead of maintaining competing rules.
 
+Current implementation: [Season shell, Friday-to-Monday fixtures and durable identity](delivery/season-milestone.md).
+
 | Document                                                   | Purpose                                                          |
 | ---------------------------------------------------------- | ---------------------------------------------------------------- |
 | [Product scope and roadmap](product/scope-and-roadmap.md)  | Pilot boundaries, Five, acceptance criteria and delivery order   |

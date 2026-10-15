@@ -498,7 +498,7 @@ export function mapApiCoverage(response: any[], season: number): InsightCoverage
   return coverage;
 }
 
-class ApiFootballProvider implements MatchDataProvider {
+export class ApiFootballProvider implements MatchDataProvider {
   readonly id = "football";
   readonly allowSimulatedFallback = false;
 
@@ -514,7 +514,7 @@ class ApiFootballProvider implements MatchDataProvider {
     2100,
   );
   private readonly competitionIds = parseCompetitionIds(process.env.FOOTBALL_LEAGUE_IDS);
-  private readonly pastDays = clampInt(process.env.FOOTBALL_FIXTURE_PAST_DAYS, 2, 0, 14);
+  private readonly pastDays = clampInt(process.env.FOOTBALL_FIXTURE_PAST_DAYS, 10, 4, 14);
   private readonly futureDays = clampInt(process.env.FOOTBALL_FIXTURE_FUTURE_DAYS, 21, 1, 120);
   private readonly livePollMs = clampInt(process.env.FOOTBALL_LIVE_POLL_SECONDS, 20, 15, 300) * 1000;
   private readonly finalConfirmations = clampInt(process.env.FOOTBALL_FINAL_CONFIRMATIONS, 2, 2, 5);
@@ -547,6 +547,7 @@ class ApiFootballProvider implements MatchDataProvider {
   private quotaRemaining?: number;
   private initialized = false;
   private scheduleInFlight: Promise<void> | null = null;
+  private scheduleWindow: { from: string; to: string; complete: boolean } | null = null;
   private resultsInFlight: Promise<Record<string, LiveResult>> | null = null;
   private readonly coverageMemo = new TimedMemo<InsightCoverage>();
   private readonly predictionMemo = new TimedMemo<MachineInsight | undefined>();
@@ -586,6 +587,12 @@ class ApiFootballProvider implements MatchDataProvider {
       .map(mapApiFixture)
       .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
   }
+
+  scheduleFixtures(): Match[] {
+    return [...this.fixtures.values()].map(mapApiFixture).sort((a,b)=>a.kickoff.localeCompare(b.kickoff));
+  }
+
+  scheduleCoverage() { return this.scheduleWindow; }
 
   async fetchInsights(match: Match): Promise<ProviderMatchInsights | null> {
     if (!this.apiKey || !isApiFootballMatch(match) || !match.oracle?.fixtureId) return null;
@@ -858,6 +865,10 @@ class ApiFootballProvider implements MatchDataProvider {
       // instead of accepting a partial schedule for the full six-hour TTL.
       this.nextScheduleRefreshAt = Date.now() + (errors.length ? 60_000 : this.scheduleTtlMs);
       this.initialized = successes > 0 || this.initialized;
+      if (successes > 0) {
+        this.scheduleWindow = { from: `${from}T00:00:00.000Z`,
+          to: new Date(Date.parse(`${to}T00:00:00.000Z`)+86400000).toISOString(), complete: errors.length === 0 };
+      } else if (this.scheduleWindow) this.scheduleWindow.complete = false;
       if (successes > 0) {
         this.lastSyncIso = new Date().toISOString();
         this.lastError = errors.length ? `${errors.length} competition refresh(es) failed` : undefined;

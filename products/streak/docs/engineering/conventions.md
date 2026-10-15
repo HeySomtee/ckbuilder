@@ -27,7 +27,7 @@ Private keys, seed phrases, provider/API credentials, database URLs and oracle s
 
 Treat fixture names, provider content and user text as untrusted display data. Escape/render them safely, validate URLs and maintain a restrictive CSP compatible with the implemented app. Avoid direct HTML insertion for untrusted values. Never weaken security policy to accommodate a screenshot helper.
 
-Use verified TLS for hosted PostgreSQL and outbound services. Source inspection found disabled certificate verification and an insecure session-cookie policy in the existing app; remediation belongs to stage 1. A source finding is not evidence of an observed exploit.
+Use verified TLS for hosted PostgreSQL and outbound services. The Season identity increment enables certificate verification and HTTPS session cookies. Verify hosted certificate compatibility and exact origin configuration before deployment; configuration tests alone do not establish a live TLS handshake.
 
 ## Data, workers and external services
 

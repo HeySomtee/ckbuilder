@@ -5,7 +5,7 @@ import { ROOT, repositoryFiles } from './repository.mjs';
 // Start with the new foundation. Expand this scope when the approved frontend
 // and server modules arrive; do not reformat historical weekly exercises.
 const files = repositoryFiles().filter((file) =>
-  /^(?:AGENTS\.md|\.prettierrc\.json|package\.json|products\/streak\/(?:package\.json|AGENTS\.md|status\.md|docs\/.*\.md)|scripts\/quality\/.*\.[cm]js|\.github\/(?:workflows\/.*\.ya?ml|pull_request_template\.md))$/.test(
+  /^(?:AGENTS\.md|\.prettierrc\.json|package\.json|products\/streak\/(?:package\.json|eslint\.config\.mjs|web\/.*\.(?:tsx?|css|html|json|mjs)|src\/(?:modules\/identity\/.*\.ts|infrastructure\/postgres-config\.ts|auth\.ts|identity\.test\.ts)|scripts\/season-browser\.cjs|AGENTS\.md|status\.md|docs\/.*\.md)|scripts\/quality\/.*\.[cm]js|\.github\/(?:workflows\/.*\.ya?ml|pull_request_template\.md))$/.test(
     file,
   ),
 );

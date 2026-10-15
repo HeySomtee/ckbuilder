@@ -14,6 +14,7 @@ const temp = mkdtempSync(join(tmpdir(), 'streak-quality-'));
 const env = {
   ...process.env,
   STREAK_SKIP_ENV_FILE: '1',
+  NODE_ENV: 'test',
   STREAK_DB_FILE: join(temp, 'db.json'),
   STREAK_DATA_DIR: temp,
   MATCH_PROVIDER: 'worldcup',
@@ -30,6 +31,7 @@ for (const name of Object.keys(env)) {
     delete env[name];
 }
 delete env.NODE_OPTIONS;
+delete env.STREAK_PUBLIC_ORIGIN;
 // A test entrypoint can import the server; loading local .env is never allowed.
 const preload = resolve(ROOT, 'scripts/quality/test-env.cjs');
 const tsc = resolve(ROOT, 'node_modules/typescript/bin/tsc');
@@ -43,7 +45,11 @@ const report = {
 };
 mkdirSync(artifacts, { recursive: true });
 
-function run(label, args, { cwd = ROOT, isolated = false, timeout = 600_000 } = {}) {
+function run(
+  label,
+  args,
+  { cwd = ROOT, isolated = false, timeout = 600_000, production = false } = {},
+) {
   console.log(`\n[quality] ${label}`);
   const started = Date.now();
   const result = spawnSync(
@@ -51,7 +57,7 @@ function run(label, args, { cwd = ROOT, isolated = false, timeout = 600_000 } = 
     [...(isolated ? ['--require', preload] : []), ...args],
     {
       cwd,
-      env,
+      env: production ? { ...env, NODE_ENV: 'production' } : env,
       stdio: 'inherit',
       timeout,
       windowsHide: true,
@@ -71,12 +77,32 @@ function run(label, args, { cwd = ROOT, isolated = false, timeout = 600_000 } = 
 }
 
 function buildProduct() {
+  run(
+    'Season TypeScript and hook lint',
+    [join(product, 'node_modules/eslint/bin/eslint.js'), 'web/src', '--max-warnings=0'],
+    { cwd: product },
+  );
   run('Streak TypeScript build', [tsc, '-p', join(product, 'tsconfig.json')]);
+  run('Season strict TypeScript', [tsc, '-p', join(product, 'web/tsconfig.json')]);
+  run(
+    'Season production build',
+    [
+      join(product, 'node_modules/vite/bin/vite.js'),
+      'build',
+      '--config',
+      join(product, 'web/vite.config.mjs'),
+    ],
+    { production: true },
+  );
 }
 
 async function browserChecks() {
   buildProduct();
   run('Current Streak browser regression', [join(product, 'scripts/browser-smoke.cjs')], {
+    cwd: product,
+    isolated: true,
+  });
+  run('Integrated Season browser regression', [join(product, 'scripts/season-browser.cjs')], {
     cwd: product,
     isolated: true,
   });
@@ -153,7 +179,10 @@ try {
           isolated: true,
         });
       }
-      const nodeTests = discoverTests(join(product, 'src'), ['.test.mjs', '.test.cjs']);
+      const nodeTests = [
+        ...discoverTests(join(product, 'src'), ['.test.mjs', '.test.cjs']),
+        ...discoverTests(join(product, 'web'), ['.test.mjs']),
+      ];
       if (!nodeTests.length) throw new Error('Application Node regression tests are required.');
       run('Streak client runtime regression', ['--test', ...nodeTests], {
         cwd: product,

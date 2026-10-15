@@ -243,7 +243,7 @@ async function main() {
       "Initial screen must not download external wallet or font code",
     );
     await context.addCookies([
-      { name: "streak_sid", value: createSession(users[0].id), url: base },
+      { name: "streak_sid", value: await createSession(users[0].id), url: base },
     ]);
     await page.goto(base + "/#/dashboard");
     await page.reload();
@@ -640,7 +640,7 @@ async function main() {
       await noOverflow(`landing ${width}`);
     }
     await context.addCookies([
-      { name: "streak_sid", value: createSession(users[0].id), url: base },
+      { name: "streak_sid", value: await createSession(users[0].id), url: base },
     ]);
     for (const width of [320, 768, 1024]) {
       await page.setViewportSize({ width, height: 900 });

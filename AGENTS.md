@@ -19,5 +19,9 @@ gates. Never bypass a failed gate, silently skip a required suite, or claim a
 GitHub check passed without a successful run for the exact revision. Do not
 commit secrets or generated private state. Stage only the intended change.
 
+On 15 October 2026 the owner paused hosted CI work after GitHub's billing lock
+prevented jobs from starting. Keep local gates; do not require hosted checks or
+restore branch protection until the owner resumes that work.
+
 Keep docs and dated test evidence current. No em dashes in newly authored prose.
 Do not promise zero bugs, capacity or deployment readiness without evidence.

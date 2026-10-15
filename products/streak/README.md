@@ -70,13 +70,13 @@ npm install
 npm start
 ```
 
-Open <http://localhost:4100>.
+Open <http://localhost:4100>. After `npm run build`, the new API-backed matchweek screen is at <http://localhost:4100/season/>. See the [Season milestone](docs/delivery/season-milestone.md) for setup, supported wallets and rollout limits.
 
 For a compiled server, run `npm run build` followed by `npm run serve`.
 See [PERFORMANCE.md](PERFORMANCE.md) for the request architecture, measurements,
 cache freshness, and withdrawal recovery behavior.
 
-**Connect Wallet** → pick a CKB wallet (JoyID, MetaMask, UniSat, OKX…) and sign
+**Connect Wallet** → pick a CKB wallet (MetaMask, UniSat, OKX…) and sign
 the login challenge. Your wallet is your account — no email, no password.
 Optionally set a display name for the leaderboard. Fund your wallet from the
 [Nervos Pudge faucet](https://faucet.nervos.org/), then **Deposit** (you sign
@@ -594,7 +594,7 @@ and `DUMMY_AHEAD_SLOTS` (48).
 
 ```
 POST /api/auth/nonce             → { address }     login challenge to sign
-POST /api/auth/verify            → { address, signature }  verify + start session
+POST /api/auth/verify            → { address, signature, challengeId }  verify + start session
 POST /api/logout
 GET  /api/me                     → current user (public view)
 POST /api/me/username            → { username }    set/change display name

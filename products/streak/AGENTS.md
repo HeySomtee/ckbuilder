@@ -48,6 +48,10 @@ The Genie is approved as a connected-surface interaction, with production readin
 
 ## Delivery and evidence
 
+Owner override, 15 October 2026: hosted CI work is paused because GitHub jobs
+cannot start under the account billing lock. Local gates remain mandatory.
+Do not resume hosted checks or branch protection without a new instruction.
+
 Use focused Conventional Commits, stage explicit files, and preserve unrelated work. Do not rewrite shared history. Local checks, GitHub Actions configuration, successful hosted runs, required branch checks and deployment are separate facts. Report each accurately. No authority to purchase hosting, set a prize budget, deploy, send messages or publish to sibling repositories is inherited from Chessdict.
 
 Write clear, direct prose without em dashes. Reports and handoffs identify the date, source revision, commands, outcomes and unresolved limits. Never promise that software cannot crash; demonstrate how failures are prevented, surfaced, recovered and monitored.

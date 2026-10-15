@@ -6,37 +6,52 @@
   "scripts": {
     "start": "ts-node src/server.ts",
     "dev": "ts-node src/server.ts",
-    "build": "tsc",
+    "build": "tsc \u0026\u0026 npm run build:web",
     "serve": "node dist/server.js",
     "verify": "ts-node src/verify.ts",
     "test:football": "ts-node src/providers/football.test.ts",
     "test:insights": "ts-node src/insights.test.ts",
     "test:matchday": "ts-node src/matchday.test.ts",
-    "check:matchday:live": "npm run build && node scripts/check-matchday-live.cjs",
+    "check:matchday:live": "npm run build \u0026\u0026 node scripts/check-matchday-live.cjs",
     "test:client": "node --test src/client-runtime.test.mjs",
     "test:store": "ts-node src/store.test.ts",
     "test:markets": "ts-node src/markets.test.ts",
     "test:backend": "ts-node src/backend-performance.test.ts",
-    "test": "npm run test:football && npm run test:insights && npm run test:matchday && npm run test:store && npm run test:markets && npm run test:backend && npm run test:client",
+    "test": "node ../../scripts/quality/verify.mjs unit",
     "quality": "node ../../scripts/quality/verify.mjs all",
     "quality:major": "node ../../scripts/quality/verify.mjs all",
-    "test:browser": "npm run build && node scripts/browser-smoke.cjs",
-    "test:store:pg": "ts-node src/store_pg.test.ts"
+    "test:browser": "npm run build \u0026\u0026 node scripts/browser-smoke.cjs",
+    "test:store:pg": "ts-node src/store_pg.test.ts",
+    "build:web": "tsc -p web/tsconfig.json \u0026\u0026 vite build --config web/vite.config.mjs",
+    "dev:web": "vite --config web/vite.config.mjs",
+    "test:season": "npm run build \u0026\u0026 node scripts/season-browser.cjs",
+    "lint:web": "eslint web/src --max-warnings=0",
+    "test:identity": "node --require ../../scripts/quality/test-env.cjs node_modules/ts-node/dist/bin.js src/identity.test.ts"
   },
   "packageManager": "npm@11.9.0",
   "engines": {
-    "node": ">=24.14.0 <25",
-    "npm": ">=11.9.0 <12"
+    "node": "\u003e=24.14.0 \u003c25",
+    "npm": "\u003e=11.9.0 \u003c12"
   },
   "dependencies": {
+    "@ckb-ccc/connector": "1.3.0",
     "@ckb-ccc/core": "^1.12.5",
-    "pg": "^8.22.0"
+    "@tanstack/react-query": "5.104.3",
+    "pg": "^8.22.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/pg": "^8.20.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "10.12.0",
+    "eslint-plugin-react-hooks": "7.1.1",
     "playwright": "^1.63.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "typescript-eslint": "8.71.2",
+    "vite": "8.3.4"
   }
 }

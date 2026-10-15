@@ -146,7 +146,7 @@ fs.writeFileSync(dbFile, JSON.stringify(seed));
 
 const { server } = require(path.join(source, "server.ts"));
 const { createSession } = require(path.join(source, "auth.ts"));
-const cookies = seed.users.map((user) => `streak_sid=${createSession(user.id)}`);
+let cookies;
 const agent = new http.Agent({ keepAlive: true, maxSockets: 1 });
 let port;
 
@@ -191,6 +191,7 @@ const operations = [
 ];
 
 async function main() {
+  cookies = await Promise.all(seed.users.map(async (user) => `streak_sid=${await createSession(user.id)}`));
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
   port = server.address().port;
   const result = { id: job.id, scenario: scenario.id, variant: job.variant, block: job.block,
