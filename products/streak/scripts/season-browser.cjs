@@ -130,6 +130,69 @@ async function main() {
         const page = await context.newPage();
         const errors = [];
         page.on('pageerror', (error) => errors.push(error.message));
+        await page.goto(base + '/');
+        await page.getByRole('heading', { name: 'You know the game. Make it yours.' }).waitFor();
+        await page.locator('.welcome-featured').getByText('Arsenal', { exact: true }).waitFor();
+        await page.getByRole('link', { name: 'Skip to content' }).focus();
+        await page.keyboard.press('Enter');
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'welcome-main');
+        assert.equal(
+          await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1),
+          false,
+        );
+        assert.equal(
+          await page
+            .locator('.welcome-copy')
+            .evaluate((node) => getComputedStyle(node).animationName),
+          'none',
+        );
+        assert.ok(
+          await page
+            .locator('.welcome-club img')
+            .first()
+            .evaluate((node) => node.complete && node.naturalWidth > 0),
+        );
+        await page.getByRole('button', { name: 'Mon', exact: true }).click();
+        await page.locator('.welcome-featured').getByText('Home 25', { exact: true }).waitFor();
+        assert.equal(await page.locator('.welcome-fixture').count(), 0);
+        await page.getByRole('button', { name: 'Sun', exact: true }).click();
+        await page.getByText('No fixtures on this day.', { exact: true }).waitFor();
+        await page.getByRole('button', { name: 'All', exact: true }).click();
+        await page.locator('.welcome-featured').getByText('Arsenal', { exact: true }).waitFor();
+        const question = page
+          .locator('summary')
+          .filter({ hasText: 'Where are my testnet funds held?' });
+        await question.focus();
+        await page.keyboard.press('Enter');
+        assert.equal(await question.evaluate((node) => node.parentElement.open), true);
+        await page.getByRole('link', { name: 'Open Wallet', exact: true }).click();
+        await page.waitForURL('**/index.html#wallet');
+        await page.locator('#connect-top').waitFor();
+        await page.goto(base + '/welcome/');
+        await page.locator('.welcome-featured').getByText('Arsenal', { exact: true }).waitFor();
+        if (width === 1440) {
+          await page.setViewportSize({ width: 768, height: 600 });
+          assert.equal(
+            await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1),
+            false,
+          );
+          await page.emulateMedia({ forcedColors: 'active' });
+          assert.notEqual(
+            await page
+              .locator('.welcome-button-primary')
+              .first()
+              .evaluate((node) => getComputedStyle(node).borderStyle),
+            'none',
+          );
+          await page.emulateMedia({ forcedColors: 'none' });
+          await page.setViewportSize({ width, height: 900 });
+        }
+        await page.screenshot({
+          path: path.join(evidence, `landing-${name}-${width}.png`),
+          fullPage: true,
+        });
+        await page.getByRole('link', { name: 'Explore the markets', exact: true }).click();
+        await page.waitForURL('**/season/');
         await page.goto(base + '/season/');
         await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
         await page.getByRole('link', { name: 'Skip to markets' }).focus();
@@ -146,7 +209,7 @@ async function main() {
         );
         assert.equal(
           await page.getByRole('link', { name: 'View market' }).first().getAttribute('href'),
-          '/#market/m-season-0',
+          '/index.html#market/m-season-0',
         );
         assert.ok(
           ![...(await page.locator('script').evaluateAll((nodes) => nodes.map((n) => n.src)))].some(
@@ -195,7 +258,58 @@ async function main() {
       );
       await context.routeWebSocket('**/*', (socket) => socket.close());
       const page = await context.newPage();
+      // Recovery must work without loading the new application's JavaScript.
+      await page.route('**/season/assets/*.js', (route) => route.abort());
+      await page.goto(base + '/');
+      await page.getByRole('heading', { name: 'Streak is loading.' }).waitFor();
+      await page.getByRole('link', { name: 'Open current Wallet', exact: true }).click();
+      await page.waitForURL('**/index.html#wallet');
+      await page.locator('#connect-top').waitFor();
+      await page.goto(base + '/?source=shared#wallet');
+      await page.waitForURL('**/index.html?source=shared#wallet');
+      await page.locator('#connect-top').waitFor();
+      await page.goto(base + '/#/receipt/unavailable-receipt');
+      await page.waitForURL('**/index.html#/receipt/unavailable-receipt');
+      await page.locator('.public-card').waitFor();
+      assert.equal(
+        await page.locator('#connect-top').count(),
+        0,
+        'Public receipts do not become login gated.',
+      );
+      await page.unroute('**/season/assets/*.js');
       let fail = true;
+      await page.route('**/api/markets?*', (route) =>
+        fail
+          ? route.fulfill({
+              status: 503,
+              contentType: 'application/json',
+              body: '{"error":"Fixture feed unavailable."}',
+            })
+          : route.continue(),
+      );
+      await page.goto(base + '/');
+      await page.getByText('The fixture feed is taking a break.', { exact: true }).waitFor();
+      assert.equal(await page.locator('.welcome-featured').count(), 0);
+      assert.equal(
+        await page
+          .getByRole('link', { name: 'Explore the markets', exact: true })
+          .getAttribute('href'),
+        '/season/',
+      );
+      fail = false;
+      await page.getByRole('button', { name: 'Retry fixtures', exact: true }).click();
+      await page.locator('.welcome-featured').getByText('Arsenal', { exact: true }).waitFor();
+      await page.route('**/api/markets?*', (route) =>
+        route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ markets: [], total: 0, nextOffset: null, coverage: null }),
+        }),
+      );
+      await page.reload();
+      await page.getByText('The schedule is not available yet.', { exact: true }).waitFor();
+      assert.equal(await page.getByText('No fixtures on this day.', { exact: true }).count(), 0);
+      await page.unroute('**/api/markets?*');
+      fail = true;
       await page.route('**/api/markets?*', (route) =>
         fail
           ? route.fulfill({
@@ -350,10 +464,29 @@ async function main() {
       await browser.close();
       browser = null;
     }
+    const fsPromises = require('node:fs/promises');
+    const originalStat = fsPromises.stat;
+    const shell = path.resolve(__dirname, '../public/season/index.html');
+    fsPromises.stat = async (file, ...args) => {
+      if (path.resolve(String(file)) === shell)
+        throw Object.assign(new Error('Synthetic missing build'), { code: 'ENOENT' });
+      return originalStat(file, ...args);
+    };
+    try {
+      for (const entry of ['/', '/welcome/', '/season/']) {
+        const missing = await guardedFetch(base + entry);
+        assert.equal(missing.status, 503);
+        assert.match(await missing.text(), /href="\/index.html#wallet"/);
+      }
+      assert.equal((await guardedFetch(base + '/index.html')).status, 200);
+      assert.equal((await guardedFetch(base + '/season/assets/unavailable.js')).status, 404);
+    } finally {
+      fsPromises.stat = originalStat;
+    }
     const invalid = await guardedFetch(base + '/api/markets?limit=999');
     assert.equal(invalid.status, 400);
     console.log(
-      `Season browser passed: ${groups} groups across Chromium/WebKit, 320/390/1440px, real API paging/search, error/retry, malformed data, account/logout recovery and stale navigation.`,
+      `Season browser passed: ${groups} groups across Chromium/WebKit, 320/390/768/1440px, landing/market API states, Monday fixtures, keyboard FAQ, reduced motion, forced colors, missing bundle/build recovery, shared links, paging/search, account/logout recovery and stale navigation.`,
     );
   } finally {
     await browser?.close();

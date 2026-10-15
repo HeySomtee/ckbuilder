@@ -128,6 +128,17 @@ async function run(): Promise<void> {
     assert.equal(await auth.consume("bound:one","https://one.example"),"audience");
     await auth.issue("delayed:one","already expired","https://one.example",Date.now()-1);
     assert.equal(await auth.consume("delayed:one","https://one.example"),null);
+    const databaseNow = Number((await probe.query("select extract(epoch from clock_timestamp())*1000 as now")).rows[0].now);
+    await auth.issue("clock-ahead:one", "expired on application clock", "test", databaseNow+60000);
+    assert.equal(await new PgAuthStorage(pgStore.getPool(), () => databaseNow+120000).consume("clock-ahead:one"), null);
+    await auth.issue("clock-behind:one", "expired on database clock", "test", databaseNow+60000);
+    await probe.query("update auth_challenges set expires_at=clock_timestamp() where address_hash=$1", [tokenHash("clock-behind:one")]);
+    assert.equal(await new PgAuthStorage(pgStore.getPool(), () => databaseNow-120000).consume("clock-behind:one"), null);
+    await auth.issue("clock-wait:one", "expired while waiting", "test", databaseNow+60000);
+    let clockReads = 0;
+    const delayedAuth = new PgAuthStorage(pgStore.getPool(), () => clockReads++ === 0 ? databaseNow : databaseNow+120000);
+    assert.equal(await delayedAuth.consume("clock-wait:one"), null);
+    assert.equal(await auth.consume("clock-wait:one"), null, "An attempt that expires during consumption stays consumed.");
     await auth.issue("alice:one", "first challenge");
     await auth.issue("alice:two", "independent challenge");
     assert.equal(await auth.consume("alice:one"), "first challenge");

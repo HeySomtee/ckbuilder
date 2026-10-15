@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './app/app';
+import { Landing } from './app/landing';
 import './design-system/styles.css';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
@@ -18,7 +19,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean
           This screen could not load. Your account and funds have not been changed by this error.
         </p>
         <button onClick={() => location.reload()}>Reload Streak</button>
-        <a href="/#wallet">Open the current Wallet</a>
+        <a href="/index.html#wallet">Open the current Wallet</a>
       </main>
     ) : (
       this.props.children
@@ -33,12 +34,15 @@ const client = new QueryClient({
 });
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing application root.');
-createRoot(root).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <QueryClientProvider client={client}>
-        <App />
-      </QueryClientProvider>
-    </ErrorBoundary>
-  </StrictMode>,
-);
+const isMarkets = location.pathname === '/season' || location.pathname.startsWith('/season/');
+document.title = isMarkets ? 'Markets | Streak' : 'Streak | Your game. Your call.';
+if (document.documentElement.dataset.streakLegacyRedirect !== 'true')
+  createRoot(root).render(
+    <StrictMode>
+      <ErrorBoundary>
+        <QueryClientProvider client={client}>
+          {isMarkets ? <App /> : <Landing />}
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </StrictMode>,
+  );

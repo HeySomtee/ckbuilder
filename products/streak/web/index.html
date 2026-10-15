@@ -2,12 +2,28 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#111413" />
-    <title>Markets | Streak</title>
+    <meta
+      name="description"
+      content="Your football instinct has a place to play. Explore matchweek prediction markets on CKB testnet and discover the next chapter, Streak Five."
+    />
+    <title>Streak | Your game. Your call.</title>
+    <script src="/entry.js"></script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="recovery">
+        <h1>Streak is loading.</h1>
+        <p>If this screen does not open, your current account is still available.</p>
+        <a href="/index.html#wallet">Open current Wallet</a>
+        <a href="/index.html#dashboard">Open current app</a>
+      </main>
+    </div>
+    <noscript
+      >Streak needs JavaScript to display fixtures and markets. Enable JavaScript, then reload this
+      page. This is a CKB testnet experience with no real-money stakes.</noscript
+    >
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

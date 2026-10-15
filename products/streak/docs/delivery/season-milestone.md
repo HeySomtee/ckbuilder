@@ -4,7 +4,7 @@ Implemented 15 October 2026 on top of foundation commit `5a90186`. This is a rev
 
 ## What works
 
-The new React, TypeScript and Vite application is served by the existing Node API at `/season/`. It uses the approved graphite, coral and mint design, clear glass borders, native scrollbar, desktop rail and labelled mobile navigation. The old application remains at `/`, including activity, wallet and legacy withdrawals.
+The new React, TypeScript and Vite application is served by the existing Node API at `/season/`. It uses the approved graphite, coral and mint design, clear glass borders, native scrollbar, desktop rail and labelled mobile navigation. The landing-page extension below now serves `/` and `/welcome/`; the existing application remains at `/index.html`, including activity, wallet and legacy withdrawals. Existing shared hash links retain their destinations.
 
 Markets default to the current or upcoming **Friday through Monday** in the viewer's local timezone. Monday belongs to the preceding Friday's matchweek. Day filters, search, market-state filters, previous/next windows and 24-item pagination use the real API. Team names, competition names and logos come from provider records. Missing/broken logos show API team codes. Browser tests use synthetic records and logo images, not live provider calls.
 
@@ -14,7 +14,21 @@ Existing markets open their current detail screen. This increment does not imple
 
 Review captures: [mobile](../evidence/season-mobile.png) and [desktop](../evidence/season-desktop.png). Both show the integrated app with synthetic test fixtures and a local placeholder logo. They demonstrate layout and fallback behavior, not live provider coverage.
 
+## Landing-page extension
+
+Requested and implemented on 15 October 2026 after commit `800e774`. The homepage now uses Season's design tokens, clear glass rims, native scrollbar and coral calls to action. Its fixture board reads the same validated API, including team logos and Friday-to-Monday filters. It shows loading, unavailable, empty and partial-coverage states without invented fixtures or odds. Browsing does not require login. Five is explicitly in development; no entry or reward is advertised as available.
+
+The homepage has keyboard-operable native FAQ disclosures, visible testnet/custody explanations, reduced-motion behavior and usable high-contrast/no-blur fallbacks. Primary links enter `/season/`. A small independent `/entry.js` redirects existing account, market and receipt hashes to `/index.html`, preserving the query and hash even if the new application bundle is unavailable. Owned legacy links go directly to that entry. Static HTML and a missing-build 503 response both retain direct account recovery links. Missing assets remain 404, not fallback HTML.
+
+Integrated Chromium/WebKit checks cover 320, 390, 768 and 1440px layouts, API logos, Monday/empty/failed/partial schedule states, CTA navigation, keyboard disclosures, reduced motion, forced colours, blocked-bundle recovery and missing-build handling. The existing browser suite retains the legacy login-page checks at `/index.html` and exercises shared receipt and account links through the root entry. An independent routing/recovery review identified the bundle and missing-build recovery cases; both were corrected and reviewed again with no remaining blockers.
+
+The combined landing/market bundle measures approximately 88 KB gzip, with 7.2 KB CSS and the unchanged deferred 242 KB wallet chunk. The landing makes one bounded fixture request per selected day, caches for one minute, retries a failed read once and uses the existing 15-second request timeout. It does not poll, request account data or load the wallet connector. Vite reports the deliberately independent classic `/entry.js` as unbundled; it must be served from the existing public directory.
+
+The complete local gate passed all 29 steps for this extension on 15 October 2026. Review captures: [mobile landing](../evidence/landing-mobile.png) and [desktop landing](../evidence/landing-desktop.png), both with synthetic test records. A separate manual inspection of the local browsing preview confirmed real provider fixtures and team logos. The extension is included on the Season review branch; no deployment was performed.
+
 ## Authentication and storage
+
+Publication verification exposed clock skew between the application and PostgreSQL during challenge expiry. Consumption now requires the stored expiry to be later than both the application timestamp and the database clock. Controlled ahead/behind-clock regressions cover this conservative expiry policy; clock skew cannot extend a signed challenge's lifetime.
 
 Wallet challenges now have independent random IDs, a pinned origin, testnet network, address, version and absolute expiry. PostgreSQL consumes each challenge atomically and enforces its stored audience and expiry. Five challenges per address per five minutes are allowed, including consumed attempts. Sessions store SHA-256 hashes of random 256-bit tokens. Logout removes the durable record before claiming success.
 

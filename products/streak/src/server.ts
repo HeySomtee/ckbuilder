@@ -183,13 +183,14 @@ const compress = promisify(gzip);
 const assetCache = new Map<string, { stamp: string; body: Promise<Buffer>; gzip?: Promise<Buffer> }>();
 
 async function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
-  if (pathname === "/season" || pathname.startsWith("/season/")) {
+  const isWelcome = pathname === "/" || pathname === "/welcome" || pathname === "/welcome/";
+  if (isWelcome || pathname === "/season" || pathname.startsWith("/season/")) {
     res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-src https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "same-origin");
   }
   const decoded = decodeURIComponent(pathname);
-  const rel = decoded === "/season" || decoded === "/season/" ? "/season/index.html" : decoded;
+  const rel = isWelcome || decoded === "/season" || decoded === "/season/" ? "/season/index.html" : decoded;
   let filePath = resolve(PUBLIC_DIR, `.${rel === "/" || !rel ? "/index.html" : rel}`);
   const inside = relative(PUBLIC_DIR, filePath);
   if (inside === ".." || inside.startsWith(`..${sep}`) || resolve(PUBLIC_DIR, inside) !== filePath) {
@@ -236,6 +237,11 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: 
     res.writeHead(200, headers).end(req.method === "HEAD" ? undefined : body);
   } catch {
     assetCache.delete(filePath);
+    if (isWelcome || pathname === "/season" || pathname === "/season/") {
+      res.writeHead(503, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Retry-After": "60" });
+      res.end(req.method === "HEAD" ? undefined : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Streak | Reconnecting</title><script src="/entry.js"></script></head><body><main><h1>The new Streak screen is temporarily unavailable.</h1><p>Your current account is still available.</p><p><a href="/index.html#wallet">Open current Wallet</a></p><p><a href="/index.html#dashboard">Open current app</a></p></main></body></html>');
+      return;
+    }
     res.writeHead(404).end("Not found");
   }
 }

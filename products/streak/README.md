@@ -70,7 +70,7 @@ npm install
 npm start
 ```
 
-Open <http://localhost:4100>. After `npm run build`, the new API-backed matchweek screen is at <http://localhost:4100/season/>. See the [Season milestone](docs/delivery/season-milestone.md) for setup, supported wallets and rollout limits.
+After `npm run build`, open the new landing page at <http://localhost:4100> and the API-backed matchweek screen at <http://localhost:4100/season/>. The existing account application remains at `/index.html`; previously shared hash links still work. See the [Season milestone](docs/delivery/season-milestone.md) for setup, supported wallets and rollout limits.
 
 For a compiled server, run `npm run build` followed by `npm run serve`.
 See [PERFORMANCE.md](PERFORMANCE.md) for the request architecture, measurements,

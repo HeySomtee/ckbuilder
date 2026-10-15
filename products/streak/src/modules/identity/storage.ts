@@ -33,7 +33,10 @@ CREATE INDEX IF NOT EXISTS auth_sessions_expiry ON auth_sessions(expires_at);
 `;
 
 export class PgAuthStorage implements AuthStorage {
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool: Pool,
+    private readonly now = Date.now,
+  ) {}
   async issue(
     address: string,
     message: string,
@@ -69,14 +72,16 @@ export class PgAuthStorage implements AuthStorage {
     await this.prune();
   }
   async consume(address: string, audience = 'test'): Promise<string | null> {
-    const result = await this.pool.query<{ message: string }>(
+    const result = await this.pool.query<{ message: string; expires_at: Date }>(
       `
       UPDATE auth_challenges SET consumed=true
-      WHERE address_hash=$1 AND audience=$2 AND NOT consumed AND expires_at>clock_timestamp()
-      RETURNING message`,
-      [tokenHash(address), audience],
+      WHERE address_hash=$1 AND audience=$2 AND NOT consumed
+        AND expires_at>GREATEST(clock_timestamp(), $3::timestamptz)
+      RETURNING message, expires_at`,
+      [tokenHash(address), audience, new Date(this.now())],
     );
-    return result.rows[0]?.message ?? null;
+    const row = result.rows[0];
+    return row && row.expires_at.getTime() > this.now() ? row.message : null;
   }
   async saveSession(hash: string, userId: string, ttl: number): Promise<void> {
     await this.pool.query(

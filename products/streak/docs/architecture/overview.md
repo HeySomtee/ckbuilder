@@ -34,6 +34,8 @@ The server can prepare transactions and help users find claims. It cannot author
 
 Use React, strict TypeScript and Vite, serving built assets from the existing same-origin Node service. Next.js is a possible later decision, not the approved initial stack. Retain public landing metadata; evaluate prerendering only when a discovery need exists.
 
+The new landing page owns `/` and `/welcome/`; market browsing owns `/season/`. The original account application is served at `/index.html`. Independent `public/entry.js` preserves existing root hash links without depending on React. New account recovery links target the original entry directly. The new shell's static HTML and missing-build response must always retain a usable recovery link; never serve application HTML in place of a missing JavaScript asset.
+
 Create these boundaries as implementation arrives:
 
 ```text

@@ -1,6 +1,6 @@
-﻿# Streak status
+# Streak status
 
-Updated **15 October 2026**, Africa/Lagos. This increment is based on published foundation commit `5a90186`. See the [milestone report](docs/delivery/season-milestone.md) for implementation and rollout limits.
+Updated **15 October 2026**, Africa/Lagos. Published Season baseline: `800e774`. The landing-page extension is included on the Season review branch and has not been deployed. See the [milestone report](docs/delivery/season-milestone.md) for implementation and rollout limits.
 
 ## Owner decisions
 
@@ -15,13 +15,16 @@ Updated **15 October 2026**, Africa/Lagos. This increment is based on published 
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Season app             | Integrated shell at `/season/`, real API fixture catalogue, Friday-to-Monday filters, search, pagination and error recovery                              |
 | Identity               | Durable single-use challenges and hashed sessions, full lock binding, exact origin policy, secure hosted cookies and verified database TLS configuration |
-| Existing app           | Retained at `/`, including custodial market details, activity, wallet and withdrawals                                                                    |
+| Public landing         | New Season design at `/` and `/welcome/`, API fixture preview, browsing before login and clearly labelled Five introduction                              |
+| Existing app           | Retained at `/index.html`, including custodial market details, activity, wallet and withdrawals; existing root hash links preserved                      |
 | Week 20 Rust work      | Separate lab and browser/CLI; direct stake-to-claim integration remains ahead                                                                            |
 | Combined slip and Five | Approved simulation only; not integrated production features                                                                                             |
 | Quality foundation     | Published in [PR 1](https://github.com/HeySomtee/ckbuilder/pull/1); local hooks and workflow configuration retained                                      |
 | Hosted checks          | No successful run claimed; temporary required branch protection removed following the owner's override                                                   |
 
 ## Verification
+
+The full local gate passed all **29 steps** for the landing-page extension on 15 October 2026. No required suite was skipped. The local preview at `http://127.0.0.1:4100/` uses real API fixtures in separate local storage with account mutations and payments disabled. Manual inspection confirmed team-logo loading; automated tests used synthetic fixtures and no live provider requests.
 
 The recurring command is `npm.cmd run quality:major`, using a disposable local PostgreSQL database. Exact results are written to `.quality-artifacts/all.json` and repeated against the unchanged staged candidate by the commit and push hooks. The foundation passed all 20 steps before publication. This increment extends the gate with frontend lint/build, identity and provider regressions, and eight integrated browser groups across Chromium/WebKit at 320, 390 and 1440px.
 

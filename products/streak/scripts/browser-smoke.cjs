@@ -207,7 +207,7 @@ async function main() {
       }
       assert.equal(overflow, false, `${name} overflows horizontally`);
     };
-    await page.goto(base);
+    await page.goto(base + "/index.html");
     await page.locator(".landing-copy h1").waitFor();
     await screenshot("landing-desktop");
     await noOverflow("landing desktop");
@@ -630,7 +630,7 @@ async function main() {
     await page.locator(".public-card").waitFor();
     await noOverflow("public receipt mobile");
     await screenshot("public-receipt-mobile");
-    await page.goto(base);
+    await page.goto(base + "/index.html");
     await page.reload();
     await page.locator(".landing-copy h1").waitFor();
     await noOverflow("landing mobile");

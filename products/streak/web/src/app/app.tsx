@@ -108,7 +108,7 @@ function MarketCard({ market }: { market: Market }) {
             <span>{formatCkb(market.totalPoolCkb)} tCKB pooled</span>
             <span>{market.totalBets} predictions</span>
           </div>
-          <a className="market-link" href={`/#market/${encodeURIComponent(market.id)}`}>
+          <a className="market-link" href={`/index.html#market/${encodeURIComponent(market.id)}`}>
             View market <Icon name="arrow" />
           </a>
         </>
@@ -209,11 +209,11 @@ export function App() {
             <Icon name="markets" />
             Markets
           </a>
-          <a href="/#portfolio">
+          <a href="/index.html#portfolio">
             <Icon name="activity" />
             My activity
           </a>
-          <a href="/#wallet">
+          <a href="/index.html#wallet">
             <Icon name="wallet" />
             Wallet
           </a>
@@ -434,7 +434,7 @@ export function App() {
                 not fixed odds. Your balance and withdrawals remain in Wallet.
               </p>
             </div>
-            <a href="/#wallet">
+            <a href="/index.html#wallet">
               Open Wallet <Icon name="arrow" />
             </a>
           </section>
@@ -450,11 +450,11 @@ export function App() {
           <Icon name="markets" />
           Markets
         </a>
-        <a href="/#portfolio">
+        <a href="/index.html#portfolio">
           <Icon name="activity" />
           Activity
         </a>
-        <a href="/#wallet">
+        <a href="/index.html#wallet">
           <Icon name="wallet" />
           Wallet
         </a>
