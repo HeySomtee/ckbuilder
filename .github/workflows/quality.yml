@@ -1,0 +1,168 @@
+name: Quality
+
+on:
+  push:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+  STREAK_SKIP_ENV_FILE: '1'
+
+jobs:
+  checks:
+    name: Static and unit (${{ matrix.group }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [static, unit]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            products/streak/package-lock.json
+      - run: npm install --global npm@11.9.0
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix products/streak --ignore-scripts
+      - run: node scripts/quality/verify.mjs ${{ matrix.group }}
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: quality-${{ matrix.group }}
+          path: .quality-artifacts/
+          include-hidden-files: true
+          retention-days: 7
+
+  postgres:
+    name: PostgreSQL integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: streak-ci-local
+          POSTGRES_DB: streak_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d streak_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PG_TEST_URL: postgresql://postgres:streak-ci-local@127.0.0.1:5432/streak_test
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            products/streak/package-lock.json
+      - run: npm install --global npm@11.9.0
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix products/streak --ignore-scripts
+      - run: node scripts/quality/verify.mjs postgres
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: quality-postgres
+          path: .quality-artifacts/
+          include-hidden-files: true
+          retention-days: 7
+
+  browser:
+    name: Browser regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            products/streak/package-lock.json
+      - run: npm install --global npm@11.9.0
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix products/streak --ignore-scripts
+      - run: node products/streak/node_modules/playwright/cli.js install --with-deps chromium webkit
+      - run: node scripts/quality/verify.mjs browser
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: quality-browser
+          path: .quality-artifacts/
+          include-hidden-files: true
+          retention-days: 7
+
+  contracts:
+    name: Rust contracts and transaction builders
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            products/streak/package-lock.json
+      - run: npm install --global npm@11.9.0
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix products/streak --ignore-scripts
+      - name: Install native contract build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang build-essential
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy --target riscv64imac-unknown-none-elf
+      - run: node scripts/quality/verify.mjs contracts
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: quality-contracts
+          path: |
+            .quality-artifacts/
+            src/week20/contract-lab/artifacts/vm-tests.txt
+          include-hidden-files: true
+          retention-days: 7
+
+  gate:
+    name: Quality gate
+    if: always()
+    needs: [checks, postgres, browser, contracts]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every mandatory job to pass
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node -e "const jobs = JSON.parse(process.env.JOB_RESULTS); for (const [name, job] of Object.entries(jobs)) { if (job.result !== 'success') { console.error(name + ': ' + job.result); process.exitCode = 1; } }"

@@ -1,0 +1,168 @@
+{
+  "capturedAt": "2026-10-15T16:53:31.937Z",
+  "scope": "Local simulated multi-pick preview",
+  "results": [
+    {
+      "name": "chromium 390: three independent stakes, one total, selected outcomes and replacement",
+      "status": "passed",
+      "durationMs": 903
+    },
+    {
+      "name": "chromium 390: all picks persist, removing a pick updates capacity, removing the last clears the dock",
+      "status": "passed",
+      "durationMs": 1252
+    },
+    {
+      "name": "chromium 390: per-pick validation targets the invalid field and combined balance includes every receipt",
+      "status": "passed",
+      "durationMs": 945
+    },
+    {
+      "name": "chromium 390: rejection and conflict preserve every pick; success creates one independent position per pick",
+      "status": "passed",
+      "durationMs": 1876
+    },
+    {
+      "name": "chromium 390: a pending combined payment preserves a new basket and never reopens a dismissed success dialog",
+      "status": "passed",
+      "durationMs": 1383
+    },
+    {
+      "name": "chromium 390: reset during a pending batch cannot recreate any submitted picks",
+      "status": "passed",
+      "durationMs": 1870
+    },
+    {
+      "name": "chromium 390: reset after a completed batch clears activity and restores clean defaults",
+      "status": "passed",
+      "durationMs": 1934
+    },
+    {
+      "name": "chromium 390: a legacy single-pick draft restores and becomes a canonical basket without losing its stake",
+      "status": "passed",
+      "durationMs": 394
+    },
+    {
+      "name": "chromium 1440: three independent stakes, one total, selected outcomes and replacement",
+      "status": "passed",
+      "durationMs": 1079
+    },
+    {
+      "name": "chromium 1440: all picks persist, removing a pick updates capacity, removing the last clears the dock",
+      "status": "passed",
+      "durationMs": 1138
+    },
+    {
+      "name": "chromium 1440: per-pick validation targets the invalid field and combined balance includes every receipt",
+      "status": "passed",
+      "durationMs": 1504
+    },
+    {
+      "name": "chromium 1440: rejection and conflict preserve every pick; success creates one independent position per pick",
+      "status": "passed",
+      "durationMs": 2621
+    },
+    {
+      "name": "chromium 1440: a pending combined payment preserves a new basket and never reopens a dismissed success dialog",
+      "status": "passed",
+      "durationMs": 1805
+    },
+    {
+      "name": "chromium 1440: reset during a pending batch cannot recreate any submitted picks",
+      "status": "passed",
+      "durationMs": 1865
+    },
+    {
+      "name": "chromium 1440: reset after a completed batch clears activity and restores clean defaults",
+      "status": "passed",
+      "durationMs": 1856
+    },
+    {
+      "name": "chromium 1440: a legacy single-pick draft restores and becomes a canonical basket without losing its stake",
+      "status": "passed",
+      "durationMs": 432
+    },
+    {
+      "name": "webkit 390: three independent stakes, one total, selected outcomes and replacement",
+      "status": "passed",
+      "durationMs": 4772
+    },
+    {
+      "name": "webkit 390: all picks persist, removing a pick updates capacity, removing the last clears the dock",
+      "status": "passed",
+      "durationMs": 6236
+    },
+    {
+      "name": "webkit 390: per-pick validation targets the invalid field and combined balance includes every receipt",
+      "status": "passed",
+      "durationMs": 6989
+    },
+    {
+      "name": "webkit 390: rejection and conflict preserve every pick; success creates one independent position per pick",
+      "status": "passed",
+      "durationMs": 8681
+    },
+    {
+      "name": "webkit 390: a pending combined payment preserves a new basket and never reopens a dismissed success dialog",
+      "status": "passed",
+      "durationMs": 4813
+    },
+    {
+      "name": "webkit 390: reset during a pending batch cannot recreate any submitted picks",
+      "status": "passed",
+      "durationMs": 4489
+    },
+    {
+      "name": "webkit 390: reset after a completed batch clears activity and restores clean defaults",
+      "status": "passed",
+      "durationMs": 6325
+    },
+    {
+      "name": "webkit 390: a legacy single-pick draft restores and becomes a canonical basket without losing its stake",
+      "status": "passed",
+      "durationMs": 1383
+    },
+    {
+      "name": "webkit 1440: three independent stakes, one total, selected outcomes and replacement",
+      "status": "passed",
+      "durationMs": 2422
+    },
+    {
+      "name": "webkit 1440: all picks persist, removing a pick updates capacity, removing the last clears the dock",
+      "status": "passed",
+      "durationMs": 3067
+    },
+    {
+      "name": "webkit 1440: per-pick validation targets the invalid field and combined balance includes every receipt",
+      "status": "passed",
+      "durationMs": 4188
+    },
+    {
+      "name": "webkit 1440: rejection and conflict preserve every pick; success creates one independent position per pick",
+      "status": "passed",
+      "durationMs": 4913
+    },
+    {
+      "name": "webkit 1440: a pending combined payment preserves a new basket and never reopens a dismissed success dialog",
+      "status": "passed",
+      "durationMs": 3161
+    },
+    {
+      "name": "webkit 1440: reset during a pending batch cannot recreate any submitted picks",
+      "status": "passed",
+      "durationMs": 3184
+    },
+    {
+      "name": "webkit 1440: reset after a completed batch clears activity and restores clean defaults",
+      "status": "passed",
+      "durationMs": 3840
+    },
+    {
+      "name": "webkit 1440: a legacy single-pick draft restores and becomes a canonical basket without losing its stake",
+      "status": "passed",
+      "durationMs": 1030
+    }
+  ],
+  "errors": [],
+  "externalRequests": []
+}

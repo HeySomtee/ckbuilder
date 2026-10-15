@@ -20,6 +20,8 @@ async function run(): Promise<void> {
   Date.now = () => now;
   // Set before importing config/store; the suite never loads the real .env or DB.
   process.env.STREAK_DB_FILE = dbFile;
+  process.env.STREAK_SKIP_ENV_FILE = "1";
+  process.env.DATABASE_URL = "";
   process.env.STORE_READ_TTL_MS = "1000";
   process.env.SUPABASE_URL = "https://streak-store.invalid";
   process.env.SUPABASE_KEY = "test-only";

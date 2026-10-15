@@ -9,6 +9,19 @@ any side, and every market settles automatically against the live oracle feed
 at full-time. The original daily-pick streak game is preserved as one feature
 on top of the new market engine.
 
+**Approved rebuild, 15 October 2026:** Start with the [documentation map](docs/README.md),
+[agent contract](AGENTS.md), [current status](status.md), and
+[quality gate](docs/delivery/quality.md). The current application uses a custodial
+treasury ledger. Direct market-cell staking remains separate Week 20 contract
+work until explicitly integrated; wallet signing alone does not change custody.
+The approved Season preview is an interactive simulation.
+
+Before a major change or commit, run `npm run quality:major` from the repository
+root after the documented test setup. `npm test` in this directory runs the
+offline suite only. Real disposable PostgreSQL, browser and Rust checks are
+required by the full gate and cannot silently skip. Install local hooks once
+with `npm run hooks:install` from the repository root.
+
 **Week 17:** [Report and desktop/mobile screenshots](../../reports/week-17.md).
 
 **Week 18:** [Rust contract prototype, deadline tests and evidence](../../reports/week-18.md).
@@ -159,7 +172,7 @@ matches would stop the settle loop from ever seeing a fixture that just ended.
 ### Configuration
 
 ```
-DATABASE_URL=postgresql://user:pass@host:5432/db   # pooled connection string
+DATABASE_URL=postgresql://<user>:<password>@<host>:5432/<database>   # replace placeholders
 STORE_READ_TTL_MS=5000     # shared snapshot freshness; 0 disables TTL caching
 PG_POOL_MAX=5              # optional (default: 5)
 PG_CONNECT_TIMEOUT_MS=20000 # optional (default: 20000)

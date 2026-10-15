@@ -1,148 +1,313 @@
-/**
- * Streak Terminal — Postgres store regression checks.
- *
- * Runs against a real Postgres (PG_TEST_URL, or a local docker container on
- * 55432) already loaded by scripts/migrate-to-tables.cjs. Skips if unreachable
- * so the default `npm test` stays offline-friendly.
- *
- * What it proves:
- *   - a mutation writes only the rows it touched, not the whole ledger
- *   - money survives a load -> mutate -> reload round trip exactly
- *   - a wholesale collection reassignment does NOT delete the absent rows
- *   - receipts stay out of the snapshot but remain readable by id
- *   - a failed write leaves the committed state untouched
- */
-
+/** Real PostgreSQL integration checks using disposable synthetic fixtures. */
 import assert from "assert/strict";
+import { randomUUID } from "crypto";
+import { readFile } from "fs/promises";
+import { resolve } from "path";
+import { Client } from "pg";
+import type { Match, User } from "./types";
 
-const PG_URL = process.env.PG_TEST_URL ?? "postgresql://postgres:streak@127.0.0.1:55432/streak";
-
-async function reachable(): Promise<boolean> {
-  const { Client } = await import("pg");
-  const c = new Client({ connectionString: PG_URL, ssl: false, connectionTimeoutMillis: 3000 });
+function testDatabaseUrl(): URL {
+  assert.ok(
+    process.env.PG_TEST_URL,
+    "PG_TEST_URL is required. Start a disposable local PostgreSQL database named streak_test; this integration suite never skips.",
+  );
+  let url: URL;
   try {
-    await c.connect();
-    await c.query("select 1 from streak_meta limit 1");
-    await c.end();
-    return true;
+    url = new URL(process.env.PG_TEST_URL);
   } catch {
-    try { await c.end(); } catch {}
-    return false;
+    throw new Error(
+      "PG_TEST_URL must be a valid PostgreSQL URL (value omitted).",
+    );
   }
+  assert.ok(
+    ["postgres:", "postgresql:"].includes(url.protocol),
+    "PG_TEST_URL must use PostgreSQL.",
+  );
+  assert.ok(
+    ["127.0.0.1", "localhost"].includes(url.hostname),
+    "PostgreSQL tests only accept a loopback host, never a hosted or production database.",
+  );
+  assert.match(
+    url.pathname,
+    /^\/[a-zA-Z0-9_]+_test$/,
+    "PostgreSQL tests require a database name ending in _test.",
+  );
+  // Do not allow supplied connection parameters to override the guarded host,
+  // database or per-run search_path. Credentials are never logged.
+  assert.ok(!url.search, "PG_TEST_URL must not contain query parameters.");
+  return url;
+}
+
+function fixtureUser(id: string): User {
+  return {
+    id,
+    username: id,
+    walletIdentity: id,
+    walletType: "synthetic",
+    wallet: { address: `test-only-${id}` },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    escrowShannons: "900719925474099312345",
+    creatorFeesShannons: "0",
+    streak: { current: 0, best: 0, status: "active" },
+    stats: {
+      totalBets: 0,
+      wonBets: 0,
+      lostBets: 0,
+      renews: 0,
+      netPnlShannons: "0",
+      turnoverShannons: "0",
+    },
+  };
 }
 
 async function run(): Promise<void> {
-  if (!(await reachable())) {
-    console.log("Postgres store checks SKIPPED (no database at " + PG_URL + ")");
-    return;
-  }
-
-  process.env.DATABASE_URL = PG_URL;
+  const url = testDatabaseUrl();
+  const schema = `streak_test_${randomUUID().replace(/-/g, "")}`;
+  assert.match(schema, /^streak_test_[a-f0-9]{32}$/);
+  const originalEnv = { ...process.env };
+  const originalFetch = globalThis.fetch;
+  let closePool: (() => Promise<void>) | undefined;
+  let connected = false;
+  let created = false;
+  const probe = new Client({
+    connectionString: url.toString(),
+    ssl: false,
+    connectionTimeoutMillis: 3_000,
+  });
+  process.env.STREAK_SKIP_ENV_FILE = "1";
   process.env.STORE_READ_TTL_MS = "0";
-  delete process.env.SUPABASE_URL;
-  delete process.env.SUPABASE_KEY;
-
-  const { Client } = await import("pg");
-  const { loadDB, read, readReceipt, readReceipts, update } = await import("./store");
-  const { closePool } = await import("./store_pg");
-
-  const probe = new Client({ connectionString: PG_URL, ssl: false });
-  await probe.connect();
-  const scalar = async (sql: string, params: unknown[] = []): Promise<any> =>
-    (await probe.query(sql, params)).rows[0];
+  process.env.MATCH_PROVIDER = "worldcup";
+  process.env.SUPABASE_URL = "";
+  process.env.SUPABASE_KEY = "";
+  process.env.API_SPORTS_KEY = "";
+  process.env.TELEGRAM_BOT_TOKEN = "";
+  process.env.NOTIFIER = "none";
+  globalThis.fetch = async () => {
+    throw new Error("External HTTP is forbidden in PostgreSQL tests.");
+  };
 
   try {
-    // ── snapshot excludes receipts, includes everything else ────────────────
-    const db = await loadDB();
-    assert.equal(db.receipts.length, 0, "receipts must not ride along with the snapshot");
-    assert.ok(db.users.length > 0, "users load");
-    assert.ok(db.markets.length > 0, "markets load");
-    assert.ok(db.treasury?.privateKey, "treasury key loads");
-
-    const totalMarkets = Number((await scalar("select count(*)::int n from markets")).n);
-    assert.equal(db.markets.length, totalMarkets, "every market is materialised");
-
-    // ── receipts remain reachable by id, and are real payloads ──────────────
-    const anyReceipt = await scalar("select market_id from receipts limit 1");
-    const fetched = await readReceipt(anyReceipt.market_id);
-    assert.ok(fetched, "receipt fetched by marketId");
-    assert.equal(fetched!.marketId, anyReceipt.market_id);
-    const listed = await readReceipts(5);
-    assert.equal(listed.length, 5, "gallery listing is limited and non-empty");
-    for (let i = 1; i < listed.length; i++) {
-      assert.ok(listed[i - 1].settledAt >= listed[i].settledAt, "gallery is newest-first");
+    try {
+      await probe.connect();
+      connected = true;
+    } catch {
+      throw new Error(
+        "PostgreSQL integration database is unavailable. Start the local test service and check PG_TEST_URL (credentials omitted).",
+      );
     }
-
-    // ── a mutation writes only what it touched ──────────────────────────────
-    const target = db.users[0].id;
-    const before = await scalar("select escrow_shannons from users where id = $1", [target]);
-    const bumped = (BigInt(before.escrow_shannons) + 12345n).toString();
-
-    const marketsBefore = await scalar("select count(*)::int n from markets");
-    const metaBefore = await scalar("select updated_at from streak_meta where id = 'singleton'");
-
-    await update((d) => {
-      const u = d.users.find((x) => x.id === target)!;
-      u.escrowShannons = bumped;
-    });
-
-    const after = await scalar("select escrow_shannons from users where id = $1", [target]);
-    assert.equal(after.escrow_shannons, bumped, "the touched row is persisted");
-
-    const marketsAfter = await scalar("select count(*)::int n from markets");
-    assert.equal(marketsAfter.n, marketsBefore.n, "untouched collections are not rewritten");
-    const metaAfter = await scalar("select updated_at from streak_meta where id = 'singleton'");
+    await probe.query(`create schema "${schema}"`);
+    created = true;
+    await probe.query(`set search_path to "${schema}"`);
+    await probe.query(
+      await readFile(
+        resolve(__dirname, "../scripts/sql/001_schema.sql"),
+        "utf8",
+      ),
+    );
+    url.searchParams.set("options", `-c search_path=${schema}`);
+    process.env.DATABASE_URL = url.toString();
+    const store = await import("./store");
+    const pgStore = await import("./store_pg");
+    closePool = pgStore.closePool;
+    const { ensureMarketsForMatches } = await import("./markets");
+    const { buildReceiptPayload } = await import("./settlement");
+    const scalar = async (sql: string, params: unknown[] = []): Promise<any> =>
+      (await probe.query(sql, params)).rows[0];
     assert.equal(
-      metaAfter.updated_at.toISOString(), metaBefore.updated_at.toISOString(),
-      "unchanged meta is not rewritten",
+      (await pgStore.getPool().query("select current_schema() as name")).rows[0]
+        .name,
+      schema,
+      "The real store pool must stay in the disposable schema.",
     );
 
-    // reload proves it round-trips through the materialiser
-    const reloaded = await read((d) => d.users.find((x) => x.id === target)!.escrowShannons);
-    assert.equal(reloaded, bumped, "mutation survives a reload");
-
-    // ── deletes are never inferred from absence ─────────────────────────────
-    // pruneStaleSimMarkets reassigns db.markets wholesale; under a diffed write
-    // that must not be read as "delete everything that is missing".
-    const keep = (await loadDB()).markets.slice(0, 3).map((m) => ({ ...m }));
-    await update((d) => {
-      d.markets = keep as typeof d.markets;
+    await store.update((db) => {
+      db.users = [fixtureUser("alice"), fixtureUser("bob")];
+      db.treasury = { address: "synthetic-treasury", privateKey: "not-a-key" };
+      db.matches = Array.from({ length: 6 }, (_, i): Match => ({
+        id: `fixture-${i}`,
+        kickoff: `2030-01-0${i + 1}T12:00:00.000Z`,
+        date: `2030-01-0${i + 1}`,
+        stage: "Synthetic integration fixture",
+        status: "scheduled",
+        home: { code: "HOM", name: "Home", flag: "" },
+        away: { code: "AWY", name: "Away", flag: "" },
+      }));
+      ensureMarketsForMatches(db);
+      db.markets.forEach((market, i) => {
+        market.resolvedAt = `2026-01-0${i + 1}T12:00:00.000Z`;
+        db.receipts.push(buildReceiptPayload(db, market, db.treasury!).payload);
+      });
+      db.deposits.push({
+        id: "deposit-original",
+        userId: "alice",
+        amountShannons: "12345",
+        txHash: "0x" + "a".repeat(64),
+        at: "2026-01-01T12:00:00.000Z",
+      });
+      (db.renewalTxs ??= []).push("0x" + "b".repeat(64));
     });
-    const survived = await scalar("select count(*)::int n from markets");
-    assert.equal(survived.n, totalMarkets, "absent rows are preserved, not deleted");
 
-    // ── a failing write leaves committed state alone ────────────────────────
-    const escrowBefore = (await scalar("select escrow_shannons from users where id = $1", [target]))
-      .escrow_shannons;
+    const db = await store.loadDB();
+    assert.equal(
+      db.receipts.length,
+      0,
+      "Archive receipts stay outside the working snapshot.",
+    );
+    assert.equal(db.users.length, 2);
+    assert.equal(db.markets.length, 6);
+    assert.equal(
+      (await store.readReceipt("m-fixture-0"))?.marketId,
+      "m-fixture-0",
+    );
+    assert.equal(await store.readReceipt("not-a-market"), undefined);
+    const listed = await store.readReceipts(5);
+    assert.equal(listed.length, 5, "Receipt listing honors its limit.");
+    assert.deepEqual(
+      listed.map((receipt) => receipt.marketId),
+      [5, 4, 3, 2, 1].map((i) => `m-fixture-${i}`),
+      "Receipt listing is newest first.",
+    );
+    assert.deepEqual(
+      db.renewalTxs,
+      ["0x" + "b".repeat(64)],
+      "Renewal replay history survives reload.",
+    );
+
+    const before = await scalar(
+      "select escrow_shannons from users where id = 'alice'",
+    );
+    const bumped = (BigInt(before.escrow_shannons) + 12345n).toString();
+    // PostgreSQL xmin changes on UPDATE even when row counts do not change.
+    const untouched = (
+      await probe.query(
+        "select id, xmin::text as version from markets order by id",
+      )
+    ).rows;
+    const metaBefore = await scalar(
+      "select xmin::text as version from streak_meta where id = 'singleton'",
+    );
+    await store.update((draft) => {
+      draft.users[0].escrowShannons = bumped;
+    });
+    assert.equal(
+      (await scalar("select escrow_shannons from users where id = 'alice'"))
+        .escrow_shannons,
+      bumped,
+    );
+    assert.equal(
+      await store.read((draft) => draft.users[0].escrowShannons),
+      bumped,
+      "Amounts beyond Number.MAX_SAFE_INTEGER round-trip exactly.",
+    );
+    assert.deepEqual(
+      (
+        await probe.query(
+          "select id, xmin::text as version from markets order by id",
+        )
+      ).rows,
+      untouched,
+      "Changing one user must not rewrite untouched markets.",
+    );
+    assert.equal(
+      (
+        await scalar(
+          "select xmin::text as version from streak_meta where id = 'singleton'",
+        )
+      ).version,
+      metaBefore.version,
+      "Changing one user must not rewrite unchanged metadata.",
+    );
+
+    await Promise.all(
+      Array.from({ length: 12 }, () =>
+        store.update((draft) => {
+          draft.users[0].escrowShannons = (
+            BigInt(draft.users[0].escrowShannons) + 1n
+          ).toString();
+        }),
+      ),
+    );
+    const committed = (BigInt(bumped) + 12n).toString();
+    assert.equal(
+      await store.read((draft) => draft.users[0].escrowShannons),
+      committed,
+      "Concurrent mutations in the supported single writer lose no updates.",
+    );
+
+    await store.update((draft) => {
+      draft.markets = draft.markets.slice(0, 3);
+    });
+    assert.equal(
+      (await scalar("select count(*)::int as n from markets")).n,
+      6,
+      "Absent rows are preserved unless explicitly deleted.",
+    );
+
+    // Fail after the user row was updated. Both the balance and replay record
+    // must roll back together when a later collection violates a constraint.
     await assert.rejects(
-      update((d) => {
-        const u = d.users.find((x) => x.id === target)!;
-        u.escrowShannons = "-1"; // violates users_escrow_non_negative
+      store.update((draft) => {
+        draft.users[0].escrowShannons = "1";
+        draft.deposits.push({ ...draft.deposits[0], id: "duplicate-payment" });
       }),
-      "a constraint violation must reject",
+      (error: any) => error.code === "23505",
+      "Duplicate payment hashes must reject.",
     );
-    const escrowAfter = (await scalar("select escrow_shannons from users where id = $1", [target]))
-      .escrow_shannons;
-    assert.equal(escrowAfter, escrowBefore, "rejected write did not partially apply");
-
-    // ── restore ─────────────────────────────────────────────────────────────
-    await update((d) => {
-      const u = d.users.find((x) => x.id === target)!;
-      u.escrowShannons = before.escrow_shannons;
+    assert.equal(
+      (await scalar("select escrow_shannons from users where id = 'alice'"))
+        .escrow_shannons,
+      committed,
+      "A late transaction failure must roll back earlier balance writes.",
+    );
+    assert.equal(
+      (await scalar("select count(*)::int as n from deposits")).n,
+      1,
+    );
+    await assert.rejects(
+      store.update((draft) => {
+        draft.users[0].escrowShannons = "-1";
+      }),
+      (error: any) => error.code === "23514",
+      "Negative balances must fail at the database boundary.",
+    );
+    assert.equal(
+      await store.read((draft) => draft.users[0].escrowShannons),
+      committed,
+      "Failed writes invalidate the cache without exposing a rejected draft.",
+    );
+    await store.update((draft) => {
+      draft.users[0].escrowShannons = (BigInt(committed) + 1n).toString();
     });
-    const restored = await scalar("select escrow_shannons from users where id = $1", [target]);
-    assert.equal(restored.escrow_shannons, before.escrow_shannons, "restored");
-
+    assert.equal(
+      await store.read((draft) => draft.users[0].escrowShannons),
+      (BigInt(committed) + 1n).toString(),
+      "The write queue and PostgreSQL pool recover after a rejected transaction.",
+    );
     console.log(
-      "Postgres store checks passed (archive split, partial writes, no implicit deletes, rollback).",
+      "Real PostgreSQL integration passed: isolated schema, exact money, archive reads, partial writes, concurrent writes, replay rejection, atomic rollback and recovery.",
     );
   } finally {
-    await probe.end();
-    await closePool();
+    try {
+      await closePool?.();
+    } finally {
+      try {
+        if (created) {
+          assert.match(schema, /^streak_test_[a-f0-9]{32}$/);
+          await probe.query("rollback");
+          await probe.query(`drop schema "${schema}" cascade`);
+        }
+      } finally {
+        if (connected) await probe.end();
+        globalThis.fetch = originalFetch;
+        for (const key of Object.keys(process.env))
+          if (!(key in originalEnv)) delete process.env[key];
+        Object.assign(process.env, originalEnv);
+      }
+    }
   }
 }
 
-run().catch((err) => {
-  console.error(err);
-  process.exit(1);
+run().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
 });

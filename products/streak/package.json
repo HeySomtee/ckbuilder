@@ -17,12 +17,16 @@
     "test:store": "ts-node src/store.test.ts",
     "test:markets": "ts-node src/markets.test.ts",
     "test:backend": "ts-node src/backend-performance.test.ts",
-    "test": "npm run test:football && npm run test:insights && npm run test:matchday && npm run test:store && npm run test:store:pg && npm run test:markets && npm run test:backend && npm run test:client",
+    "test": "npm run test:football && npm run test:insights && npm run test:matchday && npm run test:store && npm run test:markets && npm run test:backend && npm run test:client",
+    "quality": "node ../../scripts/quality/verify.mjs all",
+    "quality:major": "node ../../scripts/quality/verify.mjs all",
     "test:browser": "npm run build && node scripts/browser-smoke.cjs",
     "test:store:pg": "ts-node src/store_pg.test.ts"
   },
+  "packageManager": "npm@11.9.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=24.14.0 <25",
+    "npm": ">=11.9.0 <12"
   },
   "dependencies": {
     "@ckb-ccc/core": "^1.12.5",

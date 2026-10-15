@@ -6,6 +6,19 @@ mirrors the mental model, then as a real interaction with the live network.
 
 ## Structure
 
+Streak's Season UI and architecture were approved on 15 October 2026. Start with
+the [documentation map](products/streak/docs/README.md),
+[agent instructions](AGENTS.md), and [delivery status](products/streak/status.md).
+The approved rebuild is separate from the current custodial application and the
+Week 20 Rust contract lab.
+
+Use Node 24.14.0 and npm 11.9.0. `npm ci` installs both locked dependency trees.
+Run `npm run hooks:install` once per checkout. `npm run quality:major` is the
+complete local quality gate, including required isolated PostgreSQL, browser and
+Rust checks. See [test setup and CI](products/streak/docs/delivery/quality.md)
+for prerequisites. PowerShell users with script execution disabled can use
+`npm.cmd` in place of `npm`. The gate never runs live settlement.
+
 ```
 src/
   week1/

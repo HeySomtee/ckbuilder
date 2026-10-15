@@ -4,6 +4,11 @@ dist/
 .DS_Store
 
 .github/*
+!.github/workflows/
+!.github/pull_request_template.md
+
+# Local verification output and disposable test fixtures
+.quality-artifacts/
 
 # Wallet — never commit private keys
 .ckb-wallet.key

@@ -1,0 +1,144 @@
+{
+  "scope": "Local simulated design preview only",
+  "environment": "Headless desktop-host Chromium and WebKit. Mobile viewport emulation, not a physical iPhone.",
+  "timingMethod": "No video recording or screenshots during timing runs. rAF measures scheduling, not proof of compositor frames. Long-task API is unavailable in WebKit.",
+  "capturedAt": "2026-10-15T16:07:25.444Z",
+  "results": [
+    {
+      "name": "chromium 390: multi-pick minimize and restore preserve separate stakes and refresh redistributed amounts",
+      "status": "passed",
+      "durationMs": 4656
+    },
+    {
+      "name": "chromium 390: scrolled basket snapshot retains the visible total and review button",
+      "status": "passed",
+      "durationMs": 2512
+    },
+    {
+      "name": "chromium 1440: multi-pick minimize and restore preserve separate stakes and refresh redistributed amounts",
+      "status": "passed",
+      "durationMs": 4916
+    },
+    {
+      "name": "chromium 1440: scrolled basket snapshot retains the visible total and review button",
+      "status": "passed",
+      "durationMs": 1462
+    },
+    {
+      "name": "webkit 390: multi-pick minimize and restore preserve separate stakes and refresh redistributed amounts",
+      "status": "passed",
+      "durationMs": 10706
+    },
+    {
+      "name": "webkit 390: scrolled basket snapshot retains the visible total and review button",
+      "status": "passed",
+      "durationMs": 6744
+    },
+    {
+      "name": "webkit 1440: multi-pick minimize and restore preserve separate stakes and refresh redistributed amounts",
+      "status": "passed",
+      "durationMs": 4942
+    },
+    {
+      "name": "webkit 1440: scrolled basket snapshot retains the visible total and review button",
+      "status": "passed",
+      "durationMs": 1682
+    },
+    {
+      "name": "No uncaught browser errors",
+      "status": "passed",
+      "durationMs": 0
+    }
+  ],
+  "measurements": [],
+  "geometryMeasurements": [],
+  "snapshotMeasurements": [
+    {
+      "engine": "chromium",
+      "width": 390,
+      "scrollTop": 236,
+      "measurements": [
+        {
+          "selector": "[data-total=\"pay\"]",
+          "brightPixels": 454,
+          "mismatchedBrightRatio": 0.0022026431718061676,
+          "meanChannelError": 0.027486550175625804
+        },
+        {
+          "selector": "[data-action=\"review-prediction\"]",
+          "brightPixels": 13231,
+          "mismatchedBrightRatio": 0.013982314261960548,
+          "meanChannelError": 0.020535225718194255
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "scrollTop": 256,
+      "measurements": [
+        {
+          "selector": "[data-total=\"pay\"]",
+          "brightPixels": 547,
+          "mismatchedBrightRatio": 0,
+          "meanChannelError": 0.0033102129740785204
+        },
+        {
+          "selector": "[data-action=\"review-prediction\"]",
+          "brightPixels": 15992,
+          "mismatchedBrightRatio": 0,
+          "meanChannelError": 0.000014445391683243344
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "scrollTop": 236,
+      "measurements": [
+        {
+          "selector": "[data-total=\"pay\"]",
+          "brightPixels": 366,
+          "mismatchedBrightRatio": 0.06557377049180328,
+          "meanChannelError": 0.04974434218131697
+        },
+        {
+          "selector": "[data-action=\"review-prediction\"]",
+          "brightPixels": 13218,
+          "mismatchedBrightRatio": 0.0018157058556513845,
+          "meanChannelError": 0.007169117647058823
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "width": 1440,
+      "scrollTop": 256,
+      "measurements": [
+        {
+          "selector": "[data-total=\"pay\"]",
+          "brightPixels": 434,
+          "mismatchedBrightRatio": 0,
+          "meanChannelError": 0.0014605842336934776
+        },
+        {
+          "selector": "[data-action=\"review-prediction\"]",
+          "brightPixels": 15983,
+          "mismatchedBrightRatio": 0,
+          "meanChannelError": 0.000002841716396703609
+        }
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "artifacts": [
+    "motion-scrolled-real-chromium-390.png",
+    "motion-scrolled-snapshot-chromium-390.png",
+    "motion-scrolled-real-chromium-1440.png",
+    "motion-scrolled-snapshot-chromium-1440.png",
+    "motion-scrolled-real-webkit-390.png",
+    "motion-scrolled-snapshot-webkit-390.png",
+    "motion-scrolled-real-webkit-1440.png",
+    "motion-scrolled-snapshot-webkit-1440.png"
+  ]
+}

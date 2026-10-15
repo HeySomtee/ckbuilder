@@ -1,0 +1,573 @@
+{
+  "scope": "Local simulated design preview only",
+  "environment": "Headless desktop-host Chromium and WebKit. Mobile viewport emulation, not a physical iPhone.",
+  "timingMethod": "No video recording or screenshots during timing runs. rAF measures scheduling, not proof of compositor frames. Long-task API is unavailable in WebKit.",
+  "capturedAt": "2026-10-15T16:12:00.978Z",
+  "results": [
+    {
+      "name": "Funnel geometry: continuous edges, finite coordinates and narrow lower neck",
+      "status": "passed",
+      "durationMs": 26
+    },
+    {
+      "name": "chromium 390: unrecorded minimize and restore timing",
+      "status": "passed",
+      "durationMs": 2956
+    },
+    {
+      "name": "chromium 390: one inert raster surface, shared timeline and saved stake",
+      "status": "passed",
+      "durationMs": 1098
+    },
+    {
+      "name": "chromium 390: rapid restore, Escape and route interruption",
+      "status": "passed",
+      "durationMs": 970
+    },
+    {
+      "name": "chromium 390: queued no-op viewport events do not cancel a visible transition",
+      "status": "passed",
+      "durationMs": 1470
+    },
+    {
+      "name": "chromium 390: scroll, resize, visual viewport and hidden-document cleanup",
+      "status": "passed",
+      "durationMs": 4147
+    },
+    {
+      "name": "chromium 390: reduced-motion bypass and live preference change",
+      "status": "passed",
+      "durationMs": 98
+    },
+    {
+      "name": "chromium 390: cold open and immediate stake edit both animate without prewarming",
+      "status": "passed",
+      "durationMs": 3421
+    },
+    {
+      "name": "chromium 390: pending preparation respects close, navigation and stake edits",
+      "status": "passed",
+      "durationMs": 2439
+    },
+    {
+      "name": "chromium 390: persisted dock restores with an empty image cache",
+      "status": "passed",
+      "durationMs": 1867
+    },
+    {
+      "name": "chromium 390: WebGL unavailable uses the canvas fallback",
+      "status": "passed",
+      "durationMs": 1544
+    },
+    {
+      "name": "chromium 390: context loss reveals the real dialog and releases the overlay",
+      "status": "passed",
+      "durationMs": 910
+    },
+    {
+      "name": "chromium 390: neck-phase visual evidence",
+      "status": "passed",
+      "durationMs": 1188
+    },
+    {
+      "name": "chromium 390: multi-pick minimize and restore preserve separate stakes and refresh redistributed amounts",
+      "status": "passed",
+      "durationMs": 4790
+    },
+    {
+      "name": "chromium 390: scrolled basket snapshot retains the visible total and review button",
+      "status": "passed",
+      "durationMs": 2638
+    },
+    {
+      "name": "chromium 1440: unrecorded minimize and restore timing",
+      "status": "passed",
+      "durationMs": 3262
+    },
+    {
+      "name": "chromium 1440: one inert raster surface, shared timeline and saved stake",
+      "status": "passed",
+      "durationMs": 1359
+    },
+    {
+      "name": "chromium 1440: rapid restore, Escape and route interruption",
+      "status": "passed",
+      "durationMs": 920
+    },
+    {
+      "name": "chromium 1440: queued no-op viewport events do not cancel a visible transition",
+      "status": "passed",
+      "durationMs": 1572
+    },
+    {
+      "name": "chromium 1440: scroll, resize, visual viewport and hidden-document cleanup",
+      "status": "passed",
+      "durationMs": 4620
+    },
+    {
+      "name": "chromium 1440: reduced-motion bypass and live preference change",
+      "status": "passed",
+      "durationMs": 132
+    },
+    {
+      "name": "chromium 1440: cold open and immediate stake edit both animate without prewarming",
+      "status": "passed",
+      "durationMs": 3520
+    },
+    {
+      "name": "chromium 1440: pending preparation respects close, navigation and stake edits",
+      "status": "passed",
+      "durationMs": 2763
+    },
+    {
+      "name": "chromium 1440: persisted dock restores with an empty image cache",
+      "status": "passed",
+      "durationMs": 2002
+    },
+    {
+      "name": "chromium 1440: WebGL unavailable uses the canvas fallback",
+      "status": "passed",
+      "durationMs": 1692
+    },
+    {
+      "name": "chromium 1440: context loss reveals the real dialog and releases the overlay",
+      "status": "passed",
+      "durationMs": 954
+    },
+    {
+      "name": "chromium 1440: neck-phase visual evidence",
+      "status": "passed",
+      "durationMs": 816
+    },
+    {
+      "name": "chromium 1440: multi-pick minimize and restore preserve separate stakes and refresh redistributed amounts",
+      "status": "passed",
+      "durationMs": 4707
+    },
+    {
+      "name": "chromium 1440: scrolled basket snapshot retains the visible total and review button",
+      "status": "passed",
+      "durationMs": 1707
+    },
+    {
+      "name": "webkit 390: unrecorded minimize and restore timing",
+      "status": "failed",
+      "error": "The expression evaluated to a falsy value:\n\n  assert.ok(result.layerCleaned)\n"
+    },
+    {
+      "name": "webkit 390: one inert raster surface, shared timeline and saved stake",
+      "status": "passed",
+      "durationMs": 4083
+    },
+    {
+      "name": "webkit 390: rapid restore, Escape and route interruption",
+      "status": "passed",
+      "durationMs": 2029
+    },
+    {
+      "name": "webkit 390: queued no-op viewport events do not cancel a visible transition",
+      "status": "passed",
+      "durationMs": 2948
+    },
+    {
+      "name": "webkit 390: scroll, resize, visual viewport and hidden-document cleanup",
+      "status": "passed",
+      "durationMs": 8055
+    },
+    {
+      "name": "webkit 390: reduced-motion bypass and live preference change",
+      "status": "passed",
+      "durationMs": 610
+    },
+    {
+      "name": "webkit 390: cold open and immediate stake edit both animate without prewarming",
+      "status": "failed",
+      "error": "Cold initial minimize: page.waitForFunction: Timeout 6000ms exceeded."
+    },
+    {
+      "name": "webkit 390: pending preparation respects close, navigation and stake edits",
+      "status": "passed",
+      "durationMs": 2462
+    },
+    {
+      "name": "webkit 390: persisted dock restores with an empty image cache",
+      "status": "passed",
+      "durationMs": 2589
+    },
+    {
+      "name": "webkit 390: WebGL unavailable uses the canvas fallback",
+      "status": "passed",
+      "durationMs": 4654
+    },
+    {
+      "name": "webkit 390: context loss reveals the real dialog and releases the overlay",
+      "status": "passed",
+      "durationMs": 2082
+    },
+    {
+      "name": "webkit 390: neck-phase visual evidence",
+      "status": "passed",
+      "durationMs": 5615
+    },
+    {
+      "name": "webkit 390: multi-pick minimize and restore preserve separate stakes and refresh redistributed amounts",
+      "status": "passed",
+      "durationMs": 10108
+    },
+    {
+      "name": "webkit 390: scrolled basket snapshot retains the visible total and review button",
+      "status": "passed",
+      "durationMs": 6664
+    },
+    {
+      "name": "webkit 1440: unrecorded minimize and restore timing",
+      "status": "passed",
+      "durationMs": 3101
+    },
+    {
+      "name": "webkit 1440: one inert raster surface, shared timeline and saved stake",
+      "status": "passed",
+      "durationMs": 1315
+    },
+    {
+      "name": "webkit 1440: rapid restore, Escape and route interruption",
+      "status": "passed",
+      "durationMs": 973
+    },
+    {
+      "name": "webkit 1440: queued no-op viewport events do not cancel a visible transition",
+      "status": "passed",
+      "durationMs": 1646
+    },
+    {
+      "name": "webkit 1440: scroll, resize, visual viewport and hidden-document cleanup",
+      "status": "passed",
+      "durationMs": 4448
+    },
+    {
+      "name": "webkit 1440: reduced-motion bypass and live preference change",
+      "status": "passed",
+      "durationMs": 104
+    },
+    {
+      "name": "webkit 1440: cold open and immediate stake edit both animate without prewarming",
+      "status": "passed",
+      "durationMs": 3661
+    },
+    {
+      "name": "webkit 1440: pending preparation respects close, navigation and stake edits",
+      "status": "passed",
+      "durationMs": 2518
+    },
+    {
+      "name": "webkit 1440: persisted dock restores with an empty image cache",
+      "status": "passed",
+      "durationMs": 1884
+    },
+    {
+      "name": "webkit 1440: WebGL unavailable uses the canvas fallback",
+      "status": "passed",
+      "durationMs": 1842
+    },
+    {
+      "name": "webkit 1440: context loss reveals the real dialog and releases the overlay",
+      "status": "passed",
+      "durationMs": 933
+    },
+    {
+      "name": "webkit 1440: neck-phase visual evidence",
+      "status": "passed",
+      "durationMs": 1059
+    },
+    {
+      "name": "webkit 1440: multi-pick minimize and restore preserve separate stakes and refresh redistributed amounts",
+      "status": "passed",
+      "durationMs": 4883
+    },
+    {
+      "name": "webkit 1440: scrolled basket snapshot retains the visible total and review button",
+      "status": "passed",
+      "durationMs": 1721
+    },
+    {
+      "name": "No uncaught browser errors",
+      "status": "passed",
+      "durationMs": 0
+    }
+  ],
+  "measurements": [
+    {
+      "engine": "chromium",
+      "viewport": 390,
+      "direction": "minimize",
+      "setupMs": 28.5,
+      "firstFrameDelayMs": 18.491999928474456,
+      "frameCount": 59,
+      "intervalMedianMs": 16.699999999999818,
+      "intervalP95Ms": 33.30000000000007,
+      "intervalMaxMs": 50.09999999999991,
+      "intervalsOver25Ms": 3,
+      "longTaskObserverSupported": true,
+      "longTasks": [
+        {
+          "startMs": 28.699999928474426,
+          "durationMs": 60
+        }
+      ],
+      "layerCreated": true,
+      "layerCleaned": true
+    },
+    {
+      "engine": "chromium",
+      "viewport": 390,
+      "direction": "restore",
+      "setupMs": 28.799999952316284,
+      "firstFrameDelayMs": 0,
+      "frameCount": 53,
+      "intervalMedianMs": 16.699999999999818,
+      "intervalP95Ms": 33.40000000000009,
+      "intervalMaxMs": 50,
+      "intervalsOver25Ms": 11,
+      "longTaskObserverSupported": true,
+      "longTasks": [],
+      "layerCreated": true,
+      "layerCleaned": true
+    },
+    {
+      "engine": "chromium",
+      "viewport": 1440,
+      "direction": "minimize",
+      "setupMs": 28.09999990463257,
+      "firstFrameDelayMs": 12.705999952316233,
+      "frameCount": 40,
+      "intervalMedianMs": 33.299999999999955,
+      "intervalP95Ms": 33.40000000000009,
+      "intervalMaxMs": 83.394,
+      "intervalsOver25Ms": 22,
+      "longTaskObserverSupported": true,
+      "longTasks": [
+        {
+          "startMs": 28.199999928474426,
+          "durationMs": 60
+        }
+      ],
+      "layerCreated": true,
+      "layerCleaned": true
+    },
+    {
+      "engine": "chromium",
+      "viewport": 1440,
+      "direction": "restore",
+      "setupMs": 30.300000071525574,
+      "firstFrameDelayMs": 11.900000047683534,
+      "frameCount": 19,
+      "intervalMedianMs": 50,
+      "intervalP95Ms": 133.30000000000018,
+      "intervalMaxMs": 133.30000000000018,
+      "intervalsOver25Ms": 9,
+      "longTaskObserverSupported": true,
+      "longTasks": [],
+      "layerCreated": true,
+      "layerCleaned": true
+    },
+    {
+      "engine": "webkit",
+      "viewport": 390,
+      "direction": "minimize",
+      "setupMs": 932,
+      "firstFrameDelayMs": 950,
+      "frameCount": 2,
+      "intervalMedianMs": 815,
+      "intervalP95Ms": 815,
+      "intervalMaxMs": 815,
+      "intervalsOver25Ms": 1,
+      "longTaskObserverSupported": false,
+      "longTasks": [],
+      "layerCreated": true,
+      "layerCleaned": true
+    },
+    {
+      "engine": "webkit",
+      "viewport": 390,
+      "direction": "restore",
+      "setupMs": 70,
+      "firstFrameDelayMs": 554,
+      "frameCount": 2,
+      "intervalMedianMs": 442,
+      "intervalP95Ms": 442,
+      "intervalMaxMs": 442,
+      "intervalsOver25Ms": 1,
+      "longTaskObserverSupported": false,
+      "longTasks": [],
+      "layerCreated": true,
+      "layerCleaned": false
+    },
+    {
+      "engine": "webkit",
+      "viewport": 1440,
+      "direction": "minimize",
+      "setupMs": 159,
+      "firstFrameDelayMs": 168,
+      "frameCount": 19,
+      "intervalMedianMs": 31,
+      "intervalP95Ms": 130,
+      "intervalMaxMs": 130,
+      "intervalsOver25Ms": 9,
+      "longTaskObserverSupported": false,
+      "longTasks": [],
+      "layerCreated": true,
+      "layerCleaned": true
+    },
+    {
+      "engine": "webkit",
+      "viewport": 1440,
+      "direction": "restore",
+      "setupMs": 32,
+      "firstFrameDelayMs": 32,
+      "frameCount": 24,
+      "intervalMedianMs": 16,
+      "intervalP95Ms": 109,
+      "intervalMaxMs": 145,
+      "intervalsOver25Ms": 9,
+      "longTaskObserverSupported": false,
+      "longTasks": [],
+      "layerCreated": true,
+      "layerCleaned": true
+    }
+  ],
+  "geometryMeasurements": [
+    {
+      "engine": "chromium",
+      "width": 390,
+      "progress": 0.4,
+      "renderer": "webgl",
+      "visiblePixels": 590995,
+      "leakedSamples": 0,
+      "canvasWidth": 780,
+      "canvasHeight": 1688
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "progress": 0.4,
+      "renderer": "webgl",
+      "visiblePixels": 251023,
+      "leakedSamples": 0,
+      "canvasWidth": 1440,
+      "canvasHeight": 1000
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "progress": 0.4,
+      "renderer": "webgl",
+      "visiblePixels": 591005,
+      "leakedSamples": 0,
+      "canvasWidth": 780,
+      "canvasHeight": 1688
+    },
+    {
+      "engine": "webkit",
+      "width": 1440,
+      "progress": 0.4,
+      "renderer": "webgl",
+      "visiblePixels": 251031,
+      "leakedSamples": 0,
+      "canvasWidth": 1440,
+      "canvasHeight": 1000
+    }
+  ],
+  "snapshotMeasurements": [
+    {
+      "engine": "chromium",
+      "width": 390,
+      "scrollTop": 236,
+      "measurements": [
+        {
+          "selector": "[data-total=\"pay\"]",
+          "brightPixels": 454,
+          "mismatchedBrightRatio": 0.0022026431718061676,
+          "meanChannelError": 0.027486550175625804
+        },
+        {
+          "selector": "[data-action=\"review-prediction\"]",
+          "brightPixels": 13231,
+          "mismatchedBrightRatio": 0.013982314261960548,
+          "meanChannelError": 0.020535225718194255
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "scrollTop": 256,
+      "measurements": [
+        {
+          "selector": "[data-total=\"pay\"]",
+          "brightPixels": 547,
+          "mismatchedBrightRatio": 0,
+          "meanChannelError": 0.0005891245387043707
+        },
+        {
+          "selector": "[data-action=\"review-prediction\"]",
+          "brightPixels": 15992,
+          "mismatchedBrightRatio": 0,
+          "meanChannelError": 0.000010419626787913233
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "scrollTop": 236,
+      "measurements": [
+        {
+          "selector": "[data-total=\"pay\"]",
+          "brightPixels": 366,
+          "mismatchedBrightRatio": 0.06557377049180328,
+          "meanChannelError": 0.04955537770663821
+        },
+        {
+          "selector": "[data-action=\"review-prediction\"]",
+          "brightPixels": 13218,
+          "mismatchedBrightRatio": 0.0018157058556513845,
+          "meanChannelError": 0.007169972640218878
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "width": 1440,
+      "scrollTop": 256,
+      "measurements": [
+        {
+          "selector": "[data-total=\"pay\"]",
+          "brightPixels": 434,
+          "mismatchedBrightRatio": 0,
+          "meanChannelError": 0.001111555733404473
+        },
+        {
+          "selector": "[data-action=\"review-prediction\"]",
+          "brightPixels": 15983,
+          "mismatchedBrightRatio": 0,
+          "meanChannelError": 0.0000016576678980771052
+        }
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "artifacts": [
+    "motion-neck-chromium-390.png",
+    "motion-scrolled-real-chromium-390.png",
+    "motion-scrolled-snapshot-chromium-390.png",
+    "motion-neck-chromium-1440.png",
+    "motion-scrolled-real-chromium-1440.png",
+    "motion-scrolled-snapshot-chromium-1440.png",
+    "motion-neck-webkit-390.png",
+    "motion-scrolled-real-webkit-390.png",
+    "motion-scrolled-snapshot-webkit-390.png",
+    "motion-neck-webkit-1440.png",
+    "motion-scrolled-real-webkit-1440.png",
+    "motion-scrolled-snapshot-webkit-1440.png"
+  ]
+}

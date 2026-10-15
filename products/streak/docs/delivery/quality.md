@@ -1,0 +1,96 @@
+# Quality gates and release procedure
+
+The owner's requirement is that major changes receive repeatable tests and every commit passes CI checks. The local gate therefore runs the same substantive checks before a commit; GitHub confirms the committed revision separately after publication. A commit cannot have a hosted result before its SHA exists. Neither a local pass nor a workflow file proves remote enforcement.
+
+## Reproducible setup
+
+Use the repository-pinned **Node 24.14.0 and npm 11.9.0**, the committed lockfiles and `npm ci`. Root and Streak installs are distinct dependency contexts; follow the root scripts rather than hand-editing installed packages. [npm ci](https://docs.npmjs.com/cli/v11/commands/npm-ci/) is the clean-install contract.
+
+Install the Playwright browser versions matching Streak's lockfile. Browser CI needs Chromium and WebKit. The contract lane uses Rust 1.97.1 and the Week 20 lab's documented native toolchain. See the [lab prerequisites](../../../../src/week20/contract-lab/README.md#run); Windows invokes WSL for the Rust VM suite.
+
+PostgreSQL checks require an explicitly configured `PG_TEST_URL` targeting loopback and a disposable database whose name ends in `_test`, conventionally `streak_test`. The harness isolates fixtures in a random schema and cleans up its own schema. Never substitute a production URL, an existing application database or a hosted Neon instance. Missing prerequisites fail the required gate; they are not skipped into success.
+
+Install repository hooks with `npm run hooks:install` after setup. Hooks are local enforcement and must be installed in each checkout. CI repeats the requirements. Do not bypass a failing hook with `--no-verify` or weaken a test just to make a commit.
+
+Example local PowerShell setup from the repository root, after installing the pinned Node/npm and contract prerequisites:
+
+```powershell
+npm.cmd ci --ignore-scripts
+npm.cmd ci --prefix products/streak --ignore-scripts
+node products/streak/node_modules/playwright/cli.js install chromium webkit
+docker run --detach --rm --name streak-quality-postgres --publish 127.0.0.1:55432:5432 --tmpfs /var/lib/postgresql/data -e POSTGRES_DB=streak_test -e POSTGRES_PASSWORD=streak-ci-local postgres:16-alpine
+docker exec streak-quality-postgres pg_isready -U postgres -d streak_test
+$env:PG_TEST_URL = 'postgresql://postgres:streak-ci-local@127.0.0.1:55432/streak_test'
+npm.cmd run hooks:install
+npm.cmd run quality:major
+```
+
+`npm.cmd` avoids PowerShell execution-policy blocks on `npm.ps1`. On other shells use `npm` and the shell's environment-variable syntax. Wait for `pg_isready` to report ready before the gate. The password above belongs only to a disposable local test container. The container binds to loopback and uses temporary storage. Do not reuse its name if another unrelated container owns it. Stop only this test container with `docker stop streak-quality-postgres` when finished; `--rm` removes the container and its temporary data. Start it again for future commit/push gates. The browser lane owns preview port 4176, leaving the interactive preview on 4175 alone.
+
+## Command contract
+
+Run these from the repository root:
+
+| Command                     | Required scope                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| `npm run quality`           | Full static, unit, PostgreSQL, browser and contract lanes                      |
+| `npm run quality:major`     | Full gate after a major change; same complete lane set                         |
+| `npm run verify`            | Alias for the full gate                                                        |
+| `npm run quality:static`    | Repository policy, syntax/types, docs and static checks wired by the runner    |
+| `npm run quality:unit`      | Existing application and shared-client unit/regression suites                  |
+| `npm run quality:postgres`  | Required real PostgreSQL checks in disposable local isolation                  |
+| `npm run quality:browser`   | Built-app Chromium smoke and deterministic preview journeys in Chromium/WebKit |
+| `npm run quality:contracts` | Required Week 20 Rust VM, accounting and shared-client checks                  |
+| `npm run test:tooling`      | Regression checks for the repository's own gate/isolation tooling              |
+| `npm run format:check`      | Prettier check for the new documentation and quality foundation                |
+| `npm run format:foundation` | Format that same scope locally before staging                                  |
+
+The runner writes per-lane results and safe browser evidence to the ignored `.quality-artifacts/` directory. Preserve a dated result summary in status; artifacts alone are not hosted CI evidence. The local pre-commit and pre-push hooks both run the complete gate.
+
+Static checks currently cover scoped formatting, strict TypeScript builds, maintained JavaScript syntax, documentation links, sensitive paths and credential patterns, and direct browser/server import rules. They are not a full historical secret audit or a transitive dependency analysis. Add frontend linting and component checks alongside the React/Vite implementation. The unit runner discovers new `src/**/*.test.ts`, `.test.mjs` and `.test.cjs` files automatically; PostgreSQL remains in its own mandatory lane.
+
+Inspect the current package scripts and runner when a lane changes. Keep this table synchronized in that change. While iterating, run the focused lane that can reveal the change's failure. Before each commit and after a major change, run the complete gate. Major changes include domain behavior, identity, persistence, financial handling, contracts/builders, dependencies, security, architecture, the application shell and delivery tooling.
+
+`products/streak` already has an `npm run verify -- <marketId>` command for receipt verification. That is not the root quality gate and may contact a configured service. Do not confuse the two or invoke live receipt verification as a routine test.
+
+## Safety and meaningful coverage
+
+Required tests must be self-contained: disposable file storage, a random test schema, deterministic provider fixtures, dummy identities and isolated local chain nodes. They must not read local wallet keys or production credentials, mutate the working application data directory, contact public RPC, consume football API quota, send notifications or publish transactions. Testnet and live-provider commands are separate explicitly scoped work.
+
+| Layer       | Behavior to protect                                                                                        |
+| ----------- | ---------------------------------------------------------------------------------------------------------- |
+| Domain/unit | Exact money, validation, mapping, lifecycle rules, idempotency and failure branches                        |
+| Persistence | Real SQL constraints, atomic rollback, exact round trips, bounded behavior and concurrency when introduced |
+| Browser     | Real built routes, navigation, draft persistence, errors, keyboard/focus and critical user journeys        |
+| Preview     | Approved independent-pick UX, totals, rejection/recovery, layout and accessible controls                   |
+| Contract    | Authorization, cell conservation, timing, complete shard closure, fully backed claims, replay and recovery |
+| Tooling     | Gates reject forbidden environments/configuration and report missing prerequisites as failures             |
+
+Add tests for newly implemented failure and recovery behavior. A new API feature needs integration coverage; Five needs deterministic scoring/cutoff race checks when its implementation arrives. Do not add placeholder tests for unbuilt architecture or fill coverage with assertions that mirror constants. A mock proves only the boundary it controls.
+
+PostgreSQL and browser jobs must be required, not optional because they need extra setup. A skipped, unavailable or cancelled required check is not green. Keep timeouts, cleanup and artifact capture, but never solve a failure by removing the assertion, loosening its meaning or broadly ignoring errors.
+
+## Browser and motion evidence
+
+Review changed journeys at 320px, representative phone and desktop widths, short heights and keyboard/zoom conditions. Test reduced motion and readable no-blur/high-contrast fallbacks. Capture relevant pending, failure and recovery states, not only the happy-path screenshot. Browser artifacts must contain only test data.
+
+The preview's last full timing suite passed **56/58**, with two Windows headless mobile WebKit timing observations unresolved. Its earlier dedicated snapshot run passed **9/9 before the final slip tint**. Those results are retained, not silently reclassified as a production pass. See [the design evidence](../design/system.md#evidence-and-remaining-limits). Deterministic functional CI and separate timing/device profiling have different purposes. Production Genie readiness still needs real-device profiling and resolution or a documented immediate-transition fallback.
+
+## Commit and CI procedure
+
+1. Inspect the working tree and stage only intended files. Preserve unrelated changes. Ensure the candidate index is exactly what the verification will evaluate; the hook rejects a mismatch that could test one version and commit another.
+2. Run the complete quality gate. Resolve failures and rerun affected checks, then complete the gate for the final candidate. Record actual results and any missing environment prerequisites.
+3. Review the diff, including generated artifacts, dependencies, trust boundaries and docs. Financial, identity and recovery changes receive an independent review.
+4. Commit only after the applicable gates pass. Use a focused Conventional Commit describing the final change. Do not create a knowingly failing checkpoint merely to obtain a GitHub SHA.
+5. When publication is authorized, push and inspect all required GitHub checks for that exact SHA. Fix failures on a new commit and verify that SHA. Do not merge or release on a result from an older revision.
+6. Record hosted run links, local evidence, reviewed scope and unresolved limitations. Release is a separate action from passing tests.
+
+CI uses locked installs and separate required lanes for static checks, unit tests, PostgreSQL, browser smoke and Week 20 contracts. The workflow's aggregate **Quality gate** fails unless every required job succeeds. Confirm its actual successful GitHub check context before making it required in branch settings. Workflow configuration, successful hosted execution and branch protection are three separate states.
+
+Configure protected branches/rulesets to require the actual quality checks, disallow force pushes/deletion and prevent merging incomplete checks, subject to repository permissions and plan support. A prepared config is not an applied rule. [GitHub protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) describes the repository setting. The initial foundation has no verified hosted run or active protection; read [status](../../status.md) for updates.
+
+## Release acceptance
+
+Before inviting a cohort, require the implemented journey's tests, supported-wallet evidence, observable failures/recovery, a restore rehearsal, bounded workload evidence and a deployment rollback plan. Run real testnet settlement only as an explicitly scoped validation, recording actual network, contract version, transaction hashes and what the test covered. It is not a substitute for isolated regression tests.
+
+No test suite proves software cannot crash. Completion means known critical failures are fixed, invariants are protected, failures are recoverable, monitoring can find them and remaining limits are stated. Do not describe the grant pilot as production-ready or unrestricted based on a clean local run alone.

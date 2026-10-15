@@ -1,0 +1,109 @@
+{
+  "scope": "Local interactive design proposal with synthetic fixtures, local browser state and simulated wallet actions. Not production, live data or on-chain validation.",
+  "checkedAt": "2026-10-15T16:51:58.934Z",
+  "baseUrl": "http://127.0.0.1:4176",
+  "browser": "Playwright Chromium",
+  "widths": [
+    320,
+    390,
+    1440
+  ],
+  "routeCount": 11,
+  "passed": 18,
+  "failed": 0,
+  "cspBlocksConnections": true,
+  "pageErrors": [],
+  "externalRequests": [],
+  "checks": [
+    {
+      "name": "All 11 routes render without horizontal overflow at 320px",
+      "status": "passed",
+      "durationMs": 393
+    },
+    {
+      "name": "All 11 routes render without horizontal overflow at 390px",
+      "status": "passed",
+      "durationMs": 398
+    },
+    {
+      "name": "All 11 routes render without horizontal overflow at 1440px",
+      "status": "passed",
+      "durationMs": 416
+    },
+    {
+      "name": "Fantasy squad validates five slots, duplicate players, budget and captain",
+      "status": "passed",
+      "durationMs": 5194
+    },
+    {
+      "name": "Changing the captain player clears the armband and requires review again",
+      "status": "passed",
+      "durationMs": 1843
+    },
+    {
+      "name": "Prediction validation, minimized draft recovery, rejected signature, conflict and submission",
+      "status": "passed",
+      "durationMs": 4050
+    },
+    {
+      "name": "Closing pending submission preserves one result without reopening a dismissed dialog",
+      "status": "passed",
+      "durationMs": 2311
+    },
+    {
+      "name": "A pending submission cannot discard a different prediction draft opened afterward",
+      "status": "passed",
+      "durationMs": 1522
+    },
+    {
+      "name": "Reset cancels pending preview completion so old activity cannot reappear",
+      "status": "passed",
+      "durationMs": 1972
+    },
+    {
+      "name": "Claim and void refund disclose capacity, persist and prevent repeat actions",
+      "status": "passed",
+      "durationMs": 2123
+    },
+    {
+      "name": "Native dialog Escape restores focus and keeps background controls out of the Tab sequence",
+      "status": "passed",
+      "durationMs": 279
+    },
+    {
+      "name": "Skip to content focuses the current page without changing its route",
+      "status": "passed",
+      "durationMs": 151
+    },
+    {
+      "name": "System reduced motion prevents genie rendering while minimizing and restoring",
+      "status": "passed",
+      "durationMs": 362
+    },
+    {
+      "name": "Opening and immediately minimizing animates one inert surface without prewarming",
+      "status": "passed",
+      "durationMs": 2162
+    },
+    {
+      "name": "Changing the stake and immediately minimizing preserves the amount and animates",
+      "status": "passed",
+      "durationMs": 2819
+    },
+    {
+      "name": "User reduced-motion preference persists and preserves keyboard focus",
+      "status": "passed",
+      "durationMs": 482
+    },
+    {
+      "name": "Delayed and empty Matchday scenarios explain freshness and preserve navigation",
+      "status": "passed",
+      "durationMs": 1001
+    },
+    {
+      "name": "Narrow mobile modal and secondary tabs remain within the viewport",
+      "status": "passed",
+      "durationMs": 2640
+    }
+  ]
+}

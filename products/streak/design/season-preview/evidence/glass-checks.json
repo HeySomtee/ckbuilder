@@ -1,0 +1,152 @@
+[
+  {
+    "engine": "chromium",
+    "width": 1440,
+    "status": "passed",
+    "controls": [
+      {
+        "label": "Minimize",
+        "height": 44,
+        "width": 95.90625
+      },
+      {
+        "label": "Close",
+        "height": 44,
+        "width": 76.875
+      }
+    ],
+    "wheelScroll": 256,
+    "keyboardScroll": 256,
+    "thumbScroll": 256,
+    "scrollbar": {
+      "width": "12px",
+      "image": "linear-gradient(110deg, rgb(201, 231, 215), rgb(115, 139, 126) 42%, rgb(82, 105, 93))",
+      "radius": "100px",
+      "gutter": "stable"
+    }
+  },
+  {
+    "engine": "chromium",
+    "width": 390,
+    "status": "passed",
+    "controls": [
+      {
+        "label": "Minimize",
+        "height": 44,
+        "width": 93.90625
+      },
+      {
+        "label": "Close",
+        "height": 44,
+        "width": 74.875
+      }
+    ],
+    "wheelScroll": 236,
+    "keyboardScroll": 236,
+    "thumbScroll": null
+  },
+  {
+    "engine": "chromium",
+    "width": 320,
+    "status": "passed",
+    "controls": [
+      {
+        "label": "Minimize",
+        "height": 44,
+        "width": 93.90625
+      },
+      {
+        "label": "Close",
+        "height": 44,
+        "width": 74.875
+      }
+    ],
+    "wheelScroll": 236,
+    "keyboardScroll": 236,
+    "thumbScroll": null
+  },
+  {
+    "engine": "chromium",
+    "forcedColors": true,
+    "colors": [
+      {
+        "label": "Minimize",
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(255, 255, 255, 0)",
+        "border": "rgb(0, 0, 0)"
+      },
+      {
+        "label": "Close",
+        "color": "rgb(0, 0, 0)",
+        "background": "rgba(255, 255, 255, 0)",
+        "border": "rgb(0, 0, 0)"
+      }
+    ]
+  },
+  {
+    "engine": "webkit",
+    "width": 1440,
+    "status": "passed",
+    "controls": [
+      {
+        "label": "Minimize",
+        "height": 44,
+        "width": 95.90625
+      },
+      {
+        "label": "Close",
+        "height": 44,
+        "width": 76.875
+      }
+    ],
+    "wheelScroll": 256,
+    "keyboardScroll": 256,
+    "thumbScroll": 256,
+    "scrollbar": {
+      "width": "12px",
+      "image": "linear-gradient(110deg, rgb(201, 231, 215), rgb(115, 139, 126) 42%, rgb(82, 105, 93))",
+      "radius": "100px",
+      "gutter": "stable"
+    }
+  },
+  {
+    "engine": "webkit",
+    "width": 390,
+    "status": "passed",
+    "controls": [
+      {
+        "label": "Minimize",
+        "height": 44,
+        "width": 93.90625
+      },
+      {
+        "label": "Close",
+        "height": 44,
+        "width": 74.875
+      }
+    ],
+    "wheelScroll": null,
+    "keyboardScroll": 236,
+    "thumbScroll": null
+  },
+  {
+    "engine": "webkit",
+    "width": 320,
+    "status": "passed",
+    "controls": [
+      {
+        "label": "Minimize",
+        "height": 44,
+        "width": 93.90625
+      },
+      {
+        "label": "Close",
+        "height": 44,
+        "width": 74.875
+      }
+    ],
+    "wheelScroll": null,
+    "keyboardScroll": 236,
+    "thumbScroll": null
+  }
+]

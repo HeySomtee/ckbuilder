@@ -1,0 +1,112 @@
+{
+  "scope": "Local simulated design preview only",
+  "environment": "Headless desktop-host Chromium and WebKit. Mobile viewport emulation, not a physical iPhone.",
+  "timingMethod": "No video recording or screenshots during timing runs. rAF measures scheduling, not proof of compositor frames. Long-task API is unavailable in WebKit.",
+  "capturedAt": "2026-10-15T16:13:26.676Z",
+  "results": [
+    {
+      "name": "Funnel geometry: continuous edges, finite coordinates and narrow lower neck",
+      "status": "passed",
+      "durationMs": 23
+    },
+    {
+      "name": "webkit 390: unrecorded minimize and restore timing",
+      "status": "failed",
+      "error": "The expression evaluated to a falsy value:\n\n  assert.ok(result.layerCleaned)\n"
+    },
+    {
+      "name": "webkit 390: one inert raster surface, shared timeline and saved stake",
+      "status": "failed",
+      "error": "page.waitForFunction: Timeout 6000ms exceeded."
+    },
+    {
+      "name": "webkit 390: rapid restore, Escape and route interruption",
+      "status": "failed",
+      "error": "page.evaluate: Error: Missing action minimize"
+    },
+    {
+      "name": "webkit 390: queued no-op viewport events do not cancel a visible transition",
+      "status": "failed",
+      "error": "page.evaluate: Error: Missing action minimize"
+    },
+    {
+      "name": "webkit 390: scroll, resize, visual viewport and hidden-document cleanup",
+      "status": "failed",
+      "error": "page.evaluate: Error: Missing action minimize"
+    },
+    {
+      "name": "webkit 390: reduced-motion bypass and live preference change",
+      "status": "failed",
+      "error": "page.evaluate: Error: Missing action minimize"
+    },
+    {
+      "name": "webkit 390: cold open and immediate stake edit both animate without prewarming",
+      "status": "failed",
+      "error": "The live slip remains available while its snapshot prepares\n\n0 !== 1\n"
+    },
+    {
+      "name": "webkit 390: pending preparation respects close, navigation and stake edits",
+      "status": "failed",
+      "error": "page.evaluate: TypeError: null is not an object (evaluating 'document\n                        .querySelector('[data-action=\"close-modal\"]')\n                        .click')"
+    },
+    {
+      "name": "webkit 390: persisted dock restores with an empty image cache",
+      "status": "failed",
+      "error": "page.waitForFunction: Timeout 6000ms exceeded."
+    },
+    {
+      "name": "webkit 390: WebGL unavailable uses the canvas fallback",
+      "status": "failed",
+      "error": "page.evaluate: Error: Snapshot preparation timed out"
+    },
+    {
+      "name": "webkit 390: context loss reveals the real dialog and releases the overlay",
+      "status": "failed",
+      "error": "page.evaluate: TypeError: null is not an object (evaluating 'canvas.dataset')"
+    },
+    {
+      "name": "webkit 390: neck-phase visual evidence",
+      "status": "failed",
+      "error": "page.evaluate: Error: Snapshot preparation timed out"
+    },
+    {
+      "name": "webkit 390: multi-pick minimize and restore preserve separate stakes and refresh redistributed amounts",
+      "status": "failed",
+      "error": "page.evaluate: Error: Missing action restore-slip"
+    },
+    {
+      "name": "webkit 390: scrolled basket snapshot retains the visible total and review button",
+      "status": "failed",
+      "error": "The basket is actually scrolled"
+    },
+    {
+      "name": "No uncaught browser errors",
+      "status": "passed",
+      "durationMs": 1
+    }
+  ],
+  "measurements": [
+    {
+      "engine": "webkit",
+      "viewport": 390,
+      "direction": "minimize",
+      "setupMs": 204,
+      "firstFrameDelayMs": null,
+      "frameCount": 0,
+      "intervalMedianMs": null,
+      "intervalP95Ms": null,
+      "intervalMaxMs": null,
+      "intervalsOver25Ms": 0,
+      "longTaskObserverSupported": false,
+      "longTasks": [],
+      "layerCreated": true,
+      "layerCleaned": false
+    }
+  ],
+  "geometryMeasurements": [],
+  "snapshotMeasurements": [],
+  "pageErrors": [],
+  "artifacts": [],
+  "experiment": "Diagnostic rerun with one-pixel raster readback. This experiment was reverted after it did not improve Windows headless WebKit scheduling. Later failures include dependent-flow cascades after the initial timing failure.",
+  "finalImplementation": false
+}
