@@ -7,6 +7,7 @@ Current implementation: [Season shell, Friday-to-Monday fixtures and durable ide
 | Document                                                   | Purpose                                                          |
 | ---------------------------------------------------------- | ---------------------------------------------------------------- |
 | [Product scope and roadmap](product/scope-and-roadmap.md)  | Pilot boundaries, Five, acceptance criteria and delivery order   |
+| [Featured fixture ranking](product/fixture-ranking.md)     | League preferences, match appeal, rivalries and discovery order  |
 | [Architecture](architecture/overview.md)                   | Current system, approved target, state ownership and migration   |
 | [Chain and oracle](architecture/chain.md)                  | Rust lab limits, direct stake/claim integration and pinned trust |
 | [Design system](design/system.md)                          | Approved visual tokens, interaction, motion and accessibility    |

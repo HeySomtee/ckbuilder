@@ -36,6 +36,8 @@ Use React, strict TypeScript and Vite, serving built assets from the existing sa
 
 The new landing page owns `/` and `/welcome/`; market browsing owns `/season/`. The original account application is served at `/index.html`. Independent `public/entry.js` preserves existing root hash links without depending on React. New account recovery links target the original entry directly. The new shell's static HTML and missing-build response must always retain a usable recovery link; never serve application HTML in place of a missing JavaScript asset.
 
+Featured fixture ranking is a read-only catalogue projection shared by the landing page and market browser. The API filters, scores and sorts the full catalogue before applying pagination. Its versioned editorial preferences are documented in [fixture ranking](../product/fixture-ranking.md); they have no authority over betting funds, probabilities or settlement. Ranking uses cached fixture metadata without remote requests. The browser also offers chronological order.
+
 Create these boundaries as implementation arrives:
 
 ```text

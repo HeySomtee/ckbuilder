@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Icon } from '../components/icon';
 import { getMarkets } from '../features/markets/api';
@@ -71,7 +71,22 @@ function Fixture({ market, featured = false }: { market: Market; featured?: bool
 
 export function Landing() {
   const [day, setDay] = useState<number | null>(null);
-  const dates = weekend();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    // Recalculate the matchweek after midnight and when a sleeping tab returns.
+    const refreshCalendar = () => {
+      if (document.visibilityState === 'visible') setNow(new Date());
+    };
+    const timer = window.setInterval(refreshCalendar, 60_000);
+    document.addEventListener('visibilitychange', refreshCalendar);
+    window.addEventListener('focus', refreshCalendar);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshCalendar);
+      window.removeEventListener('focus', refreshCalendar);
+    };
+  }, []);
+  const dates = weekend(0, now);
   const from = day === null ? dates.start : dates.days[day];
   const to =
     day === null ? dates.end : new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
@@ -81,6 +96,8 @@ export function Landing() {
     queryKey: ['markets', 'all', '', fromIso, toIso, 'landing'],
     queryFn: ({ signal }) => getMarkets('all', '', 0, fromIso, toIso, signal),
     staleTime: 60_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     retry: 1,
   });
   const fixtures = feed.data?.markets.slice(0, 3) ?? [];
@@ -156,7 +173,7 @@ export function Landing() {
                   {dates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} to{' '}
                   {dates.days[3].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                 </span>
-                <span>Friday through Monday</span>
+                <span>Friday through Monday · Big games first</span>
               </div>
               <div className="welcome-days" role="group" aria-label="Preview fixtures by day">
                 <button aria-pressed={day === null} onClick={() => setDay(null)}>

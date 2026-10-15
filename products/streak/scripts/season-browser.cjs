@@ -249,6 +249,128 @@ async function main() {
         await context.close();
         groups++;
       }
+      // Real API data changes without reloading; Monday remains in the same
+      // matchweek until Tuesday, when an already-open page advances its window.
+      const liveContext = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        timezoneId: 'UTC',
+        serviceWorkers: 'block',
+      });
+      await liveContext.route('**/*', (route) =>
+        new URL(route.request().url()).origin === base ? route.continue() : route.abort(),
+      );
+      await liveContext.routeWebSocket('**/*', (socket) => socket.close());
+      const livePage = await liveContext.newPage();
+      const mondayNight = new Date(
+        Date.UTC(friday.getFullYear(), friday.getMonth(), friday.getDate() + 3, 23, 58, 30),
+      );
+      await livePage.clock.install({ time: mondayNight });
+      const originals = await update((db) => {
+        const rows = db.matches.filter((match) =>
+          ['season-22', 'season-23', 'season-24'].includes(match.id),
+        );
+        const saved = structuredClone(rows);
+        for (const row of rows) {
+          row.competition = { id: 'test-epl', name: 'Premier League', country: 'England' };
+          if (row.id === 'season-23') {
+            row.home.name = 'Manchester United';
+            row.away.name = 'Tottenham';
+          }
+          if (row.id === 'season-24') {
+            row.home.name = 'Barcelona';
+            row.away.name = 'Real Madrid';
+            row.competition = { id: 'test-la-liga', name: 'La Liga', country: 'Spain' };
+          }
+        }
+        return saved;
+      });
+      try {
+        await livePage.goto(base + '/');
+        await livePage
+          .locator('.welcome-featured')
+          .getByText('Barcelona', { exact: true })
+          .waitFor();
+        assert.match(
+          await livePage.locator('.welcome-fixture').first().textContent(),
+          /Manchester United/,
+        );
+        await livePage.goto(base + '/season/');
+        await livePage
+          .locator('.market-card')
+          .first()
+          .getByRole('heading', { name: 'Barcelona', exact: true })
+          .waitFor();
+        await livePage.getByRole('combobox', { name: 'Sort by' }).selectOption('kickoff');
+        await livePage
+          .locator('.market-card')
+          .first()
+          .getByRole('heading', { name: 'Arsenal', exact: true })
+          .waitFor();
+        await livePage.getByRole('combobox', { name: 'Sort by' }).selectOption('featured');
+        await livePage
+          .locator('.market-card')
+          .first()
+          .getByRole('heading', { name: 'Barcelona', exact: true })
+          .waitFor();
+        const rankedFirst = await guardedFetch(base + '/api/markets?limit=1&sort=featured');
+        assert.equal((await rankedFirst.json()).markets[0].match.home.name, 'Barcelona');
+        const rankedSecond = await guardedFetch(
+          base + '/api/markets?limit=1&offset=1&sort=featured',
+        );
+        assert.equal((await rankedSecond.json()).markets[0].match.home.name, 'Manchester United');
+        const filtered = await guardedFetch(
+          base + '/api/markets?limit=1&sort=featured&competition=test-epl',
+        );
+        assert.equal((await filtered.json()).markets[0].match.home.name, 'Manchester United');
+        assert.equal((await guardedFetch(base + '/api/markets?limit=1&sort=invalid')).status, 400);
+      } finally {
+        await update((db) => {
+          const saved = new Map(originals.map((match) => [match.id, match]));
+          db.matches = db.matches.map((match) => saved.get(match.id) ?? match);
+        });
+      }
+      groups++;
+      await livePage.goto(base + '/');
+      await livePage.locator('.welcome-featured').getByText('Arsenal', { exact: true }).waitFor();
+      await update((db) => {
+        db.matches.find((match) => match.id === 'season-0').home.name = 'Updated Arsenal';
+      });
+      try {
+        await livePage.clock.fastForward(60_000);
+        await livePage
+          .locator('.welcome-featured')
+          .getByText('Updated Arsenal', { exact: true })
+          .waitFor();
+        const nextFriday = new Date(
+          Date.UTC(friday.getFullYear(), friday.getMonth(), friday.getDate() + 7),
+        );
+        const nextWindow = livePage.waitForResponse((response) => {
+          const url = new URL(response.url());
+          return (
+            url.pathname === '/api/markets' &&
+            url.searchParams.get('from') === nextFriday.toISOString()
+          );
+        });
+        await livePage.clock.fastForward(60_000);
+        await nextWindow;
+        await livePage.getByText('No fixtures on this day.', { exact: true }).waitFor();
+        assert.equal(await livePage.locator('.welcome-featured').count(), 0);
+        assert.ok(
+          (await livePage.locator('.welcome-dates').textContent()).includes(
+            nextFriday.toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'short',
+              timeZone: 'UTC',
+            }),
+          ),
+        );
+      } finally {
+        await update((db) => {
+          db.matches.find((match) => match.id === 'season-0').home.name = 'Arsenal';
+        });
+        await liveContext.close();
+      }
+      groups++;
       const context = await browser.newContext({
         viewport: { width: 390, height: 844 },
         serviceWorkers: 'block',

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMarkets, formatCkb, outcomes } from '../features/markets/api';
-import type { Market } from '../features/markets/api';
+import type { Market, MarketSort } from '../features/markets/api';
 import { getAccount, signIn, signOut } from '../features/account/api';
 import { Icon } from '../components/icon';
 import { weekend } from '../features/markets/weekend';
@@ -125,6 +125,7 @@ function MarketCard({ market }: { market: Market }) {
 export function App() {
   const client = useQueryClient();
   const [status, setStatus] = useState('all');
+  const [sort, setSort] = useState<MarketSort>('featured');
   const [week, setWeek] = useState(0);
   const [day, setDay] = useState<number | null>(null);
   const dates = weekend(week);
@@ -164,10 +165,10 @@ export function App() {
     },
   });
   const feed = useInfiniteQuery({
-    queryKey: ['markets', status, query, fromIso, toIso],
+    queryKey: ['markets', status, query, fromIso, toIso, sort],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
-      getMarkets(status, query, pageParam, fromIso, toIso, signal),
+      getMarkets(status, query, pageParam, fromIso, toIso, signal, sort),
     getNextPageParam: (last) => last.nextOffset ?? undefined,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -337,6 +338,18 @@ export function App() {
             </label>
           </div>
           <div className="feed-meta" aria-live="polite">
+            <label className="fixture-sort">
+              Sort by
+              <select
+                value={sort}
+                onChange={(event) =>
+                  setSort(event.target.value === 'kickoff' ? 'kickoff' : 'featured')
+                }
+              >
+                <option value="featured">Big games first</option>
+                <option value="kickoff">Kickoff time</option>
+              </select>
+            </label>
             <span>
               {count === undefined
                 ? 'Finding fixtures'

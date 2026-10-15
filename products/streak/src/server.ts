@@ -9,6 +9,7 @@
  */
 
 import "./env";
+import { rankFeaturedFixtures } from './fixture-ranking';
 
 import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
@@ -556,6 +557,9 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
 // ── Markets ─────────────────────────────────────────────────────────────────
 
 async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  const sort = url.searchParams.get('sort') ?? 'kickoff';
+  if (!['featured', 'kickoff'].includes(sort) || (url.searchParams.has('sort') && !url.searchParams.has('limit')))
+    return sendJson(res, 400, { error: 'Invalid fixture sort.' });
   const status = url.searchParams.get("status") as any;
   const matchId = url.searchParams.get("matchId") ?? undefined;
   const competitionId = url.searchParams.get("competition") ?? undefined;
@@ -590,7 +594,8 @@ async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL
     const catalogue = [...markets, ...schedule].sort((a,b)=>a.match.kickoff.localeCompare(b.match.kickoff) || a.id.localeCompare(b.id));
     const inWindow = start !== null && end !== null ? catalogue.filter(m => Date.parse(m.match.kickoff) >= start && Date.parse(m.match.kickoff) < end) : catalogue;
     const filtered = query ? inWindow.filter(m => `${m.match.home.name} ${m.match.away.name} ${m.match.competition?.name ?? ""}`.toLowerCase().includes(query)) : inWindow;
-    const page = filtered.slice(offset, offset+limit);
+    const ordered = sort === 'featured' ? rankFeaturedFixtures(filtered) : filtered;
+    const page = ordered.slice(offset, offset+limit);
     return sendJson(res, 200, { markets: page, total: filtered.length, nextOffset: offset+limit < filtered.length ? offset+limit : null,
       coverage: provider.scheduleCoverage?.() ?? null });
   }

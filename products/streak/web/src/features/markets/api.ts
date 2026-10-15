@@ -1,6 +1,7 @@
 import { isRecord, request, text } from '../../lib/http';
 
 export type MarketStatus = 'open' | 'closed' | 'resolved' | 'void';
+export type MarketSort = 'featured' | 'kickoff';
 export interface Market {
   id: string;
   status: MarketStatus;
@@ -96,6 +97,7 @@ export async function getMarkets(
   from: string,
   to: string,
   signal: AbortSignal,
+  sort: MarketSort = 'featured',
 ): Promise<MarketPage> {
   const query = new URLSearchParams({
     limit: '24',
@@ -104,6 +106,7 @@ export async function getMarkets(
     from,
     to,
     catalogue: '1',
+    sort,
   });
   if (status !== 'all') query.set('status', status);
   const data = await request(`/markets?${query}`, signal);

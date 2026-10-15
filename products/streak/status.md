@@ -7,26 +7,27 @@ Updated **15 October 2026**, Africa/Lagos. Published Season baseline: `800e774`.
 - The Season UI and architecture are approved: React/TypeScript/Vite, the retained Node API, clear glass, labelled controls and a denser prediction slip.
 - Independent predictions in one combined payment remain the accepted future slip behavior.
 - Fixtures and logos must use API data. A matchweek covers Friday through Monday, including Monday EPL fixtures.
+- Featured matches use weighted league and club preferences. EPL leads otherwise comparable fixtures, followed by La Liga and Italian Serie A, but marquee matches such as El Clásico can outrank EPL games.
 - Hosted CI work is paused at the owner's request after GitHub's account billing lock prevented jobs from starting. Local commit and push gates remain mandatory.
 
 ## Implementation state
 
-| Area                   | State                                                                                                                                                    |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Season app             | Integrated shell at `/season/`, real API fixture catalogue, Friday-to-Monday filters, search, pagination and error recovery                              |
-| Identity               | Durable single-use challenges and hashed sessions, full lock binding, exact origin policy, secure hosted cookies and verified database TLS configuration |
-| Public landing         | New Season design at `/` and `/welcome/`, API fixture preview, browsing before login and clearly labelled Five introduction                              |
-| Existing app           | Retained at `/index.html`, including custodial market details, activity, wallet and withdrawals; existing root hash links preserved                      |
-| Week 20 Rust work      | Separate lab and browser/CLI; direct stake-to-claim integration remains ahead                                                                            |
-| Combined slip and Five | Approved simulation only; not integrated production features                                                                                             |
-| Quality foundation     | Published in [PR 1](https://github.com/HeySomtee/ckbuilder/pull/1); local hooks and workflow configuration retained                                      |
-| Hosted checks          | No successful run claimed; temporary required branch protection removed following the owner's override                                                   |
+| Area                   | State                                                                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Season app             | Integrated shell at `/season/`, real API fixture catalogue, Friday-to-Monday filters, search, pagination and error recovery                                                                |
+| Identity               | Durable single-use challenges and hashed sessions, full lock binding, exact origin policy, secure hosted cookies and verified database TLS configuration                                   |
+| Public landing         | New Season design at `/` and `/welcome/`, live API fixture preview with visible-tab refresh and automatic matchweek rollover, browsing before login and clearly labelled Five introduction |
+| Existing app           | Retained at `/index.html`, including custodial market details, activity, wallet and withdrawals; existing root hash links preserved                                                        |
+| Week 20 Rust work      | Separate lab and browser/CLI; direct stake-to-claim integration remains ahead                                                                                                              |
+| Combined slip and Five | Approved simulation only; not integrated production features                                                                                                                               |
+| Quality foundation     | Published in [PR 1](https://github.com/HeySomtee/ckbuilder/pull/1); local hooks and workflow configuration retained                                                                        |
+| Hosted checks          | No successful run claimed; temporary required branch protection removed following the owner's override                                                                                     |
 
 ## Verification
 
 The full local gate passed all **29 steps** for the landing-page extension on 15 October 2026. No required suite was skipped. The local preview at `http://127.0.0.1:4100/` uses real API fixtures in separate local storage with account mutations and payments disabled. Manual inspection confirmed team-logo loading; automated tests used synthetic fixtures and no live provider requests.
 
-The recurring command is `npm.cmd run quality:major`, using a disposable local PostgreSQL database. Exact results are written to `.quality-artifacts/all.json` and repeated against the unchanged staged candidate by the commit and push hooks. The foundation passed all 20 steps before publication. This increment extends the gate with frontend lint/build, identity and provider regressions, and eight integrated browser groups across Chromium/WebKit at 320, 390 and 1440px.
+The recurring command is `npm.cmd run quality:major`, using a disposable local PostgreSQL database. Exact results are written to `.quality-artifacts/all.json` and repeated against the unchanged staged candidate by the commit and push hooks. The foundation passed all 20 steps before publication. This increment extends the gate with frontend lint/build, identity and provider regressions, and twelve integrated browser groups across Chromium/WebKit at 320, 390 and 1440px, including automatic API refresh, Monday-to-Tuesday rollover, ranking before pagination and chronological sorting. See the [ranking policy](docs/product/fixture-ranking.md) for scoring and remaining data limits.
 
 Targeted checks cover Monday fixtures, catalogue-only postponed matches, API logos, paging/search, failed reads, stale responses, real disposable wallet signatures, CCC connector event ordering, cancelled connection, logout failure and delayed account responses. Database tests cover challenge races, audience/expiry enforcement, session persistence across pool recreation, revocation and storage failure. Tests use synthetic data and loopback services; no production data or live settlement was used.
 

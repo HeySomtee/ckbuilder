@@ -417,10 +417,28 @@ h1 {
 }
 .feed-meta {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
   justify-content: space-between;
   color: var(--muted);
   font-size: 11px;
   margin: 18px 0 14px;
+}
+.fixture-sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fixture-sort select {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  cursor: pointer;
 }
 .glass {
   position: relative;
