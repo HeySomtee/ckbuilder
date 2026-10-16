@@ -1,8 +1,8 @@
 # Direct testnet operator and wallet recovery
 
-This runbook covers the direct wallet journey, automatic fixture provisioning and recovery across the original and compatible contract generations. The wire format remains `testnet-v1`; protocol hashes and operation IDs distinguish deployments. The API serves the real fixture catalogue and public provisioning progress. A separate operator process funds markets and reports football results. Wallets send their own stakes and claim directly through CKB.
+This runbook covers direct positions, sponsored creation, atomic v4 entry and recovery across retained generations. Market descriptors retain the `testnet-v1` format and pinned deployment hashes; atomic offers and browser records use `atomic-predictions-v1`. The API serves real fixture terms and proxies authenticated requests to a separate sponsor. Wallets authorize their own exact contribution, and claims remain independent CKB transactions.
 
-The compatible deployment adds support for lock arguments up to 59 bytes. Its protocol is confirmed at output 0 of [transaction fb3a8cdb](https://pudge.explorer.nervos.org/transaction/0xfb3a8cdb8b79f84785c5847ba53181021bd4f4f2556bf33b0f6883741b50f2fe); backend and browser dependencies match the build manifest. The original deployment remains available for existing positions and recovery. A local supervisor runs repeated worker invocations while the computer is available; this is not an installed system service or hosted deployment.
+The current v4 deployment is output 0 of [transaction 930bba6c](https://pudge.explorer.nervos.org/transaction/0x930bba6cce8cd6b1dc254cc3469249d7ba32f09b44bc20ea784f45e172cd606f), with 13 canonical confirmations observed for the delivery record. Its protocol hash is `0x6c03d7942bd133c713c501df7a6e263699a0ea731339eda993548640e900405c`. The unchanged guard remains at output 1 of transaction `0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11`. V1, v2 and v3 mappings remain pinned for existing positions and exits. Public code deployment and local application activation are complete. All 47 local major-gate steps passed at 19:33 UTC on 16 October. The API, separate sponsor and lifecycle worker are active locally. Phone and desktop live-provider checks passed with no page errors, distinct Wallet/Activity routes and preserved drafts. Exact-candidate commit and push gates remain mandatory. See the [atomic delivery record](../delivery/atomic-slip-correction.md).
 
 ## Protocol and pilot bounds
 
@@ -11,8 +11,8 @@ The compatible deployment adds support for lock arguments up to 59 bytes. Its pr
 - Minimum principal: 100 testnet CKB. Each position also supplies 321 CKB of recoverable claim storage. Fees and ordinary wallet change capacity are separate.
 - Winners receive principal plus their proportional share of the losing pool after 2% protocol and 1% creator fees. These percentages apply to the losing pool. Losing positions recover their 321 CKB storage. A void or an outcome with no winning stake returns principal plus storage. Late provisional deposits are refunded directly during closure.
 - This builder pins both fee recipients to the configured market creator/operator. Legacy application creator and balance records have no authority over these direct terms.
-- Original contract wallet lock arguments are limited to 20 bytes. The compatible contract allows up to 59 bytes, with actual wallet/device verification still separate. One claim uses one transaction and separate fee capacity. This increment pays for one market. An eight-pick draft does not authorize eight separate payments.
-- The current funded catalogue supports 256 markets. The durable provisioning queue retains up to 4,096 fixtures, including explicit blocked entries beyond the funded limit. The shared operator journal supports at most 1,536 operations across two generations. The owner recovery journal supports 128 records. These are resource bounds, not demonstrated user capacity.
+- Original contract wallet lock arguments are limited to 20 bytes. Later contracts allow up to 59 bytes, with actual wallet/device verification still separate. One claim uses one transaction and separate fee capacity. Atomic entry supports one through eight distinct v4 fixtures in a single transaction, including a mixture of new and funded markets. Older generations cannot be mixed into that entry. One failed line blocks the entire review; there is no silent individual-payment fallback.
+- A funded catalogue supports 256 markets. The durable provisioning queue retains up to 4,096 fixtures, including explicit blocked entries beyond the funded limit. The shared operator journal supports at most 1,536 lifecycle operations across configured generations. Sponsor histories are bounded at 4,096 offers per generation. Browser recovery storage supports 128 records in aggregate across ordinary, sponsored and atomic stores. These are resource bounds, not demonstrated user capacity.
 
 ## Fixture mapping and trusted results
 
@@ -51,9 +51,11 @@ Commands do not load `.env`, `.ckb-wallet.key`, legacy treasury keys or demonstr
 
 Use one operator writer on a durable local volume. Ephemeral hosted filesystems and multiple hosts sharing this adapter are unsupported. Separate API and operator machines need a reviewed durable catalogue distribution step. The acknowledgement variable is not evidence that a volume or restore procedure has been verified.
 
-Both provisioning variables must be configured together. Only a literal loopback HTTP address with the exact `/api/direct/fixtures` path is accepted. With neither variable, the worker retains its existing result and closure duties without creating new markets. Keep current and archived public registries separate, but use the same private operator directory and one worker for both generations. Two workers using the same wallet in separate journal directories would bypass shared input reservations and are unsupported.
+Both provisioning variables must be configured together. Only a literal loopback HTTP address with the exact `/api/direct/fixtures` path is accepted. With neither variable, the worker retains its existing result and closure duties without creating new markets. Keep current and archived public registries separate, but use the same private operator directory and one worker for all configured generations. Two workers using the same wallet in separate journal directories would bypass shared input reservations and are unsupported.
 
-## Automatic funding of the API catalogue
+## Earlier automatic funding mode, currently paused
+
+Bulk creation is retained for historical operation and recovery. The owner selected demand creation instead. Do not enable bulk catalogue/progress provisioning while running the approved sponsored flow.
 
 The worker loads the active real provider's schedule and coverage window from `/api/direct/fixtures`. It rejects a simulated, disabled, foreign, malformed or stale catalogue. Every future scheduled fixture is retained in the durable queue, not just the first funded page. Before signing, it fetches that exact fixture directly from API-Football and checks provider identity, teams, kickoff and scheduled status against the queued entry. Partial provider coverage remains visible as partial coverage.
 
@@ -63,15 +65,15 @@ Each market reserves **3,050 testnet CKB**, five cells of 610 CKB. For example, 
 
 At most one market creation is attempted per invocation. The next funding signature waits for four canonical confirmations of the prior operator spend. A queued fixture is not presented as funded, and the 256-market limit leaves the remaining queue explicitly blocked. Insufficient capacity likewise remains visible and retries after funding becomes available. Increasing or archiving these bounds requires a reviewed migration that preserves all funded mappings and exits.
 
-An individual upstream fixture failure gets a five-minute retry delay so later fixtures can proceed. A missing or stale catalogue pauses new creation while existing result and refund processing continues. If a creation was signed before interruption, the next cycle reconciles its exact saved hash; it never creates a replacement market for the same operation. Unknown or conflicting funding spends stop new signatures across both generations.
+An individual upstream fixture failure gets a five-minute retry delay so later fixtures can proceed. A missing or stale catalogue pauses new creation while existing result and refund processing continues. If a creation was signed before interruption, the next cycle reconciles its exact saved hash; it never creates a replacement market for the same operation. Unknown or conflicting funding spends stop new signatures across all configured generations.
 
 ## Deployment funding and generation recovery
 
 Deployment uses the same operator wallet and spending barrier. Before broadcast, the deployment helper must durably save `STREAK_DIRECT_OPERATOR_DIR/deployment-v2.json` with the pinned `protocolHash`, `transactionHash`, `signedTransaction` and `createdAtMs`. `loadOperatorDeployment` validates bounded bytes, the exact transaction hash and an output containing the pinned protocol binary. `operatorFundingBarrier` prioritizes this sentinel and requires four current canonical confirmations before another new financial signature. `assertFreshOperatorInputs` also reserves its original inputs against replacement signatures after a reorg.
 
-Deployment must acquire the shared operator journal lease, check the funding barrier and existing input reservations, persist the signed sentinel, then broadcast only those bytes. If submission becomes uncertain, reconcile the saved hash and inputs. Do not delete the sentinel, rebuild a different deployment or restart funding blindly. This runbook does not claim that the compatible code has been deployed; the delivery evidence must record its actual transaction and pinned dependencies when that happens.
+Deployment must acquire the shared operator journal lease, check the funding barrier and existing input reservations, persist the signed sentinel, then broadcast only those bytes. If submission becomes uncertain, reconcile the saved hash and inputs. Do not delete the sentinel, rebuild a different deployment or restart funding blindly. The exact deployment transaction and generation-specific dependency pins must match the delivery record. A deployment sentinel remains a recovery obligation after code activation; do not discard it when upgrading generations.
 
-Original operation files retain names such as `create-api-football-ID.json`. Compatible operations use `create-v2-api-football-ID.json`, with matching `report-v2-` and `close-v2-` names. Their descriptors use `direct-ID` and `direct-v2-ID` respectively. The automatic worker discovers both generations from the shared journal and chooses each descriptor's exact protocol configuration. Original signed bytes and funded mappings are never rewritten.
+Original operation files retain names such as `create-api-football-ID.json`. Compatible operations use `create-v2-api-football-ID.json`, with matching `report-v2-` and `close-v2-` names. Their descriptors use `direct-ID` and `direct-v2-ID` respectively. The automatic worker discovers all configured generations from the shared journal and chooses each descriptor's exact protocol configuration. Original signed bytes and funded mappings are never rewritten.
 
 For a manual original-generation command, use a separate terminal with `STREAK_DIRECT_REGISTRY_DIR` pointing to the archived original catalogue and the same shared operator directory. Check `status` and the expected generation before mutation. A current-generation command uses the new catalogue. Do not copy an original mapping over the current mapping or infer generation from the football fixture ID alone.
 
@@ -120,7 +122,7 @@ Provider failure cannot become a winning result and does not disable the timeout
 
 ## Restart, backup and conflicts
 
-Back up the durable journal, deployment sentinel, provisioning queue, provider observations and both catalogue generations together. Public progress can be regenerated from those records and fresh chain observations. Signed bytes are public transaction material, but retain restricted filesystem permissions. Keep signing keys in separate secret configuration, outside source control and these state files.
+Back up the durable journal, deployment sentinel, provisioning queue, provider observations and all catalogue generations together. Public progress can be regenerated from those records and fresh chain observations. Signed bytes are public transaction material, but retain restricted filesystem permissions. Keep signing keys in separate secret configuration, outside source control and these state files.
 
 Each financial operation has an immutable signed entry. After a timeout or restart:
 
@@ -132,7 +134,7 @@ Each financial operation has an immutable signed entry. After a timeout or resta
 
 The funding barrier applies to creation, reporting, closure and the deployment sentinel. It derives dependency links from actual signed input outpoints and verifies the last transaction on every independent branch. A canonical descendant proves its referenced ancestors; a later timestamp alone proves nothing about an unrelated wallet spend. All unresolved operations are reconciled too. Reads run in batches of at most four, with sequential journal and catalogue writes and an overall 1,536-operation bound. Every independent branch is checked before the barrier clears, so many independent funding cells can increase a cycle's duration.
 
-Before a new signature, every proposed input is also compared against immutable signed entries in both generations. An input that belonged to another signed operation cannot be silently reused after a reorg, even if an older observation had called that operation committed. This policy can require manual recovery review; it deliberately avoids automatic replacement signatures.
+Before a new signature, every proposed input is also compared against immutable signed entries in all configured generations. An input that belonged to another signed operation cannot be silently reused after a reorg, even if an older observation had called that operation committed. This policy can require manual recovery review; it deliberately avoids automatic replacement signatures.
 
 A signed creation that remains unconfirmed after its pinned kickoff, or a signed report that remains unconfirmed after the six-hour reporting window, needs manual intervention. Expiry does not cancel signed bytes or release their input reservations. Automatic creation/report resubmission stops when the applicable window closes; the worker cannot silently discard the operation or issue another signature using its funds. Preserve the journal, inspect the canonical original and consuming transactions, and resolve the case before resuming operator funding. An independent keeper can still use the permissionless closure path with its own wallet and journal.
 
@@ -144,7 +146,7 @@ The file adapter flushes signed file contents before publishing their names and 
 
 ## Owner recovery without the API
 
-Export recovery JSON from the Season direct-position screen. It includes the pinned manifest, fixture descriptors, public owner hash and saved signed transactions. It contains no private key. Retain it before clearing browser storage or changing devices.
+Export recovery JSON from Activity. It includes the pinned manifest, fixture descriptors, public owner hash and saved ordinary, sponsored and atomic records. It contains no private key. Retain it before clearing browser storage or changing devices. The standalone tool below imports descriptors and ordinary signed transactions for independent claims and exact retries. It does not import or co-sign the additional sponsored or atomic partial-record arrays; retain those backups and use the connected browser and sponsor recovery for incomplete combined payments.
 
 The standalone tool imports the same `DirectClient`, validators and builders as the browser. Node 24 native TypeScript loading is required. The API, login, football provider and operator key are not involved.
 
@@ -241,7 +243,25 @@ Do not delete journals or manually free inputs after an uncertain submission. A 
 
 Canonical publication stores immutable descriptors under `instances/<fixture>/<creation-hash>.json` and proof events under `selection-history/<fixture>/`. A verified reorganisation may change the active fixture mapping; it does not rewrite those historical files. Publication uses `.canonical-selection.lock` in addition to the operator lease. After a process crash, verify the recorded process has stopped before removing only its stale lock. Never remove a live process's lock or an uncertain transaction record to make checkout proceed.
 
-Contract deployment, local service activation, successful public first bets and hosted operation are separate evidence. See the [sponsored delivery record](../delivery/sponsored-creation.md) for the current state. Keep enough plain operator capacity for each 3,050 CKB reserve plus change and lifecycle fees. No grant or campaign reward budget is implied by this testnet sponsorship.
+Contract deployment, local service activation, successful public first bets and hosted operation are separate evidence. The [sponsored delivery record](../delivery/sponsored-creation.md) records the earlier v3 release; the [atomic correction](../delivery/atomic-slip-correction.md) records current v4 work. Keep enough plain operator capacity for each 3,050 CKB reserve plus change and lifecycle fees. No grant or campaign reward budget is implied by this testnet sponsorship.
+
+## Atomic v4 entry
+
+Configure `STREAK_DIRECT_BATCH_REGISTRY_DIR` as a separate absolute public-catalogue directory in the API, sponsor and lifecycle-worker processes. It must differ from the private operator directory and the earlier public catalogue. Keep the same private operator journal and signing lease for all generations. The existing sponsor service hosts v3 and v4 paths, storing their offers separately under `sponsored-v3/` and `atomic-v4/`. Do not run an independent second signer with a separate journal against the same funding wallet.
+
+The browser uses `GET /api/direct/batch/config` and `GET /api/direct/batch/demand` for pinned configuration and eligibility. Offer, submit, resume and conflict-resolution requests require the authenticated same-origin wallet session. Status is read-only and cannot sign or broadcast. Each quote freezes one through eight fixtures, outcome and principal per line, input order, every output group, dependency order, contributor change, fee and expiry. The browser independently verifies the quote against live chain state.
+
+The sponsor supplies 3,050 CKB for each new market; the owner supplies total principal, 321 CKB storage per line and the network fee. Admission checks the previous pending ticket against its actual creation header. A stale shard, unavailable fixture, competing reservation or insufficient reserve blocks the complete quote. Limits remain four shards and eight positions per shard per market. Sponsor capacity is finite and a fragmented balance can still lack a suitable funding cell.
+
+An unsigned quote lasts at most 90 seconds, with a two-minute preparation margin before the earliest kickoff. Owner review can expire sooner. These application checks do not create a consensus upper time bound: actual late entries retain the protocol refund path. Financial browser API calls allow 60 seconds for bounded multi-fixture work; ordinary reads retain 15 seconds. Neither a timeout nor quote expiry releases a signature once submission was attempted.
+
+Before submitting a partial signature, the browser persists its exact bytes, hash, all reserved inputs and source draft identities. The operator verifies the owner's signature before adding its own and saves completed bytes before broadcasting. Recovery uses original identities after reload or lost responses. Three confirmations establish the browser's local canonical checkpoint; sponsor funding and conflict-proof release require four. Canonical proofs are checked again after reorganisation. An orphaned proof restores reservations, and a subsequently canonical original transaction takes precedence.
+
+Activity exposes combined recovery and each market's independent claims. Confirmed payments remove only unchanged source draft picks; newer selections remain. The ordinary, v3 and v4 browser stores share atomic input reservations. Do not delete or manually modify a journal to make a new payment possible. If a partial was never submitted and its offer expired, the explicit browser discard path checks read-only operator status before retiring it. Submitted or uncertain partials cannot use that path.
+
+Multiple v4 markets can share a creation hash, so retain every descriptor's complete type script and genesis output index. Back up all public registries, immutable instance histories, canonical selection proofs, operator jobs and both sponsor directories together. Recovery and rollover must not infer a market solely from its football fixture ID or creation hash.
+
+Current evidence is 149 VM checks and 37 actual local-devnet product checks plus three harness checks. Native and genuine OmniLock signatures cover eight-new, mixed and eight-funded payments, independent claims, refunds and real reorganisation. The public v4 transaction proves code deployment only. The 47-step major gate and local activation passed. Supported physical-wallet checks and durable operation remain separate requirements.
 
 ## Isolated evidence
 

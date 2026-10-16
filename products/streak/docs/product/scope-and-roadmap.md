@@ -2,21 +2,27 @@
 
 Owner-approved direction: 15 October 2026, [ADR 0001](../decisions/0001-approved-foundation.md). The aim is a usable, enjoyable testnet pilot with evidence of repeat participation. A grant is a potential outcome, not an approved budget or a reason to overstate readiness.
 
+Current increment, 16 October 2026: [atomic combined entry](../delivery/atomic-slip-correction.md) is implemented for up to eight independent predictions, with exact review and payment inside the slip. V4 code is deployed on public testnet. Its eight-line signing, claims and recovery evidence comes from an isolated devnet; the 47-step major gate passed, with exact-candidate commit and push gates enforced separately. Wallet and Activity are distinct, and the slip uses one X close button with retained drafts and no Genie animation.
+
 ## Pilot scope
 
 The minimum useful experience combines the new responsive shell, a complete prediction lifecycle, existing Matchday context, a small free Streak Five competition and basic community progress. Keep legacy balances and exits understandable during migration. A functioning narrow cohort is more useful than disconnected screens labelled complete.
 
-| Journey         | Acceptance before public use                                                                                                                   |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Onboarding      | Clear testnet/custody explanation, account recovery and honest wallet support; browse/draft without a wallet                                   |
-| Predictions     | Published fixture terms, exact review, wallet rejection/retry, committed admission state, settlement, owner claim/refund and recovery evidence |
-| Combined slip   | Independent positions, one reviewed payment, per-pick status, no silent omissions or partial submission                                        |
-| Matchday        | Source/freshness visible, no synthetic results for real markets, unavailable coverage handled                                                  |
-| Five            | Published rules, verified player data, atomic entry cutoff, replayable scores and correction policy                                            |
-| Activity/wallet | Distinct legacy liability and direct positions; pending, accepted, claimable, refunded and spent states reflect authority                      |
-| Community       | Basic standings/badges, opt-in sharing and a measured onboarding/support loop                                                                  |
+| Journey         | Acceptance before public use                                                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Onboarding      | Clear testnet/custody explanation, account recovery and honest wallet support; browse/draft without a wallet                                           |
+| Predictions     | Published fixture terms, exact review, wallet rejection/retry, committed admission state, settlement, owner claim/refund and recovery evidence         |
+| Combined slip   | Independent positions, one reviewed payment, per-pick status, no silent omissions or partial submission                                                |
+| Matchday        | Source/freshness visible, no synthetic results for real markets, unavailable coverage handled                                                          |
+| Five            | Published rules, verified player data, atomic entry cutoff, replayable scores and correction policy                                                    |
+| Activity/wallet | Separate Wallet balance/address/connection controls from Activity history/recovery/claims; preserve legacy liabilities and authoritative direct states |
+| Community       | Basic standings/badges, opt-in sharing and a measured onboarding/support loop                                                                          |
 
 Rich private leagues, paid fantasy, chips/transfers, share trading, broader social features and unbounded markets are deferred. A feature illustrated in the preview is not automatically part of the first pilot.
+
+The combined slip supports one through eight distinct fixtures, all in one transaction. Streak supplies market reserves only for newly created markets. Every line retains an independent outcome, payout and claim. Existing generations remain recoverable through their original terms. Completion of this feature does not imply that a community campaign or Five is already available.
+
+Telegram connection controls are implemented against the existing integration endpoints, with explicit configuration and expiry states. Local linking uses a verified webhook-only tunnel. Registration and receiver routing were checked without sending messages or linking a test account. Direct v4 settlement notification dispatch is not implemented; verify that separate path before promising alerts to participants.
 
 ## Streak Five
 
@@ -44,7 +50,7 @@ Measure account activation, successful first entry/stake, completed claims/refun
 | ---------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | 0. Foundation    | Canonical docs, agent contract, safe recurring tests and CI                       | Exact local command results; hosted checks and protection state reported separately                                           |
 | 1. Reliability   | Bounded DB work, storage recovery, durable identity/jobs, TLS/cookie hardening    | Disposable DB concurrency tests, restart/replay checks and restore rehearsal                                                  |
-| 2. Core journey  | Shared frontend shell, adapters, direct stake-to-claim flow and legacy exits      | Supported-wallet matrix, authoritative statuses, rejection/retry/reorg behavior, real testnet flow when separately authorized |
+| 2. Core journey  | Shared shell, atomic slip, direct stake-to-claim flow and separate legacy exits   | Supported-wallet matrix, authoritative statuses, rejection/retry/reorg behavior, real testnet flow when separately authorized |
 | 3. Five          | Verified player feed, frozen rounds, submission and scoring                       | Deterministic replay, cutoff races, corrections and clear public rules                                                        |
 | 4. Limited pilot | Published markets, cohort onboarding, monitoring, support and approved incentives | Real-device checks, observed workload, complete exits and genuine participant metrics                                         |
 | 5. Expansion     | Larger contract design or richer community features when justified                | Separate design and benchmarks before raising limits                                                                          |

@@ -28,7 +28,11 @@ export async function sponsorProxy(
     origin.hash
   )
     throw Error('Sponsor service must use an explicit loopback HTTP port');
-  if (!/^\/(?:configuration|fixture|status|offer|submit|resolve|resume)(?:\?.*)?$/.test(path))
+  if (
+    !/^\/(?:batch\/)?(?:configuration|fixture|status|offer|submit|resolve|resume)(?:\?.*)?$/.test(
+      path,
+    )
+  )
     throw Error('Invalid sponsor operation');
   const response = await fetch(`${origin.origin}${path}`, {
     method: request === undefined ? 'GET' : 'POST',
@@ -62,7 +66,7 @@ export async function sponsorProxy(
         : '';
     if (
       message.length <= 240 &&
-      /^(Sponsor is completing|Streak needs additional|Unsigned sponsor offer expired|Invalid owner transaction signature|Fixture terms changed|This fixture already has|Sponsored contract deployment|Sponsor funding is awaiting|Owner needs principal|Owner input must be live|Sponsor queue is busy|This fixture has reached|Use the wallet linked|This proposal belongs|Sponsor request could not complete)/.test(
+      /^(Sponsor is completing|Streak needs additional|Streak is at|Unsigned sponsor offer expired|Invalid owner transaction signature|Fixture terms changed|This fixture already has|Sponsored contract deployment|Sponsor funding is awaiting|Owner needs principal|Owner input must be live|Sponsor queue is busy|This fixture has reached|Use the wallet linked|This proposal belongs|Sponsor request could not complete|Atomic payment is awaiting|New predictions use|This fixture has positions|This fixture has no available|This fixture is closed)/.test(
         message,
       )
     )

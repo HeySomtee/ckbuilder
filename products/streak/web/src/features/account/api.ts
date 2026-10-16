@@ -5,24 +5,23 @@ import {
   disconnectWallet,
   getWalletState,
 } from '../../lib/wallet';
-export interface Account {
-  id: string;
-  username: string;
-  walletAddress: string;
-}
+import { parseAccount, parseTelegramLink } from './data';
+import type { Account, TelegramLink } from './data';
+export type { Account, TelegramLink } from './data';
 export async function getAccount(signal: AbortSignal): Promise<Account | null> {
   try {
     const data = await request('/me', signal);
-    if (!isRecord(data) || !isRecord(data.user)) throw new Error('Unable to read your account.');
-    return {
-      id: text(data.user.id),
-      username: text(data.user.username),
-      walletAddress: text(data.user.walletAddress),
-    };
+    return parseAccount(data);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) return null;
     throw error;
   }
+}
+export async function connectTelegram(): Promise<TelegramLink> {
+  return parseTelegramLink(await request('/integrations/telegram/connect', undefined, {}));
+}
+export async function disconnectTelegram(): Promise<Account> {
+  return parseAccount(await request('/integrations/telegram/disconnect', undefined, {}));
 }
 export async function signOut(): Promise<void> {
   await request('/logout', undefined, {});

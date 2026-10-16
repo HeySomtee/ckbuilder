@@ -476,7 +476,7 @@ export interface ProvisionBarrier {
   clear: boolean;
   pending: {
     fixtureId: string;
-    action: 'create' | 'report' | 'close';
+    action: 'create' | 'report' | 'close' | 'batch';
     protocolHash: string;
     transactionHash: string;
     kickoffMs: number;

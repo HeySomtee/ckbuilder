@@ -15,6 +15,7 @@ import {
 import {
   DirectRegistry,
   PUBLIC_DIRECT_CONFIG,
+  V4_DIRECT_CONFIG,
   type DirectMarketRecord,
   writeExclusiveJson,
 } from './registry';
@@ -130,6 +131,20 @@ export async function runWorkerOnce(): Promise<void> {
     throw Error('Hosted worker needs an acknowledged durable volume');
   const journal = new OperatorJournal(directory),
     registry = new DirectRegistry(registryDirectory);
+  const batchDirectory = process.env.STREAK_DIRECT_BATCH_REGISTRY_DIR;
+  if (
+    batchDirectory &&
+    (!isAbsolute(batchDirectory) ||
+      [resolve(directory), resolve(registryDirectory)].includes(resolve(batchDirectory)))
+  )
+    throw Error('Atomic registry requires a separate absolute directory');
+  const batchRegistry = batchDirectory
+    ? new DirectRegistry(batchDirectory, V4_DIRECT_CONFIG)
+    : undefined;
+  if (batchRegistry) {
+    registry.publicationTargets = [batchRegistry];
+    batchRegistry.publicationTargets = [registry];
+  }
   const lease = new OperatorJournal(join(directory, 'worker-lease'));
   const client = new ccc.ClientPublicTestnet({
     url: PUBLIC_DIRECT_CONFIG.rpc,
@@ -169,23 +184,26 @@ export async function runWorkerOnce(): Promise<void> {
         // A missing catalogue pauses new funding, never existing refunds or results.
       }
     }
-    const records = new Map(registry.all().map((record) => [record.id, record]));
+    const archivedRegistry = new DirectRegistry(process.env.STREAK_DIRECT_LEGACY_REGISTRY_DIR);
+    const records = new Map(
+      [...archivedRegistry.all(), ...registry.all(), ...(batchRegistry?.all() ?? [])].map(
+        (record) => [record.id, record],
+      ),
+    );
     const conflictState = await canonicalSponsorConflicts(client, journal.directory);
     for (const [id, record] of records)
       if (conflictState.resolved.has(record.creationTxHash)) records.delete(id);
     const files = readdirSync(directory).filter(
-      (file) => OPERATION_FILE.test(file) && file.startsWith('create-'),
+      (file) =>
+        OPERATION_FILE.test(file) && (file.startsWith('create-') || file.startsWith('batch-')),
     );
     if (files.length > 1536)
       throw Error('Worker creation journal exceeds its reviewed operation bound');
     for (const file of files) {
       const creation = journal.load(file.slice(0, -5));
-      if (
-        creation &&
-        !conflictState.resolved.has(creation.transactionHash) &&
-        !records.has(creation.descriptor.id)
-      )
-        records.set(creation.descriptor.id, creation.descriptor);
+      if (creation && !conflictState.resolved.has(creation.transactionHash))
+        for (const descriptor of creation.creations ?? [creation.descriptor])
+          if (!records.has(descriptor.id)) records.set(descriptor.id, descriptor);
     }
     const checkpointFile = join(directory, 'worker-checkpoints.json');
     const checkpoints: Record<string, { observedAtMs: number; closed: boolean }> = {};

@@ -151,7 +151,7 @@ export class SponsoredClient {
       if (record.hash === ignoreHash || (await reservationReleased(this.signer.client, record)))
         continue;
       pending.push(record);
-      if (fixtureId && record.fixtureId === fixtureId)
+      if (fixtureId && (record.fixtureIds ?? [record.fixtureId]).includes(fixtureId))
         throw Error(
           'This fixture already has a signed prediction. Resume its original transaction before paying again.',
         );

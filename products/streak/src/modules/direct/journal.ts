@@ -27,9 +27,9 @@ import {
   directGeneration,
 } from './registry';
 
-export type OperatorAction = 'create' | 'report' | 'close';
+export type OperatorAction = 'create' | 'report' | 'close' | 'batch';
 export const OPERATION_FILE =
-  /^(?:(?:create|report|close)-(?:v[23]-)?api-football-[1-9][0-9]{0,14}|(?:create|report|close)-v3-api-football-[1-9][0-9]{0,14}-[0-9a-f]{64})\.json$/;
+  /^(?:(?:create|report|close)-(?:v[234]-)?api-football-[1-9][0-9]{0,14}|(?:create|report|close|batch)-v[34]-api-football-[1-9][0-9]{0,14}-[0-9a-f]{64})\.json$/;
 export function operationKey(
   action: OperatorAction,
   fixtureId: string,
@@ -39,7 +39,7 @@ export function operationKey(
   if (!/^api-football-[1-9][0-9]{0,14}$/.test(fixtureId) || !/^0x[0-9a-f]{64}$/.test(protocolHash))
     throw Error('Unsupported operator operation identity');
   const base = `${action}-${directGeneration(protocolHash)}${fixtureId}`;
-  return directGeneration(protocolHash) === 'v3-' && creationHash
+  return ['v3-', 'v4-'].includes(directGeneration(protocolHash)) && creationHash
     ? `${base}-${hash32(creationHash, 'creation transaction hash').slice(2)}`
     : base;
 }
@@ -52,6 +52,8 @@ export interface SignedOperation {
   transactionHash: string;
   signedTransaction: string;
   descriptor: DirectMarketRecord;
+  /** One signed atomic transaction, with zero to eight newly created markets. */
+  creations?: DirectMarketRecord[];
 }
 export type Reconciliation = {
   transactionHash: string;
@@ -74,6 +76,10 @@ export class OperatorJournal {
     if (!OPERATION_FILE.test(`${operationId}.json`)) throw Error('Invalid operator operation ID');
     return join(this.directory, `${operationId}.json`);
   }
+  assertAvailableSlot(): void {
+    if (readdirSync(this.directory).filter((file) => OPERATION_FILE.test(file)).length >= 1536)
+      throw Error('Operator journal reached the bounded pilot limit');
+  }
   load(operationId: string): SignedOperation | undefined {
     const file = this.path(operationId);
     if (!existsSync(file)) return undefined;
@@ -82,7 +88,7 @@ export class OperatorJournal {
     if (
       row.version !== 1 ||
       row.operationId !== operationId ||
-      !['create', 'report', 'close'].includes(String(row.action)) ||
+      !['create', 'report', 'close', 'batch'].includes(String(row.action)) ||
       typeof row.signedTransaction !== 'string' ||
       !/^0x(?:[0-9a-f]{2})+$/.test(row.signedTransaction)
     )
@@ -94,7 +100,7 @@ export class OperatorJournal {
         row.action as OperatorAction,
         descriptor.fixtureId,
         descriptor.type.codeHash,
-        descriptor.creationTxHash,
+        row.action === 'batch' ? String(row.transactionHash) : descriptor.creationTxHash,
       )
     )
       throw Error('Journal operation generation does not match its descriptor');
@@ -102,6 +108,8 @@ export class OperatorJournal {
       throw Error('Journal fixture and descriptor differ');
     const transactionHash = hash32(row.transactionHash, 'journal transaction hash');
     const tx = ccc.Transaction.fromBytes(row.signedTransaction);
+    const creations =
+      row.action === 'batch' ? this.parseCreations(row.creations, transactionHash) : undefined;
     if (
       tx.hash() !== transactionHash ||
       tx.inputs.length > 64 ||
@@ -119,6 +127,7 @@ export class OperatorJournal {
       transactionHash,
       signedTransaction: row.signedTransaction,
       descriptor,
+      ...(creations ? { creations } : {}),
     };
   }
   persist(
@@ -126,12 +135,13 @@ export class OperatorJournal {
     descriptor: DirectMarketRecord,
     signed: ccc.Transaction,
     now = Date.now(),
+    creations?: DirectMarketRecord[],
   ): SignedOperation {
     const operationId = operationKey(
       action,
       descriptor.fixtureId,
       descriptor.type.codeHash,
-      descriptor.creationTxHash,
+      action === 'batch' ? signed.hash() : descriptor.creationTxHash,
     );
     const existing = this.load(operationId);
     if (existing) {
@@ -141,8 +151,7 @@ export class OperatorJournal {
         );
       return existing;
     }
-    if (readdirSync(this.directory).filter((file) => OPERATION_FILE.test(file)).length >= 1536)
-      throw Error('Operator journal reached the bounded pilot limit');
+    this.assertAvailableSlot();
     const operation: SignedOperation = {
       version: 1,
       operationId,
@@ -152,6 +161,7 @@ export class OperatorJournal {
       transactionHash: signed.hash(),
       signedTransaction: ccc.hexFrom(signed.toBytes()),
       descriptor,
+      ...(action === 'batch' ? { creations: this.parseCreations(creations, signed.hash()) } : {}),
     };
     // Validate before exposing a signed transaction on disk or the network.
     validateRecord(descriptor, this.config);
@@ -164,6 +174,21 @@ export class OperatorJournal {
       throw Error('Signed operator transaction exceeds bounds');
     writeExclusiveJson(this.path(operationId), operation);
     return this.load(operationId)!;
+  }
+  private parseCreations(value: unknown, transactionHash: string): DirectMarketRecord[] {
+    if (!Array.isArray(value) || value.length > 8)
+      throw Error('Invalid atomic creation descriptors');
+    const records = value.map((record) => validateRecord(record, this.config));
+    if (
+      new Set(records.map((record) => record.fixtureId)).size !== records.length ||
+      records.some(
+        (record) =>
+          record.creationTxHash !== transactionHash ||
+          directGeneration(record.type.codeHash) !== 'v4-',
+      )
+    )
+      throw Error('Atomic creation identities differ');
+    return records;
   }
   record(
     operationId: string,

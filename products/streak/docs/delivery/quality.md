@@ -16,6 +16,8 @@ Sponsored first-prediction creation adds three mandatory lanes: the separate `co
 
 Install repository hooks with `npm run hooks:install` after setup. Hooks are local enforcement and must be installed in each checkout. CI repeats the requirements. Do not bypass a failing hook with `--no-verify` or weaken a test just to make a commit.
 
+Atomic slip payments add mandatory v4 Rust VM and signed devnet lanes, the production combined-slip browser journey and Wallet/Telegram browser coverage. Older single-market browser lanes exercise historical deep links and recovery; they do not prescribe the new inline checkout. Database version 3 tests retain previous signed records and cross-store reservations. All tests use synthetic accounts, mocked remote transports or isolated local nodes. Public deployment and a live provider smoke check are recorded separately in the [atomic delivery report](atomic-slip-correction.md).
+
 Example local PowerShell setup from the repository root, after installing the pinned Node/npm and contract prerequisites:
 
 ```powershell

@@ -106,6 +106,16 @@ async function main() {
           return route.continue();
         });
         await context.routeWebSocket('**/*', (socket) => socket.close());
+        await context.addInitScript(() => {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: {
+              writeText: async (value) => {
+                window.syntheticCopiedAddress = value;
+              },
+            },
+          });
+        });
         const page = await context.newPage(),
           reads = observeReads(page, base);
         page.on('pageerror', (error) => errors.push(error.message));
@@ -153,13 +163,39 @@ async function main() {
           );
           await walletNav().click();
           await disconnect.waitFor();
-          await page.locator('.direct-address').getByText(address, { exact: true }).waitFor();
-          await page.locator('.direct-balance').getByText('1,234 tCKB', { exact: true }).waitFor();
+          const overview = page.getByRole('region', { name: 'Wallet overview', exact: true });
+          await overview.getByRole('heading', { name: 'Wallet', exact: true }).waitFor();
+          await overview.getByText('1,234 tCKB', { exact: true }).waitFor();
+          const summary = page.locator('.wallet-nav-summary');
+          await summary.getByText('1,234 tCKB', { exact: true }).waitFor();
+          assert.equal(
+            await summary
+              .getByRole('button', { name: 'Copy wallet address' })
+              .getAttribute('title'),
+            address,
+          );
+          await summary.getByRole('button', { name: 'Copy wallet address' }).click();
+          assert.equal(await page.evaluate(() => window.syntheticCopiedAddress), address);
+          await overview.getByRole('button', { name: 'Copy wallet address' }).click();
+          assert.equal(await page.evaluate(() => window.syntheticCopiedAddress), address);
           assert.equal(await connect.count(), 0, 'Sign-in connection carries into Wallet.');
           assert.equal(await page.locator('ccc-connector').count(), 0);
           await page
-            .locator('.direct-page')
-            .getByRole('link', { name: 'Browse matches', exact: true })
+            .locator('a[href="/season/?view=activity"]')
+            .filter({ visible: true })
+            .first()
+            .click();
+          await page.waitForURL('**/?view=activity');
+          assert.equal(await overview.count(), 0, 'Activity is a distinct page from Wallet.');
+          await page
+            .getByRole('heading', { name: 'Recent transactions', exact: true })
+            .waitFor();
+          await walletNav().click();
+          await disconnect.waitFor();
+          await page
+            .getByRole('link', { name: 'Markets', exact: true })
+            .filter({ visible: true })
+            .first()
             .click();
           await page.getByRole('heading', { name: 'You know the game.', exact: true }).waitFor();
           await walletNav().click();
@@ -205,7 +241,7 @@ async function main() {
           await page.evaluate(() => window.syntheticEvm.replace());
           await connect.waitFor();
           assert.equal(
-            await page.locator('.direct-address').count(),
+            await page.getByRole('button', { name: 'Copy wallet address', exact: true }).count(),
             0,
             'Provider account changes discard the old connection.',
           );
@@ -247,12 +283,20 @@ async function main() {
               'This wallet differs from your signed-in account. Connect that wallet or sign out first.',
               { exact: true },
             )
+            .first()
             .waitFor();
           await connect.waitFor();
           assert.equal(
-            await page.locator('.direct-address').count(),
+            await overview.getByText('1,234 tCKB', { exact: true }).count(),
             0,
             'A different wallet cannot inherit the signed-in account or its review.',
+          );
+          assert.equal(
+            await overview
+              .getByRole('button', { name: 'Copy wallet address' })
+              .getAttribute('title'),
+            address,
+            'The signed-in address stays explicit after a mismatched connection is rejected.',
           );
           await signOut.click();
           await signIn.waitFor();
@@ -266,7 +310,7 @@ async function main() {
           });
           await signIn.waitFor();
           await page
-            .getByText('The connected wallet changed. Connect again and review your action.', {
+            .locator('.notice.error').getByText('The connected wallet changed. Connect again and review your action.', {
               exact: true,
             })
             .waitFor();

@@ -7,6 +7,7 @@ import {
   DirectRegistry,
   PUBLIC_DIRECT_CONFIG,
   V3_DIRECT_CONFIG,
+  V4_DIRECT_CONFIG,
   LEGACY_DIRECT_CONFIG,
   PROVIDER_ORIGIN,
   createRecord,
@@ -54,6 +55,44 @@ async function main(): Promise<void> {
       assert.equal(sponsorConfig.status, 200);
       assert.equal(sponsorConfig.headers.get('cache-control'), 'no-store');
       assert.deepEqual(await sponsorConfig.json(), V3_DIRECT_CONFIG);
+      const batchConfig = await fetch(`${base}/api/direct/batch/config`);
+      assert.equal(batchConfig.headers.get('cache-control'), 'no-store');
+      assert.deepEqual(await batchConfig.json(), V4_DIRECT_CONFIG);
+      const batchDemand = (await (await fetch(`${base}/api/direct/batch/demand`)).json()) as {
+        fixtures: unknown[];
+        enabled: boolean;
+        unavailableReason: string;
+        serverTime: number;
+      };
+      assert.deepEqual(batchDemand.fixtures, []);
+      assert.equal(batchDemand.enabled, false);
+      assert.match(batchDemand.unavailableReason, /deployment/);
+      assert.equal(typeof batchDemand.serverTime, 'number');
+      assert.equal(
+        (await fetch(`${base}/api/direct/batch/demand?matchId=../../secret`)).status,
+        400,
+      );
+      for (const action of ['offer', 'submit', 'resume', 'resolve'])
+        assert.equal(
+          (
+            await fetch(`${base}/api/direct/batch/${action}`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', origin: base },
+              body: '{}',
+            })
+          ).status,
+          401,
+        );
+      assert.equal(
+        (
+          await fetch(`${base}/api/direct/batch/submit`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', origin: 'https://attacker.invalid' },
+            body: '{}',
+          })
+        ).status,
+        403,
+      );
       assert.deepEqual(
         await (await fetch(`${base}/api/direct/demand`)).json(),
         { fixtures: [] },

@@ -36,9 +36,9 @@ The owner approved the Streak UI and architecture on **15 October 2026**, includ
 
 Use the [design system](docs/design/system.md) and approved [preview](design/season-preview/README.md) as the reference. Preserve the coral/graphite football identity, clear glass, directional rims, dense payment surfaces and native scrolling. Use semantic tokens rather than copying values into every feature.
 
-Every interaction has appropriate press, focus, pending, success, failure and disabled behavior. Keep 44px primary touch targets, visible focus, semantic labels and keyboard/touch alternatives. Amounts and consequences must remain legible without blur or colour. Owner correction, 16 October: the prediction slip has one visibly labelled Minimize control; omit its duplicate Close control. Escape also minimizes while retaining the draft. Clear slip is a separate explicit action.
+Every interaction has appropriate press, focus, pending, success, failure and disabled behavior. Keep 44px primary touch targets, visible focus, semantic labels and keyboard/touch alternatives. Amounts and consequences must remain legible without blur or colour. Latest owner correction, 16 October: the prediction slip has one X close button with an accessible label. Close and Escape retain the draft. Clear slip is a separate explicit action. Payment stays inside the slip; Wallet and My activity have distinct routes and purposes.
 
-The Genie is approved as a connected-surface interaction, with production readiness still conditional on performance and accessibility evidence. Immediate state changes are the fallback. Animation must never control payment completion or block input. Preserve interruption cleanup, focus, reduced motion and reduced transparency. The two known mobile WebKit timing failures are open evidence, not permission to weaken checks.
+The owner removed the Genie effect on 16 October. Use immediate slip opening and closing, with reliable focus restoration. Retain reduced motion and reduced transparency support elsewhere. Historical preview motion evidence is archived and does not govern the current application.
 
 ## Security and testing
 

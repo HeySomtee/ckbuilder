@@ -194,7 +194,10 @@ export class DirectClient {
     for (const record of (await this.journal.otherReservations?.(identity.scope)) ?? []) {
       if (await reservationReleased(this.signer.client, record)) continue;
       pending.push(record);
-      if (kind === 'deposit' && record.fixtureId === descriptor.fixtureId)
+      if (
+        kind === 'deposit' &&
+        (record.fixtureIds ?? [record.fixtureId]).includes(descriptor.fixtureId)
+      )
         throw Error(
           'This fixture already has a signed sponsored prediction. Resume its original transaction.',
         );

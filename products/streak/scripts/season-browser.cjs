@@ -731,7 +731,7 @@ async function main() {
     const invalid = await guardedFetch(base + '/api/markets?limit=999');
     assert.equal(invalid.status, 400);
     console.log(
-      `Season browser passed: ${groups} groups across Chromium/WebKit, 320/390/768/1440px, hero CTA visibility on seven short viewports, landing/market API states, Monday fixtures, keyboard FAQ, reduced motion, forced colors, missing bundle/build recovery, shared links, paging/search, account/logout recovery, stale navigation, Minimize-only slips, painted Genie taper, eight-pick restoration and interrupted/canvas-failure recovery.`,
+      `Season browser passed: ${groups} groups across Chromium/WebKit, 320/390/768/1440px, hero CTA visibility on seven short viewports, landing/market API states, Monday fixtures, keyboard FAQ, reduced motion, forced colors, missing bundle/build recovery, shared links, paging/search, account/logout recovery, stale navigation, X close controls, immediate dismissal, eight-pick restoration and retained drafts without Genie rendering.`,
     );
   } finally {
     await browser?.close();

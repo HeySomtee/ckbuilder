@@ -14,7 +14,7 @@
   --green: #71e0b5;
   --violet: #c8b7f6;
   --red: #ff95a4;
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --press: 120ms;
   --surface-time: 220ms;
@@ -86,7 +86,7 @@ body {
   margin: 0;
   background: var(--canvas);
   color: var(--text);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   isolation: isolate;
@@ -358,7 +358,7 @@ main {
   margin-bottom: 28px;
 }
 h1 {
-  font-size: clamp(30px, 3vw, 44px);
+  font-size: clamp(26px, 2.5vw, 34px);
   line-height: 1.12;
   letter-spacing: -1.8px;
   font-weight: 600;
@@ -925,7 +925,7 @@ footer {
     display: none;
   }
   h1 {
-    font-size: 34px;
+    font-size: 28px;
   }
   .market-grid {
     grid-template-columns: 1fr;

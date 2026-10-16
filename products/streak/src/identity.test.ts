@@ -1,4 +1,5 @@
 import assert from 'assert/strict';
+import { telegramAvailable } from './modules/identity/integration-config';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, dirname, resolve } from 'path';
@@ -10,6 +11,33 @@ import { postgresConfig } from './infrastructure/postgres-config';
 import { signatureFrom, walletAddressMatches } from './modules/identity/wallet-binding';
 
 async function main(): Promise<void> {
+  const telegram = {
+    TELEGRAM_BOT_TOKEN: 'synthetic-test-token',
+    TELEGRAM_BOT_USERNAME: 'synthetic_test_bot',
+    TELEGRAM_WEBHOOK_SECRET: 'synthetic-secret',
+    APP_PUBLIC_URL: 'https://streak.example',
+  };
+  assert.equal(telegramAvailable({}, false), false);
+  assert.equal(
+    telegramAvailable(telegram, false),
+    false,
+    'credentials alone do not prove a receiving bot',
+  );
+  assert.equal(
+    telegramAvailable({ ...telegram, APP_PUBLIC_URL: 'http://127.0.0.1:4100' }, true),
+    false,
+    'local address is not a public Telegram receiver',
+  );
+  assert.equal(telegramAvailable({ ...telegram, TELEGRAM_WEBHOOK_SECRET: '' }, true), false);
+  assert.equal(
+    telegramAvailable({ ...telegram, TELEGRAM_WEBHOOK_SECRET: 'invalid/path' }, true),
+    false,
+  );
+  assert.equal(
+    telegramAvailable({ ...telegram, APP_PUBLIC_URL: 'https://streak.example?query=value' }, true),
+    false,
+  );
+  assert.equal(telegramAvailable(telegram, true), true);
   const directory = await mkdtemp(join(tmpdir(), 'streak-identity-'));
   process.env.STREAK_DB_FILE = join(directory, 'db.json');
   process.env.STREAK_SKIP_ENV_FILE = '1';
@@ -133,7 +161,71 @@ async function main(): Promise<void> {
       assert.equal(await walletAddressMatches(otherAddress, proof), false);
     }
 
-    const { server } = await import('./server');
+    const { server, configureTelegramWebhook } = await import('./server');
+    let webhookRequests = 0;
+    const acceptWebhook: typeof fetch = async (input, init) => {
+      webhookRequests++;
+      assert.equal(
+        String(input),
+        `https://api.telegram.org/bot${telegram.TELEGRAM_BOT_TOKEN}/setWebhook`,
+      );
+      assert.equal(init?.method, 'POST');
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        url: `https://streak.example/api/integrations/telegram/webhook/${telegram.TELEGRAM_WEBHOOK_SECRET}`,
+      });
+      assert.ok(init?.signal);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+    assert.equal(
+      await configureTelegramWebhook({ environment: {}, request: acceptWebhook }),
+      false,
+    );
+    assert.equal(
+      await configureTelegramWebhook({
+        environment: { ...telegram, APP_PUBLIC_URL: 'http://127.0.0.1' },
+        request: acceptWebhook,
+      }),
+      false,
+    );
+    assert.equal(webhookRequests, 0, 'invalid webhook settings never contact Telegram');
+    assert.equal(
+      await configureTelegramWebhook({ environment: telegram, request: acceptWebhook }),
+      true,
+    );
+    assert.equal(webhookRequests, 1);
+    for (const [status, payload] of [
+      [200, { ok: false }],
+      [502, { ok: true }],
+      [200, null],
+    ] as const) {
+      assert.equal(
+        await configureTelegramWebhook({
+          environment: telegram,
+          request: async () => new Response(JSON.stringify(payload), { status }),
+        }),
+        false,
+      );
+    }
+    assert.equal(
+      await configureTelegramWebhook({
+        environment: telegram,
+        request: async () => {
+          throw Error('Synthetic private transport detail');
+        },
+      }),
+      false,
+    );
+    let finishOldSetup!: (response: Response) => void;
+    const oldSetup = configureTelegramWebhook({
+      environment: telegram,
+      request: () =>
+        new Promise((done) => {
+          finishOldSetup = done;
+        }),
+    });
+    assert.equal(await configureTelegramWebhook({ environment: {} }), false);
+    finishOldSetup(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    assert.equal(await oldSetup, false, 'an earlier setup cannot overwrite a newer disabled state');
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
     const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const post = (path: string, body: unknown, extra: Record<string, string> = {}) =>
@@ -159,6 +251,48 @@ async function main(): Promise<void> {
         .headers.get('set-cookie')!
         .split(';')[0];
       assert.equal((await fetch(origin + '/api/me', { headers: { cookie } })).status, 200);
+      const account = (await (await fetch(origin + '/api/me', { headers: { cookie } })).json()) as {
+        user: { telegramAvailable: boolean };
+      };
+      assert.equal(
+        account.user.telegramAvailable,
+        false,
+        'account exposes configuration availability without bot credentials',
+      );
+      const previousTelegram = Object.fromEntries(
+        Object.keys(telegram).map((key) => [key, process.env[key]]),
+      );
+      try {
+        Object.assign(process.env, telegram);
+        assert.equal(await configureTelegramWebhook({ request: acceptWebhook }), true);
+        const readyResponse = await fetch(origin + '/api/me', { headers: { cookie } });
+        const readyAccount = (await readyResponse.json()) as {
+          user: { telegramAvailable: boolean };
+        };
+        assert.equal(
+          readyAccount.user.telegramAvailable,
+          true,
+          'the real account response uses the nested field consumed by Wallet',
+        );
+        assert.equal(JSON.stringify(readyAccount).includes(telegram.TELEGRAM_BOT_TOKEN!), false);
+        const disconnected = await post('/api/integrations/telegram/disconnect', {}, { cookie });
+        assert.equal(disconnected.status, 200);
+        const disconnectedAccount = (await disconnected.json()) as {
+          user: { telegramAvailable: boolean; telegramConnected: boolean };
+        };
+        assert.equal(
+          disconnectedAccount.user.telegramAvailable,
+          true,
+          'disconnect preserves availability so the account can reconnect',
+        );
+        assert.equal(disconnectedAccount.user.telegramConnected, false);
+      } finally {
+        for (const [key, value] of Object.entries(previousTelegram)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+        await configureTelegramWebhook({ environment: {} });
+      }
       const wrongNonce = (await (
         await post('/api/auth/nonce', { address: otherAddress })
       ).json()) as typeof nonce;

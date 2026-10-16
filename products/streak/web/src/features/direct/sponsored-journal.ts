@@ -1,7 +1,7 @@
 import { ccc } from '@ckb-ccc/core';
 import { hex, integer, object, text } from './protocol.ts';
 import type { Descriptor, Point } from './protocol.ts';
-import { DIRECT_STORE, SPONSORED_STORE, storedRecords, putStored } from './journal-db.ts';
+import { otherStoredRecords, SPONSORED_STORE, storedRecords, putStored } from './journal-db.ts';
 import { parseReservation } from './reservations.ts';
 import type { ConflictProof, Reservation } from './reservations.ts';
 import { inputPoints, parseSponsorOffer, transactionBytes } from './sponsored-protocol.ts';
@@ -125,7 +125,7 @@ export class IndexedSponsoredJournal implements SponsoredJournal {
     return Promise.all((await storedRecords(SPONSORED_STORE, scope)).map(parseSponsoredRecord));
   }
   async otherReservations(scope: string): Promise<Reservation[]> {
-    return (await storedRecords(DIRECT_STORE, scope)).map(parseReservation);
+    return (await otherStoredRecords(SPONSORED_STORE, scope)).map(parseReservation);
   }
   async put(record: SponsoredRecord): Promise<void> {
     const checked = await parseSponsoredRecord(record);

@@ -7,6 +7,7 @@ import {
   PROVIDER_ORIGIN,
   PUBLIC_DIRECT_CONFIG,
   V3_DIRECT_CONFIG,
+  V4_DIRECT_CONFIG,
   LEGACY_DIRECT_CONFIG,
   protocolConfigFor,
   type DirectProtocolConfig,
@@ -151,12 +152,13 @@ async function recordReconciliation(
 ) {
   journal.record(operation.operationId, state);
   if (
-    operation.action === 'create' &&
+    ['create', 'batch'].includes(operation.action) &&
     operation.descriptor.type.codeHash !== LEGACY_DIRECT_CONFIG.protocolHash &&
     state.status === 'committed' &&
     (state.confirmations ?? 0) >= 4
   )
-    await registry.publishCanonical(operation.descriptor, client);
+    for (const descriptor of operation.creations ?? [operation.descriptor])
+      await registry.publishCanonical(descriptor, client);
   return {
     ...state,
     explorer: `https://pudge.explorer.nervos.org/transaction/${operation.transactionHash}`,
@@ -172,7 +174,7 @@ export interface OperatorDeployment {
 /** A deployment spends from the same wallet but is not a fabricated football market. */
 export function loadOperatorDeployment(
   journal: OperatorJournal,
-  generation: 'v2' | 'v3' = 'v2',
+  generation: 'v2' | 'v3' | 'v4' = 'v2',
 ): OperatorDeployment | undefined {
   const path = join(journal.directory, `deployment-${generation}.json`);
   if (!existsSync(path)) return undefined;
@@ -181,9 +183,11 @@ export function loadOperatorDeployment(
   const row = object(JSON.parse(readFileSync(path, 'utf8')), 'operator deployment');
   if (
     row.protocolHash !==
-      (generation === 'v3'
-        ? V3_DIRECT_CONFIG.protocolHash
-        : (journal.config?.protocolHash ?? PUBLIC_DIRECT_CONFIG.protocolHash)) ||
+      (generation === 'v4'
+        ? V4_DIRECT_CONFIG.protocolHash
+        : generation === 'v3'
+          ? V3_DIRECT_CONFIG.protocolHash
+          : (journal.config?.protocolHash ?? PUBLIC_DIRECT_CONFIG.protocolHash)) ||
     typeof row.transactionHash !== 'string' ||
     !/^0x[0-9a-f]{64}$/.test(row.transactionHash) ||
     typeof row.signedTransaction !== 'string' ||
@@ -226,6 +230,7 @@ export async function operatorFundingBarrier(
   for (const deployment of [
     loadOperatorDeployment(journal),
     loadOperatorDeployment(journal, 'v3'),
+    loadOperatorDeployment(journal, 'v4'),
   ].filter((value): value is OperatorDeployment => !!value)) {
     const state = await reconcileOperation(client, deployment);
     if (state.status !== 'committed' || (state.confirmations ?? 0) < 4)
@@ -338,6 +343,7 @@ export function assertFreshOperatorInputs(
   const deployments = [
     loadOperatorDeployment(journal),
     loadOperatorDeployment(journal, 'v3'),
+    loadOperatorDeployment(journal, 'v4'),
   ].filter((value): value is OperatorDeployment => !!value);
   if (
     deployments.some((deployment) =>
@@ -411,7 +417,25 @@ export async function runOperator(
     throw Error(
       'Hosted operation requires durable-volume confirmation through STREAK_DIRECT_DURABLE_STATE_ACK=1; ephemeral storage is unsupported',
     );
-  const registry = new DirectRegistry(registryDir);
+  const legacyRegistry = new DirectRegistry(registryDir);
+  const batchDirectory = process.env.STREAK_DIRECT_BATCH_REGISTRY_DIR;
+  if (
+    batchDirectory &&
+    (!isAbsolute(batchDirectory) ||
+      [resolve(stateDir), resolve(registryDir)].includes(resolve(batchDirectory)))
+  )
+    throw Error('Atomic registry needs its own absolute durable directory');
+  const batchRegistry = batchDirectory
+    ? new DirectRegistry(batchDirectory, V4_DIRECT_CONFIG)
+    : undefined;
+  if (batchRegistry) {
+    legacyRegistry.publicationTargets = [batchRegistry];
+    batchRegistry.publicationTargets = [legacyRegistry];
+  }
+  const registry =
+    options_.record?.type.codeHash === V4_DIRECT_CONFIG.protocolHash
+      ? (batchRegistry ?? legacyRegistry)
+      : legacyRegistry;
   const journal = new OperatorJournal(stateDir);
   const client = new ccc.ClientPublicTestnet({
     url: PUBLIC_DIRECT_CONFIG.rpc,

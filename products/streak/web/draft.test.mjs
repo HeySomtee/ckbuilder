@@ -11,6 +11,29 @@ function storage() {
   const data = new Map();
   return { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
 }
+test('Submitted picks retire atomically without deleting later edits or another tab draft', () => {
+  const memory = storage(),
+    store = new DraftStore(memory);
+  store.select('m1', 'f1', 'home');
+  store.select('m2', 'f2', 'draw');
+  const paid = structuredClone(store.getSnapshot().draft.picks);
+  store.amount(paid[1].lineId, '200');
+  store.select('m3', 'f3', 'away');
+  assert.equal(store.retireSubmitted(paid), true);
+  assert.deepEqual(
+    store.getSnapshot().draft.picks.map((p) => [p.matchId, p.amountCkb]),
+    [
+      ['f2', '200'],
+      ['f3', '100'],
+    ],
+  );
+  const other = new DraftStore(memory);
+  other.select('m4', 'f4', 'home');
+  const saved = memory.getItem(DRAFT_KEY);
+  assert.equal(store.retireSubmitted(store.getSnapshot().draft.picks), false);
+  assert.equal(memory.getItem(DRAFT_KEY), saved);
+  assert.equal(store.getSnapshot().conflict, true);
+});
 test('Exact independent totals and replacement preserve user amounts across reload', () => {
   const memory = storage();
   const store = new DraftStore(memory);

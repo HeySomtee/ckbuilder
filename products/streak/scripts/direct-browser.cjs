@@ -164,73 +164,45 @@ async function main() {
           await page.getByRole('button', { name: 'Disconnect wallet', exact: true }).waitFor();
           assert.equal(await page.locator('ccc-connector').count(), 0);
         }
-        // Start where users start, not on a privileged/deep-linked checkout route.
-        await reads.goto(base + '/season/');
-        await page
-          .getByRole('region', { name: 'Available testnet markets' })
-          .getByRole('link', { name: 'Arsenal vs Chelsea', exact: true })
-          .click();
-        await page.getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true }).waitFor();
-        await accountReadFinished(page);
-        await page.locator('.detail-outcomes').getByRole('button').nth(2).click();
-        const slip = page.getByRole('dialog', { name: 'Prediction slip' });
-        await slip
-          .getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' })
-          .fill('125.00000001');
-        await slip.getByRole('button', { name: 'Continue to payment', exact: true }).click();
-        await slip.waitFor({ state: 'hidden' });
+        await page.addInitScript(() => {
+          if (!localStorage.getItem('streak.predictionDraft.v1'))
+            localStorage.setItem(
+              'streak.predictionDraft.v1',
+              JSON.stringify({
+                v: 1,
+                revision: 'legacy-recovery-draft',
+                picks: [
+                  {
+                    lineId: 'a',
+                    marketId: 'm-api-football-900001',
+                    matchId: 'api-football-900001',
+                    outcome: 'away',
+                    amountCkb: '150.00000001',
+                  },
+                  {
+                    lineId: 'b',
+                    marketId: 'm-direct-two',
+                    matchId: 'direct-two',
+                    outcome: 'home',
+                    amountCkb: '100',
+                  },
+                ],
+              }),
+            );
+        });
+        // Historical single-market recovery remains accessible after the main slip moves to atomic v4.
+        await reads.goto(base + '/season/?direct=m-api-football-900001');
         await page.getByRole('region', { name: 'Direct testnet predictions' }).waitFor();
-        assert.equal(new URL(page.url()).searchParams.get('direct'), 'm-api-football-900001');
-        assert.equal(
-          await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).inputValue(),
-          '125.00000001',
-        );
-        assert.equal(
-          await page
-            .getByRole('button', { name: 'Chelsea', exact: true })
-            .getAttribute('aria-pressed'),
-          'true',
-        );
-        await page.locator('.prediction-dock').click();
-        await slip
-          .getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' })
-          .fill('150.00000001');
-        await slip.getByRole('button', { name: 'Continue to payment', exact: true }).click();
-        await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).waitFor();
-        assert.equal(
-          await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).inputValue(),
-          '150.00000001',
-          'An explicit same-market handoff replaces the old checkout intent.',
-        );
-        // A multi-pick draft must never silently become a combined transaction.
-        await reads.goto(base + '/season/?market=m-direct-two');
-        await page.getByRole('heading', { name: 'Liverpool vs Tottenham', exact: true }).waitFor();
         await accountReadFinished(page);
-        await page.locator('.detail-outcomes').getByRole('button').first().click();
-        await page.locator('.prediction-dock').click();
-        await slip.getByText(/Combined payment is not available yet/).waitFor();
-        assert.equal(await slip.locator('.slip-pick').count(), 2);
-        assert.equal(
-          await slip.getByRole('region', { name: 'Available testnet markets' }).count(),
-          0,
-          'The slip explains availability per pick without an unrelated market promotion.',
-        );
-        assert.equal(
-          await slip.getByRole('button', { name: 'Pay this prediction', exact: true }).count(),
-          1,
-        );
-        await slip.getByRole('button', { name: 'Pay this prediction', exact: true }).click();
-        await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).waitFor();
-        assert.equal(new URL(page.url()).searchParams.get('direct'), 'm-api-football-900001');
-        assert.equal(
-          await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).inputValue(),
-          '150.00000001',
-        );
+        const slip = page.getByRole('dialog', { name: 'Prediction slip' });
         await connect(true);
         await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).fill('100');
         await page.getByRole('button', { name: 'Arsenal', exact: true }).click();
         phase = `${name} ${width}: review and reject`;
-        await page.getByText('10,000 tCKB', { exact: true }).waitFor();
+        await page
+          .locator('.direct-wallet-card')
+          .getByText('10,000 tCKB', { exact: true })
+          .waitFor();
         await page.getByRole('button', { name: 'Review testnet prediction', exact: true }).click();
         const review = page.getByRole('region', { name: 'Review wallet transaction' });
         await review.waitFor();
@@ -367,7 +339,7 @@ async function main() {
         await page.evaluate(
           (ownerHash) =>
             new Promise((resolve, reject) => {
-              const request = indexedDB.open('streak-direct-transactions-v1', 2);
+              const request = indexedDB.open('streak-direct-transactions-v1', 3);
               request.onerror = () => reject(request.error);
               request.onsuccess = () => {
                 const db = request.result,
@@ -403,46 +375,6 @@ async function main() {
         assert.equal(returned.searchParams.get('market'), 'm-api-football-900001');
         assert.equal(returned.searchParams.has('direct'), false);
         assert.equal(returned.searchParams.has('view'), false);
-        brokenAvailability = true;
-        await reads.reload();
-        await accountReadFinished(page);
-        await page.locator('.prediction-dock').click();
-        await slip
-          .getByText('Payment availability could not be checked.', { exact: true })
-          .first()
-          .waitFor();
-        assert.equal(
-          await slip.getByRole('button', { name: 'Pay this prediction', exact: true }).count(),
-          0,
-          'A failed catalogue never exposes payable draft actions.',
-        );
-        assert.equal(await slip.locator('.slip-pick').count(), 2);
-        brokenAvailability = false;
-        await slip.getByRole('button', { name: 'Retry availability', exact: true }).click();
-        await slip.getByRole('button', { name: 'Pay this prediction', exact: true }).waitFor();
-        for (const [state, expected] of [
-          ['queued', 'This market is queued for automatic setup. Your pick stays saved.'],
-          ['confirming', 'Market setup is confirming on CKB. Payment will open once confirmed.'],
-          [
-            'blocked-capacity',
-            'Market setup is waiting for operator testnet funds. Your pick stays saved.',
-          ],
-        ]) {
-          preparationState = state;
-          await reads.reload();
-          await accountReadFinished(page);
-          await page.locator('.prediction-dock').click();
-          await slip.getByText(expected, { exact: true }).waitFor();
-          assert.equal(
-            await slip.getByRole('button', { name: 'Pay this prediction', exact: true }).count(),
-            0,
-          );
-          assert.equal(await slip.locator('.slip-pick').count(), 2);
-          assert.equal(
-            await slip.getByRole('region', { name: 'Available testnet markets' }).count(),
-            0,
-          );
-        }
         await reads.settled();
         assert.deepEqual(errors, []);
         assert.deepEqual(external, []);

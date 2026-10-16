@@ -3,10 +3,12 @@ import { timingSafeEqual } from 'node:crypto';
 import { isAbsolute, resolve } from 'node:path';
 import * as ccc from '@ckb-ccc/core';
 import { SponsorService, parseSponsorRequest, type SponsorSubmitRequest } from './sponsor';
+import { BatchService, parseBatchRequest } from './batch';
 import { sponsorId } from './sponsor-journal';
 import {
   DirectRegistry,
   V3_DIRECT_CONFIG,
+  V4_DIRECT_CONFIG,
   PUBLIC_DIRECT_CONFIG,
   PROVIDER_ORIGIN,
   object,
@@ -57,7 +59,11 @@ function reply(res: ServerResponse, status: number, value: unknown): void {
   res.end(JSON.stringify(value));
 }
 /** Bound to loopback by the launcher. The API process has only this IPC credential. */
-export function createSponsorServer(service: SponsorService, ipcSecret: string) {
+export function createSponsorServer(
+  legacy: SponsorService,
+  ipcSecret: string,
+  batch?: BatchService,
+) {
   const expected = Buffer.from(`Bearer ${secret(ipcSecret)}`);
   let active = 0;
   return createServer(async (req, res) => {
@@ -71,6 +77,13 @@ export function createSponsorServer(service: SponsorService, ipcSecret: string) 
     active++;
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const atomic = url.pathname.startsWith('/batch/');
+      const service = atomic ? batch : legacy;
+      if (!service)
+        return reply(res, 409, {
+          error: 'Atomic payment is awaiting its verified deployment and operator activation.',
+        });
+      if (atomic) url.pathname = url.pathname.slice(6);
       if (req.method === 'GET' && url.pathname === '/configuration')
         return reply(res, 200, await service.configuration());
       if (req.method === 'GET' && url.pathname === '/fixture') {
@@ -100,7 +113,14 @@ export function createSponsorServer(service: SponsorService, ipcSecret: string) 
       if (typeof authenticated !== 'string' || authenticated.length > 300)
         throw Error('Authenticated wallet address required');
       if (url.pathname === '/offer') {
-        const request = parseSponsorRequest(payload.request);
+        if (!atomic && batch)
+          return reply(res, 409, {
+            error:
+              'New predictions use the atomic slip. Refresh checkout; existing signatures remain recoverable.',
+          });
+        const request = atomic
+          ? parseBatchRequest(payload.request)
+          : parseSponsorRequest(payload.request);
         if (request.ownerAddress !== authenticated)
           return reply(res, 403, { error: 'Use the wallet linked to the signed-in account.' });
         return reply(res, 200, await service.prepareOffer(request));
@@ -137,7 +157,7 @@ export function createSponsorServer(service: SponsorService, ipcSecret: string) 
       // Do not return provider payloads, RPC errors, file paths or signing context.
       const message = error instanceof Error ? error.message : '';
       const safe =
-        /^(Sponsor is completing|Streak needs additional|Unsigned sponsor offer expired|Invalid owner transaction signature|Fixture terms changed|This fixture already has|Sponsored contract deployment|Sponsor funding is awaiting|Owner needs principal|Owner input must be live|This fixture has reached)/.test(
+        /^(Sponsor is completing|Streak needs additional|Streak is at|Unsigned sponsor offer expired|Invalid owner transaction signature|Fixture terms changed|This fixture already has|Sponsored contract deployment|Sponsor funding is awaiting|Owner needs principal|Owner input must be live|This fixture has reached|This fixture has positions|This fixture has no available|This fixture is closed)/.test(
           message,
         );
       reply(res, 409, {
@@ -214,7 +234,27 @@ export async function runSponsorService(): Promise<void> {
       return match;
     },
   });
-  const server = createSponsorServer(service, ipc);
+  const batchDirectory = process.env.STREAK_DIRECT_BATCH_REGISTRY_DIR;
+  if (
+    batchDirectory &&
+    (!isAbsolute(batchDirectory) ||
+      [resolve(directory), resolve(registryDirectory)].includes(resolve(batchDirectory)))
+  )
+    throw Error('Atomic registry requires a separate absolute directory');
+  const batch = batchDirectory
+    ? new BatchService({
+        ...service.options,
+        config: V4_DIRECT_CONFIG,
+        registry: new DirectRegistry(batchDirectory, V4_DIRECT_CONFIG),
+        existingRegistry: [
+          service.options.registry,
+          ...(process.env.STREAK_DIRECT_LEGACY_REGISTRY_DIR
+            ? [new DirectRegistry(process.env.STREAK_DIRECT_LEGACY_REGISTRY_DIR)]
+            : []),
+        ],
+      })
+    : undefined;
+  const server = createSponsorServer(service, ipc, batch);
   server.requestTimeout = 65_000;
   server.headersTimeout = 10_000;
   await new Promise<void>((resolve, reject) => {
@@ -226,7 +266,10 @@ export async function runSponsorService(): Promise<void> {
     if (recovering) return;
     recovering = true;
     try {
-      const results = await service.recoverPending();
+      const results = [
+        ...(await service.recoverPending()),
+        ...(batch ? await batch.recoverPending() : []),
+      ];
       if (results.some((result) => result.needsReview))
         console.error(
           'A sponsored transaction needs bounded-history reconciliation. Its durable bytes remain reserved.',

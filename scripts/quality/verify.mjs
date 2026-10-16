@@ -124,7 +124,16 @@ async function browserChecks() {
       isolated: true,
     },
   );
+  run(
+    'Wallet overview and Telegram browser regression',
+    [join(product, 'scripts/wallet-overview-browser.cjs')],
+    { cwd: product, isolated: true },
+  );
   const base = `http://127.0.0.1:${previewPort}`;
+  run('Atomic combined-payment browser regression', [join(product, 'scripts/batch-browser.cjs')], {
+    cwd: product,
+    isolated: true,
+  });
   run(
     'Sponsored first prediction browser regression',
     [join(product, 'scripts/sponsored-browser.cjs')],
@@ -223,6 +232,11 @@ try {
       await browserChecks();
     } else if (selected === 'contracts') {
       run(
+        'Atomic prediction Rust VM regression',
+        [join(product, 'contracts/direct-v4/scripts/run.cjs'), 'test'],
+        { timeout: 1_200_000 },
+      );
+      run(
         'Streak sponsored creation Rust VM regression',
         [join(product, 'contracts/direct-v3/scripts/run.cjs'), 'test'],
         { timeout: 1_200_000 },
@@ -257,6 +271,11 @@ try {
       run(
         'Sponsored first prediction signed devnet lifecycle',
         [join(product, 'scripts/sponsored-devnet-run.cjs')],
+        { timeout: 600_000 },
+      );
+      run(
+        'Atomic prediction signed devnet lifecycle',
+        [join(product, 'scripts/batch-devnet-run.cjs')],
         { timeout: 600_000 },
       );
     }

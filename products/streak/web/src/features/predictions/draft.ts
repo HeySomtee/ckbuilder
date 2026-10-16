@@ -227,6 +227,22 @@ export class DraftStore {
       picks: this.state.draft.picks.filter((pick) => pick.lineId !== lineId),
     });
   }
+  /** A submitted snapshot cannot erase edits or picks made while a wallet was open. */
+  retireSubmitted(submitted: readonly Pick[]): boolean {
+    const same = (a: Pick, b: Pick) =>
+      a.lineId === b.lineId &&
+      a.marketId === b.marketId &&
+      a.matchId === b.matchId &&
+      a.outcome === b.outcome &&
+      a.amountCkb === b.amountCkb;
+    if (!this.state.draft.picks.some((pick) => submitted.some((row) => same(pick, row))))
+      return true;
+    return this.write({
+      ...this.state.draft,
+      revision: crypto.randomUUID(),
+      picks: this.state.draft.picks.filter((pick) => !submitted.some((row) => same(pick, row))),
+    });
+  }
   clear() {
     this.write(empty(), true);
   }

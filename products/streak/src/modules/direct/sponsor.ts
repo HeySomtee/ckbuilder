@@ -50,7 +50,7 @@ export interface DemandFixture {
   descriptor?: DirectMarketDescriptor;
 }
 export interface SponsorOffer {
-  version: 'sponsored-create-v1';
+  version: 'sponsored-create-v1' | 'atomic-predictions-v1';
   offerId: string;
   expiresAt: number;
   fixture: DemandFixture;
@@ -61,7 +61,7 @@ export interface SponsorOffer {
   sponsorInput: OutPointDTO;
   ownerLock: ScriptDTO;
   userInputIndexes: number[];
-  reserveShannons: '305000000000';
+  reserveShannons: string;
   feeShannons: string;
   outcome: 0 | 1 | 2;
   principalShannons: string;
@@ -236,11 +236,15 @@ export class SponsorService {
   readonly store: SponsorJournal;
   readonly now: () => number;
   private recoveryCursor = 0;
-  constructor(readonly options: SponsorOptions) {
-    this.store = new SponsorJournal(options.journal.directory);
+  private confirmedRecoveryCursor = 0;
+  constructor(
+    readonly options: SponsorOptions,
+    generation: 'sponsored-v3' | 'atomic-v4' = 'sponsored-v3',
+  ) {
+    this.store = new SponsorJournal(options.journal.directory, generation);
     this.now = options.now ?? Date.now;
   }
-  private async fixture(id: string): Promise<Match> {
+  protected async fixture(id: string): Promise<Match> {
     const fixture = await this.options.fixture(id);
     if (
       fixture.id !== id ||
@@ -279,7 +283,7 @@ export class SponsorService {
         })),
     };
   }
-  private async describeMatch(match: Match): Promise<DemandFixture> {
+  protected async describeMatch(match: Match): Promise<DemandFixture> {
     const id = match.id,
       cutoffMs = Date.parse(match.kickoff),
       lock = (await this.options.signer.getRecommendedAddressObj()).script;
@@ -340,6 +344,11 @@ export class SponsorService {
           throw Error('Request identity already belongs to another prediction');
         return prior.offer;
       }
+      this.options.journal.assertAvailableSlot();
+      if (this.options.registry.all().length >= 256)
+        throw Error(
+          'Streak is at its current testnet market limit. Existing claims remain available.',
+        );
       if (this.options.config.codeDeps.length !== 2)
         throw Error('Sponsored contract deployment is not ready');
       if (this.existing(request.fixtureId))
@@ -578,18 +587,32 @@ export class SponsorService {
       return offer;
     });
   }
-  private load(value: { offerId: string; rawHash: string }): SponsorEntry {
+  protected operationFor(offer: SponsorOffer) {
+    return this.options.journal.load(
+      operationKey(
+        'create',
+        offer.fixture.fixtureId,
+        this.options.config.protocolHash,
+        offer.rawHash,
+      ),
+    );
+  }
+  protected persistSigned(offer: SponsorOffer, signed: ccc.Transaction): void {
+    this.options.journal.persist('create', offer.descriptor, signed, this.now());
+  }
+  protected async publish(offer: SponsorOffer): Promise<void> {
+    await this.options.registry.publishCanonical(offer.descriptor, this.options.client);
+  }
+  protected async validateInitial(offer: SponsorOffer): Promise<void> {
+    const fixture = await this.describe(offer.fixture.fixtureId);
+    if (fixture.termsHash !== offer.fixture.termsHash)
+      throw Error('Pinned football fixture changed before sponsorship');
+  }
+  protected load(value: { offerId: string; rawHash: string }): SponsorEntry {
     const entry = this.store.load(sponsorId(value.offerId));
     if (!entry || entry.offer.rawHash !== hash32(value.rawHash, 'sponsor transaction hash'))
       throw Error('Unknown sponsor offer');
-    const operation = this.options.journal.load(
-      operationKey(
-        'create',
-        entry.offer.fixture.fixtureId,
-        this.options.config.protocolHash,
-        entry.offer.rawHash,
-      ),
-    );
+    const operation = this.operationFor(entry.offer);
     if (operation && !entry.signedBytes) {
       entry.signedBytes = operation.signedTransaction;
       if (entry.state !== 'cancelled') entry.state = 'signed';
@@ -597,7 +620,7 @@ export class SponsorService {
     }
     return entry;
   }
-  private async refreshConflicts(): Promise<void> {
+  protected async refreshConflicts(): Promise<void> {
     const state = await canonicalSponsorConflicts(
       this.options.client,
       this.options.journal.directory,
@@ -618,7 +641,7 @@ export class SponsorService {
       }
     }
   }
-  private async validateFrozen(offer: SponsorOffer): Promise<void> {
+  protected async validateFrozen(offer: SponsorOffer): Promise<void> {
     const tx = ccc.Transaction.fromBytes(offer.unsignedBytes),
       sponsor = ccc.Script.from(offer.sponsorLock),
       owner = ccc.Script.from(offer.ownerLock);
@@ -677,11 +700,7 @@ export class SponsorService {
         (entry.state !== 'offered' || this.now() >= entry.offer.expiresAt)
       )
         throw Error('Unsigned sponsor offer expired. Its signature was not accepted.');
-      if (!entry.userSignedBytes) {
-        const fixture = await this.describe(entry.offer.fixture.fixtureId);
-        if (fixture.termsHash !== entry.offer.fixture.termsHash)
-          throw Error('Pinned football fixture changed before sponsorship');
-      }
+      if (!entry.userSignedBytes) await this.validateInitial(entry.offer);
       await this.validateFrozen(entry.offer);
       await verifySponsorOwnerWitness(this.options.client, entry.offer, value.userSignedBytes);
       if (!entry.userSignedBytes) {
@@ -692,16 +711,9 @@ export class SponsorService {
       return this.finish(entry);
     });
   }
-  private async finish(entry: SponsorEntry): Promise<SponsorStatus> {
+  protected async finish(entry: SponsorEntry): Promise<SponsorStatus> {
     if (!entry.userSignedBytes) throw Error('Owner signature is required');
-    const operation = this.options.journal.load(
-      operationKey(
-        'create',
-        entry.offer.fixture.fixtureId,
-        this.options.config.protocolHash,
-        entry.offer.rawHash,
-      ),
-    );
+    const operation = this.operationFor(entry.offer);
     if (operation) {
       if (operation.transactionHash !== entry.offer.rawHash)
         throw Error('Fixture already belongs to a different signed creation');
@@ -726,7 +738,7 @@ export class SponsorService {
           )
       )
         throw Error('Sponsor signer changed the owner transaction');
-      this.options.journal.persist('create', entry.offer.descriptor, signed, this.now());
+      this.persistSigned(entry.offer, signed);
       entry.signedBytes = hex(signed.toBytes());
     }
     entry.state = 'signed';
@@ -735,14 +747,7 @@ export class SponsorService {
   }
   private async reconcile(entry: SponsorEntry, broadcast = false): Promise<SponsorStatus> {
     if (!entry.signedBytes) return this.public(entry);
-    const operation = this.options.journal.load(
-      operationKey(
-        'create',
-        entry.offer.fixture.fixtureId,
-        this.options.config.protocolHash,
-        entry.offer.rawHash,
-      ),
-    );
+    const operation = this.operationFor(entry.offer);
     if (!operation || operation.signedTransaction !== entry.signedBytes)
       throw Error('Signed sponsor operation is missing from the funding journal');
     let state = await reconcileOperation(this.options.client, operation);
@@ -766,7 +771,8 @@ export class SponsorService {
         );
       }
     }
-    this.options.journal.record(operation.operationId, state);
+    if (entry.state !== 'funded' || state.status !== 'committed' || (state.confirmations ?? 0) < 4)
+      this.options.journal.record(operation.operationId, state);
     entry.state =
       state.status === 'committed'
         ? (state.confirmations ?? 0) >= 4
@@ -775,8 +781,7 @@ export class SponsorService {
         : state.status === 'pending'
           ? 'confirming'
           : 'blocked';
-    if (entry.state === 'funded')
-      await this.options.registry.publishCanonical(entry.offer.descriptor, this.options.client);
+    if (entry.state === 'funded') await this.publish(entry.offer);
     this.store.save(entry);
     return this.public(entry);
   }
@@ -861,13 +866,23 @@ export class SponsorService {
   ): Promise<{ offerId: string; state: SponsorState; needsReview: boolean }[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 4)
       throw Error('Sponsor recovery batch exceeds its bound');
-    const pending = this.store
-      .all()
-      .filter((entry) => entry.userSignedBytes && entry.state !== 'funded');
-    if (!pending.length) return [];
+    const entries = this.store.all().filter((entry) => entry.userSignedBytes);
+    const pending = entries.filter((entry) => entry.state !== 'funded');
+    const confirmed = entries.filter((entry) => entry.state === 'funded');
+    if (!entries.length) return [];
+    const pendingCount = Math.min(
+      pending.length,
+      confirmed.length && limit > 1 ? limit - 1 : limit,
+    );
+    const selected = Array.from(
+      { length: pendingCount },
+      (_, offset) => pending[(this.recoveryCursor + offset) % pending.length],
+    );
+    const confirmedCount = Math.min(confirmed.length, limit - selected.length);
+    for (let offset = 0; offset < confirmedCount; offset++)
+      selected.push(confirmed[(this.confirmedRecoveryCursor + offset) % confirmed.length]);
     const output: { offerId: string; state: SponsorState; needsReview: boolean }[] = [];
-    for (let offset = 0; offset < Math.min(limit, pending.length); offset++) {
-      const entry = pending[(this.recoveryCursor + offset) % pending.length];
+    for (const entry of selected) {
       let status: SponsorStatus;
       try {
         status = await this.status(
@@ -906,7 +921,12 @@ export class SponsorService {
         needsReview: status.state === 'blocked',
       });
     }
-    this.recoveryCursor = (this.recoveryCursor + Math.min(limit, pending.length)) % pending.length;
+    this.recoveryCursor = pending.length
+      ? (this.recoveryCursor + pendingCount) % pending.length
+      : 0;
+    this.confirmedRecoveryCursor = confirmed.length
+      ? (this.confirmedRecoveryCursor + confirmedCount) % confirmed.length
+      : 0;
     return output;
   }
   private async findConflict(entry: SponsorEntry): Promise<string | undefined> {

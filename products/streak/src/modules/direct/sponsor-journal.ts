@@ -30,8 +30,11 @@ export const sponsorId = (value: unknown): string => {
 /** Owned by the same operator lease as its funding journal, never by the HTTP API. */
 export class SponsorJournal {
   readonly directory: string;
-  constructor(operatorDirectory: string) {
-    this.directory = join(operatorDirectory, 'sponsored-v3');
+  constructor(
+    operatorDirectory: string,
+    generation: 'sponsored-v3' | 'atomic-v4' = 'sponsored-v3',
+  ) {
+    this.directory = join(operatorDirectory, generation);
   }
   load(id: string): SponsorEntry | undefined {
     const path = join(this.directory, `${sponsorId(id)}.json`);
@@ -129,8 +132,8 @@ export function sponsorFundingBlocked(
   now = Date.now(),
   resolved = new Set<string>(),
 ): boolean {
-  return new SponsorJournal(operatorDirectory)
-    .active(now)
+  return sponsorStores(operatorDirectory)
+    .flatMap((store) => store.active(now))
     .some(
       (entry) =>
         !resolved.has(entry.offer.rawHash) && !entry.signedBytes && entry.state !== 'cancelled',
@@ -139,14 +142,14 @@ export function sponsorFundingBlocked(
 
 /** Call while holding the shared operator lease before deadline-critical work. */
 export function cancelUnsignedSponsorOffers(operatorDirectory: string): number {
-  const store = new SponsorJournal(operatorDirectory);
   let count = 0;
-  for (const entry of store.all())
-    if (entry.state === 'offered' && !entry.userSignedBytes) {
-      entry.state = 'cancelled';
-      store.save(entry);
-      count++;
-    }
+  for (const store of sponsorStores(operatorDirectory))
+    for (const entry of store.all())
+      if (entry.state === 'offered' && !entry.userSignedBytes) {
+        entry.state = 'cancelled';
+        store.save(entry);
+        count++;
+      }
   return count;
 }
 
@@ -157,7 +160,7 @@ export function assertSponsorInputsAvailable(
   resolved = new Set<string>(),
 ): void {
   const candidate = new Set(tx.inputs.map((input) => input.previousOutput.toHex()));
-  for (const entry of new SponsorJournal(operatorDirectory).active(now)) {
+  for (const entry of sponsorStores(operatorDirectory).flatMap((store) => store.active(now))) {
     if (
       entry.offer.rawHash === tx.hash() ||
       entry.state === 'cancelled' ||
@@ -185,7 +188,7 @@ export async function canonicalSponsorConflicts(
   proofs: Map<string, string>;
   originals: Set<string>;
 }> {
-  const all = new SponsorJournal(operatorDirectory).all(),
+  const all = sponsorStores(operatorDirectory).flatMap((store) => store.all()),
     entries = all.filter((entry) => entry.conflictHash);
   const resolved = new Set<string>(),
     proofs = new Map<string, string>(),
@@ -249,4 +252,11 @@ export async function canonicalSponsorConflicts(
         uncertain.delete(entry.offer.rawHash);
       }
   return { resolved, uncertain: uncertain.size > 0, proofs, originals };
+}
+
+export function sponsorStores(operatorDirectory: string): SponsorJournal[] {
+  return [
+    new SponsorJournal(operatorDirectory),
+    new SponsorJournal(operatorDirectory, 'atomic-v4'),
+  ];
 }

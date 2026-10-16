@@ -11,7 +11,8 @@
 import "./env";
 import { rankFeaturedFixtures } from './fixture-ranking';
 import { findPublicPredictionMarket, InvalidSlip, parseSlip, reviewPredictions } from './modules/predictions/review';
-import { DirectRegistry, PUBLIC_DIRECT_CONFIG, LEGACY_DIRECT_CONFIG, V3_DIRECT_CONFIG, PROVIDER_ORIGIN, RESULT_WINDOW_MS, termsDigest, object } from './modules/direct/registry';
+import { DirectRegistry, PUBLIC_DIRECT_CONFIG, LEGACY_DIRECT_CONFIG, V3_DIRECT_CONFIG, V4_DIRECT_CONFIG, PROVIDER_ORIGIN, RESULT_WINDOW_MS, termsDigest, object } from './modules/direct/registry';
+import { telegramAvailable } from './modules/identity/integration-config';
 import { readProvisioningProgress, PROVISION_QUEUE_LIMIT } from './modules/direct/provision';
 import { sponsorProxy, SponsorProxyError } from './modules/direct/sponsor-proxy';
 
@@ -367,10 +368,42 @@ async function requireUser(req: IncomingMessage, res: ServerResponse): Promise<U
   return user;
 }
 
+let telegramReceiverReady = false;
+let telegramSetupGeneration = 0;
+/** Called explicitly after a listener and its public receiving route are available. */
+export async function configureTelegramWebhook(options: {
+  environment?: NodeJS.ProcessEnv;
+  request?: typeof fetch;
+} = {}): Promise<boolean> {
+  const generation = ++telegramSetupGeneration;
+  telegramReceiverReady = false;
+  const environment = options.environment ?? process.env;
+  if (!telegramAvailable(environment, true)) return false;
+  const hookUrl = `${environment.APP_PUBLIC_URL!.replace(/\/$/, '')}/api/integrations/telegram/webhook/${environment.TELEGRAM_WEBHOOK_SECRET!}`;
+  try {
+    const response = await (options.request ?? fetch)(`https://api.telegram.org/bot${environment.TELEGRAM_BOT_TOKEN!}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: hookUrl }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const result: unknown = await response.json();
+    if (!response.ok || !result || typeof result !== 'object' || !('ok' in result) || result.ok !== true)
+      throw Error('Webhook registration was not accepted');
+    if (generation !== telegramSetupGeneration) return false;
+    telegramReceiverReady = true;
+    console.log('[telegram] webhook configured');
+    return true;
+  } catch {
+    if (generation === telegramSetupGeneration) telegramReceiverReady = false;
+    console.warn('[telegram] webhook setup unavailable');
+    return false;
+  }
+}
 async function handleMe(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const user = await requireUser(req, res);
   if (!user) return;
-  sendJson(res, 200, { user: await toPublicUser(user) });
+  sendJson(res, 200, { user: { ...await toPublicUser(user), telegramAvailable: telegramAvailable(process.env, telegramReceiverReady) } });
 }
 
 async function handleSetNotify(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -402,6 +435,7 @@ async function telegramSendText(chatId: string, text: string): Promise<void> {
 async function handleTelegramConnect(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const user = await requireUser(req, res);
   if (!user) return;
+  if(!telegramAvailable(process.env,telegramReceiverReady))return sendJson(res,503,{error:'Telegram linking is not configured on this instance.'});
   const botUsername = process.env.TELEGRAM_BOT_USERNAME;
   if (!botUsername) {
     return sendJson(res, 400, { error: "TELEGRAM_BOT_USERNAME is not configured." });
@@ -432,7 +466,7 @@ async function handleTelegramDisconnect(req: IncomingMessage, res: ServerRespons
     delete u.telegramUsername;
   });
   const fresh = await read((db) => db.users.find((x) => x.id === user.id))!;
-  sendJson(res, 200, { user: await toPublicUser(fresh!) });
+  sendJson(res, 200, { user: { ...await toPublicUser(fresh!), telegramAvailable: telegramAvailable(process.env, telegramReceiverReady) } });
 }
 
 async function handleTelegramWebhook(req: IncomingMessage, res: ServerResponse, secret: string): Promise<void> {
@@ -466,7 +500,7 @@ async function handleTelegramWebhook(req: IncomingMessage, res: ServerResponse, 
   });
 
   if (linkedUser) {
-    await telegramSendText(String(chatId), `Connected to Streak as @${linkedUser.username}. You'll now receive pick and settlement notifications.`);
+    await telegramSendText(String(chatId), `Connected to Streak as @${linkedUser.username}. Your Telegram account is now linked.`);
   } else {
     await telegramSendText(String(chatId), "This connect link is invalid or expired. Please create a new one from the app.");
   }
@@ -1101,7 +1135,9 @@ type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<
 
 const directRegistry = new DirectRegistry(process.env.STREAK_DIRECT_REGISTRY_DIR);
 const legacyDirectRegistry = new DirectRegistry(process.env.STREAK_DIRECT_LEGACY_REGISTRY_DIR);
-const sponsorConfigurationCache=new AsyncSnapshotCache<string,unknown>(5_000,1);
+const batchDirectRegistry = new DirectRegistry(process.env.STREAK_DIRECT_BATCH_REGISTRY_DIR,V4_DIRECT_CONFIG);
+const atomicConfigured = !!process.env.STREAK_DIRECT_BATCH_REGISTRY_DIR && V4_DIRECT_CONFIG.codeDeps.length===2;
+const sponsorConfigurationCache=new AsyncSnapshotCache<string,unknown>(5_000,2);
 const sponsorRequests = new Map<string,{start:number;count:number}>();
 function sponsorRate(key:string,limit:number):boolean {
   const now=Date.now();
@@ -1110,42 +1146,48 @@ function sponsorRate(key:string,limit:number):boolean {
   if(!value){if(sponsorRequests.size>=256)return false;value={start:now,count:0};sponsorRequests.set(key,value);}
   value.count++;return value.count<=limit;
 }
-async function handleDemand(req:IncomingMessage,res:ServerResponse,url:URL):Promise<void> {
+async function handleDemand(req:IncomingMessage,res:ServerResponse,url:URL,atomic=false):Promise<void> {
   const id=url.searchParams.get('matchId');
   if(id&&!/^api-football-[1-9][0-9]{0,14}$/.test(id))return sendJson(res,400,{error:'An API football fixture is required.'});
+  const envelope=(fixtures:unknown[],enabled=true,unavailableReason?:string)=>atomic?{fixtures,serverTime:Date.now(),enabled,...unavailableReason?{unavailableReason}:{}}:{fixtures};
+  if(atomic&&!atomicConfigured)return sendJson(res,200,envelope([],false,'Atomic payment is awaiting verified deployment and operator activation.'));
   const status=providerStatus();
   const fixtures=(provider.scheduleFixtures?.()??[]).filter(match=>(!id||match.id===id)&&isActiveProviderMatch(match)&&match.status==='scheduled'&&match.oracle?.source===PROVIDER_ORIGIN&&Date.parse(match.kickoff)>Date.now()+120_000);
   if(provider.id!=='football'||!status.enabled||status.simulated||!fixtures.length)
-    return sendJson(res,200,{fixtures:[]});
+    return sendJson(res,200,envelope([],false,'The real football catalogue is not ready.'));
   if(fixtures.length>4096)return sendJson(res,503,{error:'The active fixture catalogue exceeds its reviewed bound.'});
   if(!sponsorRate(`demand:${req.socket.remoteAddress}`,120))return sendJson(res,429,{error:'Please wait before refreshing sponsored availability.'});
   try {
-    const config=object(sponsorConfigurationCache.isFresh('operator')?sponsorConfigurationCache.peek('operator'):
-      await within(sponsorConfigurationCache.refresh('operator',()=>sponsorProxy('/configuration')),8_000),'sponsor configuration');
+    const cacheKey=atomic?'batch':'operator',prefix=atomic?'/batch':'';
+    const config=object(sponsorConfigurationCache.isFresh(cacheKey)?sponsorConfigurationCache.peek(cacheKey):
+      await within(sponsorConfigurationCache.refresh(cacheKey,()=>sponsorProxy(`${prefix}/configuration`)),8_000),'sponsor configuration');
     const lock=object(config.sponsorLock,'sponsor lock');
     if(typeof lock.codeHash!=='string'||!/^0x[0-9a-f]{64}$/.test(lock.codeHash)||!['type','data','data1','data2'].includes(String(lock.hashType))||typeof lock.args!=='string'||!/^0x(?:[0-9a-f]{2}){1,59}$/.test(lock.args))throw Error('Invalid sponsor lock');
     const reservations=Array.isArray(config.reservations)?config.reservations.map(value=>object(value,'sponsor reservation')):[];
     if(reservations.length>4096)throw Error('Sponsor reservations exceed their bound');
-    const descriptors=new Map(directRegistry.describe(fixtures,()=>true,id??undefined).filter(row=>row.type.codeHash!==LEGACY_DIRECT_CONFIG.protocolHash).map(row=>[row.fixtureId,row]));
+    const retired=atomic&&Array.isArray(config.retiredCreations)?config.retiredCreations.map(value=>object(value,'retired creation')):[];
+    if(retired.length>256||retired.some(row=>typeof row.fixtureId!=='string'||!/^api-football-[1-9][0-9]{0,14}$/.test(row.fixtureId)||typeof row.creationTxHash!=='string'||!/^0x[0-9a-f]{64}$/.test(row.creationTxHash)))throw Error('Invalid retired atomic selection');
+    const descriptors=new Map((atomic?batchDirectRegistry:directRegistry).describe(fixtures,()=>true,id??undefined).filter(row=>row.type.codeHash!==LEGACY_DIRECT_CONFIG.protocolHash&&!retired.some(old=>old.fixtureId===row.fixtureId&&old.creationTxHash===row.creationTxHash)).map(row=>[row.fixtureId,row]));
     const output=fixtures.map(match=>{
       const cutoffMs=Date.parse(match.kickoff),terms={provider:'football' as const,providerFixtureId:match.oracle!.fixtureId,source:'api-football' as const,rules:'regulation-time-1x2-v1' as const,deadlineMs:cutoffMs+RESULT_WINDOW_MS};
       const base={fixtureId:match.id,label:`${match.home.name} vs ${match.away.name}`,cutoffMs,terms};
       const descriptor=descriptors.get(match.id);
       const reservation=reservations.find(value=>value.fixtureId===match.id);
       return {...base,termsHash:termsDigest({...base,id:'',creationTxHash:'',type:{codeHash:'',hashType:'data2',args:''}}),sponsorLock:{codeHash:lock.codeHash,hashType:lock.hashType,args:lock.args},
-        state:descriptor?(descriptor.entryEnabled?'funded':'unavailable'):reservation?.state==='unavailable'?'unavailable':reservation?.state==='confirming'?'confirming':reservation?.state==='reserved'?'reserved':V3_DIRECT_CONFIG.codeDeps.length===2?'available':'unavailable',
+        state:descriptor?(descriptor.entryEnabled?'funded':'unavailable'):reservation?.state==='unavailable'?'unavailable':reservation?.state==='confirming'?'confirming':reservation?.state==='reserved'?'reserved':(atomic?V4_DIRECT_CONFIG:V3_DIRECT_CONFIG).codeDeps.length===2?'available':'unavailable',
         ...(descriptor?{descriptor}:{})};
     });
-    sendJson(res,200,{fixtures:output});
+    sendJson(res,200,envelope(output));
   }
-  catch {sendJson(res,503,{error:'Sponsored market creation is temporarily unavailable. Existing positions remain recoverable.'});}
+  catch {atomic?sendJson(res,200,envelope([],false,'Atomic sponsorship is temporarily unavailable. Existing signed payments remain recoverable.')):sendJson(res,503,{error:'Sponsored market creation is temporarily unavailable. Existing positions remain recoverable.'});}
 }
-async function handleSponsor(req:IncomingMessage,res:ServerResponse,url:URL,action:'offer'|'submit'|'resume'|'resolve'|'status'):Promise<void> {
+async function handleSponsor(req:IncomingMessage,res:ServerResponse,url:URL,action:'offer'|'submit'|'resume'|'resolve'|'status',atomic=false):Promise<void> {
+  const prefix=atomic?'/batch':'';
   if(action==='status') {
     const offerId=url.searchParams.get('offerId'),rawHash=url.searchParams.get('rawHash');
     if(!offerId||!/^[0-9a-f-]{36}$/.test(offerId)||!rawHash||!/^0x[0-9a-f]{64}$/.test(rawHash))return sendJson(res,400,{error:'Invalid sponsor recovery identity.'});
     if(!sponsorRate(`status:${req.socket.remoteAddress}`,60))return sendJson(res,429,{error:'Please wait before refreshing transaction status.'});
-    try {sendJson(res,200,await sponsorProxy(`/status?offerId=${encodeURIComponent(offerId)}&rawHash=${rawHash}`));}
+    try {sendJson(res,200,await sponsorProxy(`${prefix}/status?offerId=${encodeURIComponent(offerId)}&rawHash=${rawHash}`));}
     catch {sendJson(res,503,{error:'Sponsor status is unavailable. Keep the saved transaction and try recovery again.'});}
     return;
   }
@@ -1156,7 +1198,7 @@ async function handleSponsor(req:IncomingMessage,res:ServerResponse,url:URL,acti
   const body=await readJson(req);
   if(!body||typeof body!=='object'||Array.isArray(body)||JSON.stringify(body).length>210_000)return sendJson(res,400,{error:'Invalid sponsored request.'});
   if(action==='offer'&&(await canonicalWalletAddress(body.ownerAddress))!==address)return sendJson(res,403,{error:'Use the wallet linked to the signed-in account.'});
-  try {sendJson(res,200,await sponsorProxy(`/${action}`,body,address));}
+  try {sendJson(res,200,await sponsorProxy(`${prefix}/${action}`,body,address));}
   catch(error) {sendJson(res,error instanceof SponsorProxyError?error.status:409,{error:error instanceof SponsorProxyError?error.message:'Sponsored operation could not complete. Preserve any signed transaction and check its status before retrying.'});}
 }
 async function handleDirectMarkets(res: ServerResponse, url: URL): Promise<void> {
@@ -1174,7 +1216,8 @@ async function handleDirectMarkets(res: ServerResponse, url: URL): Promise<void>
     const archived = legacyDirectRegistry.describe(fixtures, () => false, fixtureId)
       .filter(row => !current.some(active => active.id === row.id))
       .map(row => ({ ...row, entryEnabled: false, entryUnavailableReason: 'This earlier contract is closed to new entries. Existing positions and claims remain available.' }));
-    return [...current, ...archived];
+    const atomic = batchDirectRegistry.describe(fixtures,match=>provider.id==='football'&&status.enabled&&!status.simulated&&isActiveProviderMatch(match),fixtureId);
+    return [...atomic,...current.map(row=>atomicConfigured?{...row,entryEnabled:false,entryUnavailableReason:'New payments use the atomic slip. This earlier pool retains its positions and claim recovery.'}:row), ...archived];
   });
   sendJson(res, 200, { markets });
 }
@@ -1196,6 +1239,13 @@ async function handleDirectFixtures(res: ServerResponse): Promise<void> {
 const staticRoutes: Record<string, Handler> = {
   "GET /api/direct/config": async (_req, res) => sendJson(res, 200, PUBLIC_DIRECT_CONFIG),
   "GET /api/direct/sponsor/config": async (_req,res) => sendJson(res,200,V3_DIRECT_CONFIG),
+  "GET /api/direct/batch/config": async (_req,res) => sendJson(res,200,V4_DIRECT_CONFIG),
+  "GET /api/direct/batch/demand": (req,res,url)=>handleDemand(req,res,url,true),
+  "POST /api/direct/batch/offer": (req,res,url)=>handleSponsor(req,res,url,'offer',true),
+  "POST /api/direct/batch/submit": (req,res,url)=>handleSponsor(req,res,url,'submit',true),
+  "POST /api/direct/batch/resume": (req,res,url)=>handleSponsor(req,res,url,'resume',true),
+  "POST /api/direct/batch/resolve": (req,res,url)=>handleSponsor(req,res,url,'resolve',true),
+  "GET /api/direct/batch/status": (req,res,url)=>handleSponsor(req,res,url,'status',true),
   "GET /api/direct/demand": handleDemand,
   "POST /api/direct/sponsor/offer": (req,res,url)=>handleSponsor(req,res,url,'offer'),
   "POST /api/direct/sponsor/submit": (req,res,url)=>handleSponsor(req,res,url,'submit'),
@@ -1340,20 +1390,7 @@ async function boot(): Promise<void> {
   server.once("close", () => clearInterval(interval));
   void initNotifications().catch((error) => console.warn("[notifications] setup failed:", (error as Error).message));
 
-  // Best-effort Telegram webhook auto-setup for deep-link connect flow.
-  const appUrl = process.env.APP_PUBLIC_URL;
-  const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-  const tgSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (appUrl && tgToken && tgSecret) {
-    const hookUrl = `${appUrl.replace(/\/$/, "")}/api/integrations/telegram/webhook/${tgSecret}`;
-    void fetch(`https://api.telegram.org/bot${tgToken}/setWebhook`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: hookUrl }),
-        signal: AbortSignal.timeout(10_000),
-      }).then(() => console.log("[telegram] webhook configured"))
-        .catch((error) => console.warn("[telegram] webhook setup failed:", error.message));
-  }
+  void configureTelegramWebhook();
 }
 
 if (require.main === module) {

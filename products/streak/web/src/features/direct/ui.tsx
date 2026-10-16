@@ -6,6 +6,9 @@ import { getDirectMarkets } from './api';
 import { DirectClient } from './client';
 import type { Review } from './client';
 import { SponsoredClient } from './sponsored-client';
+import { BatchClient } from './batch-client';
+import { batchTransport } from './batch-api';
+import { BatchTransaction } from './batch-ui';
 import { getDemandFixtures, sponsorTransport } from './sponsored-api';
 import { SponsoredCheckout, SponsoredTransaction } from './sponsored-ui';
 import type { JournalRecord } from './journal';
@@ -13,7 +16,7 @@ import { MANIFEST, MIN_PRINCIPAL } from './protocol';
 import type { Descriptor, Outcome, Point } from './protocol';
 import { getPublicMarket } from '../predictions/api';
 import { amountShannons, displayShannons } from '../predictions/draft';
-import type { Pick } from '../predictions/draft';
+import type { Pick, DraftStore } from '../predictions/draft';
 import type { Account } from '../account/api';
 import {
   assertActiveWallet,
@@ -47,6 +50,7 @@ const message = (error: unknown) =>
 interface Connection {
   client: DirectClient;
   sponsored: SponsoredClient;
+  batch: BatchClient;
   address: string;
   ownerHash: string;
 }
@@ -292,11 +296,15 @@ export default function DirectPage({
   account,
   accountReady,
   draftPick,
+  activityOnly = false,
+  draftStore,
 }: {
   marketId?: string;
   account: Account | null;
   accountReady: boolean;
   draftPick?: Pick;
+  activityOnly?: boolean;
+  draftStore?: DraftStore;
 }) {
   const queryClient = useQueryClient();
   const title = useRef<HTMLHeadingElement>(null);
@@ -320,7 +328,9 @@ export default function DirectPage({
       await assertActiveWallet(activeWallet);
       const sponsored = new SponsoredClient(signer, sponsorTransport);
       await sponsored.history();
-      return { client, sponsored, address, ownerHash: lock.hash() };
+      const batch = new BatchClient(signer, batchTransport);
+      await batch.history();
+      return { client, sponsored, batch, address, ownerHash: lock.hash() };
     },
     retry: false,
     staleTime: Infinity,
@@ -394,6 +404,13 @@ export default function DirectPage({
     queryKey: ['direct-private', connection?.ownerHash, 'sponsored-history'],
     enabled: !!connection,
     queryFn: () => connection!.sponsored.history(),
+    retry: false,
+    staleTime: 5_000,
+  });
+  const batchHistory = useQuery({
+    queryKey: ['direct-private', connection?.ownerHash, 'batch-history'],
+    enabled: !!connection,
+    queryFn: () => connection!.batch.history(),
     retry: false,
     staleTime: 5_000,
   });
@@ -487,6 +504,9 @@ export default function DirectPage({
     if (row.status === 'committed' || row.finalSignedBytes)
       savedDescriptors.set(definitionKey(row.descriptor), row.descriptor);
   if (descriptor) savedDescriptors.set(definitionKey(descriptor), descriptor);
+  for (const row of batchHistory.data ?? [])
+    if (row.status === 'committed' || row.finalSignedBytes)
+      for (const item of row.descriptors) savedDescriptors.set(definitionKey(item), item);
   // Catalogue discovery also restores positions when this browser has no transaction history.
   for (const row of catalogue.data ?? []) savedDescriptors.set(definitionKey(row), row);
   const working = prepare.isPending || submit.isPending || sponsoredBusy;
@@ -504,6 +524,7 @@ export default function DirectPage({
       markets: Array.from(savedDescriptors.values()),
       records: history.data,
       sponsoredRecords: sponsoredHistory.data ?? [],
+      batchRecords: batchHistory.data ?? [],
     };
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }),
@@ -516,14 +537,27 @@ export default function DirectPage({
   }
 
   return (
-    <section className="direct-page" aria-label="Direct testnet predictions">
+    <section
+      className={`direct-page${activityOnly ? ' activity-page' : ''}`}
+      aria-label={activityOnly ? 'My activity' : 'Direct testnet predictions'}
+    >
       <div className="detail-page-head">
         <div>
-          <p className="eyebrow">YOUR WALLET. YOUR PREDICTION.</p>
+          <p className="eyebrow">
+            {activityOnly ? 'YOUR PREDICTIONS' : 'YOUR WALLET. YOUR PREDICTION.'}
+          </p>
           <h1 ref={title} tabIndex={-1}>
-            {teams ? `${teams.home} vs ${teams.away}` : 'Your testnet touchline.'}
+            {activityOnly
+              ? 'My activity'
+              : teams
+                ? `${teams.home} vs ${teams.away}`
+                : 'Your testnet touchline.'}
           </h1>
-          <p>Follow every prediction from your wallet to its final claim.</p>
+          <p>
+            {activityOnly
+              ? 'Track your predictions, payments and returns.'
+              : 'Follow every prediction from your wallet to its final claim.'}
+          </p>
         </div>
         {marketId ? (
           <a
@@ -539,192 +573,218 @@ export default function DirectPage({
           </a>
         )}
       </div>
-      <div className="direct-layout">
-        <section className="glass direct-wallet-card" aria-label="Testnet wallet">
-          <p className="eyebrow">CKB PUDGE TESTNET</p>
-          <h2>Your available CKB</h2>
-          <strong className="direct-balance">
-            {balance.data === undefined
-              ? linkedWallet.isError || balance.isError
-                ? 'Balance unavailable'
-                : activeWallet
-                  ? 'Checking balance...'
-                  : 'Connect to view'
-              : money(balance.data)}
-          </strong>
+      {activityOnly && !connection && (
+        <section className="glass activity-connect">
+          <h2>{activeWallet ? 'Loading your predictions' : 'Your matchday history starts here'}</h2>
           <p>
-            Spendable plain wallet cells. Your existing Streak balance stays in{' '}
-            <a href="/index.html#wallet">legacy Wallet</a>.
+            {activeWallet
+              ? 'Checking this wallet for saved payments and claims.'
+              : 'Connect your wallet to see your predictions and collect returns.'}
           </p>
-          {activeWallet ? (
-            <>
-              <code className="direct-address">{activeWallet.address}</code>
-              <button
-                className="quiet"
-                disabled={working}
-                onClick={() => {
-                  disconnectWallet();
-                  setReview(null);
-                }}
-              >
-                Disconnect wallet
-              </button>
-            </>
-          ) : (
+          {!activeWallet && (
             <button
               className="connect"
               disabled={connect.isPending || !accountReady}
               onClick={() => connect.mutate()}
             >
-              {connect.isPending ? 'Connecting wallet...' : 'Connect testnet wallet'}
+              {connect.isPending ? 'Connecting...' : 'Connect wallet'}
             </button>
           )}
-          {wallet.notice && <p role="status">{wallet.notice}</p>}
-          {account && !activeWallet && (
-            <p>
-              Your sign-in is active. Reconnect your wallet in this tab to view your balance and
-              approve payments.
-            </p>
-          )}
-          {linkedWallet.isError && activeWallet && (
+          {linkedWallet.isError && (
             <button className="quiet" onClick={() => void linkedWallet.refetch()}>
-              Retry wallet checks
+              Retry activity
             </button>
           )}
-          {balance.isError && (
-            <p className="pick-error" role="alert">
-              Balance unavailable.{' '}
-              <button onClick={() => void balance.refetch()}>Retry balance</button>
-            </p>
-          )}
-          <a href="https://faucet.nervos.org/" target="_blank" rel="noreferrer">
-            Get testnet CKB ↗
-          </a>
-          <small>Testnet CKB has no monetary value.</small>
         </section>
-        <section className="glass direct-stake-card" aria-label="Contract prediction">
-          {teams ? (
-            <>
-              <div className="direct-match">
-                <TeamBadge logo={teams.homeLogo} code={teams.homeCode} side="home" />
-                <strong>
-                  {teams.home} <span>vs</span> {teams.away}
-                </strong>
-                <TeamBadge logo={teams.awayLogo} code={teams.awayCode} side="away" />
-              </div>
-              {catalogue.isError ? (
-                <div className="notice error" role="alert">
-                  Contract catalogue unavailable. Existing saved claims remain recoverable.{' '}
-                  <button onClick={() => void catalogue.refetch()}>Retry catalogue</button>
-                </div>
-              ) : !descriptor && demandFixture ? (
-                <SponsoredCheckout
-                  key={`${demandFixture.fixtureId}:${activeWallet?.revision ?? 0}`}
-                  fixture={demandFixture}
-                  client={sponsoredHistory.isError ? undefined : connection?.sponsored}
-                  signedIn={!!account}
-                  draftPick={draftPick}
-                  onBusy={setSponsoredBusy}
-                  refresh={refresh}
-                />
-              ) : !descriptor ? (
-                <p className="notice">
-                  {catalogue.isPending || demand.isFetching
-                    ? 'Checking contract availability...'
-                    : demand.isError
-                      ? 'Market sponsorship is unavailable. Your saved slip is unchanged.'
-                      : 'This fixture is not available for payment yet. Your saved slip is unchanged.'}
-                  {demand.isError && (
-                    <button className="quiet" onClick={() => void demand.refetch()}>
-                      Retry sponsorship
-                    </button>
-                  )}
-                </p>
-              ) : (
-                <>
-                  {!descriptor.entryEnabled && (
-                    <p className="notice">{descriptor.entryUnavailableReason}</p>
-                  )}
-                  <div className="direct-outcomes" role="group" aria-label="Contract outcome">
-                    {outcomeNames.map((label, index) => (
-                      <button
-                        key={label}
-                        aria-pressed={outcome === index}
-                        disabled={working || !descriptor.entryEnabled}
-                        onClick={() => {
-                          setOutcome(index as Outcome);
-                          setReview(null);
-                        }}
-                      >
-                        {index === 0 ? teams.home : index === 2 ? teams.away : label}
-                      </button>
-                    ))}
-                  </div>
-                  <label className="direct-amount">
-                    Your stake{' '}
-                    <span>
-                      <input
-                        inputMode="decimal"
-                        aria-label="Contract stake in tCKB"
-                        value={amount}
-                        maxLength={32}
-                        disabled={working}
-                        onChange={(event) => {
-                          setAmount(event.target.value);
-                          setReview(null);
-                        }}
-                      />
-                      <b>tCKB</b>
-                    </span>
-                  </label>
-                  <p>
-                    Minimum 100 tCKB. An additional 321 tCKB funds your claim cell and is
-                    recoverable after settlement. Network fees are quoted at review.
-                  </p>
-                  <button
-                    className="review-button"
-                    disabled={
-                      !connection ||
-                      working ||
-                      !descriptor.entryEnabled ||
-                      now >= descriptor.cutoffMs ||
-                      principal === null ||
-                      principal < MIN_PRINCIPAL ||
-                      history.isError ||
-                      sponsoredHistory.isError ||
-                      catalogue.isError
-                    }
-                    onClick={() => prepare.mutate(undefined)}
-                  >
-                    {prepare.isPending ? 'Preparing transaction...' : 'Review testnet prediction'}
-                  </button>
-                  <small>
-                    One prediction per transaction in this contract version. Your multi-pick draft
-                    remains saved.
-                  </small>
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              <p className="eyebrow">FROM KICKOFF TO CLAIM</p>
-              <h2>Your next move.</h2>
+      )}
+      {!activityOnly && (
+        <div className="direct-layout">
+          <section className="glass direct-wallet-card" aria-label="Testnet wallet">
+            <p className="eyebrow">CKB PUDGE TESTNET</p>
+            <h2>Your available CKB</h2>
+            <strong className="direct-balance">
+              {balance.data === undefined
+                ? linkedWallet.isError || balance.isError
+                  ? 'Balance unavailable'
+                  : activeWallet
+                    ? 'Checking balance...'
+                    : 'Connect to view'
+                : money(balance.data)}
+            </strong>
+            <p>
+              Spendable plain wallet cells. Your existing Streak balance stays in{' '}
+              <a href="/index.html#wallet">legacy Wallet</a>.
+            </p>
+            {activeWallet ? (
+              <>
+                <code className="direct-address">{activeWallet.address}</code>
+                <button
+                  className="quiet"
+                  disabled={working}
+                  onClick={() => {
+                    disconnectWallet();
+                    setReview(null);
+                  }}
+                >
+                  Disconnect wallet
+                </button>
+              </>
+            ) : (
+              <button
+                className="connect"
+                disabled={connect.isPending || !accountReady}
+                onClick={() => connect.mutate()}
+              >
+                {connect.isPending ? 'Connecting wallet...' : 'Connect testnet wallet'}
+              </button>
+            )}
+            {wallet.notice && <p role="status">{wallet.notice}</p>}
+            {account && !activeWallet && (
               <p>
-                Open a match and choose its testnet prediction to stake directly. Connect here to
-                restore pending transactions and find claims owned by your wallet.
+                Your sign-in is active. Reconnect your wallet in this tab to view your balance and
+                approve payments.
               </p>
-              <a className="connect" href="/season/" onClick={browseMarkets}>
-                Find a match
-              </a>
-            </>
-          )}
-          {detail.isError && (
-            <p className="pick-error" role="alert">
-              {detail.error.message}
-            </p>
-          )}
-        </section>
-      </div>
+            )}
+            {linkedWallet.isError && activeWallet && (
+              <button className="quiet" onClick={() => void linkedWallet.refetch()}>
+                Retry wallet checks
+              </button>
+            )}
+            {balance.isError && (
+              <p className="pick-error" role="alert">
+                Balance unavailable.{' '}
+                <button onClick={() => void balance.refetch()}>Retry balance</button>
+              </p>
+            )}
+            <a href="https://faucet.nervos.org/" target="_blank" rel="noreferrer">
+              Get testnet CKB ↗
+            </a>
+            <small>Testnet CKB has no monetary value.</small>
+          </section>
+          <section className="glass direct-stake-card" aria-label="Contract prediction">
+            {teams ? (
+              <>
+                <div className="direct-match">
+                  <TeamBadge logo={teams.homeLogo} code={teams.homeCode} side="home" />
+                  <strong>
+                    {teams.home} <span>vs</span> {teams.away}
+                  </strong>
+                  <TeamBadge logo={teams.awayLogo} code={teams.awayCode} side="away" />
+                </div>
+                {catalogue.isError ? (
+                  <div className="notice error" role="alert">
+                    Contract catalogue unavailable. Existing saved claims remain recoverable.{' '}
+                    <button onClick={() => void catalogue.refetch()}>Retry catalogue</button>
+                  </div>
+                ) : !descriptor && demandFixture ? (
+                  <SponsoredCheckout
+                    key={`${demandFixture.fixtureId}:${activeWallet?.revision ?? 0}`}
+                    fixture={demandFixture}
+                    client={sponsoredHistory.isError ? undefined : connection?.sponsored}
+                    signedIn={!!account}
+                    draftPick={draftPick}
+                    onBusy={setSponsoredBusy}
+                    refresh={refresh}
+                  />
+                ) : !descriptor ? (
+                  <p className="notice">
+                    {catalogue.isPending || demand.isFetching
+                      ? 'Checking contract availability...'
+                      : demand.isError
+                        ? 'Market sponsorship is unavailable. Your saved slip is unchanged.'
+                        : 'This fixture is not available for payment yet. Your saved slip is unchanged.'}
+                    {demand.isError && (
+                      <button className="quiet" onClick={() => void demand.refetch()}>
+                        Retry sponsorship
+                      </button>
+                    )}
+                  </p>
+                ) : (
+                  <>
+                    {!descriptor.entryEnabled && (
+                      <p className="notice">{descriptor.entryUnavailableReason}</p>
+                    )}
+                    <div className="direct-outcomes" role="group" aria-label="Contract outcome">
+                      {outcomeNames.map((label, index) => (
+                        <button
+                          key={label}
+                          aria-pressed={outcome === index}
+                          disabled={working || !descriptor.entryEnabled}
+                          onClick={() => {
+                            setOutcome(index as Outcome);
+                            setReview(null);
+                          }}
+                        >
+                          {index === 0 ? teams.home : index === 2 ? teams.away : label}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="direct-amount">
+                      Your stake{' '}
+                      <span>
+                        <input
+                          inputMode="decimal"
+                          aria-label="Contract stake in tCKB"
+                          value={amount}
+                          maxLength={32}
+                          disabled={working}
+                          onChange={(event) => {
+                            setAmount(event.target.value);
+                            setReview(null);
+                          }}
+                        />
+                        <b>tCKB</b>
+                      </span>
+                    </label>
+                    <p>
+                      Minimum 100 tCKB. An additional 321 tCKB funds your claim cell and is
+                      recoverable after settlement. Network fees are quoted at review.
+                    </p>
+                    <button
+                      className="review-button"
+                      disabled={
+                        !connection ||
+                        working ||
+                        !descriptor.entryEnabled ||
+                        now >= descriptor.cutoffMs ||
+                        principal === null ||
+                        principal < MIN_PRINCIPAL ||
+                        history.isError ||
+                        sponsoredHistory.isError ||
+                        catalogue.isError
+                      }
+                      onClick={() => prepare.mutate(undefined)}
+                    >
+                      {prepare.isPending ? 'Preparing transaction...' : 'Review testnet prediction'}
+                    </button>
+                    <small>
+                      One prediction per transaction in this contract version. Your multi-pick draft
+                      remains saved.
+                    </small>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="eyebrow">FROM KICKOFF TO CLAIM</p>
+                <h2>Your next move.</h2>
+                <p>
+                  Open a match and choose its testnet prediction to stake directly. Connect here to
+                  restore pending transactions and find claims owned by your wallet.
+                </p>
+                <a className="connect" href="/season/" onClick={browseMarkets}>
+                  Find a match
+                </a>
+              </>
+            )}
+            {detail.isError && (
+              <p className="pick-error" role="alert">
+                {detail.error.message}
+              </p>
+            )}
+          </section>
+        </div>
+      )}
       {notice && (
         <p className="notice" role="status">
           {notice}
@@ -819,8 +879,8 @@ export default function DirectPage({
           <section className="glass direct-history" aria-label="Saved testnet transactions">
             <div className="direct-row">
               <div>
-                <p className="eyebrow">SAVED BEFORE BROADCAST</p>
-                <h2>Your transaction activity</h2>
+                <p className="eyebrow">PAYMENTS</p>
+                <h2>Recent transactions</h2>
               </div>
               <button className="quiet" disabled={history.isFetching || working} onClick={refresh}>
                 Refresh status
@@ -836,9 +896,29 @@ export default function DirectPage({
                 {sponsoredHistory.error.message} New signing is paused.
               </p>
             )}
-            {history.data?.length === 0 && sponsoredHistory.data?.length === 0 && (
-              <p>No saved transactions for this wallet on this device.</p>
+            {batchHistory.isError && (
+              <p className="notice error" role="alert">
+                {batchHistory.error.message} New signing is paused.
+              </p>
             )}
+            {history.data?.length === 0 &&
+              sponsoredHistory.data?.length === 0 &&
+              batchHistory.data?.length === 0 && (
+                <p>No saved transactions for this wallet on this device.</p>
+              )}
+            {batchHistory.data
+              ?.slice()
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .slice(0, visibleTransactions)
+              .map((record) => (
+                <BatchTransaction
+                  key={record.hash}
+                  record={record}
+                  client={connection.batch}
+                  refresh={refresh}
+                  draftStore={draftStore}
+                />
+              ))}
             {history.data
               ?.slice()
               .sort((a, b) => b.createdAt - a.createdAt)
@@ -864,7 +944,11 @@ export default function DirectPage({
                   working={working}
                 />
               ))}
-            {(history.data?.length ?? 0) > visibleTransactions && (
+            {Math.max(
+              history.data?.length ?? 0,
+              sponsoredHistory.data?.length ?? 0,
+              batchHistory.data?.length ?? 0,
+            ) > visibleTransactions && (
               <button
                 className="quiet"
                 onClick={() => setVisibleTransactions((count) => count + 8)}
@@ -882,8 +966,8 @@ export default function DirectPage({
             </small>
           </section>
           <section className="glass direct-positions" aria-label="Contract positions and claims">
-            <p className="eyebrow">INDEPENDENTLY RECOVERABLE</p>
-            <h2>Your positions and claims</h2>
+            <p className="eyebrow">PREDICTIONS</p>
+            <h2>Results and returns</h2>
             <p>
               Accepted predictions await settlement. Winning claims include payout and storage;
               losing claims return storage. Voided predictions return principal and storage.
@@ -920,7 +1004,7 @@ export default function DirectPage({
       )}
       <p className="direct-footer">
         <a href={directHref()} onClick={(event) => followDirect(event)}>
-          Open testnet wallet and activity
+          Open wallet
         </a>{' '}
         · <a href="/index.html#wallet">Existing balance and withdrawals</a>
       </p>

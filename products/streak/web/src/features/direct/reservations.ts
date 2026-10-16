@@ -7,6 +7,7 @@ export type Reservation = Readonly<{
   hash: string;
   inputs: readonly Point[];
   fixtureId: string;
+  fixtureIds?: readonly string[];
   conflictProof?: ConflictProof;
   discardedUnsubmitted?: true;
 }>;
@@ -16,7 +17,18 @@ export function parseReservation(value: unknown): Reservation {
   if (!Array.isArray(row.inputs) || row.inputs.length < 1 || row.inputs.length > 64)
     throw Error('Saved input reservations are invalid.');
   const proof = row.conflictProof === undefined ? undefined : object(row.conflictProof);
-  const discarded = row.status === 'discarded' && row.version === 'sponsored-create-v1';
+  const discarded =
+    row.status === 'discarded' &&
+    ['sponsored-create-v1', 'atomic-predictions-v1'].includes(String(row.version));
+  let fixtureIds: string[] | undefined;
+  if (row.version === 'atomic-predictions-v1') {
+    const offer = object(row.offer);
+    if (!Array.isArray(offer.lines) || offer.lines.length < 1 || offer.lines.length > 8)
+      throw Error('Invalid combined payment reservations.');
+    fixtureIds = offer.lines.map((line) => text(object(object(line).fixture).fixtureId));
+    if (fixtureIds[0] !== descriptor.fixtureId || new Set(fixtureIds).size !== fixtureIds.length)
+      throw Error('Invalid combined fixture identities.');
+  }
   const expiry = discarded
     ? integer(object(row.offer).expiresAt, 1, Number.MAX_SAFE_INTEGER)
     : undefined;
@@ -37,6 +49,7 @@ export function parseReservation(value: unknown): Reservation {
   return Object.freeze({
     hash: hex(row.hash, 32),
     fixtureId: text(descriptor.fixtureId),
+    ...(fixtureIds ? { fixtureIds: Object.freeze(fixtureIds) } : {}),
     inputs: row.inputs.map((input) => {
       const p = object(input);
       return { txHash: hex(p.txHash, 32), index: integer(p.index, 0, 0xffffffff) };

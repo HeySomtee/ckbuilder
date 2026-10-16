@@ -2,11 +2,11 @@
 
 Canonical foundation approved **15 October 2026**. Start with [status](../status.md), then the document governing the task. [AGENTS.md](../AGENTS.md) is the single contributor contract; tool-specific guidance should link to it instead of maintaining competing rules.
 
-Current implementation: the [direct wallet-to-market journey](delivery/direct-testnet-milestone.md) includes shared EVM wallet state and [sponsored creation with the first prediction](delivery/sponsored-creation.md). The v3 contract is deployed on testnet and the separate sponsor is active locally. All 42 local gate steps passed at 14:59 UTC on 16 October. Real-API phone and desktop checks passed with 180 unused fixtures eligible for sponsorship and 16 existing funded markets. Bulk creation is paused. Operator capacity currently covers roughly five new reserves before replenishment. Physical wallet checks and durable operation remain before community onboarding; combined payment and Five remain open.
+Current implementation: the [atomic slip correction](delivery/atomic-slip-correction.md) adds one reviewed payment for up to eight independent predictions, same-transaction sponsored market creation, separate Wallet and Activity routes, and compact balance/address controls. The v4 contract is deployed on public testnet. All 47 local major-gate steps passed at 19:33 UTC on 16 October. The API, separate sponsor and lifecycle worker are active locally. Phone and desktop live-provider checks passed with no page errors, distinct Wallet/Activity routes and preserved drafts. Exact-candidate commit and push gates remain mandatory. Public deployment is not evidence of a public eight-prediction payment. Five, durable operation, physical-wallet checks, direct v4 Telegram notifications and community onboarding remain open.
 
 Current commitments and resume point: [work tracker](work-tracker.md). Update it whenever work is steered, interrupted or completed.
 
-Latest owner direction: [sponsored first-prediction creation](architecture/sponsored-creation.md) replaces bulk funding of unused markets. The [delivery record](delivery/sponsored-creation.md) tracks its separate contract deployment, local activation, verification and remaining limits.
+Latest owner direction: payment stays inside the slip, with one X close button and no Genie animation. Close and Escape retain the draft. The [atomic delivery record](delivery/atomic-slip-correction.md) supersedes the earlier individual-payment and minimize-only behavior while preserving its historical evidence. [Sponsored first-prediction creation](architecture/sponsored-creation.md) continues to replace bulk funding of unused markets.
 
 The [wallet and automatic provisioning correction](delivery/wallet-provisioning-correction.md) supersedes the native-wallet-only and single-funded-fixture limitations above. It records the separate compatible contract deployment, shared signer state, all-fixture queue and remaining rollout evidence.
 
@@ -30,8 +30,8 @@ Existing implementation references remain useful: [application README](../README
 
 The [market/slip milestone](delivery/market-slip-milestone.md) documents the integrated read-only detail, persistent draft and whole-slip review increment, including its recovery rules and payment boundary.
 
-The [visual and Genie correction](delivery/ui-motion-correction.md) documents the follow-up to the approved preview, the single Minimize control and motion resource ownership.
+The [visual and Genie correction](delivery/ui-motion-correction.md) is historical evidence for the earlier Minimize design. The owner subsequently removed that animation and selected the close-only interaction described in the atomic correction.
 
-The [direct testnet milestone](delivery/direct-testnet-milestone.md) records the new single-market payment, settlement and recovery integration. It keeps legacy custody liabilities separate. The immutable football catalogue is a trusted mapping because the unchanged script arguments do not include a fixture digest. Combined payments and Five remain later increments.
+The [direct testnet milestone](delivery/direct-testnet-milestone.md) records the new single-market payment, settlement and recovery integration. It keeps legacy custody liabilities separate. The immutable football catalogue is a trusted mapping because the unchanged script arguments do not include a fixture digest. Combined entry is now implemented in the separate v4 protocol; Five remains a later increment.
 
 Update the governing document when a decision changes. Add an ADR for a material architecture or trust decision, with the superseded decision and consequences. Update status with dated evidence, not a duplicate specification. This directory defines the approved direction; the implementation source and exact test results establish what exists today.

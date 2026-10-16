@@ -74,12 +74,30 @@ export const V3_DIRECT_CONFIG = Object.freeze({
   ],
 });
 
-export function directGeneration(protocolHash: string): '' | 'v2-' | 'v3-' {
+/** Atomic entry deployment. Historical generations retain their original dependencies. */
+export const V4_DIRECT_CONFIG = Object.freeze({
+  ...PUBLIC_DIRECT_CONFIG,
+  protocolHash: '0x6c03d7942bd133c713c501df7a6e263699a0ea731339eda993548640e900405c',
+  codeDeps: [
+    {
+      outPoint: {
+        txHash: '0x930bba6cce8cd6b1dc254cc3469249d7ba32f09b44bc20ea784f45e172cd606f',
+        index: 0,
+      },
+      depType: 'code' as const,
+    },
+    LEGACY_DIRECT_CONFIG.codeDeps[1],
+  ],
+});
+
+export function directGeneration(protocolHash: string): '' | 'v2-' | 'v3-' | 'v4-' {
   return protocolHash === LEGACY_DIRECT_CONFIG.protocolHash
     ? ''
-    : protocolHash === V3_DIRECT_CONFIG.protocolHash
-      ? 'v3-'
-      : 'v2-';
+    : protocolHash === V4_DIRECT_CONFIG.protocolHash
+      ? 'v4-'
+      : protocolHash === V3_DIRECT_CONFIG.protocolHash
+        ? 'v3-'
+        : 'v2-';
 }
 
 export function protocolConfigFor(
@@ -88,13 +106,16 @@ export function protocolConfigFor(
 ): DirectProtocolConfig {
   if (record.type.codeHash === config.protocolHash) return config;
   if (
-    [PUBLIC_DIRECT_CONFIG, LEGACY_DIRECT_CONFIG, V3_DIRECT_CONFIG].includes(
+    [PUBLIC_DIRECT_CONFIG, LEGACY_DIRECT_CONFIG, V3_DIRECT_CONFIG, V4_DIRECT_CONFIG].includes(
       config as typeof PUBLIC_DIRECT_CONFIG,
     )
   ) {
-    const pinned = [PUBLIC_DIRECT_CONFIG, LEGACY_DIRECT_CONFIG, V3_DIRECT_CONFIG].find(
-      (value) => value.protocolHash === record.type.codeHash,
-    );
+    const pinned = [
+      PUBLIC_DIRECT_CONFIG,
+      LEGACY_DIRECT_CONFIG,
+      V3_DIRECT_CONFIG,
+      V4_DIRECT_CONFIG,
+    ].find((value) => value.protocolHash === record.type.codeHash);
     if (pinned) return pinned;
   }
   throw Error('Unsupported direct market contract');
@@ -289,6 +310,8 @@ export function writeExclusiveJson(file: string, value: unknown): void {
 }
 
 export class DirectRegistry {
+  /** Separate generation catalogues share funding recovery, never fixture files. */
+  publicationTargets: DirectRegistry[] = [];
   readonly directory?: string;
   constructor(
     directory?: string,
@@ -339,7 +362,23 @@ export class DirectRegistry {
   /** Caller holds the shared operator lease. Every instance and selection proof is retained. */
   async publishCanonical(value: unknown, client: ccc.Client): Promise<DirectMarketRecord> {
     const record = validateRecord(value, this.config);
-    if (record.type.codeHash !== V3_DIRECT_CONFIG.protocolHash) return this.add(record);
+    if (record.type.codeHash !== this.config.protocolHash && this.publicationTargets.length) {
+      const target =
+        this.publicationTargets.find(
+          (candidate) => candidate.config.protocolHash === record.type.codeHash,
+        ) ??
+        (record.type.codeHash !== V4_DIRECT_CONFIG.protocolHash
+          ? this.publicationTargets.find(
+              (candidate) => candidate.config.protocolHash !== V4_DIRECT_CONFIG.protocolHash,
+            )
+          : undefined);
+      if (target && target !== this) return target.publishCanonical(record, client);
+    }
+    if (
+      record.type.codeHash !== V3_DIRECT_CONFIG.protocolHash &&
+      record.type.codeHash !== V4_DIRECT_CONFIG.protocolHash
+    )
+      return this.add(record);
     if (!this.directory) throw Error('Direct market registry is not configured');
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     const lockFile = join(this.directory, '.canonical-selection.lock'),
@@ -371,11 +410,16 @@ export class DirectRegistry {
     if (header?.hash !== response.blockHash || tip.number < response.blockNumber + 3n)
       throw Error('Canonical market publication needs four confirmations');
     const transaction = response.transaction;
+    const atomic = record.type.codeHash === V4_DIRECT_CONFIG.protocolHash;
+    const base = atomic ? Buffer.from(record.type.args.slice(2), 'hex').readUInt32LE(32) : 0;
     if (
       transaction.inputs.length < 2 ||
-      transaction.outputs[0]?.type?.toHex() !== ccc.Script.from(record.type).toHex() ||
-      transaction.outputsData[0] !== '0x0000ff' ||
-      transaction.inputs[0].previousOutput.toHex() !== `0x${record.type.args.slice(2, 74)}`
+      transaction.outputs[base]?.type?.toHex() !== ccc.Script.from(record.type).toHex() ||
+      transaction.outputsData[base] !== '0x0000ff' ||
+      (atomic
+        ? ccc.hashCkb(transaction.inputs[0].previousOutput.toBytes()) !==
+          `0x${record.type.args.slice(2, 66)}`
+        : transaction.inputs[0].previousOutput.toHex() !== `0x${record.type.args.slice(2, 74)}`)
     )
       throw Error('Canonical transaction is not this sponsored market genesis');
     const current = this.get(record.fixtureId);
@@ -385,9 +429,10 @@ export class DirectRegistry {
       return current;
     }
     let orphaned: { blockHash: string; blockNumber: string; creationTxHash: string } | undefined;
+    let checkpointOrigin: ccc.OutPoint | undefined;
     const historyDirectory = join(this.directory!, 'selection-history', record.fixtureId);
     if (current) {
-      if (current.type.codeHash !== V3_DIRECT_CONFIG.protocolHash)
+      if (current.type.codeHash !== record.type.codeHash)
         throw Error('Canonical selection cannot replace an earlier contract generation');
       const old = await client.getTransactionNoCache(current.creationTxHash);
       if (
@@ -423,10 +468,19 @@ export class DirectRegistry {
           blockNumber: proof.blockNumber,
           creationTxHash: current.creationTxHash,
         };
+        if (atomic && typeof proof.originPoint === 'string') {
+          checkpointOrigin = ccc.OutPoint.fromBytes(proof.originPoint);
+          if (ccc.hashCkb(checkpointOrigin.toBytes()) !== `0x${current.type.args.slice(2, 66)}`)
+            throw Error('Prior atomic funding checkpoint differs');
+        }
         break;
       }
       if (!orphaned) throw Error('Prior selection has no matching canonical proof');
-      const previousOrigin = ccc.OutPoint.fromBytes(`0x${current.type.args.slice(2, 74)}`);
+      const previousOrigin = atomic
+        ? (old?.transaction.inputs[0]?.previousOutput ?? checkpointOrigin)
+        : ccc.OutPoint.fromBytes(`0x${current.type.args.slice(2, 74)}`);
+      if (!previousOrigin)
+        throw Error('Prior atomic genesis bytes are required to prove its funding origin');
       const nextOrigin = transaction.inputs[0].previousOutput;
       // Either attempt may be the ancestor after a reorg. Their funding lineage
       // must make both creations impossible on the same canonical branch.
@@ -465,6 +519,7 @@ export class DirectRegistry {
       blockHash: response.blockHash,
       blockNumber: response.blockNumber.toString(),
       confirmations: Number(tip.number - response.blockNumber + 1n),
+      ...(atomic ? { originPoint: transaction.inputs[0].previousOutput.toHex() } : {}),
       ...(orphaned ? { orphaned } : {}),
     });
     if (!current) return this.add(record);

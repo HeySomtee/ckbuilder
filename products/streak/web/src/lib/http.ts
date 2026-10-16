@@ -11,8 +11,9 @@ export async function request(
   path: string,
   signal?: AbortSignal,
   body?: unknown,
+  timeoutMs: 15_000 | 60_000 = 15_000,
 ): Promise<unknown> {
-  const timeout = AbortSignal.timeout(15_000);
+  const timeout = AbortSignal.timeout(timeoutMs);
   const response = await fetch(`/api${path}`, {
     credentials: 'same-origin',
     method: body === undefined ? 'GET' : 'POST',

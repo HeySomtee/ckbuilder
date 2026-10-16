@@ -39,7 +39,7 @@ Keep both hero actions visible without scrolling on common laptop and phone view
 
 Desktop uses a stable navigation rail and a wide work area. Mobile uses natural vertical reading order and a thumb-accessible dock. My activity, Wallet and Account remain reachable without hover. Matchday keeps a user's predictions beside the match context.
 
-Owner correction, 16 October: the prediction slip displays one labelled Minimize control beside its minus icon, with a 44px target at every width. Remove the duplicate Close control. Minimize and Escape retain the draft in the dock, with the connected Genie when motion is enabled. Clear slip remains a separate explicit action. Other dialogs can retain Close when dismissal is their distinct action.
+Latest owner correction, 16 October: the prediction slip has one X close button with an accessible name and a 44px target. Close and Escape immediately dismiss the slip while retaining every pick. Clear slip remains a separate explicit action. Remove Genie animation. Payment review and signing stay in the slip. Wallet shows funds and account settings; My activity shows transactions, predictions and claims on its own route.
 
 The integrated slip is 480px wide on desktop and a full-width bottom sheet on phones, with safe-area spacing. Inset cards group each fixture, chosen outcome, amount and stake shortcuts. The first pick opens the slip; later new picks update the dock so browsing can continue. Choosing an already selected outcome reopens its existing pick. Match details put the fixture and pool distribution beside the prediction panel at desktop widths.
 
@@ -51,11 +51,7 @@ Use clear loading, empty, stale, error, rejected, full-market and locked-round s
 
 Every interaction gets immediate press/focus feedback and understandable pending/success/failure states. Use motion to connect surfaces, preserve orientation and acknowledge an action. Avoid full-page movement, looping celebration, auto-playing audio and loss-pressure copy.
 
-The approved Genie retracts the lower sheet into a narrow dock mouth before the top follows; restore reverses that connection. Preview timing is 720ms to minimize and 620ms to restore. Production must profile preparation and animation cost, not assume those durations guarantee smoothness.
-
-The decorative renderer is inert and hidden from assistive technology. The real dialog owns focus and semantics. State transitions are independent of animation completion. Reduced motion skips the warp, with immediate focus and state restoration. Unsupported or failed rendering uses the same immediate transition after a bounded preparation wait.
-
-Cancel rendering and clean up resources on navigation, repeated actions, pointer/keyboard interruption, resize, scrolling, tab hiding, unmount and preference changes. Late preparation must never hide a newer draft. Do not capture a live wallet prompt, sensitive signing data or user secrets into a raster. Shared geometry and tokens belong outside feature components.
+The active application uses immediate slip opening and closing. The owner removed Genie motion after using the integrated app. Keep focus restoration and draft persistence independent of rendering, with no screenshots or raster copies of payment surfaces. Earlier preview motion measurements below are historical evidence.
 
 ## Accessibility acceptance
 

@@ -4,6 +4,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { getMarkets, formatCkb, outcomes } from '../features/markets/api';
 import type { Market, MarketSort } from '../features/markets/api';
 import { getAccount, signIn, signOut } from '../features/account/api';
+import { WalletOverview, WalletSummary } from '../features/account/wallet-ui';
 import { Icon } from '../components/icon';
 import { weekend } from '../features/markets/weekend';
 import { TeamBadge } from '../components/team-badge';
@@ -12,10 +13,15 @@ import { createDraftStore } from '../features/predictions/draft';
 import type { Outcome } from '../features/predictions/draft';
 import { PredictionSlip } from '../features/predictions/slip';
 import { followMarket, marketHref, navigateMarket, useMarketRoute } from '../lib/market-route';
-import { directHref, followDirect, navigateDirect, useDirectRoute } from '../lib/direct-route';
+import {
+  activityHref,
+  followActivity,
+  navigateActivity,
+  directHref,
+  followDirect,
+  useDirectRoute,
+} from '../lib/direct-route';
 import '../design-system/predictions.css';
-import { AvailableMarkets, useDirectCatalogue } from '../features/direct/availability';
-import { acceptsPayment } from '../features/direct/availability-api';
 import {
   assertWalletAccount,
   disconnectWallet,
@@ -35,12 +41,10 @@ function MarketCard({
   market,
   onPick,
   selected,
-  payable,
 }: {
   market: Market;
   onPick: (market: Market, outcome: Outcome) => void;
   selected?: Outcome;
-  payable: boolean | undefined;
 }) {
   const labels = { home: 'Home', draw: 'Draw', away: 'Away' };
   return (
@@ -135,13 +139,7 @@ function MarketCard({
           </div>
           <div className="card-meta">
             <span>{formatCkb(market.totalPoolCkb)} tCKB in legacy pool</span>
-            <span>
-              {payable === undefined
-                ? 'Checking payment'
-                : payable
-                  ? 'Funded contract'
-                  : 'Save picks only'}
-            </span>
+            <span>Independent prediction</span>
           </div>
         </>
       ) : (
@@ -165,13 +163,11 @@ export function App() {
       }),
     [client],
   );
-  const catalogue = useDirectCatalogue();
   const marketId = useMarketRoute();
   const directRoute = useDirectRoute();
   const [draftStore] = useState(createDraftStore);
   const draftState = useSyncExternalStore(draftStore.subscribe, draftStore.getSnapshot);
   const [slipOpen, setSlipOpen] = useState(false);
-  const [checkoutRevision, setCheckoutRevision] = useState(0);
   const [selectionNotice, setSelectionNotice] = useState('');
   function pick(market: Market, outcome: Outcome) {
     if (
@@ -300,7 +296,11 @@ export function App() {
             <Icon name="markets" />
             Markets
           </a>
-          <a href={directHref()} onClick={(event) => followDirect(event)}>
+          <a
+            href={activityHref}
+            onClick={followActivity}
+            aria-current={directRoute === 'activity' ? 'page' : undefined}
+          >
             <Icon name="activity" />
             My activity
           </a>
@@ -324,10 +324,18 @@ export function App() {
         <header className="topbar">
           <span className="breadcrumb">
             Your touchline <span>/</span>{' '}
-            <strong>{directRoute ? 'Testnet wallet' : 'Markets'}</strong>
+            <strong>
+              {directRoute === 'wallet'
+                ? 'Wallet'
+                : directRoute === 'activity'
+                  ? 'My activity'
+                  : directRoute
+                    ? 'Prediction'
+                    : 'Markets'}
+            </strong>
           </span>
           <div className="account-actions">
-            {account.data && <span className="username">{account.data.username}</span>}
+            <WalletSummary account={account.data ?? null} accountReady={!account.isPending} />
             {accountAction}
           </div>
         </header>
@@ -358,18 +366,34 @@ export function App() {
               {selectionNotice}
             </p>
           )}
-          {directRoute && (
+          {directRoute === 'wallet' && (
+            <WalletOverview
+              account={account.data ?? null}
+              accountReady={!account.isPending}
+              onSignIn={() => login.mutate()}
+              signInPending={login.isPending}
+              onActivity={navigateActivity}
+              onRecovery={navigateActivity}
+            />
+          )}
+          {directRoute && directRoute !== 'wallet' && (
             <Suspense
               fallback={
                 <section className="glass detail-state">
-                  <h1>Opening your testnet wallet...</h1>
+                  <h1>
+                    {directRoute === 'activity'
+                      ? 'Loading your activity...'
+                      : 'Opening prediction...'}
+                  </h1>
                   <p>Your saved predictions are safe.</p>
                 </section>
               }
             >
               <DirectPage
-                key={`${directRoute}:${account.data?.id ?? 'guest'}:${checkoutRevision}:${wallet.revision}`}
-                marketId={directRoute === 'wallet' ? undefined : directRoute}
+                key={`${directRoute}:${account.data?.id ?? 'guest'}:${wallet.revision}`}
+                marketId={directRoute === 'activity' ? undefined : directRoute}
+                activityOnly={directRoute === 'activity'}
+                draftStore={draftStore}
                 account={account.data ?? null}
                 accountReady={!account.isPending}
                 draftPick={draftState.draft.picks.find((row) => row.marketId === directRoute)}
@@ -394,7 +418,6 @@ export function App() {
               </div>
               <span className="pilot-badge">Early access</span>
             </div>
-            <AvailableMarkets />
             <section className="weekend-picker" aria-label="Matchweek">
               <div className="week-navigation">
                 <button
@@ -565,14 +588,6 @@ export function App() {
                     key={market.id}
                     market={market}
                     onPick={pick}
-                    payable={
-                      catalogue.isPending || catalogue.isError
-                        ? undefined
-                        : catalogue.data?.some(
-                            (row) =>
-                              row.fixtureId === market.matchId && acceptsPayment(row, Date.now()),
-                          )
-                    }
                     selected={
                       draftState.draft.picks.find((row) => row.matchId === market.matchId)?.outcome
                     }
@@ -587,24 +602,9 @@ export function App() {
                 </button>
               </div>
             )}
-            <section className="glass trust-note">
-              <Icon name="shield" />
-              <div>
-                <h2>A clearer view of every prediction.</h2>
-                <p>
-                  Funded matches accept payments from your wallet into CKB testnet contracts. The
-                  percentages shown here belong to the legacy pool, not the contract pool. Existing
-                  account balances and withdrawals remain in legacy Wallet.
-                </p>
-              </div>
-              <a href="/index.html#wallet">
-                Open Wallet <Icon name="arrow" />
-              </a>
-            </section>
             <footer>
               Friday through Monday, in your local time. Fixtures from connected competitions.
-              Testnet CKB has no monetary value. Funded matches support one prediction per wallet
-              transaction. Combined payment is not available yet.
+              Testnet CKB has no monetary value.
             </footer>
           </div>
         </main>
@@ -614,7 +614,11 @@ export function App() {
           <Icon name="markets" />
           Markets
         </a>
-        <a href={directHref()} onClick={(event) => followDirect(event)}>
+        <a
+          href={activityHref}
+          onClick={followActivity}
+          aria-current={directRoute === 'activity' ? 'page' : undefined}
+        >
           <Icon name="activity" />
           Activity
         </a>
@@ -632,12 +636,10 @@ export function App() {
         open={slipOpen}
         onOpen={() => setSlipOpen(true)}
         onDismiss={() => setSlipOpen(false)}
-        onDirect={(id) => {
-          setSlipOpen(false);
-          // A deliberate handoff replaces any older unsent quote, even on the same route.
-          setCheckoutRevision((revision) => revision + 1);
-          navigateDirect(id);
-        }}
+        account={account.data ?? null}
+        accountReady={!account.isPending}
+        onSignIn={() => login.mutate()}
+        signInPending={login.isPending}
         accountKey={
           account.isPending
             ? 'pending'

@@ -109,23 +109,7 @@ module.exports = async function predictionJourney({
         .click();
       await page
         .getByRole('dialog')
-        .getByText(
-          'Payment is unavailable for this fixture. Your pick stays saved while market preparation is checked.',
-          {
-            exact: true,
-          },
-        )
-        .waitFor();
-      assert.equal(
-        await page
-          .getByRole('dialog')
-          .getByRole('button', { name: 'Continue to payment', exact: true })
-          .isDisabled(),
-        true,
-      );
-      await page
-        .getByRole('dialog')
-        .getByRole('button', { name: 'Minimize slip', exact: true })
+        .getByRole('button', { name: 'Close prediction slip', exact: true })
         .click();
       await page.getByRole('dialog').waitFor({ state: 'hidden' });
       await page
@@ -139,7 +123,7 @@ module.exports = async function predictionJourney({
       await page.locator('.prediction-dock').click();
       await page
         .getByRole('dialog')
-        .getByRole('button', { name: 'Minimize slip', exact: true })
+        .getByRole('button', { name: 'Close prediction slip', exact: true })
         .click();
       await page.getByRole('dialog').waitFor({ state: 'hidden' });
       const card = page
@@ -163,7 +147,7 @@ module.exports = async function predictionJourney({
       );
       await page
         .getByRole('dialog')
-        .getByRole('button', { name: 'Minimize slip', exact: true })
+        .getByRole('button', { name: 'Close prediction slip', exact: true })
         .click();
       await page.getByRole('dialog').waitFor({ state: 'hidden' });
       await page.screenshot({
@@ -178,7 +162,7 @@ module.exports = async function predictionJourney({
         0,
       );
       assert.equal(
-        await dialog.getByRole('button', { name: 'Minimize slip', exact: true }).count(),
+        await dialog.getByRole('button', { name: 'Close prediction slip', exact: true }).count(),
         1,
       );
       assert.equal(await dialog.locator('.slip-pick').count(), 2);
@@ -186,28 +170,18 @@ module.exports = async function predictionJourney({
       const stake = dialog.getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' });
       await stake.fill('10.00000001');
       assert.equal(await dialog.locator('.slip-total strong').textContent(), '110.00000001 tCKB');
-      await dialog.locator('.slip-draft-check').evaluate((node) => {
-        node.open = true;
-      });
-      await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).click();
-      await dialog
-        .getByText(
-          'Saved picks checked against legacy rules. Use wallet payment above to place an available prediction.',
-          { exact: true },
-        )
-        .waitFor();
       await page.screenshot({ path: path.join(evidence, `prediction-slip-${name}-${width}.png`) });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       const bounds = await dialog.boundingBox();
       assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= width + 1);
       // Keyboard focus remains inside the modal; labelled controls retain input.
-      await dialog.getByRole('button', { name: 'Minimize slip', exact: true }).focus();
+      await dialog.getByRole('button', { name: 'Close prediction slip', exact: true }).focus();
       await page.keyboard.press('Enter');
       await dialog.waitFor({ state: 'hidden' });
       assert.equal(
         await page.locator('.genie-layer').count(),
         0,
-        'Reduced motion bypasses Genie rendering.',
+        'Closing never creates a Genie surface.',
       );
       await page.waitForFunction(() => document.activeElement.className === 'prediction-dock');
       assert.equal(await page.evaluate(() => document.activeElement.className), 'prediction-dock');
@@ -218,117 +192,19 @@ module.exports = async function predictionJourney({
       await dialog.getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' }).waitFor();
       assert.equal(await stake.inputValue(), '10.00000001');
       assert.equal(await dialog.locator('.review-ok').count(), 0, 'Reviews are never persisted.');
-      await dialog.locator('.slip-draft-check > summary').click();
       await stake.fill('10.');
       assert.equal(await dialog.locator('.slip-total strong').textContent(), 'Check amounts');
-      assert.equal(
-        await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).isDisabled(),
-        true,
-      );
-      await stake.fill('10');
-      // A response for an earlier edit cannot approve the new draft.
-      let release, started;
-      const begun = new Promise((done) => {
-        started = done;
-      });
-      await page.route('**/api/slips/review', async (route) => {
-        const response = await loopbackFetch(base + '/api/slips/review', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: route.request().postData(),
-        });
-        const body = await response.text();
-        started();
-        await new Promise((done) => {
-          release = done;
-        });
-        try {
-          await route.fulfill({ status: 200, contentType: 'application/json', body });
-        } catch {
-          /* The edit aborts the obsolete browser request. */
-        }
-      });
-      await dialog.locator('.slip-draft-check').evaluate((node) => {
-        node.open = true;
-      });
-      await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).click();
-      await begun;
       await stake.fill('20');
-      release();
-      await page.unroute('**/api/slips/review');
-      await page.waitForTimeout(100);
-      assert.equal(await dialog.locator('.review-ok').count(), 0);
       assert.equal(await dialog.locator('.slip-total strong').textContent(), '120 tCKB');
-      if (width === 1440) {
-        await page.clock.install();
-        await page.clock.fastForward(16_000);
-        let releaseTerms, termsStarted;
-        const termsPending = new Promise((done) => {
-          termsStarted = done;
-        });
-        await page.route('**/api/slips/review', async (route) => {
-          const response = await loopbackFetch(base + '/api/slips/review', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: route.request().postData(),
-          });
-          const body = await response.text();
-          termsStarted();
-          await new Promise((done) => {
-            releaseTerms = done;
-          });
-          await route.fulfill({ status: 200, contentType: 'application/json', body });
-        });
-        await dialog.locator('.slip-draft-check').evaluate((node) => {
-          node.open = true;
-        });
-        await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).click();
-        await termsPending;
-        await update((db) => {
-          db.markets.find((row) => row.id === 'm-slip-one').feeBps.protocol += 1;
-        });
-        const refreshed = page.waitForResponse(
-          (response) => new URL(response.url()).pathname === '/api/markets/m-slip-one/public',
-        );
-        await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-        await refreshed;
-        releaseTerms();
-        await dialog.getByText('Market rules changed. Review again.', { exact: true }).waitFor();
-        assert.equal(
-          await dialog.locator('.review-ok').count(),
-          0,
-          'Older review cannot replace newer rules.',
-        );
-        await page.unroute('**/api/slips/review');
-        // A slow device clock cannot extend the server's thirty-second window.
-        await page.clock.setSystemTime(new Date(Date.now() - 300_000));
-        await dialog.locator('.slip-draft-check').evaluate((node) => {
-          node.open = true;
-        });
-        await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).click();
-        await dialog.locator('.review-ok').waitFor();
-        await page.clock.fastForward(31_000);
-        await dialog
-          .getByText('This review expired. Review again for current rules.', { exact: true })
-          .waitFor();
-        await page.clock.setSystemTime(new Date());
-        await page.clock.resume();
-      }
-      // A closed line stays in the whole-slip result, alongside the valid line.
-      await update((db) => {
-        db.markets.find((row) => row.id === 'm-slip-two').status = 'closed';
-      });
-      await dialog.locator('.slip-draft-check').evaluate((node) => {
-        node.open = true;
-      });
-      await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).click();
-      await dialog
-        .getByText('Some predictions need attention. All picks are retained.', { exact: true })
-        .waitFor();
-      assert.equal(await dialog.locator('.slip-pick').count(), 2);
-      await update((db) => {
-        db.markets.find((row) => row.id === 'm-slip-two').status = 'open';
-      });
+      assert.equal(
+        await dialog.getByRole('button', { name: 'Pay this prediction', exact: true }).count(),
+        0,
+      );
+      assert.equal(
+        await dialog.locator('.slip-draft-check').count(),
+        0,
+        'Checkout does not present a legacy review as payment.',
+      );
       // A second tab cannot silently overwrite an open draft.
       const other = await context.newPage();
       const otherReads = observeReads(other, base);
@@ -370,7 +246,7 @@ module.exports = async function predictionJourney({
       );
       await dialog.getByRole('button', { name: 'Start a new slip', exact: true }).click();
       await dialog.getByRole('button', { name: 'Clear all predictions', exact: true }).click();
-      await dialog.getByRole('button', { name: 'Minimize slip', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Close prediction slip', exact: true }).click();
       phase = 'missing market recovery';
       await reads.goto(base + '/season/?market=does-not-exist');
       await page.getByRole('heading', { name: 'This market could not be loaded' }).waitFor();

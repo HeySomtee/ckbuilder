@@ -7,6 +7,7 @@ import {
   pointKey,
   SHARD_RESERVE,
   SPONSORED_PROTOCOL_HASH,
+  BATCH_PROTOCOL_HASH,
   STORAGE,
 } from './protocol.ts';
 import type { CellState, Descriptor, Outcome, Point, Ticket } from './protocol.ts';
@@ -66,21 +67,30 @@ export async function loadMarket(
     !(await confirmedHeader(client, descriptor.creationTxHash, creation))
   )
     throw Error('Market creation is not confirmed on the canonical chain.');
+  const args = bytes(descriptor.type.args);
+  const batch = descriptor.type.codeHash === BATCH_PROTOCOL_HASH;
+  const base = batch
+    ? new DataView(args.buffer, args.byteOffset, args.byteLength).getUint32(32, true)
+    : 0;
   if (
     creation.transaction.inputs.length === 0 ||
-    ccc.hexFrom(creation.transaction.inputs[0].previousOutput.toBytes()) !==
-      ccc.hexFrom(bytes(descriptor.type.args).slice(0, 36))
+    (batch
+      ? ccc.hashCkb(creation.transaction.inputs[0].previousOutput.toBytes()) !==
+        ccc.hexFrom(args.slice(0, 32))
+      : ccc.hexFrom(creation.transaction.inputs[0].previousOutput.toBytes()) !==
+        ccc.hexFrom(args.slice(0, 36)))
   )
     throw Error('Market identity does not match its creation transaction.');
   for (let index = 0; index < 5; index++) {
-    const output = creation.transaction.getOutput(index);
+    const output = creation.transaction.getOutput(base + index);
     if (!output) throw Error('Market creation outputs are incomplete.');
     const cell = ccc.Cell.from({
       ...output,
-      outPoint: { txHash: descriptor.creationTxHash, index },
+      outPoint: { txHash: descriptor.creationTxHash, index: base + index },
     });
     const state = checkCell(cell, descriptor);
-    const firstPrediction = descriptor.type.codeHash === SPONSORED_PROTOCOL_HASH && index === 1;
+    const firstPrediction =
+      (batch || descriptor.type.codeHash === SPONSORED_PROTOCOL_HASH) && index === 1;
     if (
       (!firstPrediction && cell.cellOutput.capacity !== SHARD_RESERVE) ||
       (index === 0
@@ -149,6 +159,16 @@ export async function discoverMarket(
   descriptor: Descriptor,
   ownerHash: string,
 ): Promise<MarketSnapshot> {
+  // One bounded discovery pass can encounter many inputs from the same batch.
+  const transactions = new Map<string, ReturnType<ccc.Client['getTransactionNoCache']>>();
+  const getTransaction = (hash: string) => {
+    let pending = transactions.get(hash);
+    if (!pending) {
+      pending = client.getTransactionNoCache(hash);
+      transactions.set(hash, pending);
+    }
+    return pending;
+  };
   const live = await loadMarket(client, descriptor),
     positions: Position[] = [];
   let phase: MarketSnapshot['phase'] = 'unknown',
@@ -212,7 +232,7 @@ export async function discoverMarket(
     }
     if (seenTransactions.has(record.txHash)) continue;
     seenTransactions.add(record.txHash);
-    const response = await client.getTransactionNoCache(record.txHash);
+    const response = await getTransaction(record.txHash);
     if (
       !response ||
       response.status !== 'committed' ||
@@ -271,7 +291,7 @@ export async function discoverMarket(
     if (reserve) {
       let lateIndex = tx.outputs.filter((o) => o.type?.eq(descriptor.type)).length;
       for (const input of tx.inputs.slice(1, 5)) {
-        const response = await client.getTransactionNoCache(input.previousOutput.txHash);
+        const response = await getTransaction(input.previousOutput.txHash);
         const header = response
           ? await confirmedHeader(client, input.previousOutput.txHash, response)
           : undefined;
@@ -308,45 +328,55 @@ export async function discoverMarket(
             ),
           );
       }
-    } else if (
-      first?.cellOutput.type?.eq(descriptor.type) &&
-      decode(first.outputData).kind === 'shard' &&
-      tx.inputs.length > 0
-    ) {
-      const input = tx.inputs[0].previousOutput;
-      const response = await client.getTransactionNoCache(input.txHash),
-        header = response ? await confirmedHeader(client, input.txHash, response) : undefined;
-      const previous = response?.transaction.getOutput(input.index);
-      if (
-        previous?.cellOutput.type?.eq(descriptor.type) &&
-        header &&
-        header.timestamp >= BigInt(descriptor.cutoffMs)
-      ) {
+    } else {
+      const replacementIndex = tx.outputs.findIndex((output) => output.type?.eq(descriptor.type));
+      const replacement = replacementIndex < 0 ? undefined : tx.getOutput(replacementIndex);
+      if (!replacement || tx.inputs.length > 64) continue;
+      const nextState = checkCell(
+        ccc.Cell.from({ ...replacement, outPoint: { txHash: tx.hash(), index: replacementIndex } }),
+        descriptor,
+      );
+      if (nextState.kind !== 'shard') continue;
+      // Atomic entries place each market at its own output offset. Find its
+      // actual input rather than assuming the sponsor or first wallet cell.
+      for (const transactionInput of tx.inputs) {
+        const input = transactionInput.previousOutput;
+        const response = await getTransaction(input.txHash);
+        const previous = response?.transaction.getOutput(input.index);
+        if (!previous?.cellOutput.type?.eq(descriptor.type)) continue;
+        const header = response ? await confirmedHeader(client, input.txHash, response) : undefined;
+        if (!header || header.timestamp < BigInt(descriptor.cutoffMs)) continue;
         const state = checkCell(ccc.Cell.from({ ...previous, outPoint: input }), descriptor);
-        if (state.kind === 'shard' && state.pending?.owner === ownerHash) {
-          const refund = tx.getOutput(1),
-            ticket = state.pending;
-          if (
-            !refund ||
-            refund.cellOutput.type ||
-            refund.outputData !== '0x' ||
-            refund.cellOutput.lock.hash() !== ownerHash ||
-            refund.cellOutput.capacity !== ticket.principal + STORAGE
-          )
-            throw Error('Replacement refund evidence is inconsistent.');
-          positions.push(
-            position(
-              ticket,
-              point({ txHash: tx.hash(), index: 1 }),
-              'refunded',
-              0,
-              refund.cellOutput.capacity,
-            ),
-          );
-        }
+        if (
+          state.kind !== 'shard' ||
+          state.id !== nextState.id ||
+          state.pending?.owner !== ownerHash
+        )
+          continue;
+        const refundIndex = replacementIndex + 1;
+        const refund = tx.getOutput(refundIndex),
+          ticket = state.pending;
+        if (
+          !refund ||
+          refund.cellOutput.type ||
+          refund.outputData !== '0x' ||
+          refund.cellOutput.lock.hash() !== ownerHash ||
+          refund.cellOutput.capacity !== ticket.principal + STORAGE
+        )
+          throw Error('Replacement refund evidence is inconsistent.');
+        positions.push(
+          position(
+            ticket,
+            point({ txHash: tx.hash(), index: refundIndex }),
+            'refunded',
+            0,
+            refund.cellOutput.capacity,
+          ),
+        );
       }
     }
   }
+
   return Object.freeze({
     phase,
     positions: Object.freeze(positions),

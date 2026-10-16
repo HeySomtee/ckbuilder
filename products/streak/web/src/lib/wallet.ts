@@ -156,6 +156,21 @@ export async function chooseWallet(): Promise<ccc.Signer> {
       }),
     );
     element.style.zIndex = '1000';
+    // A native slip dialog makes ordinary body overlays inert. Give the chooser
+    // its own top-layer host, keeping both the draft and its route in place.
+    const modalHost = document.querySelector('dialog[open]')
+      ? document.createElement('dialog')
+      : null;
+    if (modalHost) {
+      modalHost.setAttribute('aria-label', 'Choose wallet');
+      modalHost.className = 'wallet-chooser-host';
+      modalHost.style.cssText =
+        'position:fixed;inset:0;margin:0;padding:0;border:0;width:100vw;max-width:none;height:100dvh;max-height:none;background:transparent;overflow:visible;';
+      modalHost.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        cancelSelection?.();
+      });
+    }
     const signer = await new Promise<ccc.Signer>((resolve, reject) => {
       let connecting = false;
       let settled = false;
@@ -184,6 +199,8 @@ export async function chooseWallet(): Promise<ccc.Signer> {
         // selected provider signer retained by our own connection store.
         void updateSigner(undefined, undefined);
         element.remove();
+        modalHost?.close();
+        modalHost?.remove();
         if (error) reject(error);
         else if (selected) resolve(selected);
         else reject(new Error('Wallet connection cancelled.'));
@@ -197,7 +214,11 @@ export async function chooseWallet(): Promise<ccc.Signer> {
       cancelSelection = () => finish(new Error('Wallet connection cancelled.'));
       element.addEventListener('willUpdate', updated);
       element.addEventListener('close', closed);
-      document.body.append(element);
+      if (modalHost) {
+        document.body.append(modalHost);
+        modalHost.append(element);
+        modalHost.showModal();
+      } else document.body.append(element);
       updated();
     });
     return retainWallet(signer, revision);

@@ -1,7 +1,7 @@
 import { ccc } from '@ckb-ccc/core';
 import { hex, integer, object, parseDescriptor, text, VERSION } from './protocol.ts';
 import type { Descriptor, Point } from './protocol.ts';
-import { DIRECT_STORE, SPONSORED_STORE, storedRecords, putStored } from './journal-db.ts';
+import { DIRECT_STORE, otherStoredRecords, storedRecords, putStored } from './journal-db.ts';
 import { parseReservation, type Reservation } from './reservations.ts';
 
 export type JournalStatus =
@@ -106,7 +106,7 @@ export class IndexedJournal implements Journal {
     return Promise.all((await storedRecords(DIRECT_STORE, scope)).map(parseRecord));
   }
   async otherReservations(scope: string): Promise<Reservation[]> {
-    return (await storedRecords(SPONSORED_STORE, scope)).map(parseReservation);
+    return (await otherStoredRecords(DIRECT_STORE, scope)).map(parseReservation);
   }
   async put(record: JournalRecord): Promise<void> {
     await putStored(DIRECT_STORE, await parseRecord(record));

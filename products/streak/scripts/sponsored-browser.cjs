@@ -1,4 +1,5 @@
-/* Real built UI, real IndexedDB and CCC signing with isolated synthetic transport only. */
+/* Historical v3 single-market recovery in the built UI, real IndexedDB and CCC signing.
+   Current inline atomic checkout is covered separately by batch-browser.cjs. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -198,9 +199,17 @@ async function main() {
         await slip
           .getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' })
           .fill('125.00000001');
-        await slip.getByRole('button', { name: 'Continue to payment', exact: true }).click();
+        await slip.getByRole('button', { name: 'Close prediction slip', exact: true }).click();
         await slip.waitFor({ state: 'hidden' });
+        // The current slip pays atomically through v4. Older v3 entry/recovery retains its own route.
+        await reads.goto(base + '/season/?direct=m-api-football-900003');
+        await accountReadFinished(page, 'Sign out');
         await page.getByRole('region', { name: 'Open a market with your prediction' }).waitFor();
+        await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).fill('125.00000001');
+        await page
+          .getByRole('group', { name: 'Contract outcome' })
+          .getByRole('button', { name: 'Away', exact: true })
+          .click();
         assert.equal(
           await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).inputValue(),
           '125.00000001',
@@ -274,14 +283,18 @@ async function main() {
           oldRecord,
         );
         async function connect(rejectFirst = false) {
-          await page.getByRole('button', { name: 'Connect testnet wallet', exact: true }).click();
+          await page
+            .getByRole('button', { name: /^(Connect testnet wallet|Connect wallet)$/ })
+            .click();
           await page.locator('ccc-connector').waitFor();
           await page.evaluate(async (reject) => {
             const fixture = await import('/qa-sponsored-fixture.js');
             await fixture.connectSponsored(document.querySelector('ccc-connector'), reject);
           }, rejectFirst);
-          await page.getByRole('button', { name: 'Disconnect wallet', exact: true }).waitFor();
-          await page.getByText('6,000 tCKB', { exact: true }).waitFor();
+          await page
+            .getByLabel('Wallet summary')
+            .getByText('6,000 tCKB', { exact: true })
+            .waitFor();
         }
         await connect(true);
         const migrated = await page.evaluate(async () => {
@@ -363,10 +376,11 @@ async function main() {
         assert.equal(submittedBeforePersist, false);
         assert.equal(chain.submissions.length, 1);
         assert.equal(signatureCount, 2);
-        phase = `${engineName} ${width}: wallet route, reload and exact recovery`;
+        phase = `${engineName} ${width}: Activity route, reload and exact recovery`;
         await page
-          .getByRole('link', { name: 'Open testnet wallet and activity', exact: true })
+          .getByRole('link', { name: width === 390 ? 'Activity' : 'My activity', exact: true })
           .click();
+        assert.equal(new URL(page.url()).searchParams.get('view'), 'activity');
         await page.getByRole('article', { name: 'Sponsored prediction transaction' }).waitFor();
         await reads.reload();
         await accountReadFinished(page, 'Sign out');
