@@ -6,6 +6,7 @@ export interface MarketAvailability {
   label: string;
   cutoffMs: number;
   entryEnabled: boolean;
+  funding?: 'funded' | 'sponsored';
 }
 
 // Discovery is an operator claim, not an entitlement or transaction descriptor.
@@ -42,9 +43,47 @@ export async function getMarketAvailability(signal?: AbortSignal): Promise<Marke
   return rows;
 }
 
+export async function getDemandAvailability(
+  fixtureIds: readonly string[],
+  signal?: AbortSignal,
+): Promise<MarketAvailability[]> {
+  const ids = [...new Set(fixtureIds)].filter((id) => /^api-football-[1-9]\d{0,14}$/.test(id));
+  if (ids.length > 8) throw Error('Too many fixture sponsorship requests.');
+  const values = await Promise.all(
+    ids.map((id) => request('/direct/demand?matchId=' + encodeURIComponent(id), signal)),
+  );
+  return values.flatMap((value, index) => {
+    if (!isRecord(value) || !Array.isArray(value.fixtures) || value.fixtures.length > 1)
+      throw Error('Fixture sponsorship availability could not be verified.');
+    return value.fixtures.map((raw): MarketAvailability => {
+      if (
+        !isRecord(raw) ||
+        raw.fixtureId !== ids[index] ||
+        typeof raw.label !== 'string' ||
+        !raw.label.trim() ||
+        raw.label.length > 240 ||
+        typeof raw.cutoffMs !== 'number' ||
+        !Number.isSafeInteger(raw.cutoffMs) ||
+        !['available', 'reserved', 'confirming', 'funded', 'unavailable'].includes(
+          String(raw.state),
+        )
+      )
+        throw Error('Fixture sponsorship availability could not be verified.');
+      return {
+        id: 'sponsored-' + ids[index],
+        fixtureId: ids[index],
+        label: raw.label,
+        cutoffMs: raw.cutoffMs,
+        entryEnabled: raw.state === 'available',
+        funding: 'sponsored',
+      };
+    });
+  });
+}
+
 export function acceptsPayment(row: MarketAvailability, now: number): boolean {
   // Match the client's minimum preparation margin; the chain is rechecked at review.
-  return row.entryEnabled && now + 30_000 < row.cutoffMs;
+  return row.entryEnabled && now + (row.funding === 'sponsored' ? 120_000 : 30_000) < row.cutoffMs;
 }
 
 export type ProvisioningState =

@@ -410,4 +410,20 @@ test('An explicit canonical conflicting spend releases a claim reservation only 
   rpc.getHeaderByNumberNoCache = async () => ({ hash: hash('b'), number: 3n });
   assert.equal((await client.recover(record)).status, 'reorg');
   await assert.rejects(client.resolveConflict(record, hash('c')), /three canonical/);
+  rpc.getTransactionNoCache = async (value) =>
+    value === record.hash
+      ? {
+          transaction: ccc.Transaction.fromBytes(record.signedBytes),
+          status: 'committed',
+          blockHash: hash('b'),
+          blockNumber: 3n,
+        }
+      : undefined;
+  const originalWins = await client.recover(resolved.record);
+  assert.equal(
+    originalWins.status,
+    'confirmed',
+    'An exact original on the replacement chain supersedes the orphaned conflict checkpoint.',
+  );
+  assert.equal(originalWins.record.signedBytes, record.signedBytes);
 });

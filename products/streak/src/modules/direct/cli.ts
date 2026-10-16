@@ -6,6 +6,8 @@ import {
   object,
   PROVIDER_ORIGIN,
   PUBLIC_DIRECT_CONFIG,
+  V3_DIRECT_CONFIG,
+  LEGACY_DIRECT_CONFIG,
   protocolConfigFor,
   type DirectProtocolConfig,
   type DirectMarketRecord,
@@ -23,6 +25,12 @@ import {
   OPERATION_FILE,
 } from './journal';
 import { verifyProvisionFixture, type ProvisionFixture, type ProvisionBarrier } from './provision';
+import {
+  assertSponsorInputsAvailable,
+  sponsorFundingBlocked,
+  canonicalSponsorConflicts,
+  cancelUnsignedSponsorOffers,
+} from './sponsor-journal';
 import {
   confirmFootballEvidence,
   parseFootballObservation,
@@ -131,10 +139,11 @@ async function reconcileAndPublish(
   operation: SignedOperation,
 ) {
   const state = await reconcileOperation(client, operation);
-  return recordReconciliation(journal, registry, operation, state);
+  return recordReconciliation(client, journal, registry, operation, state);
 }
 
-function recordReconciliation(
+async function recordReconciliation(
+  client: ccc.Client,
   journal: OperatorJournal,
   registry: DirectRegistry,
   operation: SignedOperation,
@@ -143,11 +152,11 @@ function recordReconciliation(
   journal.record(operation.operationId, state);
   if (
     operation.action === 'create' &&
-    operation.descriptor.type.codeHash === PUBLIC_DIRECT_CONFIG.protocolHash &&
+    operation.descriptor.type.codeHash !== LEGACY_DIRECT_CONFIG.protocolHash &&
     state.status === 'committed' &&
     (state.confirmations ?? 0) >= 4
   )
-    registry.add(operation.descriptor);
+    await registry.publishCanonical(operation.descriptor, client);
   return {
     ...state,
     explorer: `https://pudge.explorer.nervos.org/transaction/${operation.transactionHash}`,
@@ -161,14 +170,20 @@ export interface OperatorDeployment {
   createdAtMs: number;
 }
 /** A deployment spends from the same wallet but is not a fabricated football market. */
-export function loadOperatorDeployment(journal: OperatorJournal): OperatorDeployment | undefined {
-  const path = join(journal.directory, 'deployment-v2.json');
+export function loadOperatorDeployment(
+  journal: OperatorJournal,
+  generation: 'v2' | 'v3' = 'v2',
+): OperatorDeployment | undefined {
+  const path = join(journal.directory, `deployment-${generation}.json`);
   if (!existsSync(path)) return undefined;
   if (statSync(path).size > 2_100_000)
     throw Error('Operator deployment journal exceeds its byte bound');
   const row = object(JSON.parse(readFileSync(path, 'utf8')), 'operator deployment');
   if (
-    row.protocolHash !== (journal.config?.protocolHash ?? PUBLIC_DIRECT_CONFIG.protocolHash) ||
+    row.protocolHash !==
+      (generation === 'v3'
+        ? V3_DIRECT_CONFIG.protocolHash
+        : (journal.config?.protocolHash ?? PUBLIC_DIRECT_CONFIG.protocolHash)) ||
     typeof row.transactionHash !== 'string' ||
     !/^0x[0-9a-f]{64}$/.test(row.transactionHash) ||
     typeof row.signedTransaction !== 'string' ||
@@ -203,8 +218,15 @@ export async function operatorFundingBarrier(
   journal: OperatorJournal,
   registry: DirectRegistry,
 ): Promise<ProvisionBarrier> {
-  const deployment = loadOperatorDeployment(journal);
-  if (deployment) {
+  const conflicts = await canonicalSponsorConflicts(client, journal.directory);
+  freshResolvedSponsors.set(journal, { observedAt: Date.now(), hashes: conflicts.resolved });
+  if (conflicts.uncertain) return { clear: false, pending: [] };
+  if (sponsorFundingBlocked(journal.directory, Date.now(), conflicts.resolved))
+    return { clear: false, pending: [] };
+  for (const deployment of [
+    loadOperatorDeployment(journal),
+    loadOperatorDeployment(journal, 'v3'),
+  ].filter((value): value is OperatorDeployment => !!value)) {
     const state = await reconcileOperation(client, deployment);
     if (state.status !== 'committed' || (state.confirmations ?? 0) < 4)
       return { clear: false, pending: [] };
@@ -216,6 +238,13 @@ export async function operatorFundingBarrier(
   const referencedTransactions = new Set<string>();
   for (const file of files) {
     const operation = journal.load(file.slice(0, -5))!;
+    if (
+      conflicts.resolved.has(operation.transactionHash) ||
+      conflicts.resolved.has(operation.descriptor.creationTxHash)
+    ) {
+      conflicts.resolved.add(operation.transactionHash);
+      continue;
+    }
     operations.push(operation);
     const tx = ccc.Transaction.fromBytes(operation.signedTransaction);
     for (const input of tx.inputs) referencedTransactions.add(input.previousOutput.txHash);
@@ -267,7 +296,7 @@ export async function operatorFundingBarrier(
         continue;
       }
       const operation = batch[index];
-      const state = recordReconciliation(journal, registry, operation, result.value);
+      const state = await recordReconciliation(client, journal, registry, operation, result.value);
       if (state.status !== 'committed' || (state.confirmations ?? 0) < 4)
         pending.push({
           fixtureId: operation.fixtureId,
@@ -284,6 +313,11 @@ export async function operatorFundingBarrier(
   return { clear: pending.length === 0, pending };
 }
 
+const freshResolvedSponsors = new WeakMap<
+  OperatorJournal,
+  { observedAt: number; hashes: Set<string> }
+>();
+
 /** A reorg must never make an old signed input available for a different operator transaction. */
 export function assertFreshOperatorInputs(
   journal: OperatorJournal,
@@ -294,11 +328,22 @@ export function assertFreshOperatorInputs(
   const inputs = new Set(
     candidate.inputs.map((input) => `${input.previousOutput.txHash}:${input.previousOutput.index}`),
   );
-  const deployment = loadOperatorDeployment(journal);
+  const released = freshResolvedSponsors.get(journal);
+  assertSponsorInputsAvailable(
+    journal.directory,
+    candidate,
+    Date.now(),
+    released && Date.now() - released.observedAt <= 30_000 ? released.hashes : undefined,
+  );
+  const deployments = [
+    loadOperatorDeployment(journal),
+    loadOperatorDeployment(journal, 'v3'),
+  ].filter((value): value is OperatorDeployment => !!value);
   if (
-    deployment &&
-    ccc.Transaction.fromBytes(deployment.signedTransaction).inputs.some((input) =>
-      inputs.has(`${input.previousOutput.txHash}:${input.previousOutput.index}`),
+    deployments.some((deployment) =>
+      ccc.Transaction.fromBytes(deployment.signedTransaction).inputs.some((input) =>
+        inputs.has(`${input.previousOutput.txHash}:${input.previousOutput.index}`),
+      ),
     )
   )
     throw Error(
@@ -306,6 +351,13 @@ export function assertFreshOperatorInputs(
     );
   for (const file of files) {
     const operation = journal.load(file.slice(0, -5))!;
+    const resolved = freshResolvedSponsors.get(journal);
+    if (
+      resolved &&
+      Date.now() - resolved.observedAt <= 30_000 &&
+      resolved.hashes.has(operation.transactionHash)
+    )
+      continue;
     const previous = ccc.Transaction.fromBytes(operation.signedTransaction);
     if (
       previous.inputs.some((input) =>
@@ -376,7 +428,7 @@ export async function runOperator(
       throw Error('Requested operator record has another fixture');
     await verifyDeployment(client, record ? protocolConfigFor(record) : PUBLIC_DIRECT_CONFIG);
     const keyFor = (action: OperatorAction) =>
-      operationKey(action, fixtureId, record?.type.codeHash);
+      operationKey(action, fixtureId, record?.type.codeHash, record?.creationTxHash);
     if (command === 'reconcile') {
       const states = [];
       for (const action of ['create', 'report', 'close'] as const) {
@@ -439,6 +491,36 @@ export async function runOperator(
     if (!operation) {
       if (action === 'create' && record)
         throw Error('Fixture is already mapped to an immutable market');
+      // Do not preempt a wallet review merely because a match kicked off. First
+      // establish that a report or exit is actually ready, while holding the same
+      // lease used by offer creation and owner-partial acceptance.
+      if (action === 'report') {
+        if (!record) throw Error('Create and reconcile this fixture market first');
+        freshEvidence = await confirmedEvidence(record, journal);
+        if (!freshEvidence)
+          throw Error(
+            'First result observation saved. Run report again after at least 30 seconds.',
+          );
+        cancelUnsignedSponsorOffers(journal.directory);
+      } else if (action === 'close') {
+        if (!record) throw Error('Create and reconcile this fixture market first');
+        const state = await loadOperatorMarket(client, record);
+        if (!state.market || state.closed || [0, 1, 2, 3].some((id) => !state.shards[id]))
+          throw Error('Market closure state is unavailable');
+        const data = state.market.cell.outputData,
+          timestamp = Number(state.market.header.timestamp);
+        const eligible =
+          /^0x00010[012]$/.test(data) &&
+          timestamp >= record.cutoffMs &&
+          timestamp < record.terms.deadlineMs;
+        if (
+          (command === 'void' && eligible) ||
+          (command === 'settle' && !eligible) ||
+          (!eligible && Date.now() < record.terms.deadlineMs)
+        )
+          throw Error('Market is not ready for this closure action');
+        cancelUnsignedSponsorOffers(journal.directory);
+      }
       const barrier = await operatorFundingBarrier(client, journal, registry);
       if (!barrier.clear)
         throw Error(
@@ -464,7 +546,7 @@ export async function runOperator(
       } else {
         if (!record) throw Error('Create and reconcile this fixture market first');
         if (action === 'report') {
-          const evidence = await confirmedEvidence(record, journal);
+          const evidence = freshEvidence;
           if (!evidence)
             throw Error(
               'First result observation saved. Run report again after at least 30 seconds.',

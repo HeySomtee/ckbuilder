@@ -14,7 +14,6 @@ import {
   parseManifest,
   point,
   pointKey,
-  PROTOCOL_HASH,
   STORAGE,
   U64_MAX,
   VERSION,
@@ -24,6 +23,7 @@ import { confirmedHeader, discoverMarket, loadMarket } from './discovery.ts';
 import type { MarketSnapshot } from './discovery.ts';
 import { IndexedJournal, MAX_TX_BYTES, parseRecord } from './journal.ts';
 import type { Journal, JournalRecord } from './journal.ts';
+import { reservationReleased } from './reservations.ts';
 
 export type Identity = Readonly<{ address: string; ownerHash: string; scope: string }>;
 export type Review = Readonly<{
@@ -189,8 +189,16 @@ export class DirectClient {
     kind: Review['kind'],
     descriptor: Descriptor,
     claim?: Point,
-  ): Promise<JournalRecord[]> {
-    const pending: JournalRecord[] = [];
+  ): Promise<Pick<JournalRecord, 'inputs'>[]> {
+    const pending: Pick<JournalRecord, 'inputs'>[] = [];
+    for (const record of (await this.journal.otherReservations?.(identity.scope)) ?? []) {
+      if (await reservationReleased(this.signer.client, record)) continue;
+      pending.push(record);
+      if (kind === 'deposit' && record.fixtureId === descriptor.fixtureId)
+        throw Error(
+          'This fixture already has a signed sponsored prediction. Resume its original transaction.',
+        );
+    }
     for (const record of await this.journal.list(identity.scope)) {
       const recovery = await this.recover(record);
       // A rejected/absent node response is not proof that no other node has the
@@ -213,7 +221,7 @@ export class DirectClient {
     tx: ccc.Transaction,
     owner: ccc.Script,
     protocolCapacity: bigint,
-    pending: readonly JournalRecord[],
+    pending: readonly Pick<JournalRecord, 'inputs'>[],
   ): Promise<void> {
     const reserved = new Set(pending.flatMap((r) => r.inputs.map(pointKey)));
     // Reserve enough excess for an ordinary change cell plus the maximum fee.
@@ -605,7 +613,18 @@ export class DirectClient {
     const response = await this.signer.client.getTransactionNoCache(record.hash);
     if (response && response.transaction.hash() !== record.hash)
       throw Error('RPC transaction identity mismatch.');
-    if (record.conflictProof && response?.status !== 'committed') {
+    if (
+      response &&
+      ['committed', 'pending', 'proposed', 'sent'].includes(response.status) &&
+      response.transaction.toHex() !== record.signedBytes
+    )
+      throw Error('RPC transaction witnesses differ from the saved signed transaction.');
+    const originalHeader =
+      response?.status === 'committed' && response.blockNumber !== undefined && response.blockHash
+        ? await this.signer.client.getHeaderByNumberNoCache(response.blockNumber)
+        : undefined;
+    const canonicalOriginal = !!originalHeader && originalHeader.hash === response?.blockHash;
+    if (record.conflictProof && !canonicalOriginal) {
       const proof = await this.conflictProof(record, record.conflictProof.hash);
       if (
         proof &&
@@ -774,6 +793,7 @@ export async function createDevnetDirectClient(
   scopeId: string,
   journal: Journal,
   options: Options = {},
+  manifest: Manifest = MANIFEST,
 ): Promise<DirectClient> {
   if (signer.client.url !== 'http://127.0.0.1:8218')
     throw Error('Devnet client requires the isolated loopback node.');
@@ -801,11 +821,11 @@ export async function createDevnetDirectClient(
     if (
       !cell ||
       codeDeps[i].depType !== 'code' ||
-      ccc.hashCkb(bytes(cell.outputData)) !== [PROTOCOL_HASH, GUARD_HASH][i]
+      ccc.hashCkb(bytes(cell.outputData)) !== [parseManifest(manifest).protocolHash, GUARD_HASH][i]
     )
       throw Error('Devnet binary hashes differ from the pinned testnet code.');
   }
-  const client = new DirectClient(signer, MANIFEST, scopeId, journal, options);
+  const client = new DirectClient(signer, manifest, scopeId, journal, options);
   devnetDependencies.set(
     client,
     codeDeps.map((dep) => ccc.CellDep.from(dep)),

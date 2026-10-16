@@ -11,8 +11,9 @@
 import "./env";
 import { rankFeaturedFixtures } from './fixture-ranking';
 import { findPublicPredictionMarket, InvalidSlip, parseSlip, reviewPredictions } from './modules/predictions/review';
-import { DirectRegistry, PUBLIC_DIRECT_CONFIG, PROVIDER_ORIGIN } from './modules/direct/registry';
+import { DirectRegistry, PUBLIC_DIRECT_CONFIG, LEGACY_DIRECT_CONFIG, V3_DIRECT_CONFIG, PROVIDER_ORIGIN, RESULT_WINDOW_MS, termsDigest, object } from './modules/direct/registry';
 import { readProvisioningProgress, PROVISION_QUEUE_LIMIT } from './modules/direct/provision';
+import { sponsorProxy, SponsorProxyError } from './modules/direct/sponsor-proxy';
 
 import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
@@ -1100,6 +1101,64 @@ type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<
 
 const directRegistry = new DirectRegistry(process.env.STREAK_DIRECT_REGISTRY_DIR);
 const legacyDirectRegistry = new DirectRegistry(process.env.STREAK_DIRECT_LEGACY_REGISTRY_DIR);
+const sponsorConfigurationCache=new AsyncSnapshotCache<string,unknown>(5_000,1);
+const sponsorRequests = new Map<string,{start:number;count:number}>();
+function sponsorRate(key:string,limit:number):boolean {
+  const now=Date.now();
+  for(const [id,value] of sponsorRequests)if(now-value.start>=60_000)sponsorRequests.delete(id);
+  let value=sponsorRequests.get(key);
+  if(!value){if(sponsorRequests.size>=256)return false;value={start:now,count:0};sponsorRequests.set(key,value);}
+  value.count++;return value.count<=limit;
+}
+async function handleDemand(req:IncomingMessage,res:ServerResponse,url:URL):Promise<void> {
+  const id=url.searchParams.get('matchId');
+  if(id&&!/^api-football-[1-9][0-9]{0,14}$/.test(id))return sendJson(res,400,{error:'An API football fixture is required.'});
+  const status=providerStatus();
+  const fixtures=(provider.scheduleFixtures?.()??[]).filter(match=>(!id||match.id===id)&&isActiveProviderMatch(match)&&match.status==='scheduled'&&match.oracle?.source===PROVIDER_ORIGIN&&Date.parse(match.kickoff)>Date.now()+120_000);
+  if(provider.id!=='football'||!status.enabled||status.simulated||!fixtures.length)
+    return sendJson(res,200,{fixtures:[]});
+  if(fixtures.length>4096)return sendJson(res,503,{error:'The active fixture catalogue exceeds its reviewed bound.'});
+  if(!sponsorRate(`demand:${req.socket.remoteAddress}`,120))return sendJson(res,429,{error:'Please wait before refreshing sponsored availability.'});
+  try {
+    const config=object(sponsorConfigurationCache.isFresh('operator')?sponsorConfigurationCache.peek('operator'):
+      await within(sponsorConfigurationCache.refresh('operator',()=>sponsorProxy('/configuration')),8_000),'sponsor configuration');
+    const lock=object(config.sponsorLock,'sponsor lock');
+    if(typeof lock.codeHash!=='string'||!/^0x[0-9a-f]{64}$/.test(lock.codeHash)||!['type','data','data1','data2'].includes(String(lock.hashType))||typeof lock.args!=='string'||!/^0x(?:[0-9a-f]{2}){1,59}$/.test(lock.args))throw Error('Invalid sponsor lock');
+    const reservations=Array.isArray(config.reservations)?config.reservations.map(value=>object(value,'sponsor reservation')):[];
+    if(reservations.length>4096)throw Error('Sponsor reservations exceed their bound');
+    const descriptors=new Map(directRegistry.describe(fixtures,()=>true,id??undefined).filter(row=>row.type.codeHash!==LEGACY_DIRECT_CONFIG.protocolHash).map(row=>[row.fixtureId,row]));
+    const output=fixtures.map(match=>{
+      const cutoffMs=Date.parse(match.kickoff),terms={provider:'football' as const,providerFixtureId:match.oracle!.fixtureId,source:'api-football' as const,rules:'regulation-time-1x2-v1' as const,deadlineMs:cutoffMs+RESULT_WINDOW_MS};
+      const base={fixtureId:match.id,label:`${match.home.name} vs ${match.away.name}`,cutoffMs,terms};
+      const descriptor=descriptors.get(match.id);
+      const reservation=reservations.find(value=>value.fixtureId===match.id);
+      return {...base,termsHash:termsDigest({...base,id:'',creationTxHash:'',type:{codeHash:'',hashType:'data2',args:''}}),sponsorLock:{codeHash:lock.codeHash,hashType:lock.hashType,args:lock.args},
+        state:descriptor?(descriptor.entryEnabled?'funded':'unavailable'):reservation?.state==='unavailable'?'unavailable':reservation?.state==='confirming'?'confirming':reservation?.state==='reserved'?'reserved':V3_DIRECT_CONFIG.codeDeps.length===2?'available':'unavailable',
+        ...(descriptor?{descriptor}:{})};
+    });
+    sendJson(res,200,{fixtures:output});
+  }
+  catch {sendJson(res,503,{error:'Sponsored market creation is temporarily unavailable. Existing positions remain recoverable.'});}
+}
+async function handleSponsor(req:IncomingMessage,res:ServerResponse,url:URL,action:'offer'|'submit'|'resume'|'resolve'|'status'):Promise<void> {
+  if(action==='status') {
+    const offerId=url.searchParams.get('offerId'),rawHash=url.searchParams.get('rawHash');
+    if(!offerId||!/^[0-9a-f-]{36}$/.test(offerId)||!rawHash||!/^0x[0-9a-f]{64}$/.test(rawHash))return sendJson(res,400,{error:'Invalid sponsor recovery identity.'});
+    if(!sponsorRate(`status:${req.socket.remoteAddress}`,60))return sendJson(res,429,{error:'Please wait before refreshing transaction status.'});
+    try {sendJson(res,200,await sponsorProxy(`/status?offerId=${encodeURIComponent(offerId)}&rawHash=${rawHash}`));}
+    catch {sendJson(res,503,{error:'Sponsor status is unavailable. Keep the saved transaction and try recovery again.'});}
+    return;
+  }
+  const user=await requireUser(req,res);if(!user)return;
+  if(!sponsorRate(`owner:${user.id}`,12))return sendJson(res,429,{error:'Please wait before requesting another sponsored operation.'});
+  const address=await canonicalWalletAddress(user.wallet.address);
+  if(!address)return sendJson(res,403,{error:'A verified testnet wallet account is required.'});
+  const body=await readJson(req);
+  if(!body||typeof body!=='object'||Array.isArray(body)||JSON.stringify(body).length>210_000)return sendJson(res,400,{error:'Invalid sponsored request.'});
+  if(action==='offer'&&(await canonicalWalletAddress(body.ownerAddress))!==address)return sendJson(res,403,{error:'Use the wallet linked to the signed-in account.'});
+  try {sendJson(res,200,await sponsorProxy(`/${action}`,body,address));}
+  catch(error) {sendJson(res,error instanceof SponsorProxyError?error.status:409,{error:error instanceof SponsorProxyError?error.message:'Sponsored operation could not complete. Preserve any signed transaction and check its status before retrying.'});}
+}
 async function handleDirectMarkets(res: ServerResponse, url: URL): Promise<void> {
   const fixtureId = url.searchParams.get('matchId') ?? undefined;
   if (fixtureId !== undefined && !/^api-football-[1-9][0-9]{0,14}$/.test(fixtureId)) {
@@ -1136,6 +1195,13 @@ async function handleDirectFixtures(res: ServerResponse): Promise<void> {
 
 const staticRoutes: Record<string, Handler> = {
   "GET /api/direct/config": async (_req, res) => sendJson(res, 200, PUBLIC_DIRECT_CONFIG),
+  "GET /api/direct/sponsor/config": async (_req,res) => sendJson(res,200,V3_DIRECT_CONFIG),
+  "GET /api/direct/demand": handleDemand,
+  "POST /api/direct/sponsor/offer": (req,res,url)=>handleSponsor(req,res,url,'offer'),
+  "POST /api/direct/sponsor/submit": (req,res,url)=>handleSponsor(req,res,url,'submit'),
+  "POST /api/direct/sponsor/resume": (req,res,url)=>handleSponsor(req,res,url,'resume'),
+  "POST /api/direct/sponsor/resolve": (req,res,url)=>handleSponsor(req,res,url,'resolve'),
+  "GET /api/direct/sponsor/status": (req,res,url)=>handleSponsor(req,res,url,'status'),
   "GET /api/direct/markets": (_req, res, url) => handleDirectMarkets(res, url),
   "GET /api/direct/fixtures": (_req, res) => handleDirectFixtures(res),
   "GET /api/direct/provisioning": async (_req, res) => sendJson(res, 200, { progress: readProvisioningProgress(process.env.STREAK_DIRECT_PROGRESS_DIR) ?? null }),

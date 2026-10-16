@@ -1,4 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import * as ccc from '@ckb-ccc/core';
+import { sponsoredOriginDescendant } from './sponsor-lineage';
 import {
   closeSync,
   existsSync,
@@ -8,6 +10,7 @@ import {
   openSync,
   readFileSync,
   readdirSync,
+  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -55,13 +58,45 @@ export const PUBLIC_DIRECT_CONFIG = Object.freeze({
   ],
 });
 
+/** Separate sponsored-genesis deployment. Earlier market exits keep their own pins. */
+export const V3_DIRECT_CONFIG = Object.freeze({
+  ...PUBLIC_DIRECT_CONFIG,
+  protocolHash: '0x1adbf49e05f294891e33403f399046d6de907ea18c8c256c069538a4f0508888',
+  codeDeps: [
+    {
+      outPoint: {
+        txHash: '0x243a71ceeaa06478fa8b74ba807407de55f184bfd125a03f4432babd1a9c1135',
+        index: 0,
+      },
+      depType: 'code' as const,
+    },
+    LEGACY_DIRECT_CONFIG.codeDeps[1],
+  ],
+});
+
+export function directGeneration(protocolHash: string): '' | 'v2-' | 'v3-' {
+  return protocolHash === LEGACY_DIRECT_CONFIG.protocolHash
+    ? ''
+    : protocolHash === V3_DIRECT_CONFIG.protocolHash
+      ? 'v3-'
+      : 'v2-';
+}
+
 export function protocolConfigFor(
   record: Pick<DirectMarketRecord, 'type'>,
   config: DirectProtocolConfig = PUBLIC_DIRECT_CONFIG,
 ): DirectProtocolConfig {
   if (record.type.codeHash === config.protocolHash) return config;
-  if (config === PUBLIC_DIRECT_CONFIG && record.type.codeHash === LEGACY_DIRECT_CONFIG.protocolHash)
-    return LEGACY_DIRECT_CONFIG;
+  if (
+    [PUBLIC_DIRECT_CONFIG, LEGACY_DIRECT_CONFIG, V3_DIRECT_CONFIG].includes(
+      config as typeof PUBLIC_DIRECT_CONFIG,
+    )
+  ) {
+    const pinned = [PUBLIC_DIRECT_CONFIG, LEGACY_DIRECT_CONFIG, V3_DIRECT_CONFIG].find(
+      (value) => value.protocolHash === record.type.codeHash,
+    );
+    if (pinned) return pinned;
+  }
   throw Error('Unsupported direct market contract');
 }
 
@@ -197,8 +232,7 @@ export function validateRecord(
   };
   if (
     record.fixtureId !== `api-football-${record.terms.providerFixtureId}` ||
-    record.id !==
-      `${config.protocolHash === LEGACY_DIRECT_CONFIG.protocolHash ? 'direct' : 'direct-v2'}-${record.terms.providerFixtureId}`
+    record.id !== `direct-${directGeneration(config.protocolHash)}${record.terms.providerFixtureId}`
   )
     throw Error('Fixture identity does not match the pinned source');
   if (termsDigest(record) !== record.termsHash) throw Error('Invalid catalogue digest');
@@ -219,7 +253,7 @@ export function createRecord(
   )
     throw Error('Only the real API-Football catalogue is supported');
   const record = {
-    id: `${config.protocolHash === LEGACY_DIRECT_CONFIG.protocolHash ? 'direct' : 'direct-v2'}-${match.oracle.fixtureId}`,
+    id: `direct-${directGeneration(config.protocolHash)}${match.oracle.fixtureId}`,
     fixtureId: match.id,
     label: `${match.home.name} vs ${match.away.name}`,
     cutoffMs,
@@ -256,7 +290,10 @@ export function writeExclusiveJson(file: string, value: unknown): void {
 
 export class DirectRegistry {
   readonly directory?: string;
-  constructor(directory?: string) {
+  constructor(
+    directory?: string,
+    readonly config: DirectProtocolConfig = PUBLIC_DIRECT_CONFIG,
+  ) {
     this.directory = directory ? resolve(directory) : undefined;
   }
   private filename(fixtureId: string): string {
@@ -270,7 +307,7 @@ export class DirectRegistry {
     const file = this.filename(fixtureId);
     if (!existsSync(file)) return undefined;
     if (statSync(file).size > 16_384) throw Error('Direct registry record exceeds its size limit');
-    const record = validateRecord(JSON.parse(readFileSync(file, 'utf8')));
+    const record = validateRecord(JSON.parse(readFileSync(file, 'utf8')), this.config);
     if (record.fixtureId !== fixtureId) throw Error('Direct registry filename and identity differ');
     return record;
   }
@@ -286,7 +323,7 @@ export class DirectRegistry {
     return files.sort().map((file) => this.get(file.slice(0, -5))!);
   }
   add(value: unknown): DirectMarketRecord {
-    const record = validateRecord(value);
+    const record = validateRecord(value, this.config);
     const file = this.filename(record.fixtureId);
     const existing = this.get(record.fixtureId);
     if (existing) {
@@ -297,6 +334,143 @@ export class DirectRegistry {
     mkdirSync(this.directory!, { recursive: true, mode: 0o700 });
     if (this.all().length >= 256) throw Error('Direct pilot registry is full');
     writeExclusiveJson(file, record);
+    return record;
+  }
+  /** Caller holds the shared operator lease. Every instance and selection proof is retained. */
+  async publishCanonical(value: unknown, client: ccc.Client): Promise<DirectMarketRecord> {
+    const record = validateRecord(value, this.config);
+    if (record.type.codeHash !== V3_DIRECT_CONFIG.protocolHash) return this.add(record);
+    if (!this.directory) throw Error('Direct market registry is not configured');
+    mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+    const lockFile = join(this.directory, '.canonical-selection.lock'),
+      token = randomUUID();
+    writeExclusiveJson(lockFile, { pid: process.pid, token, createdAtMs: Date.now() });
+    try {
+      return await this.selectCanonical(record, client);
+    } finally {
+      const lock = object(JSON.parse(readFileSync(lockFile, 'utf8')), 'canonical selection lock');
+      if (lock.token !== token) throw Error('Canonical selection ownership changed unexpectedly');
+      unlinkSync(lockFile);
+    }
+  }
+  private async selectCanonical(
+    record: DirectMarketRecord,
+    client: ccc.Client,
+  ): Promise<DirectMarketRecord> {
+    const response = await client.getTransactionNoCache(record.creationTxHash);
+    if (
+      !response ||
+      response.status !== 'committed' ||
+      response.transaction.hash() !== record.creationTxHash ||
+      !response.blockHash ||
+      response.blockNumber === undefined
+    )
+      throw Error('Canonical market publication needs a committed creation');
+    const header = await client.getHeaderByNumberNoCache(response.blockNumber),
+      tip = await client.getTipHeader();
+    if (header?.hash !== response.blockHash || tip.number < response.blockNumber + 3n)
+      throw Error('Canonical market publication needs four confirmations');
+    const transaction = response.transaction;
+    if (
+      transaction.inputs.length < 2 ||
+      transaction.outputs[0]?.type?.toHex() !== ccc.Script.from(record.type).toHex() ||
+      transaction.outputsData[0] !== '0x0000ff' ||
+      transaction.inputs[0].previousOutput.toHex() !== `0x${record.type.args.slice(2, 74)}`
+    )
+      throw Error('Canonical transaction is not this sponsored market genesis');
+    const current = this.get(record.fixtureId);
+    if (current && current.creationTxHash === record.creationTxHash) {
+      if (JSON.stringify(current) !== JSON.stringify(record))
+        throw Error('Cannot change immutable funded terms');
+      return current;
+    }
+    let orphaned: { blockHash: string; blockNumber: string; creationTxHash: string } | undefined;
+    const historyDirectory = join(this.directory!, 'selection-history', record.fixtureId);
+    if (current) {
+      if (current.type.codeHash !== V3_DIRECT_CONFIG.protocolHash)
+        throw Error('Canonical selection cannot replace an earlier contract generation');
+      const old = await client.getTransactionNoCache(current.creationTxHash);
+      if (
+        old?.status === 'committed' &&
+        old.blockHash &&
+        old.blockNumber !== undefined &&
+        (await client.getHeaderByNumberNoCache(old.blockNumber))?.hash === old.blockHash
+      )
+        throw Error('The currently selected market is still canonical');
+      if (!existsSync(historyDirectory))
+        throw Error('Prior selection lacks an auditable canonical checkpoint');
+      const files = readdirSync(historyDirectory)
+        .filter((file) => /^[0-9]+-[0-9a-f-]{36}\.json$/.test(file))
+        .sort()
+        .reverse();
+      if (files.length > 4096)
+        throw Error('Canonical selection history exceeds its reviewed bound');
+      for (const file of files) {
+        const path = join(historyDirectory, file);
+        if (statSync(path).size > 4096) throw Error('Selection proof exceeds its byte limit');
+        const proof = object(JSON.parse(readFileSync(path, 'utf8')), 'canonical selection proof');
+        if (proof.creationTxHash !== current.creationTxHash) continue;
+        if (typeof proof.blockNumber !== 'string' || !/^\d{1,20}$/.test(proof.blockNumber))
+          throw Error('Invalid selection checkpoint number');
+        const blockHash = hash32(proof.blockHash, 'selection checkpoint hash');
+        const canonical = await client.getHeaderByNumberNoCache(BigInt(proof.blockNumber));
+        if (canonical?.hash === blockHash)
+          throw Error('Prior market checkpoint is still canonical');
+        if (!canonical && tip.number >= BigInt(proof.blockNumber))
+          throw Error('Cannot establish that the prior checkpoint was orphaned');
+        orphaned = {
+          blockHash,
+          blockNumber: proof.blockNumber,
+          creationTxHash: current.creationTxHash,
+        };
+        break;
+      }
+      if (!orphaned) throw Error('Prior selection has no matching canonical proof');
+      const previousOrigin = ccc.OutPoint.fromBytes(`0x${current.type.args.slice(2, 74)}`);
+      const nextOrigin = transaction.inputs[0].previousOutput;
+      // Either attempt may be the ancestor after a reorg. Their funding lineage
+      // must make both creations impossible on the same canonical branch.
+      let exclusive = previousOrigin.eq(nextOrigin);
+      if (!exclusive) {
+        try {
+          exclusive = await sponsoredOriginDescendant(client, nextOrigin, [previousOrigin]);
+        } catch {
+          exclusive = false;
+        }
+        if (!exclusive)
+          try {
+            exclusive = await sponsoredOriginDescendant(client, previousOrigin, [nextOrigin]);
+          } catch {
+            exclusive = false;
+          }
+      }
+      if (!exclusive)
+        throw Error('Replacement selection lacks a mutually exclusive funding lineage');
+    }
+    const instances = join(this.directory!, 'instances', record.fixtureId);
+    mkdirSync(instances, { recursive: true, mode: 0o700 });
+    mkdirSync(historyDirectory, { recursive: true, mode: 0o700 });
+    const instance = join(instances, `${record.creationTxHash.slice(2)}.json`);
+    if (!existsSync(instance)) writeExclusiveJson(instance, record);
+    else if (
+      JSON.stringify(validateRecord(JSON.parse(readFileSync(instance, 'utf8')), this.config)) !==
+      JSON.stringify(record)
+    )
+      throw Error('Immutable market instance differs');
+    const proofFile = join(historyDirectory, `${Date.now()}-${randomUUID()}.json`);
+    writeExclusiveJson(proofFile, {
+      version: 1,
+      fixtureId: record.fixtureId,
+      creationTxHash: record.creationTxHash,
+      blockHash: response.blockHash,
+      blockNumber: response.blockNumber.toString(),
+      confirmations: Number(tip.number - response.blockNumber + 1n),
+      ...(orphaned ? { orphaned } : {}),
+    });
+    if (!current) return this.add(record);
+    const temporary = `${this.filename(record.fixtureId)}.${randomUUID()}.selection`;
+    writeExclusiveJson(temporary, record);
+    renameSync(temporary, this.filename(record.fixtureId));
     return record;
   }
   describe(

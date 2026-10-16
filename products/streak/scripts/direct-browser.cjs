@@ -367,7 +367,7 @@ async function main() {
         await page.evaluate(
           (ownerHash) =>
             new Promise((resolve, reject) => {
-              const request = indexedDB.open('streak-direct-transactions-v1', 1);
+              const request = indexedDB.open('streak-direct-transactions-v1', 2);
               request.onerror = () => reject(request.error);
               request.onsuccess = () => {
                 const db = request.result,

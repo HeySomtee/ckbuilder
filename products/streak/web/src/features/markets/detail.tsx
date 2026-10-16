@@ -8,7 +8,7 @@ import type { Market } from './api';
 import { TeamBadge } from '../../components/team-badge';
 import { useNow } from '../../lib/use-now';
 import { directHref, followDirect } from '../../lib/direct-route';
-import { useDirectCatalogue } from '../direct/availability';
+import { useDirectCatalogue, useDemandAvailability } from '../direct/availability';
 import { acceptsPayment } from '../direct/availability-api';
 
 export function MarketDetail({
@@ -33,6 +33,7 @@ export function MarketDetail({
   });
   const now = useNow(true);
   const catalogue = useDirectCatalogue();
+  const demand = useDemandAvailability(detail.data ? [detail.data.market.matchId] : []);
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
   }, [detail.data?.market.id]);
@@ -53,9 +54,10 @@ export function MarketDetail({
       </section>
     );
   const { market, terms } = data;
-  const contract = !catalogue.isError
-    ? catalogue.data?.find((row) => row.fixtureId === market.matchId)
-    : undefined;
+  const contract =
+    (!catalogue.isError
+      ? catalogue.data?.find((row) => row.fixtureId === market.matchId && row.entryEnabled)
+      : undefined) ?? demand.data?.find((row) => row.fixtureId === market.matchId);
   const payable = !!contract && acceptsPayment(contract, now);
   const accepting =
     data.accepting &&
@@ -191,7 +193,9 @@ export function MarketDetail({
               : catalogue.isPending
                 ? 'Checking payment availability...'
                 : payable
-                  ? 'Funded contract. Choose a side, then continue to payment in your slip. Wallet review checks remaining space and time. Minimum 100 tCKB plus 321 tCKB recoverable storage and a network fee.'
+                  ? contract?.funding === 'sponsored'
+                    ? 'Your first prediction opens this market in the same transaction. Streak covers the 3,050 tCKB setup reserve. You pay your stake, 321 tCKB recoverable storage and the network fee.'
+                    : 'Funded contract. Choose a side, then continue to payment in your slip. Wallet review checks remaining space and time. Minimum 100 tCKB plus 321 tCKB recoverable storage and a network fee.'
                   : 'This fixture is available for saved picks only. It has no open funded contract for payment.'}
           </p>
           <div className="detail-outcomes">

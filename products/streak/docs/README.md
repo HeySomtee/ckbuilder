@@ -2,9 +2,11 @@
 
 Canonical foundation approved **15 October 2026**. Start with [status](../status.md), then the document governing the task. [AGENTS.md](../AGENTS.md) is the single contributor contract; tool-specific guidance should link to it instead of maintaining competing rules.
 
-Current implementation: the [direct wallet-to-market journey](delivery/direct-testnet-milestone.md) now includes the [shared EVM wallet and automatic provisioning correction](delivery/wallet-provisioning-correction.md). A compatible contract is deployed on testnet and the local operator queues every eligible real API fixture. All 38 local gate steps passed at 13:54 UTC on 16 October; commit and push hooks verify the final candidate again. Funding for all 196 queued fixtures is incomplete. Physical wallet checks and durable operation remain before community onboarding; combined payment and Five remain open.
+Current implementation: the [direct wallet-to-market journey](delivery/direct-testnet-milestone.md) includes shared EVM wallet state and [sponsored creation with the first prediction](delivery/sponsored-creation.md). The v3 contract is deployed on testnet and the separate sponsor is active locally. All 42 local gate steps passed at 14:59 UTC on 16 October. Real-API phone and desktop checks passed with 180 unused fixtures eligible for sponsorship and 16 existing funded markets. Bulk creation is paused. Operator capacity currently covers roughly five new reserves before replenishment. Physical wallet checks and durable operation remain before community onboarding; combined payment and Five remain open.
 
 Current commitments and resume point: [work tracker](work-tracker.md). Update it whenever work is steered, interrupted or completed.
+
+Latest owner direction: [sponsored first-prediction creation](architecture/sponsored-creation.md) replaces bulk funding of unused markets. The [delivery record](delivery/sponsored-creation.md) tracks its separate contract deployment, local activation, verification and remaining limits.
 
 The [wallet and automatic provisioning correction](delivery/wallet-provisioning-correction.md) supersedes the native-wallet-only and single-funded-fixture limitations above. It records the separate compatible contract deployment, shared signer state, all-fixture queue and remaining rollout evidence.
 

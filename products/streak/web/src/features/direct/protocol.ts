@@ -8,6 +8,8 @@ export const SHARD_RESERVE = 610n * CKB;
 export const LEGACY_PROTOCOL_HASH =
   '0x5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86';
 export const PROTOCOL_HASH = '0xc65bfcf86e34da4bb8f51f93e261236418a639699b5fd7f3dfafb5f987e047e0';
+export const SPONSORED_PROTOCOL_HASH =
+  '0x1adbf49e05f294891e33403f399046d6de907ea18c8c256c069538a4f0508888';
 export const GUARD_HASH = '0x096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada';
 export const LEGACY_DEPLOYMENT =
   '0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11';
@@ -84,7 +86,22 @@ export const MANIFEST: Manifest = Object.freeze({
     LEGACY_MANIFEST.codeDeps[1],
   ]),
 });
+export const SPONSORED_MANIFEST: Manifest = Object.freeze({
+  ...MANIFEST,
+  protocolHash: SPONSORED_PROTOCOL_HASH,
+  codeDeps: Object.freeze([
+    Object.freeze({
+      outPoint: Object.freeze({
+        txHash: '0x243a71ceeaa06478fa8b74ba807407de55f184bfd125a03f4432babd1a9c1135',
+        index: 0,
+      }),
+      depType: 'code' as const,
+    }),
+    LEGACY_MANIFEST.codeDeps[1],
+  ]),
+});
 export function protocolManifest(codeHash: string): Manifest {
+  if (codeHash === SPONSORED_PROTOCOL_HASH) return SPONSORED_MANIFEST;
   if (codeHash === PROTOCOL_HASH) return MANIFEST;
   if (codeHash === LEGACY_PROTOCOL_HASH) return LEGACY_MANIFEST;
   throw Error('This contract deployment is not supported.');

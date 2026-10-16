@@ -125,6 +125,11 @@ async function browserChecks() {
     },
   );
   const base = `http://127.0.0.1:${previewPort}`;
+  run(
+    'Sponsored first prediction browser regression',
+    [join(product, 'scripts/sponsored-browser.cjs')],
+    { cwd: product, isolated: true },
+  );
   const server = spawn(process.execPath, [join(product, 'design/season-preview/serve.cjs')], {
     cwd: ROOT,
     env: { ...env, STREAK_PREVIEW_PORT: String(previewPort) },
@@ -218,6 +223,11 @@ try {
       await browserChecks();
     } else if (selected === 'contracts') {
       run(
+        'Streak sponsored creation Rust VM regression',
+        [join(product, 'contracts/direct-v3/scripts/run.cjs'), 'test'],
+        { timeout: 1_200_000 },
+      );
+      run(
         'Streak compatible contract Rust VM regression',
         [join(product, 'contracts/direct-v2/scripts/run.cjs'), 'test'],
         { timeout: 1_200_000 },
@@ -243,6 +253,11 @@ try {
         {
           timeout: 600_000,
         },
+      );
+      run(
+        'Sponsored first prediction signed devnet lifecycle',
+        [join(product, 'scripts/sponsored-devnet-run.cjs')],
+        { timeout: 600_000 },
       );
     }
   }

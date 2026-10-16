@@ -1,5 +1,14 @@
 import { ccc } from '@ckb-ccc/core';
-import { bytes, checkCell, decode, point, pointKey, SHARD_RESERVE, STORAGE } from './protocol.ts';
+import {
+  bytes,
+  checkCell,
+  decode,
+  point,
+  pointKey,
+  SHARD_RESERVE,
+  SPONSORED_PROTOCOL_HASH,
+  STORAGE,
+} from './protocol.ts';
 import type { CellState, Descriptor, Outcome, Point, Ticket } from './protocol.ts';
 
 export type Position = Readonly<{
@@ -71,14 +80,15 @@ export async function loadMarket(
       outPoint: { txHash: descriptor.creationTxHash, index },
     });
     const state = checkCell(cell, descriptor);
+    const firstPrediction = descriptor.type.codeHash === SPONSORED_PROTOCOL_HASH && index === 1;
     if (
-      cell.cellOutput.capacity !== SHARD_RESERVE ||
+      (!firstPrediction && cell.cellOutput.capacity !== SHARD_RESERVE) ||
       (index === 0
         ? state.kind !== 'market' || state.phase !== 0
         : state.kind !== 'shard' ||
           state.id !== index - 1 ||
           state.accepted.length !== 0 ||
-          state.pending !== null)
+          (firstPrediction ? state.pending === null : state.pending !== null))
     )
       throw Error('Market creation layout does not match this protocol.');
   }

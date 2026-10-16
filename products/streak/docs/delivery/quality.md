@@ -12,6 +12,8 @@ The contract lane also builds and tests `contracts/direct-v2` and runs the produ
 
 PostgreSQL checks require an explicitly configured `PG_TEST_URL` targeting loopback and a disposable database whose name ends in `_test`, conventionally `streak_test`. The harness isolates fixtures in a random schema and cleans up its own schema. Never substitute a production URL, an existing application database or a hosted Neon instance. Missing prerequisites fail the required gate; they are not skipped into success.
 
+Sponsored first-prediction creation adds three mandatory lanes: the separate `contracts/direct-v3` Rust VM suite, `scripts/sponsored-browser.cjs` and `scripts/sponsored-devnet-run.cjs`. Existing v1/v2 and shared-wallet checks remain required. The lanes cover actual two-party signing, exact sponsor/user contribution accounting and interrupted-submission recovery; an unsigned builder or a simulated success alone does not satisfy the signed-chain acceptance criteria. All 42 steps passed at 14:59 UTC on 16 October. See the [delivery evidence](sponsored-creation.md) for the tested scope and limits.
+
 Install repository hooks with `npm run hooks:install` after setup. Hooks are local enforcement and must be installed in each checkout. CI repeats the requirements. Do not bypass a failing hook with `--no-verify` or weaken a test just to make a commit.
 
 Example local PowerShell setup from the repository root, after installing the pinned Node/npm and contract prerequisites:

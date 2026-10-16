@@ -220,6 +220,29 @@ Once closure commits, run the standalone owner's `status` command with the origi
 
 The automatic worker deliberately stops when its own signed report or closure is ambiguous. That off-chain policy does not remove the script's permissionless timeout. An independent keeper uses its own journal and current live cells. The script still rejects voiding an eligible report, late reporting cannot become eligible, and only a committed closure changes the market. This recovery path is supported by existing builders; it does not claim that unattended conflict replacement or a public keeper service is deployed.
 
+## Sponsored first prediction
+
+The owner replaced bulk creation with demand-driven creation on 16 October 2026. Keep existing markets and their lifecycle worker. Disable the worker's bulk catalogue/progress configuration when using sponsored creation. The separate sponsor process still needs the real fixture catalogue for verification.
+
+Build the product, then launch `node products/streak/scripts/direct-sponsor.cjs --serve` in a separate process with explicit configuration:
+
+- `STREAK_DIRECT_OPERATOR_DIR` and `STREAK_DIRECT_REGISTRY_DIR`: absolute durable directories. Share the operator journal with the lifecycle worker so both use the same funding lease.
+- `STREAK_DIRECT_PRIVATE_KEY` and `API_SPORTS_KEY`: available only to the operator process. The API process must never receive the signing key.
+- `STREAK_DIRECT_CATALOGUE_URL`: the running app's `/api/direct/fixtures` endpoint.
+- `STREAK_SPONSOR_URL`: an explicit loopback HTTP origin, such as `http://127.0.0.1:4101`.
+- `STREAK_SPONSOR_IPC_SECRET`: a separate random 32-byte secret encoded as 64 lowercase hexadecimal characters. The API and sponsor share this credential; browsers never receive it.
+- `STREAK_DIRECT_DURABLE_STATE_ACK=1`: required in production after verifying the actual storage configuration.
+
+Configure only the sponsor URL and IPC credential in the API process. Browser requests use the normal authenticated same-origin API. The sponsor independently verifies the fixture, wallet signature and both parties' net contributions. One transaction creates the market and its first pending prediction. Streak supplies 3,050 CKB; the bettor supplies principal, 321 CKB position storage and the reviewed network fee. Admission still checks the committed creation block against kickoff.
+
+An unsigned offer holds a short reservation. Ready result or closure work can cancel it. A received user signature creates a recovery obligation: preserve its exact bytes even after the offer expires or an HTTP response is lost. Public status reads cannot add a signature or broadcast. The separate operator recovery cycle resumes accepted submissions and reconciles completed transactions.
+
+Do not delete journals or manually free inputs after an uncertain submission. A replacement first bet requires verified canonical conflicting-spend evidence and sponsor-input ancestry that makes competing creations mutually exclusive. Every signed attempt remains available for audit and recovery. Recovery work is bounded; exhausted ancestry or indexer-history limits need operator investigation rather than an automatic fresh signature.
+
+Canonical publication stores immutable descriptors under `instances/<fixture>/<creation-hash>.json` and proof events under `selection-history/<fixture>/`. A verified reorganisation may change the active fixture mapping; it does not rewrite those historical files. Publication uses `.canonical-selection.lock` in addition to the operator lease. After a process crash, verify the recorded process has stopped before removing only its stale lock. Never remove a live process's lock or an uncertain transaction record to make checkout proceed.
+
+Contract deployment, local service activation, successful public first bets and hosted operation are separate evidence. See the [sponsored delivery record](../delivery/sponsored-creation.md) for the current state. Keep enough plain operator capacity for each 3,050 CKB reserve plus change and lifecycle fees. No grant or campaign reward budget is implied by this testnet sponsorship.
+
 ## Isolated evidence
 
 Five backend groups pass: registry and entry gating; strict raw provider evidence; durable journal and unknown/reorg recovery; report boundary and exact payouts; bounded worker scheduling. HTTP checks cover pinned public config, `no-store`, invalid queries, origin enforcement, source unavailability, unchanged legacy data and malformed registry failure. Four standalone recovery tests cover immutable bytes, restart observations, lock exclusion, import integrity, live-network test isolation and canonical conflict-proof recovery after a reorg.

@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import {
   DirectRegistry,
   PUBLIC_DIRECT_CONFIG,
+  V3_DIRECT_CONFIG,
   LEGACY_DIRECT_CONFIG,
   PROVIDER_ORIGIN,
   createRecord,
@@ -49,6 +50,40 @@ async function main(): Promise<void> {
       assert.equal(config.status, 200);
       assert.equal(config.headers.get('cache-control'), 'no-store');
       assert.deepEqual(await config.json(), PUBLIC_DIRECT_CONFIG);
+      const sponsorConfig = await fetch(`${base}/api/direct/sponsor/config`);
+      assert.equal(sponsorConfig.status, 200);
+      assert.equal(sponsorConfig.headers.get('cache-control'), 'no-store');
+      assert.deepEqual(await sponsorConfig.json(), V3_DIRECT_CONFIG);
+      assert.deepEqual(
+        await (await fetch(`${base}/api/direct/demand`)).json(),
+        { fixtures: [] },
+        'nonfootball provider never advertises sponsored fixtures',
+      );
+      assert.equal((await fetch(`${base}/api/direct/demand?matchId=../../secret`)).status, 400);
+      assert.equal(
+        (await fetch(`${base}/api/direct/sponsor/status?offerId=invalid&rawHash=invalid`)).status,
+        400,
+      );
+      const unsignedSponsor = await fetch(`${base}/api/direct/sponsor/offer`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: base },
+        body: '{}',
+      });
+      assert.equal(
+        unsignedSponsor.status,
+        401,
+        'subsidy proposals require a verified account session',
+      );
+      const crossOriginSponsor = await fetch(`${base}/api/direct/sponsor/submit`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://attacker.invalid' },
+        body: '{}',
+      });
+      assert.equal(
+        crossOriginSponsor.status,
+        403,
+        'cross-origin requests cannot submit a subsidy proposal',
+      );
       const unreadyFixtures = await fetch(`${base}/api/direct/fixtures`);
       assert.equal(
         unreadyFixtures.status,

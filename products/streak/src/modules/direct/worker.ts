@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { runOperator, boundedJson, operatorFundingBarrier } from './cli';
 import { OperatorJournal, reconcileOperation, operationKey, OPERATION_FILE } from './journal';
 import { loadOperatorMarket, MARKET_RESERVE_SHANNONS } from './operator';
+import { canonicalSponsorConflicts } from './sponsor-journal';
 import {
   ProvisionQueue,
   parseProvisionCatalogue,
@@ -149,7 +150,12 @@ export async function runWorkerOnce(): Promise<void> {
         [resolve(directory), resolve(registryDirectory)].includes(resolve(progressDirectory)))
     )
       throw Error('Use a separate absolute public progress directory');
-    const queue = catalogueUrl ? new ProvisionQueue(join(directory, 'provision-v2')) : undefined;
+    // Demand creation is the product default. Historical bulk creation requires an
+    // explicit operator mode; its signed transactions and lifecycle remain intact.
+    const queue =
+      catalogueUrl && process.env.STREAK_DIRECT_PROVISION_MODE === 'bulk-v2'
+        ? new ProvisionQueue(join(directory, 'provision-v2'))
+        : undefined;
     let catalogueReady = false;
     if (queue) {
       try {
@@ -164,13 +170,21 @@ export async function runWorkerOnce(): Promise<void> {
       }
     }
     const records = new Map(registry.all().map((record) => [record.id, record]));
+    const conflictState = await canonicalSponsorConflicts(client, journal.directory);
+    for (const [id, record] of records)
+      if (conflictState.resolved.has(record.creationTxHash)) records.delete(id);
     const files = readdirSync(directory).filter(
       (file) => OPERATION_FILE.test(file) && file.startsWith('create-'),
     );
-    if (files.length > 512) throw Error('Worker creation journal exceeds both generation bounds');
+    if (files.length > 1536)
+      throw Error('Worker creation journal exceeds its reviewed operation bound');
     for (const file of files) {
       const creation = journal.load(file.slice(0, -5));
-      if (creation && !records.has(creation.descriptor.id))
+      if (
+        creation &&
+        !conflictState.resolved.has(creation.transactionHash) &&
+        !records.has(creation.descriptor.id)
+      )
         records.set(creation.descriptor.id, creation.descriptor);
     }
     const checkpointFile = join(directory, 'worker-checkpoints.json');
@@ -220,7 +234,7 @@ export async function runWorkerOnce(): Promise<void> {
       async inspect(record) {
         for (const action of ['close', 'report'] as const) {
           const operation = journal.load(
-            operationKey(action, record.fixtureId, record.type.codeHash),
+            operationKey(action, record.fixtureId, record.type.codeHash, record.creationTxHash),
           );
           if (!operation) continue;
           const state = await reconcileOperation(client, operation);

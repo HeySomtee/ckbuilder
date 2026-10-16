@@ -7,7 +7,11 @@ import type { Draft, DraftStore } from './draft';
 import { useNow } from '../../lib/use-now';
 import { TeamBadge } from '../../components/team-badge';
 import { createGenieMotion } from '../../lib/genie-motion';
-import { useDirectCatalogue, useProvisioningAvailability } from '../direct/availability';
+import {
+  useDirectCatalogue,
+  useProvisioningAvailability,
+  useDemandAvailability,
+} from '../direct/availability';
 import { acceptsPayment, preparationMessage } from '../direct/availability-api';
 
 export function PredictionSlip({
@@ -39,10 +43,16 @@ export function PredictionSlip({
   const [motion] = useState(createGenieMotion);
   const now = useNow(open);
   const catalogue = useDirectCatalogue(open);
+  const demand = useDemandAvailability(
+    draft.picks.map((pick) => pick.matchId),
+    open,
+  );
   const provisioning = useProvisioningAvailability(open && draft.picks.length > 0);
   const availableFor = (matchId: string) =>
-    !catalogue.isError &&
-    catalogue.data?.some((row) => row.fixtureId === matchId && acceptsPayment(row, now));
+    (!catalogue.isError &&
+      catalogue.data?.some((row) => row.fixtureId === matchId && acceptsPayment(row, now))) ||
+    (!demand.isError &&
+      demand.data?.some((row) => row.fixtureId === matchId && acceptsPayment(row, now)));
   function pay(marketId: string) {
     if (snapshot.blocked || snapshot.conflict) return;
     dismiss();
@@ -453,7 +463,7 @@ export function PredictionSlip({
                       : catalogue.isPending
                         ? 'Checking payment availability...'
                         : availableFor(pick.matchId)
-                          ? 'Funded contract. Wallet review checks remaining space and time. Minimum 100 tCKB, plus 321 tCKB recoverable storage and a network fee.'
+                          ? 'Payment is available. Streak covers setup for new markets. Wallet review shows your stake, 321 tCKB recoverable storage and the exact network fee.'
                           : preparationMessage(
                               provisioning.isError ? null : provisioning.data,
                               pick.matchId,

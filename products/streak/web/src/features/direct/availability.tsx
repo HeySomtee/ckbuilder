@@ -5,7 +5,22 @@ import {
   acceptsPayment,
   getMarketAvailability,
   getProvisioningAvailability,
+  getDemandAvailability,
 } from './availability-api';
+
+export function useDemandAvailability(fixtureIds: readonly string[], enabled = true) {
+  const ids = [...new Set(fixtureIds)]
+    .filter((id) => /^api-football-[1-9]\d{0,14}$/.test(id))
+    .sort();
+  return useQuery({
+    queryKey: ['direct-demand-availability', ...ids],
+    queryFn: ({ signal }) => getDemandAvailability(ids, signal),
+    enabled: enabled && ids.length > 0,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
 
 export function useProvisioningAvailability(enabled = true) {
   return useQuery({
@@ -44,10 +59,10 @@ export function AvailableMarkets({ onNavigate }: { onNavigate?: () => void }) {
           {catalogue.isError
             ? 'Payment availability could not be refreshed. Try again before choosing a match.'
             : catalogue.isPending
-              ? 'Checking funded markets...'
+              ? 'Checking available predictions...'
               : available.length
-                ? 'These matches have funded contracts. Pick a side, then continue to payment. Wallet review checks remaining space and time.'
-                : 'No funded markets are accepting predictions right now. You can still save picks for later.'}
+                ? 'Pick a side, then continue to payment. Streak covers market setup when your first prediction opens a new market. Wallet review checks availability and every amount.'
+                : 'Open a fixture below to check first-prediction sponsorship. Streak covers setup for eligible new markets; wallet review confirms availability.'}
         </p>
       </div>
       {catalogue.isError ? (

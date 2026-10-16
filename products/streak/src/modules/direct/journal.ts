@@ -24,18 +24,24 @@ import {
   type DirectProtocolConfig,
   PUBLIC_DIRECT_CONFIG,
   LEGACY_DIRECT_CONFIG,
+  directGeneration,
 } from './registry';
 
 export type OperatorAction = 'create' | 'report' | 'close';
-export const OPERATION_FILE = /^(create|report|close)-(?:v2-)?api-football-[1-9][0-9]{0,14}\.json$/;
+export const OPERATION_FILE =
+  /^(?:(?:create|report|close)-(?:v[23]-)?api-football-[1-9][0-9]{0,14}|(?:create|report|close)-v3-api-football-[1-9][0-9]{0,14}-[0-9a-f]{64})\.json$/;
 export function operationKey(
   action: OperatorAction,
   fixtureId: string,
   protocolHash: string = PUBLIC_DIRECT_CONFIG.protocolHash,
+  creationHash?: string,
 ): string {
   if (!/^api-football-[1-9][0-9]{0,14}$/.test(fixtureId) || !/^0x[0-9a-f]{64}$/.test(protocolHash))
     throw Error('Unsupported operator operation identity');
-  return `${action}-${protocolHash === LEGACY_DIRECT_CONFIG.protocolHash ? '' : 'v2-'}${fixtureId}`;
+  const base = `${action}-${directGeneration(protocolHash)}${fixtureId}`;
+  return directGeneration(protocolHash) === 'v3-' && creationHash
+    ? `${base}-${hash32(creationHash, 'creation transaction hash').slice(2)}`
+    : base;
 }
 export interface SignedOperation {
   version: 1;
@@ -84,7 +90,12 @@ export class OperatorJournal {
     const descriptor = validateRecord(row.descriptor, this.config);
     if (
       operationId !==
-      operationKey(row.action as OperatorAction, descriptor.fixtureId, descriptor.type.codeHash)
+      operationKey(
+        row.action as OperatorAction,
+        descriptor.fixtureId,
+        descriptor.type.codeHash,
+        descriptor.creationTxHash,
+      )
     )
       throw Error('Journal operation generation does not match its descriptor');
     if (descriptor.fixtureId !== row.fixtureId)
@@ -116,7 +127,12 @@ export class OperatorJournal {
     signed: ccc.Transaction,
     now = Date.now(),
   ): SignedOperation {
-    const operationId = operationKey(action, descriptor.fixtureId, descriptor.type.codeHash);
+    const operationId = operationKey(
+      action,
+      descriptor.fixtureId,
+      descriptor.type.codeHash,
+      descriptor.creationTxHash,
+    );
     const existing = this.load(operationId);
     if (existing) {
       if (existing.signedTransaction !== ccc.hexFrom(signed.toBytes()))

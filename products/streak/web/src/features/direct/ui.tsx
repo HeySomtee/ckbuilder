@@ -5,6 +5,9 @@ import { ccc } from '@ckb-ccc/core';
 import { getDirectMarkets } from './api';
 import { DirectClient } from './client';
 import type { Review } from './client';
+import { SponsoredClient } from './sponsored-client';
+import { getDemandFixtures, sponsorTransport } from './sponsored-api';
+import { SponsoredCheckout, SponsoredTransaction } from './sponsored-ui';
 import type { JournalRecord } from './journal';
 import { MANIFEST, MIN_PRINCIPAL } from './protocol';
 import type { Descriptor, Outcome, Point } from './protocol';
@@ -43,6 +46,7 @@ const message = (error: unknown) =>
 
 interface Connection {
   client: DirectClient;
+  sponsored: SponsoredClient;
   address: string;
   ownerHash: string;
 }
@@ -194,7 +198,14 @@ function MarketPositions({
   working: boolean;
 }) {
   const snapshot = useQuery({
-    queryKey: ['direct-private', connection.ownerHash, 'positions', descriptor.type.args],
+    queryKey: [
+      'direct-private',
+      connection.ownerHash,
+      'positions',
+      descriptor.type.codeHash,
+      descriptor.type.args,
+      descriptor.creationTxHash,
+    ],
     queryFn: () => connection.client.discover(descriptor),
     retry: false,
     staleTime: 30_000,
@@ -307,7 +318,9 @@ export default function DirectPage({
       await client.balance();
       await client.history();
       await assertActiveWallet(activeWallet);
-      return { client, address, ownerHash: lock.hash() };
+      const sponsored = new SponsoredClient(signer, sponsorTransport);
+      await sponsored.history();
+      return { client, sponsored, address, ownerHash: lock.hash() };
     },
     retry: false,
     staleTime: Infinity,
@@ -320,6 +333,7 @@ export default function DirectPage({
   const [amount, setAmount] = useState(draftPick?.amountCkb ?? '100');
   const [review, setReview] = useState<Review | null>(null);
   const [notice, setNotice] = useState('');
+  const [sponsoredBusy, setSponsoredBusy] = useState(false);
   const [visibleMarkets, setVisibleMarkets] = useState(4);
   const [visibleTransactions, setVisibleTransactions] = useState(8);
   const now = useNow(true);
@@ -348,7 +362,18 @@ export default function DirectPage({
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
-  const descriptor = catalogue.data?.find((row) => row.fixtureId === detail.data?.market.matchId);
+  const descriptor = catalogue.data?.find(
+    (row) => row.fixtureId === detail.data?.market.matchId && row.entryEnabled,
+  );
+  const demand = useQuery({
+    queryKey: ['direct-demand', detail.data?.market.matchId],
+    enabled: !!detail.data?.market.matchId && !descriptor,
+    queryFn: ({ signal }) => getDemandFixtures(signal, detail.data!.market.matchId),
+    retry: false,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
+  });
+  const demandFixture = demand.data?.[0];
   const history = useQuery({
     queryKey: ['direct-private', connection?.ownerHash, 'history'],
     enabled: !!connection,
@@ -364,6 +389,13 @@ export default function DirectPage({
     staleTime: 15_000,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
+  });
+  const sponsoredHistory = useQuery({
+    queryKey: ['direct-private', connection?.ownerHash, 'sponsored-history'],
+    enabled: !!connection,
+    queryFn: () => connection!.sponsored.history(),
+    retry: false,
+    staleTime: 5_000,
   });
   const connect = useMutation({
     mutationFn: chooseWallet,
@@ -447,12 +479,17 @@ export default function DirectPage({
     },
   });
   const savedDescriptors = new Map<string, Descriptor>();
+  const definitionKey = (row: Descriptor) =>
+    `${row.type.codeHash}:${row.type.args}:${row.creationTxHash}`;
   for (const row of history.data ?? [])
-    savedDescriptors.set(row.descriptor.type.args, row.descriptor);
-  if (descriptor) savedDescriptors.set(descriptor.type.args, descriptor);
+    savedDescriptors.set(definitionKey(row.descriptor), row.descriptor);
+  for (const row of sponsoredHistory.data ?? [])
+    if (row.status === 'committed' || row.finalSignedBytes)
+      savedDescriptors.set(definitionKey(row.descriptor), row.descriptor);
+  if (descriptor) savedDescriptors.set(definitionKey(descriptor), descriptor);
   // Catalogue discovery also restores positions when this browser has no transaction history.
-  for (const row of catalogue.data ?? []) savedDescriptors.set(row.type.args, row);
-  const working = prepare.isPending || submit.isPending;
+  for (const row of catalogue.data ?? []) savedDescriptors.set(definitionKey(row), row);
+  const working = prepare.isPending || submit.isPending || sponsoredBusy;
   const principal = amountShannons(amount);
   const reviewExpired = !!review && now >= review.expiresAt;
   const error = linkedWallet.error ?? connect.error ?? prepare.error ?? submit.error;
@@ -466,6 +503,7 @@ export default function DirectPage({
       ownerHash: connection.ownerHash,
       markets: Array.from(savedDescriptors.values()),
       records: history.data,
+      sponsoredRecords: sponsoredHistory.data ?? [],
     };
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }),
@@ -579,11 +617,28 @@ export default function DirectPage({
                   Contract catalogue unavailable. Existing saved claims remain recoverable.{' '}
                   <button onClick={() => void catalogue.refetch()}>Retry catalogue</button>
                 </div>
+              ) : !descriptor && demandFixture ? (
+                <SponsoredCheckout
+                  key={`${demandFixture.fixtureId}:${activeWallet?.revision ?? 0}`}
+                  fixture={demandFixture}
+                  client={sponsoredHistory.isError ? undefined : connection?.sponsored}
+                  signedIn={!!account}
+                  draftPick={draftPick}
+                  onBusy={setSponsoredBusy}
+                  refresh={refresh}
+                />
               ) : !descriptor ? (
                 <p className="notice">
-                  {catalogue.isPending
+                  {catalogue.isPending || demand.isFetching
                     ? 'Checking contract availability...'
-                    : 'This fixture does not have a funded testnet contract yet. Your saved slip is unchanged.'}
+                    : demand.isError
+                      ? 'Market sponsorship is unavailable. Your saved slip is unchanged.'
+                      : 'This fixture is not available for payment yet. Your saved slip is unchanged.'}
+                  {demand.isError && (
+                    <button className="quiet" onClick={() => void demand.refetch()}>
+                      Retry sponsorship
+                    </button>
+                  )}
                 </p>
               ) : (
                 <>
@@ -636,6 +691,7 @@ export default function DirectPage({
                       principal === null ||
                       principal < MIN_PRINCIPAL ||
                       history.isError ||
+                      sponsoredHistory.isError ||
                       catalogue.isError
                     }
                     onClick={() => prepare.mutate(undefined)}
@@ -775,7 +831,12 @@ export default function DirectPage({
                 {history.error.message} New signing is paused.
               </p>
             )}
-            {history.data?.length === 0 && (
+            {sponsoredHistory.isError && (
+              <p className="notice error" role="alert">
+                {sponsoredHistory.error.message} New signing is paused.
+              </p>
+            )}
+            {history.data?.length === 0 && sponsoredHistory.data?.length === 0 && (
               <p>No saved transactions for this wallet on this device.</p>
             )}
             {history.data
@@ -790,6 +851,19 @@ export default function DirectPage({
                   refresh={refresh}
                 />
               ))}
+            {sponsoredHistory.data
+              ?.slice()
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .slice(0, visibleTransactions)
+              .map((record) => (
+                <SponsoredTransaction
+                  key={record.hash}
+                  record={record}
+                  client={connection.sponsored}
+                  refresh={refresh}
+                  working={working}
+                />
+              ))}
             {(history.data?.length ?? 0) > visibleTransactions && (
               <button
                 className="quiet"
@@ -802,8 +876,9 @@ export default function DirectPage({
               Download recovery backup
             </button>
             <small>
-              Contains public transaction data and market definitions. Keep it to recover through
-              the standalone tool if this website is unavailable.
+              Contains public transaction data, market definitions and saved signatures. Confirmed
+              positions can be claimed with the standalone tool. First predictions still awaiting
+              Streak's signature resume from this browser's saved activity.
             </small>
           </section>
           <section className="glass direct-positions" aria-label="Contract positions and claims">
@@ -817,7 +892,7 @@ export default function DirectPage({
               .slice(0, visibleMarkets)
               .map((row) => (
                 <MarketPositions
-                  key={row.type.args}
+                  key={definitionKey(row)}
                   descriptor={row}
                   connection={connection}
                   working={working}

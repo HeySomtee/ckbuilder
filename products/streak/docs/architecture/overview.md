@@ -2,11 +2,13 @@
 
 Approved direction: [ADR 0001](../decisions/0001-approved-foundation.md). Detailed source inspection: [architecture proposal](../../design/season-preview/ARCHITECTURE-PROPOSAL.md). This document separates implementation from planned work.
 
+The owner subsequently selected [sponsored creation with the first prediction](sponsored-creation.md). It creates the market cells and first pending position atomically, with Streak supplying reserves and the bettor authorizing only their own contribution. A separate operator co-signs after verifying the user's signature. V3 is deployed and the local flow passed the full 42-step gate. Bulk provisioning is paused and existing v2 markets remain available. The API never loads the sponsor signing key. Canonical selection preserves every immutable creation descriptor when a verified reorganisation changes the active market.
+
 The 16 October wallet correction introduces a separately deployed product contract in `contracts/direct-v2`. It accepts authorized lock arguments up to 59 bytes, including the 22-byte OmniLock format used by EVM wallets. Historical contracts, terms, positions and exact signed recovery records retain their original code hashes. The wire and journal schema remains `testnet-v1`; the pinned code hash identifies the contract generation. Fee, storage, payout and timing rules are unchanged.
 
 Sign-in, Wallet and checkout share one explicitly selected in-memory signer. Provider replacement, account changes and successful logout invalidate it and account-bound reviews. A page reload requires reconnection, while server sessions and saved transaction recovery remain separate. Ordinary fixture browsing does not import the wallet SDK.
 
-The separate operator consumes a bounded real-provider schedule, queues every eligible fixture and funds markets serially after confirmation. It owns private signed jobs; the API reads only immutable descriptors and a redacted progress file. Current and legacy descriptors remain discoverable together, with legacy entry disabled. Per-pick preparation status cannot authorize funds; checkout rechecks actual live cells. See the [wallet and provisioning correction](../delivery/wallet-provisioning-correction.md).
+The earlier bulk operator can consume a bounded real-provider schedule and fund markets serially. That mode is now paused in favor of first-bet sponsorship. The lifecycle worker and sponsor share durable funding coordination. They own private signed jobs; the API exposes validated public descriptors and bounded status. Current and legacy descriptors remain discoverable together, with legacy entry disabled. Per-pick preparation status cannot authorize funds; checkout rechecks actual live cells. The [wallet and provisioning correction](../delivery/wallet-provisioning-correction.md) records the preceding migration.
 
 ## Four distinct systems
 
