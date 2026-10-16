@@ -210,6 +210,19 @@ button:hover:not(:disabled),
 .wordmark .dot {
   color: var(--coral);
 }
+.wordmark > img {
+  margin-right: 9px;
+  flex: none;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .eyebrow {
   font-size: 10px;
   font-weight: 650;
@@ -446,7 +459,6 @@ h1 {
   border: 1px solid #c1f1d91f;
   background: var(--glass-face), var(--glass-tint);
   box-shadow: var(--edge-shadow);
-  backdrop-filter: var(--glass-blur);
 }
 .glass::before {
   content: '';
@@ -474,15 +486,17 @@ h1 {
   gap: 18px;
 }
 .market-card {
-  padding: 24px 22px 0;
+  padding: 22px;
   overflow: hidden;
   transition:
     background 180ms var(--ease),
-    border-color 180ms;
+    border-color 180ms,
+    transform 180ms var(--ease);
 }
 .market-card:hover {
   border-color: #c1f1d940;
   background-color: #20312977;
+  transform: translateY(-2px);
 }
 .card-top {
   display: flex;
@@ -514,8 +528,9 @@ h1 {
   grid-template-columns: 1fr 24px 1fr;
   align-items: center;
   gap: 6px;
-  margin: 24px 0;
+  margin: 22px 0;
   text-align: center;
+  border-radius: 12px;
 }
 .teams h2 {
   font-size: 13px;
@@ -547,9 +562,9 @@ h1 {
   justify-content: space-between;
   gap: 20px;
   align-items: center;
-  border-block: 1px solid var(--line);
-  padding: 16px 0;
-  margin-bottom: 20px;
+  padding: 0 0 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
 }
 .week-navigation {
   display: flex;
@@ -651,12 +666,46 @@ h1 {
   background: #ffffff02;
   text-align: center;
 }
+.percentages > button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  min-height: 55px;
+  padding: 8px 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff04;
+  color: var(--text);
+  text-align: center;
+}
+.percentages > button:hover:not(:disabled),
+.percentages > button[aria-pressed='true'] {
+  border-color: #ff986f80;
+  background: #ff986f15;
+  color: var(--coral);
+}
+.percentages .pick-check {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--coral);
+  border: 2px solid var(--surface);
+  color: var(--canvas);
+  font: 700 9px var(--font);
+}
 .percentages span {
   color: var(--muted);
   font-size: 10px;
 }
 .percentages strong {
   font-size: 14px;
+  font-weight: 600;
 }
 .pool-bar {
   display: flex;
@@ -682,7 +731,7 @@ h1 {
   gap: 8px;
   font-size: 10px;
   color: var(--muted);
-  margin: 12px 0 20px;
+  margin: 10px 0 0;
   overflow-wrap: anywhere;
 }
 .market-link {
@@ -883,7 +932,7 @@ footer {
     gap: 16px;
   }
   .market-card {
-    padding: 22px 22px 0;
+    padding: 22px;
   }
   .teams {
     margin: 24px 0 16px;
@@ -960,6 +1009,9 @@ footer {
   button:active:not(:disabled) {
     transform: none;
   }
+  .market-card:hover {
+    transform: none;
+  }
 }
 @media (prefers-reduced-transparency: reduce) {
   .glass,
@@ -984,6 +1036,9 @@ footer {
     border: 1px solid CanvasText;
   }
   .filters button[aria-pressed='true'] {
+    outline: 2px solid Highlight;
+  }
+  .percentages > button[aria-pressed='true'] {
     outline: 2px solid Highlight;
   }
   .crest {

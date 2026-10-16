@@ -1,6 +1,13 @@
 /* Real loopback API and built UI. Synthetic fixtures, no wallet or external requests. */
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
 const path = require('node:path');
+const { observeReads, accountReadFinished } = require('./browser-readiness.cjs');
+
+async function restoredMarketReady(page) {
+  await page.getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true }).waitFor();
+  await accountReadFinished(page);
+}
 
 module.exports = async function predictionJourney({
   browser,
@@ -12,7 +19,11 @@ module.exports = async function predictionJourney({
   evidence,
   loopbackFetch,
 }) {
-  const ids = ['slip-one', 'slip-two'];
+  const ids = [
+    'slip-one',
+    'slip-two',
+    ...Array.from({ length: 6 }, (_, index) => `slip-${index + 3}`),
+  ];
   await update((db) => {
     db.matches = db.matches.filter((row) => !ids.includes(row.id));
     db.markets = db.markets.filter((row) => !ids.includes(row.matchId));
@@ -24,8 +35,14 @@ module.exports = async function predictionJourney({
         status: 'scheduled',
         stage: 'Synthetic test',
         competition: { id: 'test', name: 'Test Premier League' },
-        home: { name: index ? 'Liverpool' : 'Arsenal', code: index ? 'LIV' : 'ARS' },
-        away: { name: index ? 'Tottenham' : 'Chelsea', code: index ? 'TOT' : 'CHE' },
+        home: {
+          name: index > 1 ? `Home ${index + 1}` : index ? 'Liverpool' : 'Arsenal',
+          code: index > 1 ? `H${index + 1}` : index ? 'LIV' : 'ARS',
+        },
+        away: {
+          name: index > 1 ? `Away ${index + 1}` : index ? 'Tottenham' : 'Chelsea',
+          code: index > 1 ? `A${index + 1}` : index ? 'TOT' : 'CHE',
+        },
         oracle: { provider: 'worldcup', fixtureId: id },
       }),
     );
@@ -59,16 +76,37 @@ module.exports = async function predictionJourney({
     });
     await context.routeWebSocket('**/*', (socket) => socket.close());
     const page = await context.newPage();
-    page.on('pageerror', (error) => errors.push(error.message));
+    const reads = observeReads(page, base);
+    let phase = 'load weekend';
+    const requestTrace = reads.trace;
+    page.on('pageerror', (error) => {
+      errors.push(error.message);
+    });
     try {
-      await page.goto(base + '/season/');
+      await reads.goto(base + '/season/');
       await page.getByRole('button', { name: 'Next weekend', exact: true }).click();
       await page
         .getByRole('button', { name: 'Add Home for Arsenal vs Chelsea', exact: true })
         .click();
       await page
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Minimize slip', exact: true })
+        .click();
+      await page.getByRole('dialog').waitFor({ state: 'hidden' });
+      await page
         .getByRole('button', { name: 'Add Draw for Liverpool vs Tottenham', exact: true })
         .click();
+      assert.equal(
+        await page.getByRole('dialog').count(),
+        0,
+        'A later pick keeps match browsing available.',
+      );
+      await page.locator('.prediction-dock').click();
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Minimize slip', exact: true })
+        .click();
+      await page.getByRole('dialog').waitFor({ state: 'hidden' });
       const card = page
         .locator('.market-card')
         .filter({ has: page.getByRole('heading', { name: 'Arsenal', exact: true }) });
@@ -76,6 +114,23 @@ module.exports = async function predictionJourney({
       await page.getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true }).waitFor();
       assert.equal(new URL(page.url()).searchParams.get('market'), 'm-slip-one');
       await page.locator('.detail-outcomes').getByRole('button').nth(2).click();
+      assert.equal(
+        await page.getByRole('dialog').count(),
+        0,
+        'Replacing a pick retains the current match context.',
+      );
+      await page.locator('.detail-outcomes').getByRole('button').nth(2).click();
+      await page.getByRole('dialog').getByText('Chelsea to win', { exact: true }).waitFor();
+      assert.equal(
+        await page.getByRole('dialog').locator('.slip-pick').count(),
+        2,
+        'Selecting the same outcome reopens the existing pick without duplicating it.',
+      );
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Minimize slip', exact: true })
+        .click();
+      await page.getByRole('dialog').waitFor({ state: 'hidden' });
       await page.screenshot({
         path: path.join(evidence, `market-detail-${name}-${width}.png`),
         fullPage: true,
@@ -83,6 +138,14 @@ module.exports = async function predictionJourney({
       await page.locator('.prediction-dock').click();
       const dialog = page.getByRole('dialog');
       await dialog.waitFor();
+      assert.equal(
+        await dialog.getByRole('button', { name: 'Close slip', exact: true }).count(),
+        0,
+      );
+      assert.equal(
+        await dialog.getByRole('button', { name: 'Minimize slip', exact: true }).count(),
+        1,
+      );
       assert.equal(await dialog.locator('.slip-pick').count(), 2);
       await dialog.getByText('Chelsea to win', { exact: true }).waitFor();
       const stake = dialog.getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' });
@@ -100,9 +163,16 @@ module.exports = async function predictionJourney({
       await dialog.getByRole('button', { name: 'Minimize slip', exact: true }).focus();
       await page.keyboard.press('Enter');
       await dialog.waitFor({ state: 'hidden' });
+      assert.equal(
+        await page.locator('.genie-layer').count(),
+        0,
+        'Reduced motion bypasses Genie rendering.',
+      );
       await page.waitForFunction(() => document.activeElement.className === 'prediction-dock');
       assert.equal(await page.evaluate(() => document.activeElement.className), 'prediction-dock');
-      await page.reload();
+      phase = 'restore saved draft';
+      await reads.reload();
+      await restoredMarketReady(page);
       await page.locator('.prediction-dock').click();
       await dialog.getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' }).waitFor();
       assert.equal(await stake.inputValue(), '10.00000001');
@@ -207,7 +277,8 @@ module.exports = async function predictionJourney({
       });
       // A second tab cannot silently overwrite an open draft.
       const other = await context.newPage();
-      await other.goto(base + '/season/?market=m-slip-one');
+      const otherReads = observeReads(other, base);
+      await otherReads.goto(base + '/season/?market=m-slip-one');
       await other.locator('.detail-outcomes').getByRole('button').first().click();
       await dialog
         .getByText('Another tab changed this slip. Choose which version to keep.', { exact: true })
@@ -215,6 +286,8 @@ module.exports = async function predictionJourney({
       assert.equal(await stake.isDisabled(), true);
       await dialog.getByRole('button', { name: 'Keep this slip', exact: true }).click();
       assert.equal(await stake.inputValue(), '20');
+      await accountReadFinished(other);
+      await otherReads.settled();
       await other.close();
       await dialog.getByRole('button', { name: 'Clear slip', exact: true }).click();
       await dialog.getByRole('button', { name: 'Keep predictions', exact: true }).click();
@@ -224,10 +297,17 @@ module.exports = async function predictionJourney({
       assert.equal(await dialog.locator('.slip-pick').count(), 0);
       await page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'hidden' });
-      await page.reload();
+      phase = 'restore cleared draft';
+      await reads.reload();
+      // Absence of the dock is meaningful only after React and both route
+      // reads have settled. Otherwise another reload aborts the initial reads
+      // before this test has observed the cleared draft at all.
+      await restoredMarketReady(page);
       assert.equal(await page.locator('.prediction-dock').count(), 0);
       await page.evaluate(() => localStorage.setItem('streak.predictionDraft.v1', '{broken'));
-      await page.reload();
+      phase = 'restore malformed draft';
+      await reads.reload();
+      await restoredMarketReady(page);
       await page.locator('.prediction-dock').click();
       await dialog.getByText(/The saved slip could not be restored/).waitFor();
       assert.equal(
@@ -236,21 +316,35 @@ module.exports = async function predictionJourney({
       );
       await dialog.getByRole('button', { name: 'Start a new slip', exact: true }).click();
       await dialog.getByRole('button', { name: 'Clear all predictions', exact: true }).click();
-      await dialog.getByRole('button', { name: 'Close slip', exact: true }).click();
-      await page.goto(base + '/season/?market=does-not-exist');
+      await dialog.getByRole('button', { name: 'Minimize slip', exact: true }).click();
+      phase = 'missing market recovery';
+      await reads.goto(base + '/season/?market=does-not-exist');
       await page.getByRole('heading', { name: 'This market could not be loaded' }).waitFor();
+      await accountReadFinished(page);
       await page.getByRole('button', { name: 'Back to markets', exact: true }).click();
       await page.getByRole('heading', { name: 'You know the game.' }).waitFor();
+      await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
+      await reads.settled();
       assert.deepEqual(errors, []);
       assert.deepEqual(writes, [], 'The draft journey never invokes a financial write.');
       assert.deepEqual(external, []);
+    } catch (error) {
+      await fs.writeFile(
+        path.join(evidence, `prediction-recovery-failure-${name}-${width}.json`),
+        JSON.stringify({ phase, errors, requestTrace }, null, 2),
+      );
+      await page.screenshot({
+        path: path.join(evidence, `prediction-recovery-failure-${name}-${width}.png`),
+      });
+      throw error;
     } finally {
       await context.close();
     }
   }
+  const motionGroups = await require('./prediction-motion.cjs')({ browser, base, name, evidence });
   await update((db) => {
     db.matches = db.matches.filter((row) => !ids.includes(row.id));
     db.markets = db.markets.filter((row) => !ids.includes(row.matchId));
   });
-  return 3;
+  return 3 + motionGroups;
 };

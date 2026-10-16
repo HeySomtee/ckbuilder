@@ -76,6 +76,8 @@ Review changed journeys at 320px, representative phone and desktop widths, short
 
 The preview's last full timing suite passed **56/58**, with two Windows headless mobile WebKit timing observations unresolved. Its earlier dedicated snapshot run passed **9/9 before the final slip tint**. Those results are retained, not silently reclassified as a production pass. See [the design evidence](../design/system.md#evidence-and-remaining-limits). Deterministic functional CI and separate timing/device profiling have different purposes. Production Genie readiness still needs real-device profiling and resolution or a documented immediate-transition fallback.
 
+Integrated Season coverage now includes `prediction-motion.cjs` through the browser lane. It inspects actual surface pixels and taper shape at 390 and 1440px in Chromium and WebKit, with two and eight picks. Cold preparation, edited amounts, rapid reversal, focus, route changes, resize, reduced motion and failed rendering must preserve the draft. Surface presence alone is not a passing animation test. Read [the correction report](ui-motion-correction.md) for scope and evidence.
+
 ## Commit and CI procedure
 
 1. Inspect the working tree and stage only intended files. Preserve unrelated changes. Ensure the candidate index is exactly what the verification will evaluate; the hook rejects a mismatch that could test one version and commit another.

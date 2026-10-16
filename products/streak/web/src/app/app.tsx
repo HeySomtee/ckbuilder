@@ -59,7 +59,14 @@ function MarketCard({
           minute: '2-digit',
         })}
       </time>
-      <div className="teams">
+      <a
+        className="teams"
+        href={market.available ? marketHref(market.id) : undefined}
+        aria-label={market.available ? 'View market' : undefined}
+        onClick={(event) => {
+          if (market.available) followMarket(event, market.id);
+        }}
+      >
         <div>
           <TeamBadge
             key={market.homeLogo}
@@ -79,7 +86,7 @@ function MarketCard({
           />
           <h2>{market.away}</h2>
         </div>
-      </div>
+      </a>
       {market.available ? (
         <>
           <div className="percentages" aria-label="Current pool percentages">
@@ -93,6 +100,11 @@ function MarketCard({
               >
                 <span>{labels[side]}</span>
                 <strong>{Math.round(market.prices[side] * 100)}%</strong>
+                {selected === side && (
+                  <i className="pick-check" aria-hidden="true">
+                    ✓
+                  </i>
+                )}
               </button>
             ))}
           </div>
@@ -105,13 +117,6 @@ function MarketCard({
             <span>{formatCkb(market.totalPoolCkb)} tCKB pooled</span>
             <span>{market.totalBets} predictions</span>
           </div>
-          <a
-            className="market-link"
-            href={marketHref(market.id)}
-            onClick={(event) => followMarket(event, market.id)}
-          >
-            View market <Icon name="arrow" />
-          </a>
         </>
       ) : (
         <div className="schedule-only">
@@ -141,13 +146,16 @@ export function App() {
       );
       return;
     }
+    const picks = draftStore.getSnapshot().draft.picks;
+    const existing = picks.find((pick) => pick.matchId === market.matchId);
+    const openSlip = picks.length === 0 || existing?.outcome === outcome;
     const added = draftStore.select(market.id, market.matchId, outcome);
     setSelectionNotice(
       added
-        ? 'Prediction added to your draft. Open the slip to review it.'
+        ? `Prediction added: ${market.home} vs ${market.away}. ${draftStore.getSnapshot().draft.picks.length} in your slip.`
         : 'This prediction could not be added. Open your slip for details.',
     );
-    if (!added) setSlipOpen(true);
+    if (openSlip || !added) setSlipOpen(true);
   }
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState<MarketSort>('featured');
@@ -228,7 +236,8 @@ export function App() {
       </a>
       <aside className="rail">
         <a href="/season/" className="wordmark">
-          <span>S</span>streak<span className="dot">.</span>
+          <img src="/mark.svg" alt="" width="34" height="34" />
+          streak<span className="dot">.</span>
         </a>
         <p className="eyebrow">YOUR TOUCHLINE</p>
         <nav aria-label="Main navigation">
@@ -270,7 +279,12 @@ export function App() {
         </div>
         <main id="main" tabIndex={-1}>
           {selectionNotice && (
-            <p className="selection-notice" role="status">
+            <p
+              className={
+                selectionNotice.startsWith('Prediction added') ? 'sr-only' : 'notice error'
+              }
+              role="status"
+            >
               {selectionNotice}
             </p>
           )}
@@ -288,7 +302,7 @@ export function App() {
               <div>
                 <p className="eyebrow">THE PREDICTION MARKETS</p>
                 <h1>You know the game.</h1>
-                <p>Find your fixture. Read the room. Make your call.</p>
+                <p>Choose a fixture. Make your call. Follow it to the final whistle.</p>
               </div>
               <span className="pilot-badge">Early access</span>
             </div>

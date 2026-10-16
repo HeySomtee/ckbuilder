@@ -8,7 +8,7 @@ Users can open `/season/?market=<id>` from a market card, inspect API teams and 
 
 The floating slip holds up to eight independent predictions. Selecting another outcome for the same fixture replaces that outcome while retaining the amount. Amounts are decimal strings and totals use integer shannons, including all eight decimal places. Invalid amounts remain visible and prevent review. The initial editable amount is 100 tCKB, not an enforced minimum. Current ledger limits and fees come from the server; contract-lab limits are not used here.
 
-Minimize, Close and Escape retain the draft. Clear requires explicit confirmation. Reload restores only draft inputs, never a reviewed or submitted status. Corrupt saved data is retained until the user chooses to discard it. Storage denial or quota failure keeps an editable in-memory draft with a warning. Other-tab changes require an explicit choice before ordinary edits continue. Local storage is a convenience for unsent input, not a transactional cross-tab database or a record of entitlement.
+Minimize and Escape retain the draft. The owner removed the duplicate Close control on 16 October. Clear requires explicit confirmation. Reload restores only draft inputs, never a reviewed or submitted status. Corrupt saved data is retained until the user chooses to discard it. Storage denial or quota failure keeps an editable in-memory draft with a warning. Other-tab changes require an explicit choice before ordinary edits continue. Local storage is a convenience for unsent input, not a transactional cross-tab database or a record of entitlement.
 
 The review button sends every line together. No line is silently omitted. It checks provider fixture identity, duplicate upstream fixtures, market availability, kickoff and market cutoffs, limits and exact amounts against one current snapshot. Errors remain attached to their lines. Public responses contain no account positions or wallet data.
 
@@ -25,6 +25,8 @@ The existing application is still a custodial ledger. Its fees come from the los
 One public-detail request loads a market. Opening a slip can fetch at most eight unique public details, using the same TanStack Query cache as the detail screen. These queries have a fifteen-second freshness interval, one retry, and thirty-second polling while visible. Hidden slips do not poll; hidden browser tabs suppress interval refresh. One deliberate review uses one bounded POST with no automatic retry. Closing or editing cancels pending review work. The shared HTTP adapter supplies its timeout and cancellation behavior.
 
 Review accepts at most eight picks, 120-character identifiers and 32-character amount strings. Persisted drafts are versioned and capped at 20 KB. The existing request-body limit is 1 MB. Review still reads the application's working-set snapshot and builds lookup maps. This is not evidence of SQL scalability or a substitute for coordinated rate limits before rollout.
+
+The [visual and Genie correction](ui-motion-correction.md) restores the approved preview's compact market cards, split match layout, inset slip picks and mobile bottom sheet. The first pick opens the slip; later new picks update the dock so browsing can continue. The renderer only decorates minimize and restore; it cannot update a draft, submit a review or move funds.
 
 ## Verification and independent review
 

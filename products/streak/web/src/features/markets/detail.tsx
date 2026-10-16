@@ -55,133 +55,242 @@ export function MarketDetail({
     now < Date.parse(terms.kickoff) &&
     !detail.isError;
   const labels = { home: market.home, draw: 'Draw', away: market.away };
+  const marketState = accepting
+    ? 'Open for predictions'
+    : market.status === 'resolved'
+      ? 'Resolved'
+      : market.status === 'void'
+        ? 'Void'
+        : market.fixtureStatus === 'scheduled'
+          ? 'Locked'
+          : market.fixtureStatus;
+  const closesAt = new Date(Math.min(Date.parse(terms.closesAt), Date.parse(terms.kickoff)));
   return (
     <section className="market-detail" aria-label="Market detail">
-      <button className="quiet detail-back" onClick={onBack}>
-        ← Back to markets
-      </button>
+      <div className="detail-page-head">
+        <div>
+          <p className="eyebrow">{market.competition}</p>
+          <h1 ref={heading} tabIndex={-1}>
+            {market.home} vs {market.away}
+          </h1>
+          <p>The match, the crowd and your call.</p>
+        </div>
+        <button className="quiet detail-back" onClick={onBack}>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            aria-hidden="true"
+          >
+            <path d="M19 12H5m6-6-6 6 6 6" />
+          </svg>
+          Back to markets
+        </button>
+      </div>
       {detail.isError && (
         <div className="notice error" role="alert">
           The refresh failed. Review is unavailable until this market refreshes.{' '}
           <button onClick={() => void detail.refetch()}>Retry market</button>
         </div>
       )}
-      <div className="glass detail-match">
-        <div className="card-top">
-          <span>{market.competition}</span>
-          <span className="status">
-            {accepting
-              ? 'Open for predictions'
-              : market.fixtureStatus === 'scheduled'
-                ? 'Locked'
-                : market.fixtureStatus}
-          </span>
+      <div className="detail-layout">
+        <div className="detail-context">
+          <div className="glass detail-match">
+            <div className="detail-match-meta">
+              <span className={`detail-status ${accepting ? 'is-open' : ''}`}>
+                <i aria-hidden="true" />
+                {marketState}
+              </span>
+              <time dateTime={market.kickoff}>
+                {new Date(market.kickoff).toLocaleString('en-GB', {
+                  weekday: 'short',
+                  day: 'numeric',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </time>
+            </div>
+            <div className="detail-crests">
+              <div className="detail-team">
+                <TeamBadge
+                  key={market.homeLogo}
+                  logo={market.homeLogo}
+                  code={market.homeCode}
+                  side="home"
+                />
+                <strong>{market.home}</strong>
+              </div>
+              <div className="detail-versus">
+                <small>{market.fixtureStatus === 'scheduled' ? 'PRE-MATCH' : 'MATCH'}</small>
+                <span>vs</span>
+              </div>
+              <div className="detail-team">
+                <TeamBadge
+                  key={market.awayLogo}
+                  logo={market.awayLogo}
+                  code={market.awayCode}
+                  side="away"
+                />
+                <strong>{market.away}</strong>
+              </div>
+            </div>
+            <div className="detail-stats">
+              <div>
+                <span>Total pool</span>
+                <strong>{formatCkb(market.totalPoolCkb)} tCKB</strong>
+              </div>
+              <div>
+                <span>Predictions</span>
+                <strong>{market.totalBets}</strong>
+              </div>
+            </div>
+            <p className="detail-local-time">Kickoff shown in your local time.</p>
+          </div>
+          <section className="glass detail-pool">
+            <p className="eyebrow">THE CROWD'S CALL</p>
+            <h2>How the pool is leaning.</h2>
+            <p>Each share below represents stakes in the current pool.</p>
+            <div className="detail-pool-rows">
+              {outcomes.map((outcome) => (
+                <div className={`detail-pool-row ${outcome}`} key={outcome}>
+                  <div>
+                    <span>{labels[outcome]}</span>
+                    <strong>{Math.round(market.prices[outcome] * 100)}%</strong>
+                  </div>
+                  <div className="detail-pool-track" aria-hidden="true">
+                    <span style={{ width: `${market.prices[outcome] * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <small>Pool percentages are not fixed odds or guaranteed returns.</small>
+          </section>
         </div>
-        <p className="detail-kickoff">
-          <time dateTime={market.kickoff}>
-            {new Date(market.kickoff).toLocaleString('en-GB', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </time>{' '}
-          · Your local time
-        </p>
-        <h1 ref={heading} tabIndex={-1}>
-          {market.home} <span>vs</span> {market.away}
-        </h1>
-        <div className="detail-crests" aria-hidden="true">
-          <TeamBadge
-            key={market.homeLogo}
-            logo={market.homeLogo}
-            code={market.homeCode}
-            side="home"
-          />
-          <span>VS</span>
-          <TeamBadge
-            key={market.awayLogo}
-            logo={market.awayLogo}
-            code={market.awayCode}
-            side="away"
-          />
-        </div>
-        <h2>What’s your call?</h2>
-        <p className="muted">Choose one outcome. Each prediction settles independently.</p>
-        <div className="detail-outcomes">
-          {outcomes.map((outcome) => (
-            <button
-              key={outcome}
-              aria-pressed={selected === outcome}
-              disabled={!accepting}
-              onClick={() => onPick(market, outcome)}
-            >
-              <span>{labels[outcome]}</span>
-              <strong>{Math.round(market.prices[outcome] * 100)}%</strong>
-              <small>of the current pool</small>
-            </button>
-          ))}
-        </div>
-        {!accepting && (
-          <p className="notice">
-            This market is not accepting new predictions. You can still inspect its pool and rules.
+        <aside className="glass detail-rules">
+          <p className="eyebrow">WHAT'S YOUR CALL?</p>
+          <h2>Pick your side.</h2>
+          <p>Choose one outcome. Build your slip with independent predictions.</p>
+          <div className="detail-outcomes">
+            {outcomes.map((outcome) => (
+              <button
+                key={outcome}
+                aria-pressed={selected === outcome}
+                disabled={!accepting}
+                onClick={() => onPick(market, outcome)}
+              >
+                <span>{outcome === 'home' ? 'Home' : outcome === 'draw' ? 'Draw' : 'Away'}</span>
+                <strong>{Math.round(market.prices[outcome] * 100)}%</strong>
+                {selected === outcome && (
+                  <svg
+                    className="detail-selected"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    aria-hidden="true"
+                  >
+                    <path d="m4 8 3 3 5-6" />
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+          {!accepting && (
+            <p className="notice">
+              This market is not accepting new predictions. You can still inspect its pool and
+              rules.
+            </p>
+          )}
+          <dl className="detail-terms">
+            <div>
+              <dt>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="8" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+                Predictions close
+              </dt>
+              <dd>
+                <time dateTime={closesAt.toISOString()}>
+                  {closesAt.toLocaleString('en-GB', {
+                    day: 'numeric',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </time>{' '}
+                · Local time
+              </dd>
+            </div>
+            <div>
+              <dt>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  aria-hidden="true"
+                >
+                  <path d="M4 6h14a2 2 0 0 1 2 2v11H4V6Zm0 0 12-3v3M16 11h4v4h-4z" />
+                </svg>
+                Your stake
+              </dt>
+              <dd>
+                {displayShannons(terms.minimumShannons)} to {displayShannons(terms.maximumShannons)}{' '}
+                tCKB per prediction.
+              </dd>
+            </div>
+            <div>
+              <dt>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  aria-hidden="true"
+                >
+                  <path d="m12 3 8 3v5c0 5-8 10-8 10S4 16 4 11V6l8-3Z" />
+                  <path d="m8 11 3 3 5-5" />
+                </svg>
+                Pool fees
+              </dt>
+              <dd>
+                {terms.protocolFeeBps / 100}% protocol + {terms.creatorFeeBps / 100}% creator,
+                deducted from the losing pool.
+              </dd>
+            </div>
+          </dl>
+          <details className="detail-settlement">
+            <summary>
+              Settlement and fee rules <span aria-hidden="true">+</span>
+            </summary>
+            <p>
+              Winning positions share the losing pool after fees. These fees are not added to your
+              draft total. Void markets refund stakes under the existing ledger rules.
+            </p>
+            <p>
+              These markets currently use Streak's custodial treasury and account ledger. The
+              configured football reporter supplies results. Direct wallet-to-market payments are
+              being integrated separately.
+            </p>
+          </details>
+          <p className="detail-draft-note">
+            Custodial ledger market. Save and review your picks. This slip does not place bets or
+            move funds yet.
           </p>
-        )}
-        <div className="detail-stats">
-          <div>
-            <span>Total pool</span>
-            <strong>{formatCkb(market.totalPoolCkb)} tCKB</strong>
-          </div>
-          <div>
-            <span>Predictions</span>
-            <strong>{market.totalBets}</strong>
-          </div>
-        </div>
-        <p className="muted">Pool percentages are not fixed odds or guaranteed returns.</p>
+          <a className="market-link" href={`/index.html#market/${encodeURIComponent(market.id)}`}>
+            Open legacy market activity <span aria-hidden="true">↗</span>
+          </a>
+        </aside>
       </div>
-      <section className="glass detail-rules">
-        <p className="eyebrow">BEFORE YOU PICK</p>
-        <h2>Know the market.</h2>
-        <dl>
-          <div>
-            <dt>Current ledger stake limits</dt>
-            <dd>
-              {displayShannons(terms.minimumShannons)} to {displayShannons(terms.maximumShannons)}{' '}
-              tCKB
-            </dd>
-          </div>
-          <div>
-            <dt>Protocol / creator fees</dt>
-            <dd>
-              {terms.protocolFeeBps / 100}% / {terms.creatorFeeBps / 100}% of the losing pool
-            </dd>
-          </div>
-          <div>
-            <dt>Predictions close</dt>
-            <dd>
-              {new Date(
-                Math.min(Date.parse(terms.closesAt), Date.parse(terms.kickoff)),
-              ).toLocaleString('en-GB')}
-            </dd>
-          </div>
-        </dl>
-        <p>
-          Winning positions share the losing pool after fees. These fees are not an extra percentage
-          added to your draft total. Void markets refund stakes under the existing ledger rules.
-        </p>
-        <p>
-          These markets currently use Streak’s custodial treasury and account ledger. The configured
-          football reporter supplies results. Direct wallet-to-market payments are being integrated
-          separately.
-        </p>
-        <div className="notice">
-          The new slip saves and reviews predictions only. It does not place a bet or move funds.
-        </div>
-        <a className="market-link" href={`/index.html#market/${encodeURIComponent(market.id)}`}>
-          Open legacy market activity →
-        </a>
-      </section>
     </section>
   );
 }

@@ -5,6 +5,8 @@ import type { PublicMarket } from './api';
 import { DRAFT_KEY, displayShannons, totalShannons } from './draft';
 import type { Draft, DraftStore } from './draft';
 import { useNow } from '../../lib/use-now';
+import { TeamBadge } from '../../components/team-badge';
+import { createGenieMotion } from '../../lib/genie-motion';
 
 export function PredictionSlip({
   store,
@@ -27,8 +29,10 @@ export function PredictionSlip({
   const title = useRef<HTMLHeadingElement>(null);
   const dock = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
+  const focusFrame = useRef(0);
   const pending = useRef<AbortController | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [motion] = useState(createGenieMotion);
   const now = useNow(open);
   const details = useQueries({
     queries: draft.picks.map((pick) => ({
@@ -63,6 +67,7 @@ export function PredictionSlip({
     retry: false,
   });
   useEffect(() => {
+    motion.cancel();
     const unsubscribe = store.subscribe(() => pending.current?.abort());
     const storage = (event: StorageEvent) => {
       if (event.key === DRAFT_KEY || event.key === null) store.externalChange();
@@ -73,29 +78,45 @@ export function PredictionSlip({
       window.removeEventListener('storage', storage);
       pending.current?.abort();
     };
-  }, [store, accountKey]);
+  }, [store, accountKey, motion]);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(focusFrame.current);
+      motion.dispose();
+    },
+    [motion],
+  );
   useEffect(() => {
     const element = dialog.current;
     if (!element) return;
     if (open && !element.open) {
+      cancelAnimationFrame(focusFrame.current);
       opener.current =
         document.activeElement instanceof HTMLElement && document.activeElement !== document.body
           ? document.activeElement
           : dock.current;
       element.showModal();
-      title.current?.focus();
+      if (dock.current) motion.restore(element, dock.current);
+      title.current?.focus({ preventScroll: true });
     }
     if (!open && element.open) element.close();
-  }, [open]);
+  }, [open, motion]);
   function dismiss() {
+    cancelAnimationFrame(focusFrame.current);
     pending.current?.abort();
+    if (dialog.current && dock.current) motion.minimize(dialog.current, dock.current);
+    else motion.cancel();
     onDismiss();
     setConfirmClear(false);
-    requestAnimationFrame(() => {
-      const target = opener.current?.isConnected
-        ? opener.current
-        : (dock.current ?? document.getElementById('main'));
-      target?.focus();
+    focusFrame.current = requestAnimationFrame(() => {
+      focusFrame.current = 0;
+      if (!dialog.current || dialog.current.open) return;
+      const target = dock.current?.isConnected
+        ? dock.current
+        : opener.current?.isConnected
+          ? opener.current
+          : document.getElementById('main');
+      target?.focus({ preventScroll: true });
     });
   }
   const total = totalShannons(draft.picks);
@@ -122,6 +143,30 @@ export function PredictionSlip({
     review.isError &&
     review.variables?.stamp === stamp &&
     review.variables.accountKey === accountKey;
+  const surfaceVersion = details
+    .map((detail) => `${detail.dataUpdatedAt}:${detail.status}`)
+    .join(':');
+  useEffect(() => {
+    if (open && dialog.current) motion.warm(dialog.current);
+  }, [
+    open,
+    stamp,
+    surfaceVersion,
+    current,
+    currentError,
+    expired,
+    changedTerms,
+    unavailable,
+    closed,
+    confirmClear,
+    review.isPending,
+    snapshot.warning,
+    snapshot.saved,
+    snapshot.blocked,
+    snapshot.conflict,
+    accountKey,
+    motion,
+  ]);
   return (
     <>
       {(draft.picks.length > 0 || snapshot.blocked || snapshot.conflict || snapshot.warning) && (
@@ -133,41 +178,79 @@ export function PredictionSlip({
             onOpen();
           }}
         >
-          <span>{draft.picks.length || 'Your'} predictions</span>
-          <strong>{total === null ? 'Check amounts' : `${displayShannons(total)} tCKB`}</strong>
-          <span>Open slip ↑</span>
+          <span className="dock-symbol" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+              <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" />
+              <path d="M9 8h6M9 12h6" />
+            </svg>
+            <span className="dock-count">{draft.picks.length}</span>
+          </span>
+          <span className="dock-copy">
+            <strong>
+              {draft.picks.length || 'Your'}{' '}
+              {draft.picks.length === 1 ? 'prediction' : 'predictions'} in your slip
+            </strong>
+            <small>
+              {total === null ? 'Check amounts' : `${displayShannons(total)} tCKB`} ·{' '}
+              {snapshot.saved ? 'Saved draft' : 'Draft in this tab'}
+            </small>
+          </span>
+          <svg
+            className="dock-arrow"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            aria-hidden="true"
+          >
+            <path d="m6 14 6-6 6 6" />
+          </svg>
         </button>
       )}
       <dialog
         ref={dialog}
         className="prediction-slip"
-        aria-labelledby="slip-title"
+        aria-label="Prediction slip"
         onCancel={(event) => {
           event.preventDefault();
           dismiss();
         }}
       >
         <header className="slip-head">
-          <div>
-            <p className="eyebrow">YOUR NEXT CALL</p>
-            <h2 ref={title} id="slip-title" tabIndex={-1}>
-              Prediction slip <span>{draft.picks.length}/8</span>
-            </h2>
-          </div>
           <div className="slip-controls">
             <button onClick={dismiss} aria-label="Minimize slip">
-              − <span>Minimize</span>
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                aria-hidden="true"
+              >
+                <path d="M3 8h10" />
+              </svg>
+              <span>Minimize</span>
             </button>
-            <button onClick={dismiss} aria-label="Close slip">
-              × <span>Close</span>
-            </button>
+          </div>
+          <div>
+            <p className="eyebrow">YOUR PREDICTION SLIP</p>
+            <h2 ref={title} id="slip-title" tabIndex={-1}>
+              Make your calls.
+            </h2>
           </div>
         </header>
         <div className="slip-body">
-          <p className="slip-save-state">
-            {snapshot.saved ? 'Draft saved on this device.' : 'Draft in this tab.'} Nothing has been
-            placed.
-          </p>
+          <div className="slip-summary">
+            <span className="slip-count">{draft.picks.length}</span>
+            <div>
+              <strong>
+                {draft.picks.length === 1
+                  ? 'One pick to start.'
+                  : `${draft.picks.length} picks. Your call.`}
+              </strong>
+              <p>Every prediction settles independently.</p>
+            </div>
+            <span className="slip-capacity">{draft.picks.length}/8</span>
+          </div>
           {snapshot.warning && (
             <div className="notice" role="alert">
               <p>{snapshot.warning}</p>
@@ -189,74 +272,178 @@ export function PredictionSlip({
               <button onClick={dismiss}>Explore matches</button>
             </div>
           )}
-          {draft.picks.map((pick, index) => {
-            const query = details[index];
-            const detail = query.data;
-            const market = detail?.market;
-            const errors = current?.lines[index]?.errors ?? [];
-            const label = market ? `${market.home} vs ${market.away}` : `Market ${pick.marketId}`;
-            return (
-              <article key={pick.lineId} className="slip-pick">
-                <div className="slip-pick-heading">
-                  <div>
-                    <span className="eyebrow">{market?.competition ?? 'FIXTURE'}</span>
-                    <h3>{label}</h3>
+          <div className="slip-picks">
+            {draft.picks.map((pick, index) => {
+              const query = details[index];
+              const detail = query.data;
+              const market = detail?.market;
+              const errors = current?.lines[index]?.errors ?? [];
+              const label = market ? `${market.home} vs ${market.away}` : `Market ${pick.marketId}`;
+              const invalidAmount = totalShannons([pick]) === null;
+              const errorId = `pick-errors-${pick.lineId}`;
+              const allowedPresets = detail
+                ? ['100', '200', '500'].filter((amount) => {
+                    const shannons = BigInt(amount) * 100_000_000n;
+                    return (
+                      shannons >= BigInt(detail.terms.minimumShannons) &&
+                      shannons <= BigInt(detail.terms.maximumShannons)
+                    );
+                  })
+                : [];
+              return (
+                <article key={pick.lineId} className="slip-pick">
+                  <div className="slip-pick-heading">
+                    <div>
+                      <span className="eyebrow">
+                        {market ? (
+                          <time dateTime={market.kickoff}>
+                            {new Date(market.kickoff).toLocaleString('en-GB', {
+                              weekday: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </time>
+                        ) : (
+                          'FIXTURE'
+                        )}
+                      </span>
+                      <h3>{label}</h3>
+                    </div>
+                    <button
+                      disabled={snapshot.blocked || snapshot.conflict}
+                      aria-label={`Remove ${label}`}
+                      onClick={() => store.remove(pick.lineId)}
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        aria-hidden="true"
+                      >
+                        <path d="m4 4 8 8M12 4l-8 8" />
+                      </svg>
+                    </button>
                   </div>
-                  <button
-                    disabled={snapshot.blocked || snapshot.conflict}
-                    aria-label={`Remove ${label}`}
-                    onClick={() => store.remove(pick.lineId)}
-                  >
-                    ×
-                  </button>
-                </div>
-                {query.isPending && <p role="status">Loading fixture rules...</p>}
-                {query.isError && (
-                  <p className="pick-error">
-                    Fixture details are unavailable. Your pick is retained.{' '}
-                    <button onClick={() => void query.refetch()}>Retry fixture</button>
-                  </p>
-                )}
-                <p className="slip-choice">
-                  {pick.outcome === 'draw'
-                    ? 'Draw'
-                    : `${pick.outcome === 'home' ? (market?.home ?? 'Home') : (market?.away ?? 'Away')} to win`}
-                </p>
-                <label className="stake-input">
-                  Stake (tCKB)
-                  <input
-                    aria-label={`Stake for ${label}`}
-                    inputMode="decimal"
-                    autoComplete="off"
-                    maxLength={32}
-                    disabled={snapshot.blocked || snapshot.conflict}
-                    value={pick.amountCkb}
-                    aria-invalid={errors.length > 0 || totalShannons([pick]) === null}
-                    onChange={(event) => store.amount(pick.lineId, event.target.value)}
-                  />
-                </label>
-                {detail && (
-                  <small>
-                    Current ledger limits: {displayShannons(detail.terms.minimumShannons)} to{' '}
-                    {displayShannons(detail.terms.maximumShannons)} tCKB. Fees:{' '}
-                    {detail.terms.protocolFeeBps / 100}% protocol +{' '}
-                    {detail.terms.creatorFeeBps / 100}% creator, deducted from the losing pool.
-                  </small>
-                )}
-                {detail &&
-                  (!detail.accepting ||
-                    now >= Date.parse(detail.terms.closesAt) ||
-                    now >= Date.parse(detail.terms.kickoff)) && (
-                    <p className="pick-error">This market is no longer accepting predictions.</p>
+                  {query.isPending && <p role="status">Loading fixture rules...</p>}
+                  {query.isError && (
+                    <p className="pick-error">
+                      Fixture details are unavailable. Your pick is retained.{' '}
+                      <button onClick={() => void query.refetch()}>Retry fixture</button>
+                    </p>
                   )}
-                {errors.map((error) => (
-                  <p className="pick-error" key={error}>
-                    {error}
-                  </p>
-                ))}
-              </article>
-            );
-          })}
+                  <div className="slip-pick-choice">
+                    {market && (
+                      <span className="slip-crests" aria-hidden="true">
+                        <TeamBadge
+                          key={`home:${market.homeLogo ?? market.homeCode}`}
+                          logo={market.homeLogo}
+                          code={market.homeCode}
+                          side="home"
+                        />
+                        <TeamBadge
+                          key={`away:${market.awayLogo ?? market.awayCode}`}
+                          logo={market.awayLogo}
+                          code={market.awayCode}
+                          side="away"
+                        />
+                      </span>
+                    )}
+                    <span className="slip-choice">
+                      {pick.outcome === 'draw'
+                        ? 'Draw'
+                        : `${pick.outcome === 'home' ? (market?.home ?? 'Home') : (market?.away ?? 'Away')} to win`}
+                    </span>
+                  </div>
+                  <div className="slip-pick-stake">
+                    <label className="stake-label">
+                      <span>Your stake</span>
+                      <span className="stake-input">
+                        <input
+                          aria-label={`Stake for ${label}`}
+                          inputMode="decimal"
+                          autoComplete="off"
+                          maxLength={32}
+                          disabled={snapshot.blocked || snapshot.conflict}
+                          value={pick.amountCkb}
+                          aria-invalid={errors.length > 0 || invalidAmount}
+                          aria-describedby={errorId}
+                          onChange={(event) => store.amount(pick.lineId, event.target.value)}
+                        />
+                        <span aria-hidden="true">tCKB</span>
+                      </span>
+                    </label>
+                    {allowedPresets.length > 0 && (
+                      <div
+                        className="stake-presets"
+                        role="group"
+                        aria-label={`Stake shortcuts for ${label}`}
+                      >
+                        {allowedPresets.map((amount) => (
+                          <button
+                            key={amount}
+                            disabled={snapshot.blocked || snapshot.conflict}
+                            aria-pressed={pick.amountCkb === amount}
+                            aria-label={`Stake ${amount} tCKB on ${label}`}
+                            onClick={() => store.amount(pick.lineId, amount)}
+                          >
+                            {amount}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {detail && (
+                    <details className="slip-pick-terms">
+                      <summary>
+                        Limits &amp; pool fees{' '}
+                        <svg
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          aria-hidden="true"
+                        >
+                          <path d="m4 6 4 4 4-4" />
+                        </svg>
+                      </summary>
+                      <small>
+                        Ledger limits: {displayShannons(detail.terms.minimumShannons)} to{' '}
+                        {displayShannons(detail.terms.maximumShannons)} tCKB. Fees:{' '}
+                        {detail.terms.protocolFeeBps / 100}% protocol +{' '}
+                        {detail.terms.creatorFeeBps / 100}% creator, deducted from the losing pool.
+                      </small>
+                    </details>
+                  )}
+                  <div id={errorId}>
+                    {invalidAmount && (
+                      <p className="pick-error">Enter an amount with up to 8 decimal places.</p>
+                    )}
+                    {detail &&
+                      (!detail.accepting ||
+                        now >= Date.parse(detail.terms.closesAt) ||
+                        now >= Date.parse(detail.terms.kickoff)) && (
+                        <p className="pick-error">
+                          This market is no longer accepting predictions.
+                        </p>
+                      )}
+                    {errors.map((error) => (
+                      <p className="pick-error" key={error}>
+                        {error}
+                      </p>
+                    ))}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          {draft.picks.length > 0 && (
+            <button className="slip-add-more" onClick={dismiss}>
+              <span aria-hidden="true">+</span> Add more matches
+            </button>
+          )}
+        </div>
+        <footer className="slip-footer">
           {confirmClear ? (
             <div className="notice" role="alert">
               <p>Discard every prediction in this saved slip?</p>
@@ -274,20 +461,14 @@ export function PredictionSlip({
                 <button onClick={() => setConfirmClear(false)}>Keep predictions</button>
               </div>
             </div>
-          ) : (
-            draft.picks.length > 0 && (
-              <button className="quiet" onClick={() => setConfirmClear(true)}>
-                Clear slip
-              </button>
-            )
-          )}
-        </div>
-        <footer className="slip-footer">
+          ) : null}
           <div className="slip-total">
             <span>Stake subtotal</span>
             <strong>{total === null ? 'Check amounts' : `${displayShannons(total)} tCKB`}</strong>
           </div>
-          <p>Each prediction settles independently.</p>
+          <p className="slip-payment-note">
+            Review your picks before payment. No funds move in this step.
+          </p>
           {currentError && (
             <p className="pick-error" role="alert">
               Review could not finish. Your picks are retained. Try again.
@@ -320,11 +501,29 @@ export function PredictionSlip({
             onClick={() => review.mutate({ draft: structuredClone(draft), stamp, accountKey })}
           >
             {review.isPending ? 'Checking every prediction...' : 'Review predictions'}
+            {!review.isPending && (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14m-6-6 6 6-6 6" />
+              </svg>
+            )}
           </button>
-          <small>
-            Review only, no stake reserved. Payment, network fees and storage will be added in a
-            later step.
-          </small>
+          <small>No stake reserved. Payment, network fees and storage are not available yet.</small>
+          <div className="slip-footer-meta">
+            <span className="slip-save-state">
+              {snapshot.saved ? 'Saved on this device' : 'Draft in this tab'}
+            </span>
+            {draft.picks.length > 0 && (
+              <button className="clear-slip" onClick={() => setConfirmClear(true)}>
+                Clear slip
+              </button>
+            )}
+          </div>
         </footer>
       </dialog>
     </>

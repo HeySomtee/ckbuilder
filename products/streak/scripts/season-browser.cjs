@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { chromium, webkit } = require('playwright');
+const { observeReads, accountReadFinished } = require('./browser-readiness.cjs');
 
 async function main() {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'streak-season-'));
@@ -128,9 +129,10 @@ async function main() {
         });
         await context.routeWebSocket('**/*', (socket) => socket.close());
         const page = await context.newPage();
+        const reads = observeReads(page, base);
         const errors = [];
         page.on('pageerror', (error) => errors.push(error.message));
-        await page.goto(base + '/');
+        await reads.goto(base + '/');
         await page.getByRole('heading', { name: 'You know the game. Make it yours.' }).waitFor();
         await page.locator('.welcome-featured').getByText('Arsenal', { exact: true }).waitFor();
         if (width === 1440) {
@@ -223,10 +225,12 @@ async function main() {
         await question.focus();
         await page.keyboard.press('Enter');
         assert.equal(await question.evaluate((node) => node.parentElement.open), true);
+        await reads.settled();
+        reads.phase('landing wallet link');
         await page.getByRole('link', { name: 'Open Wallet', exact: true }).click();
         await page.waitForURL('**/index.html#wallet');
         await page.locator('#connect-top').waitFor();
-        await page.goto(base + '/welcome/');
+        await reads.goto(base + '/welcome/');
         await page.locator('.welcome-featured').getByText('Arsenal', { exact: true }).waitFor();
         if (width === 1440) {
           await page.setViewportSize({ width: 768, height: 600 });
@@ -249,10 +253,14 @@ async function main() {
           path: path.join(evidence, `landing-${name}-${width}.png`),
           fullPage: true,
         });
+        await reads.settled();
+        reads.phase('landing market link');
         await page.getByRole('link', { name: 'Explore the markets', exact: true }).click();
         await page.waitForURL('**/season/');
-        await page.goto(base + '/season/');
+        // Continue in the document reached by the CTA. Navigating to the same
+        // URL again here would abort its just-started market and account reads.
         await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
+        await accountReadFinished(page);
         await page.getByRole('link', { name: 'Skip to markets' }).focus();
         assert.equal(
           await page.evaluate(() => document.activeElement.textContent),
@@ -302,6 +310,12 @@ async function main() {
         await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
         await page.keyboard.press('Control+Home');
         await page.getByRole('link', { name: 'Skip to markets' }).focus();
+        await reads.settled();
+        if (errors.length || external.length)
+          fs.writeFileSync(
+            path.join(evidence, `season-read-failure-${name}-${width}.json`),
+            JSON.stringify({ errors, external, trace: reads.trace }, null, 2),
+          );
         assert.deepEqual(errors, []);
         assert.deepEqual(external, []);
         await context.close();
@@ -319,6 +333,7 @@ async function main() {
       );
       await liveContext.routeWebSocket('**/*', (socket) => socket.close());
       const livePage = await liveContext.newPage();
+      const liveReads = observeReads(livePage, base);
       const mondayNight = new Date(
         Date.UTC(friday.getFullYear(), friday.getMonth(), friday.getDate() + 3, 23, 58, 30),
       );
@@ -343,7 +358,7 @@ async function main() {
         return saved;
       });
       try {
-        await livePage.goto(base + '/');
+        await liveReads.goto(base + '/');
         await livePage
           .locator('.welcome-featured')
           .getByText('Barcelona', { exact: true })
@@ -352,12 +367,13 @@ async function main() {
           await livePage.locator('.welcome-fixture').first().textContent(),
           /Manchester United/,
         );
-        await livePage.goto(base + '/season/');
+        await liveReads.goto(base + '/season/');
         await livePage
           .locator('.market-card')
           .first()
           .getByRole('heading', { name: 'Barcelona', exact: true })
           .waitFor();
+        await accountReadFinished(livePage);
         await livePage.getByRole('combobox', { name: 'Sort by' }).selectOption('kickoff');
         await livePage
           .locator('.market-card')
@@ -388,7 +404,7 @@ async function main() {
         });
       }
       groups++;
-      await livePage.goto(base + '/');
+      await liveReads.goto(base + '/');
       await livePage.locator('.welcome-featured').getByText('Arsenal', { exact: true }).waitFor();
       await update((db) => {
         db.matches.find((match) => match.id === 'season-0').home.name = 'Updated Arsenal';
@@ -426,6 +442,7 @@ async function main() {
         await update((db) => {
           db.matches.find((match) => match.id === 'season-0').home.name = 'Arsenal';
         });
+        await liveReads.settled();
         await liveContext.close();
       }
       groups++;
@@ -438,19 +455,20 @@ async function main() {
       );
       await context.routeWebSocket('**/*', (socket) => socket.close());
       const page = await context.newPage();
+      const recoveryReads = observeReads(page, base);
       // Recovery must work without loading the new application's JavaScript.
       await page.route('**/season/assets/*.js', (route) => route.abort());
-      await page.goto(base + '/');
+      await recoveryReads.goto(base + '/');
       await page.getByRole('heading', { name: 'Streak is loading.' }).waitFor();
       await page.getByRole('link', { name: 'Open current Wallet', exact: true }).click();
       await page.waitForURL('**/index.html#wallet');
       await page.locator('#connect-top').waitFor();
-      await page.goto(base + '/?source=shared#wallet');
+      await recoveryReads.goto(base + '/?source=shared#wallet');
       await page.waitForURL('**/index.html?source=shared#wallet');
       await page.locator('#connect-top').waitFor();
-      await page.goto(base + '/#/receipt/unavailable-receipt');
+      await recoveryReads.goto(base + '/#/receipt/unavailable-receipt');
       await page.waitForURL('**/index.html#/receipt/unavailable-receipt');
-      await page.locator('.public-card').waitFor();
+      await page.getByRole('heading', { name: 'Receipt not available', exact: true }).waitFor();
       assert.equal(
         await page.locator('#connect-top').count(),
         0,
@@ -467,7 +485,7 @@ async function main() {
             })
           : route.continue(),
       );
-      await page.goto(base + '/');
+      await recoveryReads.goto(base + '/');
       await page.getByText('The fixture feed is taking a break.', { exact: true }).waitFor();
       assert.equal(await page.locator('.welcome-featured').count(), 0);
       assert.equal(
@@ -485,7 +503,7 @@ async function main() {
           body: JSON.stringify({ markets: [], total: 0, nextOffset: null, coverage: null }),
         }),
       );
-      await page.reload();
+      await recoveryReads.reload();
       await page.getByText('The schedule is not available yet.', { exact: true }).waitFor();
       assert.equal(await page.getByText('No fixtures on this day.', { exact: true }).count(), 0);
       await page.unroute('**/api/markets?*');
@@ -499,18 +517,21 @@ async function main() {
             })
           : route.continue(),
       );
-      await page.goto(base + '/season/');
+      await recoveryReads.goto(base + '/season/');
       await page.getByRole('heading', { name: 'You know the game.' }).waitFor();
       await page.getByText('We could not load the markets', { exact: true }).waitFor();
       assert.equal(await page.locator('.market-card').count(), 0);
       fail = false;
       await page.getByRole('button', { name: 'Retry markets' }).click();
       await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
+      await accountReadFinished(page);
       await context.addCookies([
         { name: 'streak_sid', value: await createSession('season-user'), url: base },
       ]);
-      await page.reload();
+      await recoveryReads.reload();
       await page.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
+      await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
+      await accountReadFinished(page, 'Sign out');
       await page.route('**/api/logout', (route) =>
         route.fulfill({
           status: 503,
@@ -636,9 +657,11 @@ async function main() {
           body: '{"markets":[{}],"total":1,"nextOffset":null}',
         }),
       );
-      await page.reload();
+      await recoveryReads.reload();
       await page.getByText('We could not load the markets', { exact: true }).waitFor();
+      await accountReadFinished(page);
       assert.equal(await page.locator('.market-card').count(), 0);
+      await recoveryReads.settled();
       await context.close();
       groups++;
       groups += await require('./prediction-journey.cjs')({
@@ -676,7 +699,7 @@ async function main() {
     const invalid = await guardedFetch(base + '/api/markets?limit=999');
     assert.equal(invalid.status, 400);
     console.log(
-      `Season browser passed: ${groups} groups across Chromium/WebKit, 320/390/768/1440px, hero CTA visibility on seven short viewports, landing/market API states, Monday fixtures, keyboard FAQ, reduced motion, forced colors, missing bundle/build recovery, shared links, paging/search, account/logout recovery and stale navigation.`,
+      `Season browser passed: ${groups} groups across Chromium/WebKit, 320/390/768/1440px, hero CTA visibility on seven short viewports, landing/market API states, Monday fixtures, keyboard FAQ, reduced motion, forced colors, missing bundle/build recovery, shared links, paging/search, account/logout recovery, stale navigation, Minimize-only slips, painted Genie taper, eight-pick restoration and interrupted/canvas-failure recovery.`,
     );
   } finally {
     await browser?.close();

@@ -39,7 +39,9 @@ Keep both hero actions visible without scrolling on common laptop and phone view
 
 Desktop uses a stable navigation rail and a wide work area. Mobile uses natural vertical reading order and a thumb-accessible dock. My activity, Wallet and Account remain reachable without hover. Matchday keeps a user's predictions beside the match context.
 
-Minimize and Close display their words beside minus and X icons with 44px targets at every width. Minimize retains the draft in the dock. Close dismisses the surface and also retains the draft. Clear slip is a separate explicit action. Colour never carries the distinction alone.
+Owner correction, 16 October: the prediction slip displays one labelled Minimize control beside its minus icon, with a 44px target at every width. Remove the duplicate Close control. Minimize and Escape retain the draft in the dock, with the connected Genie when motion is enabled. Clear slip remains a separate explicit action. Other dialogs can retain Close when dismissal is their distinct action.
+
+The integrated slip is 480px wide on desktop and a full-width bottom sheet on phones, with safe-area spacing. Inset cards group each fixture, chosen outcome, amount and stake shortcuts. The first pick opens the slip; later new picks update the dock so browsing can continue. Choosing an already selected outcome reopens its existing pick. Match details put the fixture and pool distribution beside the prediction panel at desktop widths.
 
 Amounts and consequences stay in the reading flow. Show principal, recoverable storage and estimated network fees separately. Keep the main action available at typical heights, but allow natural scrolling on short screens, with zoom and with the software keyboard. A pinned header/footer must not cover fields or focus. Do not shrink financial text to force a screenshot fit.
 
@@ -69,6 +71,8 @@ Cancel rendering and clean up resources on navigation, repeated actions, pointer
 The recorded preview run passed 18 general scenario groups and 32 basket groups, including reset during and after a completed submission. The latest full motion run passed **56 of 58 checks**. Two Windows headless WebKit mobile timing observations failed: cleanup was not confirmed within the observation window and cold animation observation timed out. The dedicated snapshot run passed **9 of 9 checks before the final 95% slip tint**. See the [preview evidence](../../design/season-preview/README.md#verification).
 
 These results do not prove smooth motion on a physical iPhone, modest Android hardware or the integrated app. Keep the two failures visible. Profile real devices before enabling expensive motion for a public pilot; the immediate transition is a valid reliability fallback. Production functional tests must cover the same state/focus invariants without depending on frame timing.
+
+The [16 October correction](../delivery/ui-motion-correction.md) implements a separate typed controller in the React app. Integrated tests inspect real painted pixels at phone and desktop widths, including cold preparation and an eight-pick slip. They preserve the draft and focus through cancellation and renderer failure. These checks are separate from the historical preview run and from physical-device profiling.
 
 ## Copy and assets
 

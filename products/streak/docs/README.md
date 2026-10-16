@@ -25,4 +25,6 @@ Existing implementation references remain useful: [application README](../README
 
 The [market/slip milestone](delivery/market-slip-milestone.md) documents the integrated read-only detail, persistent draft and whole-slip review increment, including its recovery rules and payment boundary.
 
+The [visual and Genie correction](delivery/ui-motion-correction.md) documents the follow-up to the approved preview, the single Minimize control and motion resource ownership.
+
 Update the governing document when a decision changes. Add an ADR for a material architecture or trust decision, with the superseded decision and consequences. Update status with dated evidence, not a duplicate specification. This directory defines the approved direction; the implementation source and exact test results establish what exists today.

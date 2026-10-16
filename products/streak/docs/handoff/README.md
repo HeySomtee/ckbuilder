@@ -4,6 +4,8 @@ Snapshot: **16 October 2026**, Africa/Lagos. Verify [status](../../status.md) an
 
 Read the [work tracker](../work-tracker.md) first for current progress and the exact resume point. Market detail and persistent draft/slip review are implemented. Payment remains unavailable in this flow. See the [market/slip milestone](../delivery/market-slip-milestone.md).
 
+The owner's UI correction is also implemented: preview composition, one Minimize control and actual Genie minimize/restore. The [correction report](../delivery/ui-motion-correction.md) records 22 integrated browser groups, visual evidence and the 31-step local gate completed at 09:00 UTC on 16 October. The next implementation task remains the direct stake-to-claim journey.
+
 ## Read first
 
 1. [AGENTS.md](../../AGENTS.md) and the [documentation map](../README.md).
@@ -30,7 +32,7 @@ Use the accepted preview for visual detail and the architecture for authority. A
 
 ## Known evidence gaps
 
-- Full preview motion run: 56/58, with two headless mobile WebKit timing failures. Earlier snapshot run: 9/9 before final slip-opacity change. Real-device performance is not verified.
+- Historical full preview motion run: 56/58; earlier snapshot run: 9/9 before final slip-opacity change. The integrated controller separately passes cold-start, paint and cleanup checks in both engines. Physical-device performance is not verified.
 - Current DB health, hosting budget and load capacity were not re-established by design work.
 - The 32-bet contract bound and supported lock-argument limit remain real constraints.
 - No verified GitHub Actions run or active branch protection is established by local workflow files. Read status for the latest publication/authentication state.

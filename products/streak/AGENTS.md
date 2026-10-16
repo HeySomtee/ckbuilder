@@ -36,7 +36,7 @@ The owner approved the Streak UI and architecture on **15 October 2026**, includ
 
 Use the [design system](docs/design/system.md) and approved [preview](design/season-preview/README.md) as the reference. Preserve the coral/graphite football identity, clear glass, directional rims, dense payment surfaces and native scrolling. Use semantic tokens rather than copying values into every feature.
 
-Every interaction has appropriate press, focus, pending, success, failure and disabled behavior. Keep 44px primary touch targets, visible focus, semantic labels and keyboard/touch alternatives. Amounts and consequences must remain legible without blur or colour. Minimize and Close retain visible labels; Clear slip is a separate action.
+Every interaction has appropriate press, focus, pending, success, failure and disabled behavior. Keep 44px primary touch targets, visible focus, semantic labels and keyboard/touch alternatives. Amounts and consequences must remain legible without blur or colour. Owner correction, 16 October: the prediction slip has one visibly labelled Minimize control; omit its duplicate Close control. Escape also minimizes while retaining the draft. Clear slip is a separate explicit action.
 
 The Genie is approved as a connected-surface interaction, with production readiness still conditional on performance and accessibility evidence. Immediate state changes are the fallback. Animation must never control payment completion or block input. Preserve interruption cleanup, focus, reduced motion and reduced transparency. The two known mobile WebKit timing failures are open evidence, not permission to weaken checks.
 
