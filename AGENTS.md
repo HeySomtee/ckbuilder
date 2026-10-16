@@ -3,6 +3,8 @@
 Streak's approved product work lives in `products/streak`. Read its
 [agent contract](products/streak/AGENTS.md), [documentation map](products/streak/docs/README.md)
 and [status](products/streak/status.md) before work on Streak or its shared delivery tools.
+Read and update the [work tracker](products/streak/docs/work-tracker.md) so steering
+requests and handoffs preserve earlier unfinished commitments.
 
 The owner approved the Season preview UI and architecture on 15 October 2026.
 That approval includes the documentation and quality foundation. Implement within

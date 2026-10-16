@@ -1,6 +1,8 @@
 # Streak status
 
-Updated **15 October 2026**, Africa/Lagos. Published Season baseline: `800e774`. The landing-page extension is included on the Season review branch and has not been deployed. See the [milestone report](docs/delivery/season-milestone.md) for implementation and rollout limits.
+Active work, earlier commitments and the next resume point are tracked in the [work tracker](docs/work-tracker.md). Read it before starting or switching tasks.
+
+Updated **15 October 2026**, Africa/Lagos. Published Season revision: `70beb34`. The landing page and live fixture ranking are included on the Season review branch and have not been deployed. See the [milestone report](docs/delivery/season-milestone.md) for implementation and rollout limits.
 
 ## Owner decisions
 
@@ -25,7 +27,7 @@ Updated **15 October 2026**, Africa/Lagos. Published Season baseline: `800e774`.
 
 ## Verification
 
-The full local gate passed all **29 steps** for the landing-page extension on 15 October 2026. No required suite was skipped. The local preview at `http://127.0.0.1:4100/` uses real API fixtures in separate local storage with account mutations and payments disabled. Manual inspection confirmed team-logo loading; automated tests used synthetic fixtures and no live provider requests.
+The full local gate passed all **30 steps** for published revision `70beb34` on 15 October 2026, including the live fixture ranking follow-up. No required suite was skipped. The local preview at `http://127.0.0.1:4100/` uses real API fixtures in separate local storage with account mutations and payments disabled. Manual inspection confirmed team-logo loading; automated tests used synthetic fixtures and no live provider requests. The tracker records verification for subsequent local changes separately.
 
 The recurring command is `npm.cmd run quality:major`, using a disposable local PostgreSQL database. Exact results are written to `.quality-artifacts/all.json` and repeated against the unchanged staged candidate by the commit and push hooks. The foundation passed all 20 steps before publication. This increment extends the gate with frontend lint/build, identity and provider regressions, and twelve integrated browser groups across Chromium/WebKit at 320, 390 and 1440px, including automatic API refresh, Monday-to-Tuesday rollover, ranking before pagination and chronological sorting. See the [ranking policy](docs/product/fixture-ranking.md) for scoring and remaining data limits.
 

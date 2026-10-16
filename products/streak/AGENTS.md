@@ -2,6 +2,8 @@
 
 This is the canonical instruction file for work inside `products/streak`. Read the [documentation map](docs/README.md), [status](status.md) and [architecture](docs/architecture/overview.md) before changing code. The repository contains other CKB learning projects; their state and authority are separate.
 
+Read and maintain the [work tracker](docs/work-tracker.md) on every task and handoff. Record new steering requests without dropping earlier commitments. Before changing focus, update progress, unfinished acceptance criteria and the exact resume point. Mark work complete only with implementation and verification evidence, distinguishing local work from publication and deployment.
+
 ## Approved scope and working method
 
 The owner approved the Streak UI and architecture on **15 October 2026**, including the latest dense prediction slip, clear glass elsewhere, labelled controls and shared scrollbar. The owner then requested documentation, recurring tests and CI before production implementation. [ADR 0001](docs/decisions/0001-approved-foundation.md) records that approval. Proceed within it without asking for the same permission again. Present material departures from the approved experience, trust boundaries, contract economics or launch scope for review before implementing those departures.

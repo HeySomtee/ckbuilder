@@ -4,6 +4,8 @@ Canonical foundation approved **15 October 2026**. Start with [status](../status
 
 Current implementation: [Season shell, Friday-to-Monday fixtures and durable identity](delivery/season-milestone.md).
 
+Current commitments and resume point: [work tracker](work-tracker.md). Update it whenever work is steered, interrupted or completed.
+
 | Document                                                   | Purpose                                                          |
 | ---------------------------------------------------------- | ---------------------------------------------------------------- |
 | [Product scope and roadmap](product/scope-and-roadmap.md)  | Pilot boundaries, Five, acceptance criteria and delivery order   |

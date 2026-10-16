@@ -993,6 +993,43 @@
     font-size: 34px;
   }
 }
+/* A tall fixture board must not push the hero's actions below a laptop fold. */
+@media (max-height: 800px) {
+  .welcome-header {
+    min-height: 76px;
+  }
+  .welcome-hero {
+    align-items: start;
+    padding-block: clamp(20px, 4svh, 32px) 56px;
+  }
+  .welcome-copy h1 {
+    font-size: clamp(44px, min(6.7vw, 10svh), 76px);
+    margin-block: 16px 18px;
+  }
+  .welcome-intro {
+    line-height: 1.6;
+  }
+  .welcome-actions {
+    margin-top: 18px;
+    gap: 12px 18px;
+  }
+  .welcome-network {
+    margin-top: 20px;
+  }
+}
+@media (max-width: 1000px) and (max-height: 800px) {
+  .welcome-hero {
+    grid-template-columns: 1fr;
+  }
+  .welcome-copy h1 {
+    font-size: clamp(44px, min(11vw, 9svh), 64px);
+  }
+  .welcome-showcase {
+    max-width: 480px;
+    width: 100%;
+    justify-self: center;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .welcome-button:active {
     transform: none;

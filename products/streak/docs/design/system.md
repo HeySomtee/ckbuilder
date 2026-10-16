@@ -35,6 +35,8 @@ Use native scrolling throughout. Fine-pointer browsers with custom scrollbar sup
 
 The public landing page carries the same graphite, coral, mint and glass tokens into a simpler reading flow: football-first hero, API-backed matchweek board, three onboarding steps, a clearly labelled Five introduction, native FAQ disclosures and market entry links. Visitors can browse before signing in. Use provider names/logos and explicit schedule states instead of fabricated odds, activity counters or winnings. Five stays marked as in development until its entry and scoring journey exists.
 
+Keep both hero actions visible without scrolling on common laptop and phone viewports. Short screens use height-aware spacing and type, with the copy aligned to the top instead of centred against the taller fixture panel. Preserve readable text, 44px targets and natural scrolling at high zoom; do not hide content or fix the CTA over other controls. Browser regressions check full bounds and hit targets from 320x568 through 1440x700, including 1213x629.
+
 Desktop uses a stable navigation rail and a wide work area. Mobile uses natural vertical reading order and a thumb-accessible dock. My activity, Wallet and Account remain reachable without hover. Matchday keeps a user's predictions beside the match context.
 
 Minimize and Close display their words beside minus and X icons with 44px targets at every width. Minimize retains the draft in the dock. Close dismisses the surface and also retains the draft. Clear slip is a separate explicit action. Colour never carries the distinction alone.

@@ -133,6 +133,64 @@ async function main() {
         await page.goto(base + '/');
         await page.getByRole('heading', { name: 'You know the game. Make it yours.' }).waitFor();
         await page.locator('.welcome-featured').getByText('Arsenal', { exact: true }).waitFor();
+        if (width === 1440) {
+          for (const [heroWidth, heroHeight] of [
+            [1213, 629],
+            [1366, 650],
+            [1440, 700],
+            [1024, 600],
+            [768, 600],
+            [390, 667],
+            [320, 568],
+          ]) {
+            await page.setViewportSize({ width: heroWidth, height: heroHeight });
+            await page.evaluate(() => {
+              window.scrollTo(0, 0);
+              return new Promise((done) =>
+                requestAnimationFrame(() => requestAnimationFrame(done)),
+              );
+            });
+            const actions = await page.locator('.welcome-actions a').evaluateAll((links) =>
+              links.map((link) => {
+                const box = link.getBoundingClientRect();
+                const hit = document.elementFromPoint(
+                  box.x + box.width / 2,
+                  box.y + box.height / 2,
+                );
+                return {
+                  text: link.textContent,
+                  top: box.top,
+                  bottom: box.bottom,
+                  height: box.height,
+                  visible:
+                    box.left >= 0 &&
+                    box.right <= innerWidth &&
+                    box.top >= 0 &&
+                    box.bottom <= innerHeight - 12,
+                  reachable: link.contains(hit),
+                };
+              }),
+            );
+            assert.equal(actions.length, 2);
+            for (const action of actions) {
+              assert.ok(
+                action.visible && action.reachable && action.height >= 44,
+                `${name} ${heroWidth}x${heroHeight}: hero CTA must be fully visible and clickable without scrolling: ${JSON.stringify(action)}`,
+              );
+            }
+            assert.equal(await page.evaluate(() => scrollY), 0);
+            assert.equal(
+              await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1),
+              false,
+            );
+            if (heroWidth === 1213 || heroWidth === 320) {
+              await page.screenshot({
+                path: path.join(evidence, `landing-hero-${name}-${heroWidth}.png`),
+              });
+            }
+          }
+          await page.setViewportSize({ width, height: 900 });
+        }
         await page.getByRole('link', { name: 'Skip to content' }).focus();
         await page.keyboard.press('Enter');
         assert.equal(await page.evaluate(() => document.activeElement.id), 'welcome-main');
@@ -608,7 +666,7 @@ async function main() {
     const invalid = await guardedFetch(base + '/api/markets?limit=999');
     assert.equal(invalid.status, 400);
     console.log(
-      `Season browser passed: ${groups} groups across Chromium/WebKit, 320/390/768/1440px, landing/market API states, Monday fixtures, keyboard FAQ, reduced motion, forced colors, missing bundle/build recovery, shared links, paging/search, account/logout recovery and stale navigation.`,
+      `Season browser passed: ${groups} groups across Chromium/WebKit, 320/390/768/1440px, hero CTA visibility on seven short viewports, landing/market API states, Monday fixtures, keyboard FAQ, reduced motion, forced colors, missing bundle/build recovery, shared links, paging/search, account/logout recovery and stale navigation.`,
     );
   } finally {
     await browser?.close();
