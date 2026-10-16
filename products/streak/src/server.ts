@@ -11,6 +11,7 @@
 import "./env";
 import { rankFeaturedFixtures } from './fixture-ranking';
 import { findPublicPredictionMarket, InvalidSlip, parseSlip, reviewPredictions } from './modules/predictions/review';
+import { DirectRegistry, PUBLIC_DIRECT_CONFIG } from './modules/direct/registry';
 
 import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
@@ -1096,7 +1097,23 @@ async function handleReceiptProof(
 
 type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
 
+const directRegistry = new DirectRegistry(process.env.STREAK_DIRECT_REGISTRY_DIR);
+async function handleDirectMarkets(res: ServerResponse, url: URL): Promise<void> {
+  const fixtureId = url.searchParams.get('matchId') ?? undefined;
+  if (fixtureId !== undefined && !/^api-football-[1-9][0-9]{0,14}$/.test(fixtureId)) {
+    // Other provider fixtures have no direct contract mapping in this version.
+    if (/^[a-zA-Z0-9:_-]{1,120}$/.test(fixtureId)) return sendJson(res, 200, { markets: [] });
+    return sendJson(res, 400, { error: 'Invalid fixture identifier.' });
+  }
+  const status = providerStatus();
+  const markets = await read(db => directRegistry.describe(db.matches,
+    match => provider.id === 'football' && status.enabled && !status.simulated && isActiveProviderMatch(match), fixtureId));
+  sendJson(res, 200, { markets });
+}
+
 const staticRoutes: Record<string, Handler> = {
+  "GET /api/direct/config": async (_req, res) => sendJson(res, 200, PUBLIC_DIRECT_CONFIG),
+  "GET /api/direct/markets": (_req, res, url) => handleDirectMarkets(res, url),
   "POST /api/auth/nonce": (req, res) => handleAuthNonce(req, res),
   "POST /api/auth/verify": (req, res) => handleAuthVerify(req, res),
   "POST /api/logout": (req, res) => handleLogout(req, res),

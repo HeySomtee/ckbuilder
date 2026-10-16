@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMarkets, formatCkb, outcomes } from '../features/markets/api';
 import type { Market, MarketSort } from '../features/markets/api';
@@ -11,7 +11,10 @@ import { createDraftStore } from '../features/predictions/draft';
 import type { Outcome } from '../features/predictions/draft';
 import { PredictionSlip } from '../features/predictions/slip';
 import { followMarket, marketHref, navigateMarket, useMarketRoute } from '../lib/market-route';
+import { directHref, followDirect, navigateDirect, useDirectRoute } from '../lib/direct-route';
 import '../design-system/predictions.css';
+
+const DirectPage = lazy(() => import('../features/direct/ui'));
 
 function MarketCard({
   market,
@@ -131,6 +134,7 @@ function MarketCard({
 export function App() {
   const client = useQueryClient();
   const marketId = useMarketRoute();
+  const directRoute = useDirectRoute();
   const [draftStore] = useState(createDraftStore);
   const draftState = useSyncExternalStore(draftStore.subscribe, draftStore.getSnapshot);
   const [slipOpen, setSlipOpen] = useState(false);
@@ -184,6 +188,7 @@ export function App() {
     retry: false,
     onSuccess: async () => {
       client.removeQueries({ queryKey: ['private'] });
+      client.removeQueries({ queryKey: ['direct-private'] });
       await client.invalidateQueries({ queryKey: ['account'] });
     },
   });
@@ -193,12 +198,14 @@ export function App() {
     onSuccess: async () => {
       await client.cancelQueries({ queryKey: ['account'] });
       await client.cancelQueries({ queryKey: ['private'] });
+      await client.cancelQueries({ queryKey: ['direct-private'] });
       client.removeQueries({ queryKey: ['private'] });
+      client.removeQueries({ queryKey: ['direct-private'] });
       client.setQueryData(['account'], null);
     },
   });
   const feed = useInfiniteQuery({
-    enabled: !marketId,
+    enabled: !marketId && !directRoute,
     queryKey: ['markets', status, query, fromIso, toIso, sort],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
@@ -241,15 +248,19 @@ export function App() {
         </a>
         <p className="eyebrow">YOUR TOUCHLINE</p>
         <nav aria-label="Main navigation">
-          <a href="/season/" aria-current="page">
+          <a href="/season/" aria-current={!directRoute ? 'page' : undefined}>
             <Icon name="markets" />
             Markets
           </a>
-          <a href="/index.html#portfolio">
+          <a href={directHref()} onClick={(event) => followDirect(event)}>
             <Icon name="activity" />
             My activity
           </a>
-          <a href="/index.html#wallet">
+          <a
+            href={directHref()}
+            onClick={(event) => followDirect(event)}
+            aria-current={directRoute === 'wallet' ? 'page' : undefined}
+          >
             <Icon name="wallet" />
             Wallet
           </a>
@@ -264,7 +275,8 @@ export function App() {
       <div className="workspace">
         <header className="topbar">
           <span className="breadcrumb">
-            Your touchline <span>/</span> <strong>Markets</strong>
+            Your touchline <span>/</span>{' '}
+            <strong>{directRoute ? 'Testnet wallet' : 'Markets'}</strong>
           </span>
           <div className="account-actions">
             {account.data && <span className="username">{account.data.username}</span>}
@@ -288,7 +300,25 @@ export function App() {
               {selectionNotice}
             </p>
           )}
-          {marketId && (
+          {directRoute && (
+            <Suspense
+              fallback={
+                <section className="glass detail-state">
+                  <h1>Opening your testnet wallet...</h1>
+                  <p>Your saved predictions are safe.</p>
+                </section>
+              }
+            >
+              <DirectPage
+                key={`${directRoute}:${account.data?.id ?? 'guest'}`}
+                marketId={directRoute === 'wallet' ? undefined : directRoute}
+                account={account.data ?? null}
+                accountReady={!account.isPending}
+                draftPick={draftState.draft.picks.find((row) => row.marketId === directRoute)}
+              />
+            </Suspense>
+          )}
+          {marketId && !directRoute && (
             <MarketDetail
               key={marketId}
               id={marketId}
@@ -297,7 +327,7 @@ export function App() {
               selected={draftState.draft.picks.find((row) => row.marketId === marketId)?.outcome}
             />
           )}
-          <div hidden={!!marketId}>
+          <div hidden={!!marketId || !!directRoute}>
             <div className="page-title">
               <div>
                 <p className="eyebrow">THE PREDICTION MARKETS</p>
@@ -516,21 +546,25 @@ export function App() {
             <footer>
               Friday through Monday, in your local time. Fixtures from connected competitions.
               Testnet CKB has no monetary value. The new prediction slip saves drafts and checks
-              current rules; direct payment is not available in this flow yet.
+              current rules. Funded testnet markets offer a separate single-prediction transaction.
             </footer>
           </div>
         </main>
       </div>
       <nav className="mobile-dock" aria-label="Mobile navigation">
-        <a href="/season/" aria-current="page">
+        <a href="/season/" aria-current={!directRoute ? 'page' : undefined}>
           <Icon name="markets" />
           Markets
         </a>
-        <a href="/index.html#portfolio">
+        <a href={directHref()} onClick={(event) => followDirect(event)}>
           <Icon name="activity" />
           Activity
         </a>
-        <a href="/index.html#wallet">
+        <a
+          href={directHref()}
+          onClick={(event) => followDirect(event)}
+          aria-current={directRoute === 'wallet' ? 'page' : undefined}
+        >
           <Icon name="wallet" />
           Wallet
         </a>
@@ -540,6 +574,10 @@ export function App() {
         open={slipOpen}
         onOpen={() => setSlipOpen(true)}
         onDismiss={() => setSlipOpen(false)}
+        onDirect={(id) => {
+          setSlipOpen(false);
+          navigateDirect(id);
+        }}
         accountKey={
           account.isPending
             ? 'pending'

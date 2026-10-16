@@ -9,6 +9,8 @@ export const useMarketRoute = () => useSyncExternalStore(subscribe, snapshot);
 export const marketHref = (id: string) => `/season/?market=${encodeURIComponent(id)}`;
 export function navigateMarket(id: string | null) {
   const url = new URL(location.href);
+  url.searchParams.delete('direct');
+  url.searchParams.delete('view');
   if (id === null) url.searchParams.delete('market');
   else url.searchParams.set('market', id);
   url.hash = '';

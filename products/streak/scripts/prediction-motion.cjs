@@ -84,18 +84,25 @@ async function clickWithoutWaitingForMotion(page, selector) {
   await page.locator(selector).evaluate((element) => element.click());
 }
 
-async function started(page, direction) {
+async function started(page, direction, pauseAtStart = false) {
   await page.waitForFunction(
-    (expected) => {
+    ({ expected, pauseAtStart }) => {
       const layer = document.querySelector('.genie-layer');
       const canvas = layer?.querySelector('.genie-canvas');
-      return (
+      const running =
         layer?.getAttribute('data-direction') === expected &&
         layer.getAttribute('data-phase') === 'animating' &&
-        canvas?.getAnimations().some((animation) => animation.startTime !== null)
-      );
+        canvas?.getAnimations().some((animation) => animation.startTime !== null);
+      // Capture the short-lived surface in the same browser task that observes
+      // it. Another Playwright round trip can arrive after motion has finished.
+      if (running && pauseAtStart)
+        canvas.getAnimations().forEach((animation) => {
+          animation.pause();
+          animation.currentTime = 0;
+        });
+      return running;
     },
-    direction,
+    { expected: direction, pauseAtStart },
     { timeout: 3000 },
   );
 }
@@ -313,13 +320,7 @@ module.exports = async function predictionMotion({ browser, base, name, evidence
       });
       await page.emulateMedia({ reducedMotion: 'no-preference' });
       await clickWithoutWaitingForMotion(page, '.slip-controls button');
-      await started(page, 'minimize');
-      await page.locator('.genie-canvas').evaluate((canvas) => {
-        canvas.getAnimations().forEach((animation) => {
-          animation.pause();
-          animation.currentTime = 0;
-        });
-      });
+      await started(page, 'minimize', true);
       await page.waitForFunction(
         () => document.querySelector('.genie-canvas')?.dataset.progress === '0',
       );
@@ -384,7 +385,28 @@ module.exports = async function predictionMotion({ browser, base, name, evidence
         timeout: 250,
       });
       await clean(page, true, saved);
+      // Resize cancels product motion. Observe the restoring resize event and
+      // its rendering frames before the separate navigation interruption.
+      await page.evaluate(
+        ({ width, height }) => {
+          window.predictionResizeSettled = false;
+          const resized = () => {
+            if (innerWidth !== width || innerHeight !== height) return;
+            window.removeEventListener('resize', resized);
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                window.predictionResizeSettled = true;
+              }),
+            );
+          };
+          window.addEventListener('resize', resized);
+        },
+        { width, height },
+      );
       await page.setViewportSize({ width, height });
+      await page.waitForFunction(() => window.predictionResizeSettled === true, null, {
+        timeout: 3000,
+      });
 
       // SPA navigation must dispose motion without mutating the retained slip.
       await clickWithoutWaitingForMotion(page, '.slip-controls button');

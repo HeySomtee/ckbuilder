@@ -79,6 +79,25 @@ module.exports = async function predictionJourney({
     const reads = observeReads(page, base);
     let phase = 'load weekend';
     const requestTrace = reads.trace;
+    const reviewTraffic = [];
+    const recordReview = (entry) => {
+      reviewTraffic.push(entry);
+      if (reviewTraffic.length > 32) reviewTraffic.shift();
+    };
+    page.on('requestfailed', (request) => {
+      if (new URL(request.url()).pathname === '/api/slips/review')
+        recordReview({ event: 'failed', failure: request.failure()?.errorText });
+    });
+    page.on('response', async (response) => {
+      if (new URL(response.url()).pathname !== '/api/slips/review') return;
+      const entry = { event: 'response', status: response.status() };
+      recordReview(entry);
+      try {
+        entry.body = (await response.text()).slice(0, 20_000);
+      } catch (error) {
+        entry.bodyFailure = error.message;
+      }
+    });
     page.on('pageerror', (error) => {
       errors.push(error.message);
     });
@@ -331,7 +350,7 @@ module.exports = async function predictionJourney({
     } catch (error) {
       await fs.writeFile(
         path.join(evidence, `prediction-recovery-failure-${name}-${width}.json`),
-        JSON.stringify({ phase, errors, requestTrace }, null, 2),
+        JSON.stringify({ phase, errors, requestTrace, reviewTraffic }, null, 2),
       );
       await page.screenshot({
         path: path.join(evidence, `prediction-recovery-failure-${name}-${width}.png`),

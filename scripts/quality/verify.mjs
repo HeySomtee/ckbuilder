@@ -32,6 +32,7 @@ for (const name of Object.keys(env)) {
 }
 delete env.NODE_OPTIONS;
 delete env.STREAK_PUBLIC_ORIGIN;
+for (const name of Object.keys(env)) if (name.startsWith('STREAK_DIRECT_')) delete env[name];
 // A test entrypoint can import the server; loading local .env is never allowed.
 const preload = resolve(ROOT, 'scripts/quality/test-env.cjs');
 const tsc = resolve(ROOT, 'node_modules/typescript/bin/tsc');
@@ -106,6 +107,14 @@ async function browserChecks() {
     cwd: product,
     isolated: true,
   });
+  run(
+    'Direct testnet wallet and recovery browser regression',
+    [join(product, 'scripts/direct-browser.cjs')],
+    {
+      cwd: product,
+      isolated: true,
+    },
+  );
   const previewPort = 4176;
   const base = `http://127.0.0.1:${previewPort}`;
   const server = spawn(process.execPath, [join(product, 'design/season-preview/serve.cjs')], {
@@ -214,6 +223,13 @@ try {
         'Week 20 client transaction regression',
         ['--test', resolve(ROOT, 'src/week20/contract-lab/scripts/client.test.cjs')],
         { isolated: true },
+      );
+      run(
+        'Direct prediction signed devnet lifecycle',
+        [join(product, 'scripts/direct-devnet-run.cjs')],
+        {
+          timeout: 600_000,
+        },
       );
     }
   }

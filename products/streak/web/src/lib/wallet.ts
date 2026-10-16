@@ -3,7 +3,14 @@ import { ccc, WebComponentConnector } from '@ckb-ccc/connector';
 /** Loaded only after an explicit sign-in action. No wallet/RPC on market browsing. */
 export async function chooseWallet(): Promise<ccc.Signer> {
   const element = new WebComponentConnector();
-  element.setClient(new ccc.ClientPublicTestnet());
+  element.setClient(
+    new ccc.ClientPublicTestnet({
+      url: 'https://testnet.ckb.dev/',
+      fallbacks: [],
+      timeout: 15_000,
+      maxConcurrent: 2,
+    }),
+  );
   element.style.zIndex = '1000';
   return new Promise((resolve, reject) => {
     let connecting = false;

@@ -10,7 +10,7 @@ The [Week 20 lab](../../../../src/week20/contract-lab/README.md) is the implemen
 - Claims return their full pinned entitlement to the owner, using separate fee input capacity. The current version permits one claim per transaction. Consensus rejects replay of a spent outpoint.
 - Minimum principal is 100 CKB plus 321 CKB recoverable claim storage and network fees. Operator reserve, fee-output storage and keeper reward are separate obligations.
 - Wallet lock arguments are restricted to at most 20 bytes by the current shared builder. Publish a tested wallet matrix before promising support.
-- No share transfers/splits, disputes, production indexer/keeper or mainnet deployment. Direct-market app integration is still planned.
+- No share transfers/splits, disputes, production indexer or mainnet deployment. Season integrates the deployed testnet version through a direct wallet adapter and an explicit operator worker.
 
 The lab's settlement policy returns principal plus a rounded-down proportional portion of the losing pool after 2% protocol and 1% creator fees for a nonempty winning outcome. A void or empty winning outcome returns principal. Losing positions recover their receipt storage. These are versioned prototype rules, not automatically approved new campaign economics. Review the actual manifest, encoder and deployed code for every supported version.
 
@@ -23,6 +23,22 @@ The result window ends six hours after pinned scheduled kickoff. A `since` condi
 Timeout cancellation uses the six-hour consensus condition and a keeper incentive from operator capacity. State changes occur when transactions commit, not when a browser countdown expires. Verify the exact transition rules for an already committed eligible report before exposing cancellation. Use the lab VM/devnet tests as the authority for implemented behavior.
 
 Funded kickoff and settlement terms are immutable. The Week 20 args do not yet commit a fixture/rules hash. A production football catalogue needs a reviewed commitment/version, including regulation time, postponement, abandonment and result-source rules. An off-chain fixture label alone is an additional trust assumption and must not be hidden.
+
+## Implemented Season testnet adapter
+
+`web/src/features/direct` implements exact review, wallet signing, IndexedDB persistence before broadcast, canonical confirmation, position discovery and claims. It pins the existing `testnet-v1` code hashes and deployment. The API exposes a read-only immutable catalogue through `/api/direct/config` and `/api/direct/markets`. The operator publishes a fixture mapping after four canonical creation confirmations. A missing provider fixture, changed kickoff or unavailable feed disables new entries. Saved descriptors and the pinned manifest still permit exit discovery when the API is unavailable.
+
+This increment retains the deployed protocol's one-market deposit and one-claim transaction bounds. The multi-prediction slip remains a saved draft and read-only review. A one-pick draft can continue into a separate exact chain review. Combined payment needs the next reviewed contract version and must not be simulated by sequential payments.
+
+The catalogue SHA-256 terms digest detects inconsistent metadata. It is not committed in the current 172-byte script args. Users therefore trust the operator's fixture mapping and football results. The UI discloses this alongside the 100 CKB minimum, 321 CKB recoverable storage and prototype fees. No synthetic fixture is inserted into the live football catalogue.
+
+`src/modules/direct` owns the immutable registry, raw football evidence validation, bounded transaction builders and durable signed operator journal. It does not import the ledger treasury. The API process never loads the oracle key. The explicit operator worker examines at most four registered markets per pass, reconciles previous signed operations, observes results twice at least 30 seconds apart, reports only fresh matching regulation-time scores, settles eligible reports and voids expired unresolved markets. Missing scores never become zero-zero. Ambiguous operations stop for review instead of being silently rebuilt. See the [operator runbook](../operations/direct-testnet.md).
+
+Signed user intent retains its exact transaction bytes, hash, owner, descriptor, amounts and inputs. A failed send is an unknown outcome until reconciled. Resubmission uses the original bytes. Confirmation uses uncached canonical headers with a three-confirmation policy. An explicit conflict-recovery action accepts a different confirmed transaction spending an original input; it rechecks that proof before releasing the old reservation. If the proof is reorganised out, the old reservation applies again. The original signed record is retained throughout.
+
+Discovery is bounded to the prototype market size. The activity screen initially inspects four markets and eight saved transactions; the user can request more. Position history scans are manual, unresolved transaction polling stops while hidden, and confirmed transactions do not poll continuously. The pilot catalogue and wallet journal have explicit limits of 256 markets and 128 transactions. These bounds require an archive/indexing plan before a wider rollout.
+
+The browser exports recovery descriptors and signed records without wallet secrets. `scripts/direct-claim.cjs` uses the same owner adapter to inspect, claim or resend against the pinned public RPC without the Streak website. Keep the recovery file and use a supported wallet lock. This is separately documented and tested, including an actual devnet reorganisation.
 
 ## One slip, independent positions
 

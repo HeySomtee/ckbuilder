@@ -7,6 +7,7 @@ import { outcomes, formatCkb } from './api';
 import type { Market } from './api';
 import { TeamBadge } from '../../components/team-badge';
 import { useNow } from '../../lib/use-now';
+import { directHref, followDirect } from '../../lib/direct-route';
 
 export function MarketDetail({
   id,
@@ -74,6 +75,9 @@ export function MarketDetail({
             {market.home} vs {market.away}
           </h1>
           <p>The match, the crowd and your call.</p>
+          <a className="quiet" href={directHref(id)} onClick={(event) => followDirect(event, id)}>
+            Open testnet prediction ↗
+          </a>
         </div>
         <button className="quiet detail-back" onClick={onBack}>
           <svg

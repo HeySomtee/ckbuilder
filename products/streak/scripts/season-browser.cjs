@@ -446,7 +446,7 @@ async function main() {
         await liveContext.close();
       }
       groups++;
-      const context = await browser.newContext({
+      let context = await browser.newContext({
         viewport: { width: 390, height: 844 },
         serviceWorkers: 'block',
       });
@@ -454,8 +454,8 @@ async function main() {
         new URL(route.request().url()).origin === base ? route.continue() : route.abort(),
       );
       await context.routeWebSocket('**/*', (socket) => socket.close());
-      const page = await context.newPage();
-      const recoveryReads = observeReads(page, base);
+      let page = await context.newPage();
+      let recoveryReads = observeReads(page, base);
       // Recovery must work without loading the new application's JavaScript.
       await page.route('**/season/assets/*.js', (route) => route.abort());
       await recoveryReads.goto(base + '/');
@@ -474,7 +474,22 @@ async function main() {
         0,
         'Public receipts do not become login gated.',
       );
-      await page.unroute('**/season/assets/*.js');
+      // WebKit retains the deliberately failed module load across this sequence
+      // of legacy redirects. Removing the route does not make the application
+      // execute: the failure artifact stayed on the static shell with no market
+      // request. Keep missing-bundle recovery separate from API error recovery.
+      await recoveryReads.settled();
+      await context.close();
+      context = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        serviceWorkers: 'block',
+      });
+      await context.route('**/*', (route) =>
+        new URL(route.request().url()).origin === base ? route.continue() : route.abort(),
+      );
+      await context.routeWebSocket('**/*', (socket) => socket.close());
+      page = await context.newPage();
+      recoveryReads = observeReads(page, base);
       let fail = true;
       await page.route('**/api/markets?*', (route) =>
         fail
@@ -486,7 +501,23 @@ async function main() {
           : route.continue(),
       );
       await recoveryReads.goto(base + '/');
-      await page.getByText('The fixture feed is taking a break.', { exact: true }).waitFor();
+      try {
+        await page.getByText('The fixture feed is taking a break.', { exact: true }).waitFor();
+      } catch (error) {
+        fs.writeFileSync(
+          path.join(evidence, `season-recovery-failure-${name}.json`),
+          JSON.stringify(
+            {
+              url: page.url(),
+              body: await page.locator('body').innerText(),
+              reads: recoveryReads.trace,
+            },
+            null,
+            2,
+          ),
+        );
+        throw error;
+      }
       assert.equal(await page.locator('.welcome-featured').count(), 0);
       assert.equal(
         await page

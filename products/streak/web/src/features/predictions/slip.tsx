@@ -14,12 +14,14 @@ export function PredictionSlip({
   onOpen,
   onDismiss,
   accountKey,
+  onDirect,
 }: {
   store: DraftStore;
   open: boolean;
   onOpen: () => void;
   onDismiss: () => void;
   accountKey: string;
+  onDirect?: (marketId: string) => void;
 }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { draft } = snapshot;
@@ -513,7 +515,23 @@ export function PredictionSlip({
               </svg>
             )}
           </button>
-          <small>No stake reserved. Payment, network fees and storage are not available yet.</small>
+          <small>No stake reserved. This draft review does not submit a payment.</small>
+          {draft.picks.length === 1 && onDirect && (
+            <button
+              className="quiet"
+              onClick={() => {
+                dismiss();
+                onDirect(draft.picks[0].marketId);
+              }}
+            >
+              Continue to testnet review
+            </button>
+          )}
+          {draft.picks.length > 1 && (
+            <small>
+              Combined payment needs the next contract version. Your complete slip stays saved.
+            </small>
+          )}
           <div className="slip-footer-meta">
             <span className="slip-save-state">
               {snapshot.saved ? 'Saved on this device' : 'Draft in this tab'}

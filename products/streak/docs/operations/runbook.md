@@ -1,5 +1,7 @@
 # Operations and pilot readiness
 
+The [direct testnet runbook](direct-testnet.md) covers the separately configured market operator, bounded football worker and independent owner claim recovery. Its file journals are a single-operator pilot boundary, separate from the legacy ledger and API service.
+
 This is the approved operational checklist and response procedure. It does not claim that a deployment, backup policy, alerting system or paid plan already exists. Record environment-specific commands and verified evidence as each integration is implemented. Never commit credentials or real participant data into runbooks.
 
 ## Before a public testnet cohort
