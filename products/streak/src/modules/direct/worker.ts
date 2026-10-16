@@ -1,10 +1,16 @@
 import * as ccc from '@ckb-ccc/core';
 import { existsSync, readFileSync, readdirSync, renameSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { runOperator } from './cli';
-import { OperatorJournal, reconcileOperation } from './journal';
-import { loadOperatorMarket } from './operator';
+import { runOperator, boundedJson, operatorFundingBarrier } from './cli';
+import { OperatorJournal, reconcileOperation, operationKey, OPERATION_FILE } from './journal';
+import { loadOperatorMarket, MARKET_RESERVE_SHANNONS } from './operator';
+import {
+  ProvisionQueue,
+  parseProvisionCatalogue,
+  provisionCycle,
+  provisioningCatalogueUrl,
+} from './provision';
 import {
   DirectRegistry,
   PUBLIC_DIRECT_CONFIG,
@@ -39,11 +45,22 @@ export async function workerCycle(
   cursor: number,
   ports: WorkerPorts,
 ): Promise<{ cursor: number; results: WorkerResult[] }> {
-  if (records.length > 256 || !Number.isSafeInteger(cursor) || cursor < 0)
+  if (records.length > 512 || !Number.isSafeInteger(cursor) || cursor < 0)
     throw Error('Worker catalogue or cursor exceeds its bound');
+  // Future markets do not consume RPC/provider work or delay due lifecycle actions.
+  const due = records
+    .filter((record) => record.cutoffMs <= ports.now())
+    .sort((a, b) => a.terms.deadlineMs - b.terms.deadlineMs || a.id.localeCompare(b.id));
+  if (!due.length)
+    return {
+      cursor: 0,
+      results: records
+        .slice(0, 4)
+        .map((record) => ({ fixtureId: record.fixtureId, action: 'wait', status: 'waiting' })),
+    };
   const results: WorkerResult[] = [];
-  for (let offset = 0; offset < Math.min(4, records.length); offset++) {
-    const record = records[(cursor + offset) % records.length];
+  for (let offset = 0; offset < Math.min(4, due.length); offset++) {
+    const record = due[(cursor + offset) % due.length];
     let action: WorkerResult['action'] = 'wait';
     try {
       await ports.execute('reconcile', record);
@@ -90,7 +107,7 @@ export async function workerCycle(
     }
   }
   return {
-    cursor: records.length ? (cursor + Math.min(4, records.length)) % records.length : 0,
+    cursor: due.length ? (cursor + Math.min(4, due.length)) % due.length : 0,
     results,
   };
 }
@@ -102,6 +119,8 @@ export async function runWorkerOnce(): Promise<void> {
     registryDirectory = process.env.STREAK_DIRECT_REGISTRY_DIR;
   if (!directory || !registryDirectory || !isAbsolute(directory) || !isAbsolute(registryDirectory))
     throw Error('Configure absolute durable operator and registry directories');
+  if (resolve(directory) === resolve(registryDirectory))
+    throw Error('Keep the signed journal separate from the public registry');
   if (!process.env.STREAK_DIRECT_PRIVATE_KEY)
     throw Error(
       'Worker needs explicit operator signing environment; it never loads .env or key files',
@@ -118,19 +137,72 @@ export async function runWorkerOnce(): Promise<void> {
     maxConcurrent: 2,
   });
   await lease.exclusive(async () => {
-    const records = new Map(registry.all().map((record) => [record.fixtureId, record]));
-    const files = readdirSync(directory).filter((file) =>
-      /^create-api-football-[1-9][0-9]{0,14}\.json$/.test(file),
+    const catalogueUrl = process.env.STREAK_DIRECT_CATALOGUE_URL;
+    const progressDirectory = process.env.STREAK_DIRECT_PROGRESS_DIR;
+    if (!!catalogueUrl !== !!progressDirectory)
+      throw Error(
+        'Configure both the local fixture catalogue and separate public progress directory',
+      );
+    if (
+      progressDirectory &&
+      (!isAbsolute(progressDirectory) ||
+        [resolve(directory), resolve(registryDirectory)].includes(resolve(progressDirectory)))
+    )
+      throw Error('Use a separate absolute public progress directory');
+    const queue = catalogueUrl ? new ProvisionQueue(join(directory, 'provision-v2')) : undefined;
+    let catalogueReady = false;
+    if (queue) {
+      try {
+        const payload = await boundedJson(provisioningCatalogueUrl(catalogueUrl!), {
+          headers: { accept: 'application/json' },
+        });
+        queue.synchronize(parseProvisionCatalogue(payload, Date.now()), Date.now());
+        catalogueReady = true;
+      } catch {
+        queue.status = 'waiting-catalogue';
+        // A missing catalogue pauses new funding, never existing refunds or results.
+      }
+    }
+    const records = new Map(registry.all().map((record) => [record.id, record]));
+    const files = readdirSync(directory).filter(
+      (file) => OPERATION_FILE.test(file) && file.startsWith('create-'),
     );
-    if (files.length > 256) throw Error('Worker creation journal exceeds pilot bounds');
+    if (files.length > 512) throw Error('Worker creation journal exceeds both generation bounds');
     for (const file of files) {
       const creation = journal.load(file.slice(0, -5));
-      if (creation && !records.has(creation.fixtureId))
-        records.set(creation.fixtureId, creation.descriptor);
+      if (creation && !records.has(creation.descriptor.id))
+        records.set(creation.descriptor.id, creation.descriptor);
     }
-    const ordered = [...records.values()].sort(
-      (left, right) => left.cutoffMs - right.cutoffMs || left.id.localeCompare(right.id),
-    );
+    const checkpointFile = join(directory, 'worker-checkpoints.json');
+    const checkpoints: Record<string, { observedAtMs: number; closed: boolean }> = {};
+    if (existsSync(checkpointFile)) {
+      const saved = JSON.parse(readFileSync(checkpointFile, 'utf8')) as unknown;
+      if (
+        !saved ||
+        typeof saved !== 'object' ||
+        Array.isArray(saved) ||
+        Object.keys(saved).length > 512
+      )
+        throw Error('Invalid worker checkpoint bounds');
+      for (const [id, raw] of Object.entries(saved)) {
+        if (
+          !raw ||
+          typeof raw !== 'object' ||
+          typeof raw.observedAtMs !== 'number' ||
+          !Number.isSafeInteger(raw.observedAtMs) ||
+          typeof raw.closed !== 'boolean'
+        )
+          throw Error('Invalid worker checkpoint');
+        checkpoints[id] = { observedAtMs: raw.observedAtMs, closed: raw.closed };
+      }
+    }
+    const ordered = [...records.values()]
+      .filter(
+        (record) =>
+          !checkpoints[record.id]?.closed ||
+          Date.now() - checkpoints[record.id].observedAtMs >= 900_000,
+      )
+      .sort((left, right) => left.cutoffMs - right.cutoffMs || left.id.localeCompare(right.id));
     const cursorFile = join(directory, 'worker-cursor.json');
     const cursor = existsSync(cursorFile)
       ? (JSON.parse(readFileSync(cursorFile, 'utf8')).cursor as unknown)
@@ -140,15 +212,16 @@ export async function runWorkerOnce(): Promise<void> {
     const result = await workerCycle(ordered, cursor, {
       now: Date.now,
       async execute(action, record) {
-        await runOperator([
-          action,
-          record.fixtureId,
-          ...(action === 'reconcile' ? [] : ['--broadcast']),
-        ]);
+        await runOperator(
+          [action, record.fixtureId, ...(action === 'reconcile' ? [] : ['--broadcast'])],
+          { record, quiet: true },
+        );
       },
       async inspect(record) {
         for (const action of ['close', 'report'] as const) {
-          const operation = journal.load(`${action}-${record.fixtureId}`);
+          const operation = journal.load(
+            operationKey(action, record.fixtureId, record.type.codeHash),
+          );
           if (!operation) continue;
           const state = await reconcileOperation(client, operation);
           if (['pending', 'uncertain', 'rejected'].includes(state.status))
@@ -179,12 +252,86 @@ export async function runWorkerOnce(): Promise<void> {
           /^0x00010[012]$/.test(data) &&
           timestamp >= record.cutoffMs &&
           timestamp < record.terms.deadlineMs;
+        checkpoints[record.id] = { observedAtMs: Date.now(), closed: state.closed };
         return { exists: !!state.market, closed: state.closed, eligibleReport };
       },
     });
     const temporary = `${cursorFile}.${randomUUID()}.next`;
     writeExclusiveJson(temporary, { cursor: result.cursor, completedAt: new Date().toISOString() });
     renameSync(temporary, cursorFile);
-    console.log(JSON.stringify({ worker: 'direct-testnet', ...result }, null, 2));
+    const checkpointTemporary = `${checkpointFile}.${randomUUID()}.next`;
+    writeExclusiveJson(checkpointTemporary, checkpoints);
+    renameSync(checkpointTemporary, checkpointFile);
+    if (queue && catalogueReady) {
+      try {
+        await provisionCycle(queue, {
+          now: Date.now,
+          registered: () => registry.all(),
+          barrier: () => operatorFundingBarrier(client, journal, registry),
+          async available() {
+            const signer = new ccc.SignerCkbPrivateKey(
+              client,
+              process.env.STREAK_DIRECT_PRIVATE_KEY!,
+            );
+            const lock = (await signer.getRecommendedAddressObj()).script;
+            const page = await client.findCellsPagedNoCache(
+              {
+                script: lock,
+                scriptType: 'lock',
+                scriptSearchMode: 'exact',
+                withData: true,
+                filter: { scriptLenRange: [0, 1], outputDataLenRange: [0, 1] },
+              },
+              'desc',
+              64,
+            );
+            return page.cells
+              .filter(
+                (cell) =>
+                  !cell.cellOutput.type &&
+                  cell.outputData === '0x' &&
+                  cell.cellOutput.lock.eq(lock),
+              )
+              .reduce((sum, cell) => sum + cell.cellOutput.capacity, 0n);
+          },
+          create: (entry) =>
+            runOperator(['create', entry.fixtureId, '--broadcast'], {
+              expectedFixture: entry,
+              quiet: true,
+            }),
+          resume: (entry) =>
+            runOperator(['create', entry.fixtureId, '--broadcast'], {
+              expectedFixture: entry,
+              quiet: true,
+            }),
+        });
+      } catch {
+        queue.status = 'blocked-review';
+      }
+    }
+    const provisioning =
+      queue && progressDirectory
+        ? queue.publish(progressDirectory, MARKET_RESERVE_SHANNONS, Date.now())
+        : undefined;
+    console.log(
+      JSON.stringify(
+        {
+          worker: 'direct-testnet',
+          ...result,
+          ...(provisioning
+            ? {
+                provisioning: {
+                  status: provisioning.status,
+                  counts: provisioning.counts,
+                  remainingReserveShannons: provisioning.remainingReserveShannons,
+                  estimatedShortfallShannons: provisioning.estimatedShortfallShannons,
+                },
+              }
+            : {}),
+        },
+        null,
+        2,
+      ),
+    );
   });
 }

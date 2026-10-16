@@ -1143,3 +1143,31 @@
     border: 1px solid CanvasText;
   }
 }
+.available-markets {
+  flex-wrap: wrap;
+  margin-block: 16px;
+}
+
+.available-market-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.available-market-links a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.slip-draft-check {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.slip-draft-check summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}

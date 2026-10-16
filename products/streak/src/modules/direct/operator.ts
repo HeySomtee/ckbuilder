@@ -3,6 +3,8 @@ import type { Match } from '../../types';
 import {
   createRecord,
   PUBLIC_DIRECT_CONFIG,
+  protocolConfigFor,
+  maxLockArgs,
   type DirectMarketRecord,
   type DirectProtocolConfig,
   validateRecord,
@@ -16,6 +18,7 @@ import {
 const CKB = 100_000_000n;
 const STORAGE = 321n * CKB;
 const RESERVE = 610n * CKB;
+export const MARKET_RESERVE_SHANNONS = 5n * RESERVE;
 const MAX_INPUTS = 64;
 const hex = (bytes: Uint8Array): string => `0x${Buffer.from(bytes).toString('hex')}`;
 const raw = (value: string): Buffer => Buffer.from(value.slice(2), 'hex');
@@ -41,6 +44,7 @@ export async function loadOperatorMarket(
   descriptor: DirectMarketRecord,
   config: DirectProtocolConfig = PUBLIC_DIRECT_CONFIG,
 ): Promise<OperatorMarket> {
+  config = protocolConfigFor(descriptor, config);
   validateRecord(descriptor, config);
   const type = ccc.Script.from(descriptor.type);
   const page = await client.findCellsPagedNoCache(
@@ -129,9 +133,9 @@ async function funding(client: ccc.Client, lock: ccc.Script, minimum: bigint): P
   );
 }
 
-async function signerLock(signer: ccc.Signer): Promise<ccc.Script> {
+async function signerLock(signer: ccc.Signer, config: DirectProtocolConfig): Promise<ccc.Script> {
   const lock = (await signer.getRecommendedAddressObj()).script;
-  if (ccc.bytesFrom(lock.args).length > 20)
+  if (ccc.bytesFrom(lock.args).length > maxLockArgs(config))
     throw Error('Operator lock exceeds the deployed contract limit');
   return lock;
 }
@@ -145,10 +149,13 @@ async function fundedTransaction(
   config: DirectProtocolConfig,
   options: { fund?: ccc.Cell; since?: bigint } = {},
 ): Promise<ccc.Transaction> {
-  const lock = await signerLock(signer);
+  if (config.codeDeps.length !== 2)
+    throw Error('The compatible contract deployment is awaiting testnet funding');
+  const lock = await signerLock(signer, config);
   const used = outputs.reduce((total, output) => total + ccc.numFrom(output.capacity ?? 0), 0n);
   const received = inputs.reduce((total, input) => total + input.cell.cellOutput.capacity, 0n);
-  const reserveForChangeAndFee = 62n * CKB;
+  const minimumChange = BigInt(ccc.CellOutput.from({ capacity: 0n, lock }).occupiedSize) * CKB;
+  const reserveForChangeAndFee = minimumChange + CKB;
   const fund =
     options.fund ??
     (await funding(
@@ -179,7 +186,7 @@ async function fundedTransaction(
   const fee = prepared.estimateFee(1000n);
   prepared.outputs[prepared.outputs.length - 1].capacity -= fee;
   if (
-    prepared.outputs[prepared.outputs.length - 1].capacity < 61n * CKB ||
+    prepared.outputs[prepared.outputs.length - 1].capacity < minimumChange ||
     prepared.toBytes().length > 100_000
   )
     throw Error('Operator transaction exceeds fee or size bounds');
@@ -208,8 +215,9 @@ export async function buildCreate(
   const cutoff = Date.parse(fixture.kickoff);
   if (!Number.isSafeInteger(cutoff) || cutoff <= now + 120_000 || fixture.status !== 'scheduled')
     throw Error('Create only a scheduled API fixture at least two minutes before kickoff');
-  const lock = await signerLock(signer);
-  const fund = await funding(client, lock, 5n * RESERVE + 62n * CKB);
+  const lock = await signerLock(signer, config);
+  const changeAndFee = BigInt(ccc.CellOutput.from({ capacity: 0n, lock }).occupiedSize) * CKB + CKB;
+  const fund = await funding(client, lock, MARKET_RESERVE_SHANNONS + changeAndFee);
   const args = hex(
     Buffer.concat([
       Buffer.from(fund.outPoint.toBytes()),
@@ -249,6 +257,7 @@ export async function buildReport(
   now = Date.now(),
   config: DirectProtocolConfig = PUBLIC_DIRECT_CONFIG,
 ): Promise<ccc.Transaction> {
+  config = protocolConfigFor(descriptor, config);
   validateRecord(descriptor, config);
   confirmFootballEvidence(
     parseFootballObservation(descriptor, evidence.previousObservation),
@@ -265,7 +274,7 @@ export async function buildReport(
     ![0, 1, 2].includes(evidence.outcome)
   )
     throw Error('Cannot report stale, mismatched or out-of-window football evidence');
-  const lock = await signerLock(signer);
+  const lock = await signerLock(signer, config);
   if (`0x${raw(descriptor.type.args).subarray(36, 68).toString('hex')}` !== lock.hash())
     throw Error('This signer is not the configured result reporter');
   const state = await loadOperatorMarket(client, descriptor, config);
@@ -357,6 +366,7 @@ export async function buildClose(
   now = Date.now(),
   config: DirectProtocolConfig = PUBLIC_DIRECT_CONFIG,
 ): Promise<ccc.Transaction> {
+  config = protocolConfigFor(descriptor, config);
   const state = await loadOperatorMarket(client, descriptor, config);
   if (!state.market || state.closed || [0, 1, 2, 3].some((id) => !state.shards[id]))
     throw Error('Market is closed or its complete four-shard state is unavailable');
@@ -429,7 +439,7 @@ export async function buildClose(
     }
   }
   if (outcome === 255) {
-    outputs.push({ capacity: 100n * CKB, lock: await signerLock(signer) });
+    outputs.push({ capacity: 100n * CKB, lock: await signerLock(signer, config) });
     data.push('0x');
     capacity -= 100n * CKB;
   }

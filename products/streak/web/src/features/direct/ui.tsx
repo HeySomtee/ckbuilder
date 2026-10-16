@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { MouseEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ccc } from '@ckb-ccc/core';
 import { getDirectMarkets } from './api';
@@ -11,9 +12,16 @@ import { getPublicMarket } from '../predictions/api';
 import { amountShannons, displayShannons } from '../predictions/draft';
 import type { Pick } from '../predictions/draft';
 import type { Account } from '../account/api';
-import { chooseWallet } from '../../lib/wallet';
+import {
+  assertActiveWallet,
+  assertWalletAccount,
+  chooseWallet,
+  disconnectWallet,
+  getWalletState,
+  subscribeWallet,
+} from '../../lib/wallet';
 import { directHref, followDirect } from '../../lib/direct-route';
-import { marketHref, followMarket } from '../../lib/market-route';
+import { marketHref, followMarket, navigateMarket } from '../../lib/market-route';
 import { TeamBadge } from '../../components/team-badge';
 import { useNow } from '../../lib/use-now';
 import '../../design-system/direct.css';
@@ -22,6 +30,12 @@ const outcomeNames = ['Home', 'Draw', 'Away'] as const;
 const outcomeIndexes = { home: 0, draw: 1, away: 2 } as const;
 const transactionUrl = (hash: string) => `https://pudge.explorer.nervos.org/transaction/${hash}`;
 const money = (value: string | bigint) => `${displayShannons(BigInt(value))} tCKB`;
+function browseMarkets(event: MouseEvent<HTMLAnchorElement>) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    return;
+  event.preventDefault();
+  navigateMarket(null);
+}
 const message = (error: unknown) =>
   error instanceof Error
     ? error.message
@@ -278,7 +292,28 @@ export default function DirectPage({
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   const mounted = useRef(true);
   const busy = useRef(false);
-  const [connection, setConnection] = useState<Connection | null>(null);
+  const wallet = useSyncExternalStore(subscribeWallet, getWalletState);
+  const activeWallet = wallet.connection;
+  const linkedWallet = useQuery({
+    queryKey: ['direct-private', activeWallet?.revision, 'connection', account?.walletAddress],
+    enabled: !!activeWallet && accountReady,
+    queryFn: async (): Promise<Connection> => {
+      if (!activeWallet) throw Error('Connect your wallet first.');
+      await assertActiveWallet(activeWallet);
+      if (account) await assertWalletAccount(activeWallet, account.walletAddress);
+      const { signer, address } = activeWallet;
+      const lock = (await ccc.Address.fromString(address, signer.client)).script;
+      const client = new DirectClient(signer, MANIFEST, 'wallet');
+      await client.balance();
+      await client.history();
+      await assertActiveWallet(activeWallet);
+      return { client, address, ownerHash: lock.hash() };
+    },
+    retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+  const connection = activeWallet ? (linkedWallet.data ?? null) : null;
   const [outcome, setOutcome] = useState<Outcome>(
     draftPick ? outcomeIndexes[draftPick.outcome] : 0,
   );
@@ -331,27 +366,11 @@ export default function DirectPage({
     refetchIntervalInBackground: false,
   });
   const connect = useMutation({
-    mutationFn: async () => {
-      const signer = await chooseWallet();
-      const address = await signer.getRecommendedAddress();
-      const lock = (await ccc.Address.fromString(address, signer.client)).script;
-      if (
-        account &&
-        !(await ccc.Address.fromString(account.walletAddress, signer.client)).script.eq(lock)
-      )
-        throw Error(
-          'This wallet differs from your signed-in account. Connect that wallet or sign out first.',
-        );
-      const client = new DirectClient(signer, MANIFEST, 'wallet');
-      await client.balance();
-      await client.history();
-      return { client, address, ownerHash: lock.hash() };
-    },
+    mutationFn: chooseWallet,
     retry: false,
-    onSuccess: (next) => {
+    onSuccess: () => {
       if (mounted.current) {
         setReview(null);
-        setConnection(next);
         setNotice('Wallet connected. Review every amount before signing.');
       }
     },
@@ -361,7 +380,8 @@ export default function DirectPage({
   };
   const prepare = useMutation({
     mutationFn: async (claim?: { descriptor: Descriptor; point: Point }) => {
-      if (!connection) throw Error('Connect your wallet first.');
+      if (!connection || !activeWallet) throw Error('Connect your wallet first.');
+      await assertActiveWallet(activeWallet);
       if (claim) return connection.client.prepareClaim(claim.descriptor, claim.point);
       const principal = amountShannons(amount);
       if (
@@ -388,10 +408,11 @@ export default function DirectPage({
   });
   const submit = useMutation({
     mutationFn: async () => {
-      if (busy.current || !connection || !review)
+      if (busy.current || !connection || !review || !activeWallet)
         throw Error('A wallet action is already in progress.');
       busy.current = true;
       try {
+        await assertActiveWallet(activeWallet);
         let current = review.descriptor;
         if (review.kind === 'deposit') {
           const latest = await getDirectMarkets(undefined, review.descriptor.fixtureId);
@@ -401,6 +422,7 @@ export default function DirectPage({
           current = found;
         }
         const signed = await connection.client.signAndPersist(review, current);
+        await assertActiveWallet(activeWallet);
         if (mounted.current)
           setNotice('Signed transaction saved. Sending the same transaction to CKB.');
         const result = await connection.client.broadcast(signed);
@@ -433,7 +455,7 @@ export default function DirectPage({
   const working = prepare.isPending || submit.isPending;
   const principal = amountShannons(amount);
   const reviewExpired = !!review && now >= review.expiresAt;
-  const error = connect.error ?? prepare.error ?? submit.error;
+  const error = linkedWallet.error ?? connect.error ?? prepare.error ?? submit.error;
   const teams = detail.data?.market;
   function exportRecovery() {
     if (!connection || !history.data) return;
@@ -474,7 +496,7 @@ export default function DirectPage({
             Back to match
           </a>
         ) : (
-          <a className="quiet" href="/season/">
+          <a className="quiet" href="/season/" onClick={browseMarkets}>
             Browse matches
           </a>
         )}
@@ -484,22 +506,27 @@ export default function DirectPage({
           <p className="eyebrow">CKB PUDGE TESTNET</p>
           <h2>Your available CKB</h2>
           <strong className="direct-balance">
-            {balance.data === undefined ? 'Connect to view' : money(balance.data)}
+            {balance.data === undefined
+              ? linkedWallet.isError || balance.isError
+                ? 'Balance unavailable'
+                : activeWallet
+                  ? 'Checking balance...'
+                  : 'Connect to view'
+              : money(balance.data)}
           </strong>
           <p>
             Spendable plain wallet cells. Your existing Streak balance stays in{' '}
             <a href="/index.html#wallet">legacy Wallet</a>.
           </p>
-          {connection ? (
+          {activeWallet ? (
             <>
-              <code className="direct-address">{connection.address}</code>
+              <code className="direct-address">{activeWallet.address}</code>
               <button
                 className="quiet"
                 disabled={working}
                 onClick={() => {
-                  setConnection(null);
+                  disconnectWallet();
                   setReview(null);
-                  queryClient.removeQueries({ queryKey: ['direct-private'] });
                 }}
               >
                 Disconnect wallet
@@ -512,6 +539,18 @@ export default function DirectPage({
               onClick={() => connect.mutate()}
             >
               {connect.isPending ? 'Connecting wallet...' : 'Connect testnet wallet'}
+            </button>
+          )}
+          {wallet.notice && <p role="status">{wallet.notice}</p>}
+          {account && !activeWallet && (
+            <p>
+              Your sign-in is active. Reconnect your wallet in this tab to view your balance and
+              approve payments.
+            </p>
+          )}
+          {linkedWallet.isError && activeWallet && (
+            <button className="quiet" onClick={() => void linkedWallet.refetch()}>
+              Retry wallet checks
             </button>
           )}
           {balance.isError && (
@@ -618,7 +657,7 @@ export default function DirectPage({
                 Open a match and choose its testnet prediction to stake directly. Connect here to
                 restore pending transactions and find claims owned by your wallet.
               </p>
-              <a className="connect" href="/season/">
+              <a className="connect" href="/season/" onClick={browseMarkets}>
                 Find a match
               </a>
             </>

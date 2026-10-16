@@ -15,7 +15,8 @@ require(path.join(root, 'node_modules/ts-node')).register({
   },
 });
 const ccc = require('@ckb-ccc/core');
-const { boot } = require('../../../src/week20/contract-lab/scripts/harness.cjs');
+const { boot } = require('./direct-harness.cjs');
+const { readOmniLock, setupOmniActor, PIN: OMNI_PIN } = require('./direct-omnilock.cjs');
 const { buildCreate, buildReport, buildClose } = require('../src/modules/direct/operator.ts');
 const {
   validateFootballEvidence,
@@ -132,14 +133,14 @@ async function main() {
   assert.equal(process.env.NODE_ENV, 'test');
   assert.equal(process.env.STREAK_SKIP_ENV_FILE, '1');
   assert.equal(process.argv[2], 'http://127.0.0.1:8218');
+  readOmniLock(); // Fail closed before the run if the explicit offline setup is missing.
   ({ createDevnetDirectClient } = await import('../web/src/features/direct/client.ts'));
   ({ parseDescriptor, PROTOCOL_HASH, GUARD_HASH, CKB, STORAGE } =
     await import('../web/src/features/direct/protocol.ts'));
   ({ parseRecord } = await import('../web/src/features/direct/journal.ts'));
   save();
   const h = await boot();
-  // Historical labs pin CCC 1.12.5. Exercise the product's installed CCC version
-  // with the same dev-chain script dependencies and public genesis fixtures.
+  // Use the product's CCC installation with the isolated chain's script dependencies.
   const client = new ccc.ClientPublicTestnet({
     url: 'http://127.0.0.1:8218',
     fallbacks: [],
@@ -247,7 +248,7 @@ async function main() {
     );
     return descriptor;
   }
-  async function commitUser(adapter, actor, descriptor, review, name) {
+  async function commitUser(adapter, actor, descriptor, review, name, inspectSigned) {
     const signed = await adapter.signAndPersist(review, descriptor);
     assert.equal(signed.status, 'signed');
     assert(
@@ -257,6 +258,7 @@ async function main() {
     );
     const before = await client.getTransactionNoCache(signed.hash);
     assert(!before || !['committed', 'pending', 'proposed'].includes(before.status));
+    if (inspectSigned) await inspectSigned(ccc.Transaction.fromBytes(signed.signedBytes));
     const submitted = await adapter.broadcast(signed);
     assert(['submitted', 'unknown'].includes(submitted.status), submitted.message);
     const transaction = ccc.Transaction.fromBytes(signed.signedBytes);
@@ -530,6 +532,145 @@ async function main() {
   record('Recovery rebroadcasts the original signed bytes and confirms on the replacement branch', {
     transaction: stored.hash,
   });
+
+  const evmActor = await setupOmniActor(h, client);
+  await syncIndex();
+  const evmJournalFile = path.join(artifacts, `evm-owner-${process.pid}.json`);
+  const counterpartyJournalFile = path.join(artifacts, `evm-counterparty-${process.pid}.json`);
+  for (const file of [evmJournalFile, counterpartyJournalFile])
+    fs.writeFileSync(file, '[]\n', { mode: 0o600 });
+  const evm = await createDevnetDirectClient(
+    evmActor.signer,
+    config.codeDeps,
+    'fixture-evm-owner',
+    new FileJournal(evmJournalFile),
+    options,
+  );
+  const counterparty = await createDevnetDirectClient(
+    h.admin.signer,
+    config.codeDeps,
+    'fixture-evm-counterparty',
+    new FileJournal(counterpartyJournalFile),
+    options,
+  );
+  assert.equal(ccc.bytesFrom(evmActor.lock.args).length, 22);
+  assert((await evm.balance()) >= 10_000n * CKB);
+  record('Genuine pinned OmniLock code and 22-byte EVM owner funded on the isolated chain', {
+    codeHash: OMNI_PIN.dataHash,
+    deployment: evmActor.deploymentHash,
+    funding: evmActor.fundingHash,
+    address: (await evm.identity()).address,
+  });
+
+  const evmMarket = await newMarket(990003);
+  await commitUser(
+    evm,
+    evmActor,
+    evmMarket,
+    await evm.prepareDeposit(evmMarket, 0, 100n * CKB),
+    'CCC EVM personal signature deposits directly through genuine OmniLock and product v2',
+    async (signed) => {
+      const corrupted = signed.clone();
+      const witness = ccc.WitnessArgs.fromBytes(corrupted.witnesses[1]);
+      assert(witness.lock && ccc.bytesFrom(witness.lock).length === 85);
+      const lockBytes = ccc.bytesFrom(witness.lock);
+      lockBytes[20] ^= 1;
+      witness.lock = ccc.hexFrom(lockBytes);
+      corrupted.setWitnessArgs(1, witness);
+      await h.rejects(
+        'OmniLock consensus rejects a corrupted personal signature',
+        corrupted,
+        /ValidationFailure|error code/,
+      );
+      record('Real OmniLock VM rejects a corrupted EVM signature before valid submission');
+    },
+  );
+  await commitUser(
+    counterparty,
+    h.admin,
+    evmMarket,
+    await counterparty.prepareDeposit(evmMarket, 1, 200n * CKB),
+    'Native counterparty admits the earlier EVM deposit through the same shard',
+  );
+  const evmAdmitted = await eventually(
+    'EVM admission',
+    () => evm.discover(evmMarket),
+    (value) => value.positions.some((position) => position.status === 'accepted'),
+  );
+  assert.equal(evmAdmitted.positions[0].principalShannons, (100n * CKB).toString());
+  h.setClock(evmMarket.cutoffMs + 31_000);
+  await h.mine(40);
+  const evmEvidence = confirmFootballEvidence(
+    validateFootballEvidence(evmMarket, footballPayload(evmMarket), h.getClock() - 30_000),
+    validateFootballEvidence(evmMarket, footballPayload(evmMarket), h.getClock()),
+    h.getClock(),
+  );
+  await commitOperator(
+    await buildReport(client, h.admin.signer, evmMarket, evmEvidence, h.getClock(), config),
+    'Product operator reports the EVM fixture with confirmed synthetic evidence',
+    'report',
+    evmMarket,
+  );
+  await commitOperator(
+    await buildClose(client, h.admin.signer, evmMarket, 'settle', h.getClock(), config),
+    'Product v2 settles native and EVM stakes into independently funded claims',
+    'close',
+    evmMarket,
+  );
+  const evmClaims = await eventually(
+    'EVM winning claim',
+    () => evm.discover(evmMarket),
+    (value) => value.positions.some((position) => position.status === 'claimable'),
+  );
+  const evmClaim = evmClaims.positions.find((position) => position.status === 'claimable');
+  assert.equal(evmClaim.entitlementShannons, (294n * CKB + STORAGE).toString());
+  await assert.rejects(
+    () => counterparty.prepareClaim(evmMarket, evmClaim.outPoint),
+    /owns this funded claim/,
+  );
+  await commitUser(
+    evm,
+    evmActor,
+    evmMarket,
+    await evm.prepareClaim(evmMarket, evmClaim.outPoint),
+    'EVM personal signature claims the full 615 CKB with separate network fee capacity',
+  );
+
+  const evmVoidMarket = await newMarket(990004);
+  await commitUser(
+    evm,
+    evmActor,
+    evmVoidMarket,
+    await evm.prepareDeposit(evmVoidMarket, 2, 100n * CKB),
+    'EVM owner stakes into an independent timeout fixture',
+  );
+  h.setClock(evmVoidMarket.terms.deadlineMs + 1000);
+  await h.mine(40);
+  await commitOperator(
+    await buildClose(client, h.admin.signer, evmVoidMarket, 'void', h.getClock(), config),
+    'Six-hour cancellation creates the EVM owner full-principal refund',
+    'close',
+    evmVoidMarket,
+  );
+  const evmRefunds = await eventually(
+    'EVM refund',
+    () => evm.discover(evmVoidMarket),
+    (value) => value.positions.some((position) => position.status === 'claimable'),
+  );
+  const evmRefund = evmRefunds.positions.find((position) => position.status === 'claimable');
+  assert.equal(evmRefund.entitlementShannons, (100n * CKB + STORAGE).toString());
+  await commitUser(
+    evm,
+    evmActor,
+    evmVoidMarket,
+    await evm.prepareClaim(evmVoidMarket, evmRefund.outPoint),
+    'EVM personal signature redeems all 421 CKB after void with no betting fees',
+  );
+  assert.equal(evmActor.signer.messages.length, 4);
+  assert(
+    evmActor.signer.messages.every((message) => /^CKB transaction: 0x[0-9a-f]{64}$/.test(message)),
+  );
+  record('All four EVM signatures use CCC modern personal-message transaction binding');
   evidence.status = 'passed';
   evidence.finishedAt = new Date().toISOString();
   evidence.tip = await h.rpc('get_tip_header');

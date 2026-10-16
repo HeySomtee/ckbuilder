@@ -45,7 +45,7 @@ export async function syntheticChain(cutoffMs) {
   });
   const base = {
     id: 'direct-fixture-one',
-    fixtureId: 'direct-one',
+    fixtureId: 'api-football-900001',
     label: 'Arsenal vs Chelsea',
     cutoffMs,
     creationTxHash: creation.hash(),

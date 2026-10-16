@@ -23,9 +23,20 @@ import {
   writeExclusiveJson,
   type DirectProtocolConfig,
   PUBLIC_DIRECT_CONFIG,
+  LEGACY_DIRECT_CONFIG,
 } from './registry';
 
 export type OperatorAction = 'create' | 'report' | 'close';
+export const OPERATION_FILE = /^(create|report|close)-(?:v2-)?api-football-[1-9][0-9]{0,14}\.json$/;
+export function operationKey(
+  action: OperatorAction,
+  fixtureId: string,
+  protocolHash: string = PUBLIC_DIRECT_CONFIG.protocolHash,
+): string {
+  if (!/^api-football-[1-9][0-9]{0,14}$/.test(fixtureId) || !/^0x[0-9a-f]{64}$/.test(protocolHash))
+    throw Error('Unsupported operator operation identity');
+  return `${action}-${protocolHash === LEGACY_DIRECT_CONFIG.protocolHash ? '' : 'v2-'}${fixtureId}`;
+}
 export interface SignedOperation {
   version: 1;
   operationId: string;
@@ -48,14 +59,13 @@ export class OperatorJournal {
   readonly directory: string;
   constructor(
     directory: string,
-    readonly config: DirectProtocolConfig = PUBLIC_DIRECT_CONFIG,
+    readonly config?: DirectProtocolConfig,
   ) {
     this.directory = resolve(directory);
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
   }
   private path(operationId: string): string {
-    if (!/^(create|report|close)-api-football-[1-9][0-9]{0,14}$/.test(operationId))
-      throw Error('Invalid operator operation ID');
+    if (!OPERATION_FILE.test(`${operationId}.json`)) throw Error('Invalid operator operation ID');
     return join(this.directory, `${operationId}.json`);
   }
   load(operationId: string): SignedOperation | undefined {
@@ -67,12 +77,16 @@ export class OperatorJournal {
       row.version !== 1 ||
       row.operationId !== operationId ||
       !['create', 'report', 'close'].includes(String(row.action)) ||
-      row.operationId !== `${String(row.action)}-${String(row.fixtureId)}` ||
       typeof row.signedTransaction !== 'string' ||
       !/^0x(?:[0-9a-f]{2})+$/.test(row.signedTransaction)
     )
       throw Error('Invalid operator journal entry');
     const descriptor = validateRecord(row.descriptor, this.config);
+    if (
+      operationId !==
+      operationKey(row.action as OperatorAction, descriptor.fixtureId, descriptor.type.codeHash)
+    )
+      throw Error('Journal operation generation does not match its descriptor');
     if (descriptor.fixtureId !== row.fixtureId)
       throw Error('Journal fixture and descriptor differ');
     const transactionHash = hash32(row.transactionHash, 'journal transaction hash');
@@ -102,7 +116,7 @@ export class OperatorJournal {
     signed: ccc.Transaction,
     now = Date.now(),
   ): SignedOperation {
-    const operationId = `${action}-${descriptor.fixtureId}`;
+    const operationId = operationKey(action, descriptor.fixtureId, descriptor.type.codeHash);
     const existing = this.load(operationId);
     if (existing) {
       if (existing.signedTransaction !== ccc.hexFrom(signed.toBytes()))
@@ -111,11 +125,7 @@ export class OperatorJournal {
         );
       return existing;
     }
-    if (
-      readdirSync(this.directory).filter((file) =>
-        /^(create|report|close)-api-football-\d+\.json$/.test(file),
-      ).length >= 768
-    )
+    if (readdirSync(this.directory).filter((file) => OPERATION_FILE.test(file)).length >= 1536)
       throw Error('Operator journal reached the bounded pilot limit');
     const operation: SignedOperation = {
       version: 1,
@@ -161,7 +171,11 @@ export class OperatorJournal {
       );
       if (
         previous.status === status.status &&
-        previous.blockHash === ('blockHash' in status ? status.blockHash : undefined)
+        previous.blockHash === ('blockHash' in status ? status.blockHash : undefined) &&
+        (typeof previous.confirmations === 'number' && previous.confirmations >= 4) ===
+          ('confirmations' in status &&
+            typeof status.confirmations === 'number' &&
+            status.confirmations >= 4)
       )
         return;
     }
@@ -225,7 +239,7 @@ export class OperatorJournal {
 /** Always refresh actual chain state, even when a prior observation said committed. */
 export async function reconcileOperation(
   client: ccc.Client,
-  operation: SignedOperation,
+  operation: Pick<SignedOperation, 'transactionHash' | 'signedTransaction'>,
 ): Promise<Reconciliation> {
   const base = { transactionHash: operation.transactionHash };
   const response = await client.getTransactionNoCache(operation.transactionHash);

@@ -6,9 +6,11 @@ import type { AddressInfo } from 'node:net';
 import {
   DirectRegistry,
   PUBLIC_DIRECT_CONFIG,
+  LEGACY_DIRECT_CONFIG,
   PROVIDER_ORIGIN,
   createRecord,
 } from './modules/direct/registry';
+import { ProvisionQueue } from './modules/direct/provision';
 import type { Match } from './types';
 
 async function main(): Promise<void> {
@@ -16,6 +18,8 @@ async function main(): Promise<void> {
   process.env.STREAK_SKIP_ENV_FILE = '1';
   process.env.STREAK_DB_FILE = join(directory, 'db.json');
   process.env.STREAK_DIRECT_REGISTRY_DIR = join(directory, 'registry');
+  process.env.STREAK_DIRECT_LEGACY_REGISTRY_DIR = join(directory, 'legacy');
+  process.env.STREAK_DIRECT_PROGRESS_DIR = join(directory, 'progress');
   process.env.MATCH_PROVIDER = 'worldcup';
   for (const name of [
     'DATABASE_URL',
@@ -45,6 +49,22 @@ async function main(): Promise<void> {
       assert.equal(config.status, 200);
       assert.equal(config.headers.get('cache-control'), 'no-store');
       assert.deepEqual(await config.json(), PUBLIC_DIRECT_CONFIG);
+      const unreadyFixtures = await fetch(`${base}/api/direct/fixtures`);
+      assert.equal(
+        unreadyFixtures.status,
+        503,
+        'a synthetic or unready provider cannot fund markets',
+      );
+      assert.deepEqual(await (await fetch(`${base}/api/direct/provisioning`)).json(), {
+        progress: null,
+      });
+      const queue = new ProvisionQueue(join(directory, 'queue'));
+      const progress = queue.publish(
+        process.env.STREAK_DIRECT_PROGRESS_DIR!,
+        3050n * 100000000n,
+        Date.now(),
+      );
+      assert.deepEqual(await (await fetch(`${base}/api/direct/provisioning`)).json(), { progress });
       for (const query of ['', '?matchId=api-football-12345', '?matchId=worldcup-1']) {
         const response = await fetch(`${base}/api/direct/markets${query}`);
         assert.equal(response.status, 200);
@@ -102,6 +122,25 @@ async function main(): Promise<void> {
         'treasury',
       ])
         assert.equal(publicText.includes(secret), false);
+      const legacy = createRecord(
+        fixture,
+        { ...record.type, codeHash: LEGACY_DIRECT_CONFIG.protocolHash },
+        `0x${'22'.repeat(32)}`,
+        LEGACY_DIRECT_CONFIG,
+      );
+      new DirectRegistry(process.env.STREAK_DIRECT_LEGACY_REGISTRY_DIR).add(legacy);
+      const generations = (await (
+        await fetch(`${base}/api/direct/markets?matchId=${fixture.id}`)
+      ).json()) as { markets: { id: string; entryEnabled: boolean }[] };
+      assert.deepEqual(
+        generations.markets.map((row) => row.id),
+        [record.id, legacy.id],
+      );
+      assert.equal(
+        generations.markets[1].entryEnabled,
+        false,
+        'archived positions stay discoverable without accepting new entries',
+      );
       writeFileSync(join(directory, 'registry', `${fixture.id}.json`), '{invalid');
       const invalid = await fetch(`${base}/api/direct/markets?matchId=${fixture.id}`);
       assert.equal(invalid.status, 500);

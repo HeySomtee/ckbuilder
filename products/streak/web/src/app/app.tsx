@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
+import type { MouseEvent } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMarkets, formatCkb, outcomes } from '../features/markets/api';
 import type { Market, MarketSort } from '../features/markets/api';
@@ -13,17 +14,33 @@ import { PredictionSlip } from '../features/predictions/slip';
 import { followMarket, marketHref, navigateMarket, useMarketRoute } from '../lib/market-route';
 import { directHref, followDirect, navigateDirect, useDirectRoute } from '../lib/direct-route';
 import '../design-system/predictions.css';
+import { AvailableMarkets, useDirectCatalogue } from '../features/direct/availability';
+import { acceptsPayment } from '../features/direct/availability-api';
+import {
+  assertWalletAccount,
+  disconnectWallet,
+  getWalletState,
+  subscribeWallet,
+} from '../lib/wallet';
 
 const DirectPage = lazy(() => import('../features/direct/ui'));
+function browseMarkets(event: MouseEvent<HTMLAnchorElement>) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    return;
+  event.preventDefault();
+  navigateMarket(null);
+}
 
 function MarketCard({
   market,
   onPick,
   selected,
+  payable,
 }: {
   market: Market;
   onPick: (market: Market, outcome: Outcome) => void;
   selected?: Outcome;
+  payable: boolean | undefined;
 }) {
   const labels = { home: 'Home', draw: 'Draw', away: 'Away' };
   return (
@@ -117,8 +134,14 @@ function MarketCard({
             ))}
           </div>
           <div className="card-meta">
-            <span>{formatCkb(market.totalPoolCkb)} tCKB pooled</span>
-            <span>{market.totalBets} predictions</span>
+            <span>{formatCkb(market.totalPoolCkb)} tCKB in legacy pool</span>
+            <span>
+              {payable === undefined
+                ? 'Checking payment'
+                : payable
+                  ? 'Funded contract'
+                  : 'Save picks only'}
+            </span>
           </div>
         </>
       ) : (
@@ -133,11 +156,22 @@ function MarketCard({
 
 export function App() {
   const client = useQueryClient();
+  const wallet = useSyncExternalStore(subscribeWallet, getWalletState);
+  useEffect(
+    () =>
+      subscribeWallet(() => {
+        void client.cancelQueries({ queryKey: ['direct-private'] });
+        client.removeQueries({ queryKey: ['direct-private'] });
+      }),
+    [client],
+  );
+  const catalogue = useDirectCatalogue();
   const marketId = useMarketRoute();
   const directRoute = useDirectRoute();
   const [draftStore] = useState(createDraftStore);
   const draftState = useSyncExternalStore(draftStore.subscribe, draftStore.getSnapshot);
   const [slipOpen, setSlipOpen] = useState(false);
+  const [checkoutRevision, setCheckoutRevision] = useState(0);
   const [selectionNotice, setSelectionNotice] = useState('');
   function pick(market: Market, outcome: Outcome) {
     if (
@@ -183,6 +217,16 @@ export function App() {
     retry: false,
     staleTime: 30_000,
   });
+  useEffect(() => {
+    const connection = wallet.connection;
+    if (!connection || !account.data) return;
+    void assertWalletAccount(connection, account.data.walletAddress).catch((error: unknown) => {
+      disconnectWallet(
+        error instanceof Error ? error.message : 'Your wallet account changed. Connect again.',
+        connection,
+      );
+    });
+  }, [wallet.connection, account.data]);
   const login = useMutation({
     mutationFn: signIn,
     retry: false,
@@ -242,13 +286,17 @@ export function App() {
         Skip to markets
       </a>
       <aside className="rail">
-        <a href="/season/" className="wordmark">
+        <a href="/season/" className="wordmark" onClick={browseMarkets}>
           <img src="/mark.svg" alt="" width="34" height="34" />
           streak<span className="dot">.</span>
         </a>
         <p className="eyebrow">YOUR TOUCHLINE</p>
         <nav aria-label="Main navigation">
-          <a href="/season/" aria-current={!directRoute ? 'page' : undefined}>
+          <a
+            href="/season/"
+            onClick={browseMarkets}
+            aria-current={!directRoute ? 'page' : undefined}
+          >
             <Icon name="markets" />
             Markets
           </a>
@@ -290,6 +338,16 @@ export function App() {
           <span>No real-money stakes</span>
         </div>
         <main id="main" tabIndex={-1}>
+          {(login.isError || logout.isError || account.isError) && (
+            <div className="notice error" role="alert">
+              {logout.isError
+                ? 'Sign-out failed. Your session may still be active. Please retry.'
+                : (login.error?.message ?? 'Unable to check your session.')}
+              {account.isError && (
+                <button onClick={() => void account.refetch()}>Retry account</button>
+              )}
+            </div>
+          )}
           {selectionNotice && (
             <p
               className={
@@ -310,7 +368,7 @@ export function App() {
               }
             >
               <DirectPage
-                key={`${directRoute}:${account.data?.id ?? 'guest'}`}
+                key={`${directRoute}:${account.data?.id ?? 'guest'}:${checkoutRevision}:${wallet.revision}`}
                 marketId={directRoute === 'wallet' ? undefined : directRoute}
                 account={account.data ?? null}
                 accountReady={!account.isPending}
@@ -336,16 +394,7 @@ export function App() {
               </div>
               <span className="pilot-badge">Early access</span>
             </div>
-            {(login.isError || logout.isError || account.isError) && (
-              <div className="notice error" role="alert">
-                {logout.isError
-                  ? 'Sign-out failed. Your session may still be active. Please retry.'
-                  : (login.error?.message ?? 'Unable to check your session.')}
-                {account.isError && (
-                  <button onClick={() => void account.refetch()}>Retry account</button>
-                )}
-              </div>
-            )}
+            <AvailableMarkets />
             <section className="weekend-picker" aria-label="Matchweek">
               <div className="week-navigation">
                 <button
@@ -516,6 +565,14 @@ export function App() {
                     key={market.id}
                     market={market}
                     onPick={pick}
+                    payable={
+                      catalogue.isPending || catalogue.isError
+                        ? undefined
+                        : catalogue.data?.some(
+                            (row) =>
+                              row.fixtureId === market.matchId && acceptsPayment(row, Date.now()),
+                          )
+                    }
                     selected={
                       draftState.draft.picks.find((row) => row.matchId === market.matchId)?.outcome
                     }
@@ -535,8 +592,9 @@ export function App() {
               <div>
                 <h2>A clearer view of every prediction.</h2>
                 <p>
-                  These markets use the existing Streak treasury-backed ledger. Pool percentages are
-                  not fixed odds. Your balance and withdrawals remain in Wallet.
+                  Funded matches accept payments from your wallet into CKB testnet contracts. The
+                  percentages shown here belong to the legacy pool, not the contract pool. Existing
+                  account balances and withdrawals remain in legacy Wallet.
                 </p>
               </div>
               <a href="/index.html#wallet">
@@ -545,14 +603,14 @@ export function App() {
             </section>
             <footer>
               Friday through Monday, in your local time. Fixtures from connected competitions.
-              Testnet CKB has no monetary value. The new prediction slip saves drafts and checks
-              current rules. Funded testnet markets offer a separate single-prediction transaction.
+              Testnet CKB has no monetary value. Funded matches support one prediction per wallet
+              transaction. Combined payment is not available yet.
             </footer>
           </div>
         </main>
       </div>
       <nav className="mobile-dock" aria-label="Mobile navigation">
-        <a href="/season/" aria-current={!directRoute ? 'page' : undefined}>
+        <a href="/season/" onClick={browseMarkets} aria-current={!directRoute ? 'page' : undefined}>
           <Icon name="markets" />
           Markets
         </a>
@@ -576,6 +634,8 @@ export function App() {
         onDismiss={() => setSlipOpen(false)}
         onDirect={(id) => {
           setSlipOpen(false);
+          // A deliberate handoff replaces any older unsent quote, even on the same route.
+          setCheckoutRevision((revision) => revision + 1);
           navigateDirect(id);
         }}
         accountKey={

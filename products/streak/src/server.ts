@@ -11,7 +11,8 @@
 import "./env";
 import { rankFeaturedFixtures } from './fixture-ranking';
 import { findPublicPredictionMarket, InvalidSlip, parseSlip, reviewPredictions } from './modules/predictions/review';
-import { DirectRegistry, PUBLIC_DIRECT_CONFIG } from './modules/direct/registry';
+import { DirectRegistry, PUBLIC_DIRECT_CONFIG, PROVIDER_ORIGIN } from './modules/direct/registry';
+import { readProvisioningProgress, PROVISION_QUEUE_LIMIT } from './modules/direct/provision';
 
 import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
@@ -1098,6 +1099,7 @@ async function handleReceiptProof(
 type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
 
 const directRegistry = new DirectRegistry(process.env.STREAK_DIRECT_REGISTRY_DIR);
+const legacyDirectRegistry = new DirectRegistry(process.env.STREAK_DIRECT_LEGACY_REGISTRY_DIR);
 async function handleDirectMarkets(res: ServerResponse, url: URL): Promise<void> {
   const fixtureId = url.searchParams.get('matchId') ?? undefined;
   if (fixtureId !== undefined && !/^api-football-[1-9][0-9]{0,14}$/.test(fixtureId)) {
@@ -1106,14 +1108,37 @@ async function handleDirectMarkets(res: ServerResponse, url: URL): Promise<void>
     return sendJson(res, 400, { error: 'Invalid fixture identifier.' });
   }
   const status = providerStatus();
-  const markets = await read(db => directRegistry.describe(db.matches,
-    match => provider.id === 'football' && status.enabled && !status.simulated && isActiveProviderMatch(match), fixtureId));
+  const markets = await read(db => {
+    const fixtures = provider.scheduleFixtures?.() ?? db.matches;
+    const current = directRegistry.describe(fixtures,
+      match => provider.id === 'football' && status.enabled && !status.simulated && isActiveProviderMatch(match), fixtureId);
+    const archived = legacyDirectRegistry.describe(fixtures, () => false, fixtureId)
+      .filter(row => !current.some(active => active.id === row.id))
+      .map(row => ({ ...row, entryEnabled: false, entryUnavailableReason: 'This earlier contract is closed to new entries. Existing positions and claims remain available.' }));
+    return [...current, ...archived];
+  });
   sendJson(res, 200, { markets });
+}
+
+async function handleDirectFixtures(res: ServerResponse): Promise<void> {
+  const status = providerStatus();
+  const coverage = provider.scheduleCoverage?.();
+  const fixtures = provider.scheduleFixtures?.();
+  if (provider.id !== 'football' || !status.enabled || status.simulated || !coverage || !fixtures)
+    return sendJson(res, 503, { error: 'The real football schedule is not ready. Market creation will retry.' });
+  const owned = fixtures.filter(match => isActiveProviderMatch(match) && match.oracle?.source === PROVIDER_ORIGIN);
+  if (owned.length > PROVISION_QUEUE_LIMIT)
+    return sendJson(res, 503, { error: 'The fixture catalogue exceeds the reviewed provisioning bound.' });
+  sendJson(res, 200, { format: 'streak-direct-fixtures-v1', provider: 'football', source: PROVIDER_ORIGIN,
+    enabled: true, simulated: false, observedAtMs: Date.now(),
+    coverage: { from: coverage.from.slice(0, 10), to: coverage.to.slice(0, 10), complete: coverage.complete }, fixtures: owned });
 }
 
 const staticRoutes: Record<string, Handler> = {
   "GET /api/direct/config": async (_req, res) => sendJson(res, 200, PUBLIC_DIRECT_CONFIG),
   "GET /api/direct/markets": (_req, res, url) => handleDirectMarkets(res, url),
+  "GET /api/direct/fixtures": (_req, res) => handleDirectFixtures(res),
+  "GET /api/direct/provisioning": async (_req, res) => sendJson(res, 200, { progress: readProvisioningProgress(process.env.STREAK_DIRECT_PROGRESS_DIR) ?? null }),
   "POST /api/auth/nonce": (req, res) => handleAuthNonce(req, res),
   "POST /api/auth/verify": (req, res) => handleAuthVerify(req, res),
   "POST /api/logout": (req, res) => handleLogout(req, res),

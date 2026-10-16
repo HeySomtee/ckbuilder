@@ -2,6 +2,12 @@
 
 Approved direction: [ADR 0001](../decisions/0001-approved-foundation.md). Detailed source inspection: [architecture proposal](../../design/season-preview/ARCHITECTURE-PROPOSAL.md). This document separates implementation from planned work.
 
+The 16 October wallet correction introduces a separately deployed product contract in `contracts/direct-v2`. It accepts authorized lock arguments up to 59 bytes, including the 22-byte OmniLock format used by EVM wallets. Historical contracts, terms, positions and exact signed recovery records retain their original code hashes. The wire and journal schema remains `testnet-v1`; the pinned code hash identifies the contract generation. Fee, storage, payout and timing rules are unchanged.
+
+Sign-in, Wallet and checkout share one explicitly selected in-memory signer. Provider replacement, account changes and successful logout invalidate it and account-bound reviews. A page reload requires reconnection, while server sessions and saved transaction recovery remain separate. Ordinary fixture browsing does not import the wallet SDK.
+
+The separate operator consumes a bounded real-provider schedule, queues every eligible fixture and funds markets serially after confirmation. It owns private signed jobs; the API reads only immutable descriptors and a redacted progress file. Current and legacy descriptors remain discoverable together, with legacy entry disabled. Per-pick preparation status cannot authorize funds; checkout rechecks actual live cells. See the [wallet and provisioning correction](../delivery/wallet-provisioning-correction.md).
+
 ## Four distinct systems
 
 | System              | Current evidence                                                                               | Authority                                                                                                                                                                                                            |
@@ -13,7 +19,7 @@ Approved direction: [ADR 0001](../decisions/0001-approved-foundation.md). Detail
 
 The legacy app's wallet signatures authenticate users and authorize treasury transfers. They do not remove custody from ledger betting funds. Keep legacy liabilities discoverable and withdrawable throughout migration. Season's direct testnet route uses the deployed Rust market and claim scripts for new funds, with a separate immutable football catalogue, user transaction journal and explicit operator worker. The [chain document](chain.md) describes its trust assumptions and bounds.
 
-The Season market detail and independent prediction draft are integrated read-only journeys. Public detail and whole-slip review use the current ledger snapshot, explicit provider ownership and server terms. Drafts persist only unsent picks in the browser. No funds are moved and no stake is reserved. See the [market/slip milestone](../delivery/market-slip-milestone.md) for validation, freshness, recovery and request budgets. Direct contract preparation and combined payment remain separate dependencies.
+Season browsing and the independent draft now hand off funded picks to wallet checkout. Public pool statistics and the optional saved-pick check still use the legacy ledger and are labelled accordingly. A lightweight, bounded availability projection identifies operator-listed markets without loading the wallet SDK; it cannot authorize funds. Checkout independently validates the full descriptor, wallet intent and chain state. Each explicit slip handoff replaces any older unsent quote, including on the same market route. Saved drafts persist alongside separate signed transaction journals and can include previously paid predictions, which the slip states explicitly. Combined payment remains unimplemented; selecting a line from a multi-pick draft starts an explicitly individual transaction and preserves the other picks. See the [market/slip milestone](../delivery/market-slip-milestone.md) for the earlier read-only increment and the [direct milestone](../delivery/direct-testnet-milestone.md) for wallet signing and recovery.
 
 ## Ownership
 

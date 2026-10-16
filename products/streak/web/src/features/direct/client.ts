@@ -7,6 +7,8 @@ import {
   GUARD_HASH,
   hex,
   MANIFEST,
+  protocolManifest,
+  maxLockArgs,
   MIN_PRINCIPAL,
   parseDescriptor,
   parseManifest,
@@ -137,8 +139,15 @@ export class DirectClient {
     this.now = options.now ?? Date.now;
     this.exclusive = options.exclusive ?? browserExclusive;
   }
-  private deps(): ccc.CellDep[] {
-    return devnetDependencies.get(this) ?? this.manifest.codeDeps.map((d) => ccc.CellDep.from(d));
+  private deps(descriptor: Descriptor): ccc.CellDep[] {
+    const deps =
+      devnetDependencies.get(this) ??
+      protocolManifest(descriptor.type.codeHash).codeDeps.map((d) => ccc.CellDep.from(d));
+    if (deps.length !== 2)
+      throw Error(
+        'The compatible contract deployment is awaiting confirmation. Your picks are saved.',
+      );
+    return deps;
   }
   async identity(): Promise<Identity> {
     const client = this.signer.client;
@@ -150,8 +159,6 @@ export class DirectClient {
       throw Error('This wallet is not connected to the pinned CKB testnet service.');
     const address = await ccc.Address.fromString(await this.signer.getRecommendedAddress(), client),
       ownerHash = address.script.hash();
-    if (bytes(address.script.args).length > 20)
-      throw Error('This contract version supports wallet lock arguments up to 20 bytes.');
     if (this.expectedOwner && this.expectedOwner !== ownerHash)
       throw Error('The connected wallet changed. Reconnect and review again.');
     this.expectedOwner = ownerHash;
@@ -294,6 +301,10 @@ export class DirectClient {
     const pending = await this.outstanding(identity, 'deposit', descriptor);
     await this.entryTime(descriptor);
     const owner = (await ccc.Address.fromString(identity.address, this.signer.client)).script;
+    if (bytes(owner.args).length > maxLockArgs(descriptor.type.codeHash))
+      throw Error(
+        'This market uses an older or incompatible wallet format. Choose a market on the compatible contract. Your picks are saved.',
+      );
     const cells = await loadMarket(this.signer.client, descriptor),
       control = cells.find((c) => c.state.kind === 'market' && c.state.phase === 0);
     if (!control) throw Error('The market is no longer open.');
@@ -322,7 +333,7 @@ export class DirectClient {
         inputs: [{ previousOutput: selected.cell.outPoint }],
         outputs: [{ ...selected.cell.cellOutput, capacity }],
         outputsData: [ccc.hexFrom(data)],
-        cellDeps: [...this.deps(), { outPoint: control.cell.outPoint, depType: 'code' }],
+        cellDeps: [...this.deps(descriptor), { outPoint: control.cell.outPoint, depType: 'code' }],
         headerDeps: [header.hash],
       });
       await this.fund(tx, owner, selected.cell.cellOutput.capacity, pending);
@@ -373,7 +384,7 @@ export class DirectClient {
       inputs: [{ previousOutput: outPoint }],
       outputs: [{ capacity: cell.cellOutput.capacity, lock: owner }],
       outputsData: ['0x'],
-      cellDeps: this.deps(),
+      cellDeps: this.deps(descriptor),
     });
     await this.fund(tx, owner, cell.cellOutput.capacity, pending);
     tx = await this.signer.prepareTransaction(tx);
@@ -419,7 +430,7 @@ export class DirectClient {
     control: Point | null,
     inputHeader: string | null,
   ): Review {
-    for (const dep of this.deps())
+    for (const dep of this.deps(descriptor))
       if (!tx.cellDeps.some((actual) => actual.eq(dep)))
         throw Error('Contract code dependencies are missing.');
     if (control && !tx.cellDeps.some((dep) => dep.depType === 'code' && dep.outPoint.eq(control)))

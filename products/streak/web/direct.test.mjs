@@ -5,6 +5,10 @@ import {
   CKB,
   STORAGE,
   MANIFEST,
+  LEGACY_MANIFEST,
+  LEGACY_PROTOCOL_HASH,
+  maxLockArgs,
+  protocolManifest,
   GUARD_HASH,
   PROTOCOL_HASH,
   parseManifest,
@@ -140,6 +144,33 @@ test('Pinned deployment, cutoff bytes and exact catalogue identity reject replac
   );
   assert.throws(() => assertSameTerms(d, { ...d, fixtureId: 'different' }), /terms changed/);
   assert.ok(Object.isFrozen(d) && Object.isFrozen(d.terms));
+});
+
+test('Contract generations preserve old recovery while enforcing their own wallet limits and dependencies', async () => {
+  assert.equal(parseManifest(structuredClone(LEGACY_MANIFEST)), LEGACY_MANIFEST);
+  assert.equal(protocolManifest(LEGACY_PROTOCOL_HASH), LEGACY_MANIFEST);
+  assert.equal(maxLockArgs(LEGACY_PROTOCOL_HASH), 20);
+  assert.equal(maxLockArgs(PROTOCOL_HASH), 59);
+  assert.throws(() => protocolManifest(hash('e')), /not supported/);
+  const current = await descriptor();
+  const old = await parseDescriptor({
+    ...current,
+    type: { ...current.type, codeHash: LEGACY_PROTOCOL_HASH },
+  });
+  assert.equal(old.type.codeHash, LEGACY_PROTOCOL_HASH);
+  assert.throws(() => assertSameTerms(old, current), /terms changed/);
+  assert.throws(
+    () => parseManifest({ ...LEGACY_MANIFEST, protocolHash: PROTOCOL_HASH }),
+    /dependencies/,
+  );
+  const setupData = await setup();
+  const oldSaved = await parseRecord({ ...setupData.record, descriptor: old });
+  assert.equal(oldSaved.descriptor.type.codeHash, LEGACY_PROTOCOL_HASH);
+  assert.equal(
+    oldSaved.scope,
+    setupData.record.scope,
+    'generation upgrade does not orphan the existing owner journal',
+  );
 });
 test('Strict cell decoding bounds positions and conserves exact recoverable storage', async () => {
   const d = await descriptor(),

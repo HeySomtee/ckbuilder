@@ -2,9 +2,11 @@
 
 Canonical foundation approved **15 October 2026**. Start with [status](../status.md), then the document governing the task. [AGENTS.md](../AGENTS.md) is the single contributor contract; tool-specific guidance should link to it instead of maintaining competing rules.
 
-Current implementation: all five parts of the [direct wallet-to-market testnet journey](delivery/direct-testnet-milestone.md) are implemented and verified on the `feat/streak-direct-testnet` review branch, following the [Season shell, Friday-to-Monday fixtures and durable identity](delivery/season-milestone.md). The full local gate passed all **35 checks** at **2026-10-16T11:48:11.275Z**, with 25 signed devnet checks and seven confirmed synthetic public-testnet transactions recorded separately. One real Everton vs Chelsea fixture is funded locally. Publication uses mandatory local commit and push gates; there is no hosted deployment or worker activation. Operational readiness and supported-wallet verification come before onboarding, followed by combined payment and Five.
+Current implementation: the [direct wallet-to-market journey](delivery/direct-testnet-milestone.md) now includes the [shared EVM wallet and automatic provisioning correction](delivery/wallet-provisioning-correction.md). A compatible contract is deployed on testnet and the local operator queues every eligible real API fixture. All 38 local gate steps passed at 13:54 UTC on 16 October; commit and push hooks verify the final candidate again. Funding for all 196 queued fixtures is incomplete. Physical wallet checks and durable operation remain before community onboarding; combined payment and Five remain open.
 
 Current commitments and resume point: [work tracker](work-tracker.md). Update it whenever work is steered, interrupted or completed.
+
+The [wallet and automatic provisioning correction](delivery/wallet-provisioning-correction.md) supersedes the native-wallet-only and single-funded-fixture limitations above. It records the separate compatible contract deployment, shared signer state, all-fixture queue and remaining rollout evidence.
 
 | Document                                                           | Purpose                                                                           |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------- |

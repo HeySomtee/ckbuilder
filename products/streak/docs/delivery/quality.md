@@ -8,6 +8,8 @@ Use the repository-pinned **Node 24.14.0 and npm 11.9.0**, the committed lockfil
 
 Install the Playwright browser versions matching Streak's lockfile. Browser CI needs Chromium and WebKit. The contract lane uses Rust 1.97.1 and the Week 20 lab's documented native toolchain. See the [lab prerequisites](../../../../src/week20/contract-lab/README.md#run); Windows invokes WSL for the Rust VM suite.
 
+The contract lane also builds and tests `contracts/direct-v2` and runs the product devnet harness against genuine OmniLock. Before the first gate, explicitly run `node products/streak/scripts/direct-omnilock-setup.cjs --download` from the repository root. This setup reads one pinned public code artifact, verifies its hash and canonical source, and caches it locally. Routine tests never download it, read wallet keys or use public RPC; missing or changed cached bytes fail the gate. The shared-wallet browser lane uses actual CCC EIP-6963 discovery with a synthetic EVM provider and Ethereum personal signatures, across Chromium and WebKit at phone and desktop widths.
+
 PostgreSQL checks require an explicitly configured `PG_TEST_URL` targeting loopback and a disposable database whose name ends in `_test`, conventionally `streak_test`. The harness isolates fixtures in a random schema and cleans up its own schema. Never substitute a production URL, an existing application database or a hosted Neon instance. Missing prerequisites fail the required gate; they are not skipped into success.
 
 Install repository hooks with `npm run hooks:install` after setup. Hooks are local enforcement and must be installed in each checkout. CI repeats the requirements. Do not bypass a failing hook with `--no-verify` or weaken a test just to make a commit.

@@ -1,4 +1,10 @@
 import { ApiError, isRecord, request, text } from '../../lib/http';
+import {
+  assertActiveWallet,
+  chooseWallet,
+  disconnectWallet,
+  getWalletState,
+} from '../../lib/wallet';
 export interface Account {
   id: string;
   username: string;
@@ -20,10 +26,12 @@ export async function getAccount(signal: AbortSignal): Promise<Account | null> {
 }
 export async function signOut(): Promise<void> {
   await request('/logout', undefined, {});
+  disconnectWallet('Signed out. Connect your wallet when you are ready.');
 }
 export async function signIn(): Promise<void> {
-  const { chooseWallet } = await import('../../lib/wallet');
   const signer = await chooseWallet();
+  const connection = getWalletState().connection;
+  if (!connection) throw new Error('Wallet connection changed. Please sign in again.');
   const address = await signer.getRecommendedAddress();
   const data = await request('/auth/nonce', undefined, { address });
   if (!isRecord(data)) throw new Error('Unable to prepare sign-in.');
@@ -36,5 +44,6 @@ export async function signIn(): Promise<void> {
   )
     throw new Error('The sign-in message does not match this site and wallet.');
   const signature = await signer.signMessage(message);
+  await assertActiveWallet(connection);
   await request('/auth/verify', undefined, { address, challengeId, signature });
 }

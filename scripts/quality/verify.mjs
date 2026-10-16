@@ -116,6 +116,14 @@ async function browserChecks() {
     },
   );
   const previewPort = 4176;
+  run(
+    'Shared EVM wallet connection browser regression',
+    [join(product, 'scripts/wallet-browser.cjs')],
+    {
+      cwd: product,
+      isolated: true,
+    },
+  );
   const base = `http://127.0.0.1:${previewPort}`;
   const server = spawn(process.execPath, [join(product, 'design/season-preview/serve.cjs')], {
     cwd: ROOT,
@@ -209,6 +217,11 @@ try {
     } else if (selected === 'browser') {
       await browserChecks();
     } else if (selected === 'contracts') {
+      run(
+        'Streak compatible contract Rust VM regression',
+        [join(product, 'contracts/direct-v2/scripts/run.cjs'), 'test'],
+        { timeout: 1_200_000 },
+      );
       run(
         'Week 20 Rust VM and format regression',
         [resolve(ROOT, 'src/week20/contract-lab/scripts/run.cjs'), 'test'],

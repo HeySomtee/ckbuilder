@@ -17,7 +17,9 @@ const {
   OperatorJournal,
   broadcastOperation,
   reconcileOperation,
+  operationKey,
 } = require('../dist/modules/direct/journal');
+const { LEGACY_DIRECT_CONFIG } = require('../dist/modules/direct/registry');
 
 async function main() {
   if (
@@ -134,7 +136,17 @@ async function main() {
         throw Error('Verification directory belongs to another wallet');
       evidence.ownerHash = identity.ownerHash;
       save();
-      let create = operator.load(`create-${evidence.fixtureId}`);
+      const creations = [
+        operator.load(operationKey('create', evidence.fixtureId, MANIFEST.protocolHash)),
+        operator.load(
+          operationKey('create', evidence.fixtureId, LEGACY_DIRECT_CONFIG.protocolHash),
+        ),
+      ].filter(Boolean);
+      if (creations.length > 1)
+        throw Error(
+          'Verification directory contains two contract generations. Reconcile each separately.',
+        );
+      let create = creations[0];
       if (!create) {
         assert(
           (await owner.balance()) >= 4600n * CKB,
@@ -219,7 +231,9 @@ async function main() {
           Number(tip.timestamp) > descriptor.cutoffMs + 1000 &&
           Date.now() > descriptor.cutoffMs + 1000,
       );
-      let report = operator.load(`report-${evidence.fixtureId}`);
+      let report = operator.load(
+        operationKey('report', evidence.fixtureId, create.descriptor.type.codeHash),
+      );
       if (!report) {
         const payload = {
           errors: [],
@@ -245,7 +259,9 @@ async function main() {
         report = operator.persist('report', create.descriptor, signed);
       }
       await commitOperator(report, 'Synthetic result report');
-      let close = operator.load(`close-${evidence.fixtureId}`);
+      let close = operator.load(
+        operationKey('close', evidence.fixtureId, create.descriptor.type.codeHash),
+      );
       if (!close)
         close = operator.persist(
           'close',

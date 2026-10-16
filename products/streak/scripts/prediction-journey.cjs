@@ -109,6 +109,22 @@ module.exports = async function predictionJourney({
         .click();
       await page
         .getByRole('dialog')
+        .getByText(
+          'Payment is unavailable for this fixture. Your pick stays saved while market preparation is checked.',
+          {
+            exact: true,
+          },
+        )
+        .waitFor();
+      assert.equal(
+        await page
+          .getByRole('dialog')
+          .getByRole('button', { name: 'Continue to payment', exact: true })
+          .isDisabled(),
+        true,
+      );
+      await page
+        .getByRole('dialog')
         .getByRole('button', { name: 'Minimize slip', exact: true })
         .click();
       await page.getByRole('dialog').waitFor({ state: 'hidden' });
@@ -170,9 +186,15 @@ module.exports = async function predictionJourney({
       const stake = dialog.getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' });
       await stake.fill('10.00000001');
       assert.equal(await dialog.locator('.slip-total strong').textContent(), '110.00000001 tCKB');
-      await dialog.getByRole('button', { name: 'Review predictions', exact: true }).click();
+      await dialog.locator('.slip-draft-check').evaluate((node) => {
+        node.open = true;
+      });
+      await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).click();
       await dialog
-        .getByText('Draft checked. No bets placed and no funds moved.', { exact: true })
+        .getByText(
+          'Saved picks checked against legacy rules. Use wallet payment above to place an available prediction.',
+          { exact: true },
+        )
         .waitFor();
       await page.screenshot({ path: path.join(evidence, `prediction-slip-${name}-${width}.png`) });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
@@ -196,10 +218,11 @@ module.exports = async function predictionJourney({
       await dialog.getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' }).waitFor();
       assert.equal(await stake.inputValue(), '10.00000001');
       assert.equal(await dialog.locator('.review-ok').count(), 0, 'Reviews are never persisted.');
+      await dialog.locator('.slip-draft-check > summary').click();
       await stake.fill('10.');
       assert.equal(await dialog.locator('.slip-total strong').textContent(), 'Check amounts');
       assert.equal(
-        await dialog.getByRole('button', { name: 'Review predictions', exact: true }).isDisabled(),
+        await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).isDisabled(),
         true,
       );
       await stake.fill('10');
@@ -225,7 +248,10 @@ module.exports = async function predictionJourney({
           /* The edit aborts the obsolete browser request. */
         }
       });
-      await dialog.getByRole('button', { name: 'Review predictions', exact: true }).click();
+      await dialog.locator('.slip-draft-check').evaluate((node) => {
+        node.open = true;
+      });
+      await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).click();
       await begun;
       await stake.fill('20');
       release();
@@ -253,7 +279,10 @@ module.exports = async function predictionJourney({
           });
           await route.fulfill({ status: 200, contentType: 'application/json', body });
         });
-        await dialog.getByRole('button', { name: 'Review predictions', exact: true }).click();
+        await dialog.locator('.slip-draft-check').evaluate((node) => {
+          node.open = true;
+        });
+        await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).click();
         await termsPending;
         await update((db) => {
           db.markets.find((row) => row.id === 'm-slip-one').feeBps.protocol += 1;
@@ -273,7 +302,10 @@ module.exports = async function predictionJourney({
         await page.unroute('**/api/slips/review');
         // A slow device clock cannot extend the server's thirty-second window.
         await page.clock.setSystemTime(new Date(Date.now() - 300_000));
-        await dialog.getByRole('button', { name: 'Review predictions', exact: true }).click();
+        await dialog.locator('.slip-draft-check').evaluate((node) => {
+          node.open = true;
+        });
+        await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).click();
         await dialog.locator('.review-ok').waitFor();
         await page.clock.fastForward(31_000);
         await dialog
@@ -286,7 +318,10 @@ module.exports = async function predictionJourney({
       await update((db) => {
         db.markets.find((row) => row.id === 'm-slip-two').status = 'closed';
       });
-      await dialog.getByRole('button', { name: 'Review predictions', exact: true }).click();
+      await dialog.locator('.slip-draft-check').evaluate((node) => {
+        node.open = true;
+      });
+      await dialog.getByRole('button', { name: 'Check saved picks', exact: true }).click();
       await dialog
         .getByText('Some predictions need attention. All picks are retained.', { exact: true })
         .waitFor();

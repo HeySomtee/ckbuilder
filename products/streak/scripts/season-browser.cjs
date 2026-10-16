@@ -623,6 +623,7 @@ async function main() {
               {
                 name: 'Synthetic signer',
                 signer: {
+                  client: element.client,
                   isConnected: async () => true,
                   onReplaced: () => () => {},
                   getRecommendedAddress: async () => address,

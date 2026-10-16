@@ -7,6 +7,8 @@ import type { Draft, DraftStore } from './draft';
 import { useNow } from '../../lib/use-now';
 import { TeamBadge } from '../../components/team-badge';
 import { createGenieMotion } from '../../lib/genie-motion';
+import { useDirectCatalogue, useProvisioningAvailability } from '../direct/availability';
+import { acceptsPayment, preparationMessage } from '../direct/availability-api';
 
 export function PredictionSlip({
   store,
@@ -36,6 +38,16 @@ export function PredictionSlip({
   const [confirmClear, setConfirmClear] = useState(false);
   const [motion] = useState(createGenieMotion);
   const now = useNow(open);
+  const catalogue = useDirectCatalogue(open);
+  const provisioning = useProvisioningAvailability(open && draft.picks.length > 0);
+  const availableFor = (matchId: string) =>
+    !catalogue.isError &&
+    catalogue.data?.some((row) => row.fixtureId === matchId && acceptsPayment(row, now));
+  function pay(marketId: string) {
+    if (snapshot.blocked || snapshot.conflict) return;
+    dismiss();
+    onDirect?.(marketId);
+  }
   const details = useQueries({
     queries: draft.picks.map((pick) => ({
       queryKey: ['public-market', pick.marketId],
@@ -435,6 +447,28 @@ export function PredictionSlip({
                       </p>
                     ))}
                   </div>
+                  <p className="slip-payment-note">
+                    {catalogue.isError
+                      ? 'Payment availability could not be checked.'
+                      : catalogue.isPending
+                        ? 'Checking payment availability...'
+                        : availableFor(pick.matchId)
+                          ? 'Funded contract. Wallet review checks remaining space and time. Minimum 100 tCKB, plus 321 tCKB recoverable storage and a network fee.'
+                          : preparationMessage(
+                              provisioning.isError ? null : provisioning.data,
+                              pick.matchId,
+                              now,
+                            )}
+                  </p>
+                  {draft.picks.length > 1 && availableFor(pick.matchId) && onDirect && (
+                    <button
+                      className="connect"
+                      disabled={snapshot.blocked || snapshot.conflict || invalidAmount}
+                      onClick={() => pay(pick.marketId)}
+                    >
+                      Pay this prediction
+                    </button>
+                  )}
                 </article>
               );
             })}
@@ -444,6 +478,69 @@ export function PredictionSlip({
               <span aria-hidden="true">+</span> Add more matches
             </button>
           )}
+          {(catalogue.isError || provisioning.isError) && (
+            <button
+              className="quiet"
+              disabled={catalogue.isFetching || provisioning.isFetching}
+              onClick={() => {
+                void catalogue.refetch();
+                void provisioning.refetch();
+              }}
+            >
+              Retry availability
+            </button>
+          )}
+          <details className="slip-draft-check">
+            <summary>Check saved picks against legacy market rules</summary>
+            {currentError && (
+              <p className="pick-error" role="alert">
+                Review could not finish. Your picks are retained. Try again.
+              </p>
+            )}
+            {current && (
+              <p className={accepted ? 'review-ok' : 'pick-error'} role="status">
+                {expired
+                  ? 'This review expired. Review again for current rules.'
+                  : unavailable
+                    ? 'Fixture details could not be verified. Refresh and review again.'
+                    : changedTerms
+                      ? 'Market rules changed. Review again.'
+                      : current.valid && closed
+                        ? 'A market has closed. Review again for current availability.'
+                        : current.valid
+                          ? 'Saved picks checked against legacy rules. Use wallet payment above to place an available prediction.'
+                          : 'Some predictions need attention. All picks are retained.'}
+              </p>
+            )}
+            <button
+              className="quiet"
+              disabled={
+                !draft.picks.length ||
+                total === null ||
+                snapshot.blocked ||
+                snapshot.conflict ||
+                review.isPending
+              }
+              onClick={() => review.mutate({ draft: structuredClone(draft), stamp, accountKey })}
+            >
+              {review.isPending ? 'Checking every prediction...' : 'Check saved picks'}
+              {!review.isPending && (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12h14m-6-6 6 6-6 6" />
+                </svg>
+              )}
+            </button>
+            <small>
+              This optional check uses legacy ledger rules. Wallet payment checks contract rules
+              separately.
+            </small>
+          </details>
         </div>
         <footer className="slip-footer">
           {confirmClear ? (
@@ -469,69 +566,29 @@ export function PredictionSlip({
             <strong>{total === null ? 'Check amounts' : `${displayShannons(total)} tCKB`}</strong>
           </div>
           <p className="slip-payment-note">
-            Review your picks before payment. No funds move in this step.
+            {draft.picks.length > 1
+              ? 'Combined payment is not available yet. You can pay an available prediction individually above. Every other pick stays saved.'
+              : 'Next: connect your wallet, review the full cost, then sign your payment.'}
           </p>
-          {currentError && (
-            <p className="pick-error" role="alert">
-              Review could not finish. Your picks are retained. Try again.
-            </p>
-          )}
-          {current && (
-            <p className={accepted ? 'review-ok' : 'pick-error'} role="status">
-              {expired
-                ? 'This review expired. Review again for current rules.'
-                : unavailable
-                  ? 'Fixture details could not be verified. Refresh and review again.'
-                  : changedTerms
-                    ? 'Market rules changed. Review again.'
-                    : current.valid && closed
-                      ? 'A market has closed. Review again for current availability.'
-                      : current.valid
-                        ? 'Draft checked. No bets placed and no funds moved.'
-                        : 'Some predictions need attention. All picks are retained.'}
-            </p>
-          )}
-          <button
-            className="review-button"
-            disabled={
-              !draft.picks.length ||
-              total === null ||
-              snapshot.blocked ||
-              snapshot.conflict ||
-              review.isPending
-            }
-            onClick={() => review.mutate({ draft: structuredClone(draft), stamp, accountKey })}
-          >
-            {review.isPending ? 'Checking every prediction...' : 'Review predictions'}
-            {!review.isPending && (
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                aria-hidden="true"
-              >
-                <path d="M5 12h14m-6-6 6 6-6 6" />
-              </svg>
-            )}
-          </button>
-          <small>No stake reserved. This draft review does not submit a payment.</small>
+          <small>
+            Saved picks can include predictions you already paid for. Check Activity before paying
+            again.
+          </small>
           {draft.picks.length === 1 && onDirect && (
             <button
-              className="quiet"
-              onClick={() => {
-                dismiss();
-                onDirect(draft.picks[0].marketId);
-              }}
+              className="review-button"
+              disabled={
+                !availableFor(draft.picks[0].matchId) ||
+                total === null ||
+                snapshot.blocked ||
+                snapshot.conflict
+              }
+              onClick={() => pay(draft.picks[0].marketId)}
             >
-              Continue to testnet review
+              Continue to payment
             </button>
           )}
-          {draft.picks.length > 1 && (
-            <small>
-              Combined payment needs the next contract version. Your complete slip stays saved.
-            </small>
-          )}
+
           <div className="slip-footer-meta">
             <span className="slip-save-state">
               {snapshot.saved ? 'Saved on this device' : 'Draft in this tab'}

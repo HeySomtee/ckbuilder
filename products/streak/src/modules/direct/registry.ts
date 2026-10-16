@@ -17,7 +17,7 @@ import type { Match } from '../../types';
 
 export const RESULT_WINDOW_MS = 21_600_000;
 export const PROVIDER_ORIGIN = 'https://v3.football.api-sports.io';
-export const PUBLIC_DIRECT_CONFIG = Object.freeze({
+export const LEGACY_DIRECT_CONFIG = Object.freeze({
   version: 'testnet-v1' as const,
   network: 'testnet' as const,
   rpc: 'https://testnet.ckb.dev/',
@@ -38,6 +38,36 @@ export const PUBLIC_DIRECT_CONFIG = Object.freeze({
   },
   fixtureBinding: 'trusted-operator-catalogue' as const,
 });
+
+// The wire layout and journal schema remain v1. This is a separate contract deployment.
+export const PUBLIC_DIRECT_CONFIG = Object.freeze({
+  ...LEGACY_DIRECT_CONFIG,
+  protocolHash: '0xc65bfcf86e34da4bb8f51f93e261236418a639699b5fd7f3dfafb5f987e047e0',
+  codeDeps: [
+    {
+      outPoint: {
+        txHash: '0xfb3a8cdb8b79f84785c5847ba53181021bd4f4f2556bf33b0f6883741b50f2fe',
+        index: 0,
+      },
+      depType: 'code' as const,
+    },
+    LEGACY_DIRECT_CONFIG.codeDeps[1],
+  ],
+});
+
+export function protocolConfigFor(
+  record: Pick<DirectMarketRecord, 'type'>,
+  config: DirectProtocolConfig = PUBLIC_DIRECT_CONFIG,
+): DirectProtocolConfig {
+  if (record.type.codeHash === config.protocolHash) return config;
+  if (config === PUBLIC_DIRECT_CONFIG && record.type.codeHash === LEGACY_DIRECT_CONFIG.protocolHash)
+    return LEGACY_DIRECT_CONFIG;
+  throw Error('Unsupported direct market contract');
+}
+
+export function maxLockArgs(config: DirectProtocolConfig): number {
+  return config.protocolHash === LEGACY_DIRECT_CONFIG.protocolHash ? 20 : 59;
+}
 
 export interface DirectTerms {
   provider: 'football';
@@ -121,6 +151,10 @@ export function validateRecord(
 ): DirectMarketRecord {
   const row = object(value, 'direct market');
   const type = object(row.type, 'market type');
+  config = protocolConfigFor(
+    { type: { codeHash: String(type.codeHash), hashType: 'data2', args: '' } },
+    config,
+  );
   const terms = object(row.terms, 'market terms');
   const cutoffMs = exactTimestamp(row.cutoffMs, 'kickoff');
   if (
@@ -163,7 +197,8 @@ export function validateRecord(
   };
   if (
     record.fixtureId !== `api-football-${record.terms.providerFixtureId}` ||
-    record.id !== `direct-${record.terms.providerFixtureId}`
+    record.id !==
+      `${config.protocolHash === LEGACY_DIRECT_CONFIG.protocolHash ? 'direct' : 'direct-v2'}-${record.terms.providerFixtureId}`
   )
     throw Error('Fixture identity does not match the pinned source');
   if (termsDigest(record) !== record.termsHash) throw Error('Invalid catalogue digest');
@@ -184,7 +219,7 @@ export function createRecord(
   )
     throw Error('Only the real API-Football catalogue is supported');
   const record = {
-    id: `direct-${match.oracle.fixtureId}`,
+    id: `${config.protocolHash === LEGACY_DIRECT_CONFIG.protocolHash ? 'direct' : 'direct-v2'}-${match.oracle.fixtureId}`,
     fixtureId: match.id,
     label: `${match.home.name} vs ${match.away.name}`,
     cutoffMs,
@@ -276,7 +311,10 @@ export class DirectRegistry {
     return records.map((record) => {
       const match = fixtures.find((row) => row.id === record.fixtureId);
       let entryUnavailableReason: string | undefined;
-      if (
+      if (record.type.codeHash === LEGACY_DIRECT_CONFIG.protocolHash)
+        entryUnavailableReason =
+          'This earlier contract is closed to new entries. Existing positions and claims remain available.';
+      else if (
         !match ||
         !ownsMatch(match) ||
         match.oracle?.provider !== 'api-football' ||

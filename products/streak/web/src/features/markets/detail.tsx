@@ -8,6 +8,8 @@ import type { Market } from './api';
 import { TeamBadge } from '../../components/team-badge';
 import { useNow } from '../../lib/use-now';
 import { directHref, followDirect } from '../../lib/direct-route';
+import { useDirectCatalogue } from '../direct/availability';
+import { acceptsPayment } from '../direct/availability-api';
 
 export function MarketDetail({
   id,
@@ -30,6 +32,7 @@ export function MarketDetail({
     retry: 1,
   });
   const now = useNow(true);
+  const catalogue = useDirectCatalogue();
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
   }, [detail.data?.market.id]);
@@ -50,6 +53,10 @@ export function MarketDetail({
       </section>
     );
   const { market, terms } = data;
+  const contract = !catalogue.isError
+    ? catalogue.data?.find((row) => row.fixtureId === market.matchId)
+    : undefined;
+  const payable = !!contract && acceptsPayment(contract, now);
   const accepting =
     data.accepting &&
     now < Date.parse(terms.closesAt) &&
@@ -75,9 +82,11 @@ export function MarketDetail({
             {market.home} vs {market.away}
           </h1>
           <p>The match, the crowd and your call.</p>
-          <a className="quiet" href={directHref(id)} onClick={(event) => followDirect(event, id)}>
-            Open testnet prediction ↗
-          </a>
+          {payable && (
+            <a className="quiet" href={directHref(id)} onClick={(event) => followDirect(event, id)}>
+              Open wallet payment ↗
+            </a>
+          )}
         </div>
         <button className="quiet detail-back" onClick={onBack}>
           <svg
@@ -142,7 +151,7 @@ export function MarketDetail({
             </div>
             <div className="detail-stats">
               <div>
-                <span>Total pool</span>
+                <span>Legacy pool</span>
                 <strong>{formatCkb(market.totalPoolCkb)} tCKB</strong>
               </div>
               <div>
@@ -155,7 +164,7 @@ export function MarketDetail({
           <section className="glass detail-pool">
             <p className="eyebrow">THE CROWD'S CALL</p>
             <h2>How the pool is leaning.</h2>
-            <p>Each share below represents stakes in the current pool.</p>
+            <p>These percentages describe the legacy ledger pool, not the direct contract pool.</p>
             <div className="detail-pool-rows">
               {outcomes.map((outcome) => (
                 <div className={`detail-pool-row ${outcome}`} key={outcome}>
@@ -176,6 +185,15 @@ export function MarketDetail({
           <p className="eyebrow">WHAT'S YOUR CALL?</p>
           <h2>Pick your side.</h2>
           <p>Choose one outcome. Build your slip with independent predictions.</p>
+          <p className="notice" role="status">
+            {catalogue.isError
+              ? 'Payment availability could not be checked. Your draft remains saved.'
+              : catalogue.isPending
+                ? 'Checking payment availability...'
+                : payable
+                  ? 'Funded contract. Choose a side, then continue to payment in your slip. Wallet review checks remaining space and time. Minimum 100 tCKB plus 321 tCKB recoverable storage and a network fee.'
+                  : 'This fixture is available for saved picks only. It has no open funded contract for payment.'}
+          </p>
           <div className="detail-outcomes">
             {outcomes.map((outcome) => (
               <button
@@ -245,7 +263,7 @@ export function MarketDetail({
                 >
                   <path d="M4 6h14a2 2 0 0 1 2 2v11H4V6Zm0 0 12-3v3M16 11h4v4h-4z" />
                 </svg>
-                Your stake
+                Legacy stake limits
               </dt>
               <dd>
                 {displayShannons(terms.minimumShannons)} to {displayShannons(terms.maximumShannons)}{' '}
@@ -264,7 +282,7 @@ export function MarketDetail({
                   <path d="m12 3 8 3v5c0 5-8 10-8 10S4 16 4 11V6l8-3Z" />
                   <path d="m8 11 3 3 5-5" />
                 </svg>
-                Pool fees
+                Legacy pool fees
               </dt>
               <dd>
                 {terms.protocolFeeBps / 100}% protocol + {terms.creatorFeeBps / 100}% creator,
@@ -282,13 +300,13 @@ export function MarketDetail({
             </p>
             <p>
               These markets currently use Streak's custodial treasury and account ledger. The
-              configured football reporter supplies results. Direct wallet-to-market payments are
-              being integrated separately.
+              configured football reporter supplies results. Funded testnet contracts have separate
+              pools and rules, shown in full during wallet payment.
             </p>
           </details>
           <p className="detail-draft-note">
-            Custodial ledger market. Save and review your picks. This slip does not place bets or
-            move funds yet.
+            Saving a pick does not place a bet. On funded matches, continue from the slip to review
+            and sign a wallet payment. Follow confirmation in Activity.
           </p>
           <a className="market-link" href={`/index.html#market/${encodeURIComponent(market.id)}`}>
             Open legacy market activity <span aria-hidden="true">↗</span>

@@ -5,9 +5,13 @@ export const CKB = 100_000_000n;
 export const STORAGE = 321n * CKB;
 export const MIN_PRINCIPAL = 100n * CKB;
 export const SHARD_RESERVE = 610n * CKB;
-export const PROTOCOL_HASH = '0x5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86';
+export const LEGACY_PROTOCOL_HASH =
+  '0x5407eb2a5afa2c28b505342e3694e7562e3bed70e38602130087c04d27052d86';
+export const PROTOCOL_HASH = '0xc65bfcf86e34da4bb8f51f93e261236418a639699b5fd7f3dfafb5f987e047e0';
 export const GUARD_HASH = '0x096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada';
-export const DEPLOYMENT = '0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11';
+export const LEGACY_DEPLOYMENT =
+  '0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11';
+export const DEPLOYMENT = '0xfb3a8cdb8b79f84785c5847ba53181021bd4f4f2556bf33b0f6883741b50f2fe';
 export const RPC = 'https://testnet.ckb.dev/';
 export const U64_MAX = (1n << 64n) - 1n;
 export type Outcome = 0 | 1 | 2;
@@ -17,7 +21,7 @@ export type Manifest = Readonly<{
   version: typeof VERSION;
   network: 'testnet';
   rpc: typeof RPC;
-  protocolHash: typeof PROTOCOL_HASH;
+  protocolHash: string;
   guardHash: typeof GUARD_HASH;
   codeDeps: readonly Readonly<{ outPoint: Point; depType: 'code' }>[];
   limits: Readonly<{
@@ -46,16 +50,16 @@ export type Descriptor = Readonly<{
   entryEnabled: boolean;
   entryUnavailableReason?: string;
 }>;
-export const MANIFEST: Manifest = Object.freeze({
+export const LEGACY_MANIFEST: Manifest = Object.freeze({
   version: VERSION,
   network: 'testnet',
   rpc: RPC,
-  protocolHash: PROTOCOL_HASH,
+  protocolHash: LEGACY_PROTOCOL_HASH,
   guardHash: GUARD_HASH,
   codeDeps: Object.freeze(
     [0, 1].map((index) =>
       Object.freeze({
-        outPoint: Object.freeze({ txHash: DEPLOYMENT, index }),
+        outPoint: Object.freeze({ txHash: LEGACY_DEPLOYMENT, index }),
         depType: 'code' as const,
       }),
     ),
@@ -68,6 +72,27 @@ export const MANIFEST: Manifest = Object.freeze({
   }),
   fixtureBinding: 'trusted-operator-catalogue',
 });
+// Wire format remains v1; generation is determined by the pinned code hash.
+export const MANIFEST: Manifest = Object.freeze({
+  ...LEGACY_MANIFEST,
+  protocolHash: PROTOCOL_HASH,
+  codeDeps: Object.freeze([
+    Object.freeze({
+      outPoint: Object.freeze({ txHash: DEPLOYMENT, index: 0 }),
+      depType: 'code' as const,
+    }),
+    LEGACY_MANIFEST.codeDeps[1],
+  ]),
+});
+export function protocolManifest(codeHash: string): Manifest {
+  if (codeHash === PROTOCOL_HASH) return MANIFEST;
+  if (codeHash === LEGACY_PROTOCOL_HASH) return LEGACY_MANIFEST;
+  throw Error('This contract deployment is not supported.');
+}
+export function maxLockArgs(codeHash: string): number {
+  protocolManifest(codeHash);
+  return codeHash === LEGACY_PROTOCOL_HASH ? 20 : 59;
+}
 
 export function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -111,11 +136,11 @@ export function pointKey(value: ccc.OutPointLike): string {
 export function parseManifest(value: unknown): Manifest {
   const m = object(value),
     limits = object(m.limits);
+  const expected = protocolManifest(String(m.protocolHash));
   if (
     m.version !== VERSION ||
     m.network !== 'testnet' ||
     m.rpc !== RPC ||
-    m.protocolHash !== PROTOCOL_HASH ||
     m.guardHash !== GUARD_HASH ||
     m.fixtureBinding !== MANIFEST.fixtureBinding ||
     limits.minPrincipalShannons !== MIN_PRINCIPAL.toString() ||
@@ -123,16 +148,20 @@ export function parseManifest(value: unknown): Manifest {
     limits.shards !== 4 ||
     limits.recordsPerShard !== 8 ||
     !Array.isArray(m.codeDeps) ||
-    m.codeDeps.length !== 2
+    m.codeDeps.length !== expected.codeDeps.length
   )
     throw Error('This contract deployment is not supported.');
   m.codeDeps.forEach((value, index) => {
     const dep = object(value),
       out = object(dep.outPoint);
-    if (dep.depType !== 'code' || out.txHash !== DEPLOYMENT || out.index !== index)
+    if (
+      dep.depType !== 'code' ||
+      out.txHash !== expected.codeDeps[index].outPoint.txHash ||
+      out.index !== expected.codeDeps[index].outPoint.index
+    )
       throw Error('Contract deployment dependencies changed.');
   });
-  return MANIFEST;
+  return expected;
 }
 export async function descriptorTermsHash(
   d: Pick<Descriptor, 'fixtureId' | 'label' | 'cutoffMs' | 'terms'>,
@@ -159,8 +188,8 @@ export async function parseDescriptor(value: unknown): Promise<Descriptor> {
     terms = object(d.terms);
   const args = hex(script.args, 172),
     cutoffMs = integer(d.cutoffMs, 1, Number.MAX_SAFE_INTEGER - 21_600_000);
+  const deployment = protocolManifest(String(script.codeHash));
   if (
-    script.codeHash !== PROTOCOL_HASH ||
     script.hashType !== 'data2' ||
     ccc.hexFrom(bytes(args).slice(76, 108)) !== GUARD_HASH ||
     read64(bytes(args), 68) !== BigInt(cutoffMs)
@@ -180,7 +209,7 @@ export async function parseDescriptor(value: unknown): Promise<Descriptor> {
     label: text(d.label),
     cutoffMs,
     creationTxHash: hex(d.creationTxHash, 32),
-    type: Object.freeze({ codeHash: PROTOCOL_HASH, hashType: 'data2', args }),
+    type: Object.freeze({ codeHash: deployment.protocolHash, hashType: 'data2', args }),
     termsHash: hex(d.termsHash, 32),
     terms: Object.freeze({
       provider: 'football',
@@ -286,6 +315,8 @@ export function assertSameTerms(a: Descriptor, b: Descriptor): void {
     a.termsHash !== b.termsHash ||
     a.creationTxHash !== b.creationTxHash ||
     a.type.args !== b.type.args ||
+    a.type.codeHash !== b.type.codeHash ||
+    a.type.hashType !== b.type.hashType ||
     a.cutoffMs !== b.cutoffMs
   )
     throw Error('Market terms changed. Review this prediction again.');

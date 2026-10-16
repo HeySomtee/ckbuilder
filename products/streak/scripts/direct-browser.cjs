@@ -58,7 +58,7 @@ async function main() {
   await update((db) => {
     db.matches = [
       {
-        id: 'direct-one',
+        id: 'api-football-900001',
         kickoff: new Date(cutoff).toISOString(),
         date: new Date(cutoff).toISOString().slice(0, 10),
         status: 'scheduled',
@@ -66,9 +66,16 @@ async function main() {
         competition: { id: 'test', name: 'Test Premier League' },
         home: { name: 'Arsenal', code: 'ARS' },
         away: { name: 'Chelsea', code: 'CHE' },
-        oracle: { provider: 'worldcup', fixtureId: 'direct-one' },
+        oracle: { provider: 'worldcup', fixtureId: 'api-football-900001' },
       },
     ];
+    db.matches.push({
+      ...structuredClone(db.matches[0]),
+      id: 'direct-two',
+      home: { name: 'Liverpool', code: 'LIV' },
+      away: { name: 'Tottenham', code: 'TOT' },
+      oracle: { provider: 'worldcup', fixtureId: 'direct-two' },
+    });
     ensureMarketsForMatches(db);
   });
   const { server } = require('../dist/server');
@@ -92,6 +99,8 @@ async function main() {
           external = [],
           writes = [],
           errors = [];
+        let brokenAvailability = false;
+        let preparationState = null;
         const context = await browser.newContext({
           viewport: { width, height: 900 },
           serviceWorkers: 'block',
@@ -113,7 +122,24 @@ async function main() {
           if (url.pathname === '/api/direct/markets')
             return route.fulfill({
               contentType: 'application/json',
-              body: JSON.stringify({ markets: [chain.descriptor] }),
+              body: JSON.stringify({
+                markets: brokenAvailability ? null : preparationState ? [] : [chain.descriptor],
+              }),
+            });
+          if (url.pathname === '/api/direct/provisioning')
+            return route.fulfill({
+              contentType: 'application/json',
+              body: JSON.stringify({
+                progress: preparationState
+                  ? {
+                      format: 'streak-direct-provisioning-v1',
+                      updatedAtMs: Date.now(),
+                      fixtures: [
+                        { fixtureId: chain.descriptor.fixtureId, status: preparationState },
+                      ],
+                    }
+                  : null,
+              }),
             });
           return route.continue();
         });
@@ -138,10 +164,71 @@ async function main() {
           await page.getByRole('button', { name: 'Disconnect wallet', exact: true }).waitFor();
           assert.equal(await page.locator('ccc-connector').count(), 0);
         }
-        await reads.goto(base + '/season/?direct=m-direct-one');
+        // Start where users start, not on a privileged/deep-linked checkout route.
+        await reads.goto(base + '/season/');
+        await page
+          .getByRole('region', { name: 'Available testnet markets' })
+          .getByRole('link', { name: 'Arsenal vs Chelsea', exact: true })
+          .click();
         await page.getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true }).waitFor();
         await accountReadFinished(page);
+        await page.locator('.detail-outcomes').getByRole('button').nth(2).click();
+        const slip = page.getByRole('dialog', { name: 'Prediction slip' });
+        await slip
+          .getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' })
+          .fill('125.00000001');
+        await slip.getByRole('button', { name: 'Continue to payment', exact: true }).click();
+        await slip.waitFor({ state: 'hidden' });
+        await page.getByRole('region', { name: 'Direct testnet predictions' }).waitFor();
+        assert.equal(new URL(page.url()).searchParams.get('direct'), 'm-api-football-900001');
+        assert.equal(
+          await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).inputValue(),
+          '125.00000001',
+        );
+        assert.equal(
+          await page
+            .getByRole('button', { name: 'Chelsea', exact: true })
+            .getAttribute('aria-pressed'),
+          'true',
+        );
+        await page.locator('.prediction-dock').click();
+        await slip
+          .getByRole('textbox', { name: 'Stake for Arsenal vs Chelsea' })
+          .fill('150.00000001');
+        await slip.getByRole('button', { name: 'Continue to payment', exact: true }).click();
+        await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).waitFor();
+        assert.equal(
+          await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).inputValue(),
+          '150.00000001',
+          'An explicit same-market handoff replaces the old checkout intent.',
+        );
+        // A multi-pick draft must never silently become a combined transaction.
+        await reads.goto(base + '/season/?market=m-direct-two');
+        await page.getByRole('heading', { name: 'Liverpool vs Tottenham', exact: true }).waitFor();
+        await accountReadFinished(page);
+        await page.locator('.detail-outcomes').getByRole('button').first().click();
+        await page.locator('.prediction-dock').click();
+        await slip.getByText(/Combined payment is not available yet/).waitFor();
+        assert.equal(await slip.locator('.slip-pick').count(), 2);
+        assert.equal(
+          await slip.getByRole('region', { name: 'Available testnet markets' }).count(),
+          0,
+          'The slip explains availability per pick without an unrelated market promotion.',
+        );
+        assert.equal(
+          await slip.getByRole('button', { name: 'Pay this prediction', exact: true }).count(),
+          1,
+        );
+        await slip.getByRole('button', { name: 'Pay this prediction', exact: true }).click();
+        await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).waitFor();
+        assert.equal(new URL(page.url()).searchParams.get('direct'), 'm-api-football-900001');
+        assert.equal(
+          await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).inputValue(),
+          '150.00000001',
+        );
         await connect(true);
+        await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).fill('100');
+        await page.getByRole('button', { name: 'Arsenal', exact: true }).click();
         phase = `${name} ${width}: review and reject`;
         await page.getByText('10,000 tCKB', { exact: true }).waitFor();
         await page.getByRole('button', { name: 'Review testnet prediction', exact: true }).click();
@@ -180,6 +267,13 @@ async function main() {
           .getByText('User rejected the synthetic wallet request.', { exact: true })
           .waitFor();
         assert.equal(chain.submissions.length, 0, 'Wallet rejection never broadcasts.');
+        assert.equal(
+          await page.evaluate(
+            () => JSON.parse(localStorage.getItem('streak.predictionDraft.v1')).picks.length,
+          ),
+          2,
+          'Rejection retains both independent picks.',
+        );
         await page.getByRole('button', { name: 'Review testnet prediction', exact: true }).click();
         await review.waitFor();
         await page.getByRole('button', { name: 'Sign prediction in wallet', exact: true }).click();
@@ -200,6 +294,13 @@ async function main() {
         await page.getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true }).waitFor();
         await accountReadFinished(page);
         await connect(false);
+        assert.equal(
+          await page.evaluate(
+            () => JSON.parse(localStorage.getItem('streak.predictionDraft.v1')).picks.length,
+          ),
+          2,
+          'Reload retains every draft alongside separate signed transaction recovery.',
+        );
         await page.getByRole('button', { name: 'Retry saved transaction', exact: true }).waitFor();
         await page.getByRole('button', { name: 'Retry saved transaction', exact: true }).click();
         await page
@@ -299,9 +400,49 @@ async function main() {
         await page.getByRole('link', { name: 'Back to match', exact: true }).click();
         await page.getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true }).waitFor();
         const returned = new URL(page.url());
-        assert.equal(returned.searchParams.get('market'), 'm-direct-one');
+        assert.equal(returned.searchParams.get('market'), 'm-api-football-900001');
         assert.equal(returned.searchParams.has('direct'), false);
         assert.equal(returned.searchParams.has('view'), false);
+        brokenAvailability = true;
+        await reads.reload();
+        await accountReadFinished(page);
+        await page.locator('.prediction-dock').click();
+        await slip
+          .getByText('Payment availability could not be checked.', { exact: true })
+          .first()
+          .waitFor();
+        assert.equal(
+          await slip.getByRole('button', { name: 'Pay this prediction', exact: true }).count(),
+          0,
+          'A failed catalogue never exposes payable draft actions.',
+        );
+        assert.equal(await slip.locator('.slip-pick').count(), 2);
+        brokenAvailability = false;
+        await slip.getByRole('button', { name: 'Retry availability', exact: true }).click();
+        await slip.getByRole('button', { name: 'Pay this prediction', exact: true }).waitFor();
+        for (const [state, expected] of [
+          ['queued', 'This market is queued for automatic setup. Your pick stays saved.'],
+          ['confirming', 'Market setup is confirming on CKB. Payment will open once confirmed.'],
+          [
+            'blocked-capacity',
+            'Market setup is waiting for operator testnet funds. Your pick stays saved.',
+          ],
+        ]) {
+          preparationState = state;
+          await reads.reload();
+          await accountReadFinished(page);
+          await page.locator('.prediction-dock').click();
+          await slip.getByText(expected, { exact: true }).waitFor();
+          assert.equal(
+            await slip.getByRole('button', { name: 'Pay this prediction', exact: true }).count(),
+            0,
+          );
+          assert.equal(await slip.locator('.slip-pick').count(), 2);
+          assert.equal(
+            await slip.getByRole('region', { name: 'Available testnet markets' }).count(),
+            0,
+          );
+        }
         await reads.settled();
         assert.deepEqual(errors, []);
         assert.deepEqual(external, []);

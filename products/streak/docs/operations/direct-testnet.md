@@ -1,6 +1,8 @@
 # Direct testnet operator and wallet recovery
 
-This runbook covers the integrated `testnet-v1` client and unchanged Week 20 Rust deployment. It does not deploy scripts or start a hosted worker. The API serves a public fixture catalogue. A separate operator process creates markets and reports football results. Wallets send their own stakes and claim directly through CKB.
+This runbook covers the direct wallet journey, automatic fixture provisioning and recovery across the original and compatible contract generations. The wire format remains `testnet-v1`; protocol hashes and operation IDs distinguish deployments. The API serves the real fixture catalogue and public provisioning progress. A separate operator process funds markets and reports football results. Wallets send their own stakes and claim directly through CKB.
+
+The compatible deployment adds support for lock arguments up to 59 bytes. Its protocol is confirmed at output 0 of [transaction fb3a8cdb](https://pudge.explorer.nervos.org/transaction/0xfb3a8cdb8b79f84785c5847ba53181021bd4f4f2556bf33b0f6883741b50f2fe); backend and browser dependencies match the build manifest. The original deployment remains available for existing positions and recovery. A local supervisor runs repeated worker invocations while the computer is available; this is not an installed system service or hosted deployment.
 
 ## Protocol and pilot bounds
 
@@ -9,8 +11,8 @@ This runbook covers the integrated `testnet-v1` client and unchanged Week 20 Rus
 - Minimum principal: 100 testnet CKB. Each position also supplies 321 CKB of recoverable claim storage. Fees and ordinary wallet change capacity are separate.
 - Winners receive principal plus their proportional share of the losing pool after 2% protocol and 1% creator fees. These percentages apply to the losing pool. Losing positions recover their 321 CKB storage. A void or an outcome with no winning stake returns principal plus storage. Late provisional deposits are refunded directly during closure.
 - This builder pins both fee recipients to the configured market creator/operator. Legacy application creator and balance records have no authority over these direct terms.
-- Wallet lock arguments are limited to 20 bytes. One claim uses one transaction and separate fee capacity. This increment pays for one market. An eight-pick draft does not authorize eight separate payments.
-- The catalogue supports 256 markets and the owner journal supports 128 records. These are explicit pilot bounds, not demonstrated user capacity.
+- Original contract wallet lock arguments are limited to 20 bytes. The compatible contract allows up to 59 bytes, with actual wallet/device verification still separate. One claim uses one transaction and separate fee capacity. This increment pays for one market. An eight-pick draft does not authorize eight separate payments.
+- The current funded catalogue supports 256 markets. The durable provisioning queue retains up to 4,096 fixtures, including explicit blocked entries beyond the funded limit. The shared operator journal supports at most 1,536 operations across two generations. The owner recovery journal supports 128 records. These are resource bounds, not demonstrated user capacity.
 
 ## Fixture mapping and trusted results
 
@@ -34,17 +36,44 @@ npm.cmd --prefix products/streak run build
 
 Provision these variables specifically for the operator process:
 
-| Variable                            | Purpose                                                                             |
-| ----------------------------------- | ----------------------------------------------------------------------------------- |
-| `STREAK_DIRECT_OPERATOR_DIR`        | Absolute durable path for private journal and observations                          |
-| `STREAK_DIRECT_REGISTRY_DIR`        | Separate absolute public catalogue path; give the API read access to this catalogue |
-| `STREAK_DIRECT_PRIVATE_KEY`         | Explicit testnet operator key, never supplied to the API or browser                 |
-| `API_SPORTS_KEY`                    | Football credential, needed for creation and reporting                              |
-| `STREAK_DIRECT_DURABLE_STATE_ACK=1` | Required with `NODE_ENV=production` after verifying persistent operator storage     |
+| Variable                            | Purpose                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `STREAK_DIRECT_OPERATOR_DIR`        | Absolute durable path for private journal and observations                                              |
+| `STREAK_DIRECT_REGISTRY_DIR`        | Separate absolute public catalogue path; give the API read access to this catalogue                     |
+| `STREAK_DIRECT_LEGACY_REGISTRY_DIR` | API-only path to the original catalogue, retained for existing positions and claims                     |
+| `STREAK_DIRECT_CATALOGUE_URL`       | Explicit loopback URL, such as `http://127.0.0.1:4100/api/direct/fixtures`, enabling automatic creation |
+| `STREAK_DIRECT_PROGRESS_DIR`        | Separate absolute public progress directory; configure this for both API and worker                     |
+| `STREAK_DIRECT_PRIVATE_KEY`         | Explicit testnet operator key, never supplied to the API or browser                                     |
+| `API_SPORTS_KEY`                    | Football credential, needed for creation and reporting                                                  |
+| `STREAK_DIRECT_DURABLE_STATE_ACK=1` | Required with `NODE_ENV=production` after verifying persistent operator storage                         |
 
 Commands do not load `.env`, `.ckb-wallet.key`, legacy treasury keys or demonstration wallet files. Routine tests reject public-network entry points. Do not serve the private journal as website content.
 
 Use one operator writer on a durable local volume. Ephemeral hosted filesystems and multiple hosts sharing this adapter are unsupported. Separate API and operator machines need a reviewed durable catalogue distribution step. The acknowledgement variable is not evidence that a volume or restore procedure has been verified.
+
+Both provisioning variables must be configured together. Only a literal loopback HTTP address with the exact `/api/direct/fixtures` path is accepted. With neither variable, the worker retains its existing result and closure duties without creating new markets. Keep current and archived public registries separate, but use the same private operator directory and one worker for both generations. Two workers using the same wallet in separate journal directories would bypass shared input reservations and are unsupported.
+
+## Automatic funding of the API catalogue
+
+The worker loads the active real provider's schedule and coverage window from `/api/direct/fixtures`. It rejects a simulated, disabled, foreign, malformed or stale catalogue. Every future scheduled fixture is retained in the durable queue, not just the first funded page. Before signing, it fetches that exact fixture directly from API-Football and checks provider identity, teams, kickoff and scheduled status against the queued entry. Partial provider coverage remains visible as partial coverage.
+
+The queue is stored at `STREAK_DIRECT_OPERATOR_DIR/provision-v2/queue.json`. Public progress is written separately to `STREAK_DIRECT_PROGRESS_DIR/provisioning.json` and served at `/api/direct/provisioning`. It includes queued, confirming, funded, expired, withdrawn and blocked counts, per-fixture states, catalogue coverage and reserve requirements. It contains no key or signed transaction bytes. These are observed provisioning states; the wallet still verifies the actual cells before spending.
+
+Each market reserves **3,050 testnet CKB**, five cells of 610 CKB. For example, 196 markets require **597,800 testnet CKB** of market reserves, plus deployment funding, network fees and valid operator change. Reserves are locked capacity, not a claim that all of this is burned as fees. The current builder needs a sufficiently large plain funding cell; a high aggregate balance spread across small cells may require separate consolidation. Progress labels its observed balance as one bounded 64-cell page, not the wallet's total capacity, and reports an estimated reserve shortfall when that observation is current.
+
+At most one market creation is attempted per invocation. The next funding signature waits for four canonical confirmations of the prior operator spend. A queued fixture is not presented as funded, and the 256-market limit leaves the remaining queue explicitly blocked. Insufficient capacity likewise remains visible and retries after funding becomes available. Increasing or archiving these bounds requires a reviewed migration that preserves all funded mappings and exits.
+
+An individual upstream fixture failure gets a five-minute retry delay so later fixtures can proceed. A missing or stale catalogue pauses new creation while existing result and refund processing continues. If a creation was signed before interruption, the next cycle reconciles its exact saved hash; it never creates a replacement market for the same operation. Unknown or conflicting funding spends stop new signatures across both generations.
+
+## Deployment funding and generation recovery
+
+Deployment uses the same operator wallet and spending barrier. Before broadcast, the deployment helper must durably save `STREAK_DIRECT_OPERATOR_DIR/deployment-v2.json` with the pinned `protocolHash`, `transactionHash`, `signedTransaction` and `createdAtMs`. `loadOperatorDeployment` validates bounded bytes, the exact transaction hash and an output containing the pinned protocol binary. `operatorFundingBarrier` prioritizes this sentinel and requires four current canonical confirmations before another new financial signature. `assertFreshOperatorInputs` also reserves its original inputs against replacement signatures after a reorg.
+
+Deployment must acquire the shared operator journal lease, check the funding barrier and existing input reservations, persist the signed sentinel, then broadcast only those bytes. If submission becomes uncertain, reconcile the saved hash and inputs. Do not delete the sentinel, rebuild a different deployment or restart funding blindly. This runbook does not claim that the compatible code has been deployed; the delivery evidence must record its actual transaction and pinned dependencies when that happens.
+
+Original operation files retain names such as `create-api-football-ID.json`. Compatible operations use `create-v2-api-football-ID.json`, with matching `report-v2-` and `close-v2-` names. Their descriptors use `direct-ID` and `direct-v2-ID` respectively. The automatic worker discovers both generations from the shared journal and chooses each descriptor's exact protocol configuration. Original signed bytes and funded mappings are never rewritten.
+
+For a manual original-generation command, use a separate terminal with `STREAK_DIRECT_REGISTRY_DIR` pointing to the archived original catalogue and the same shared operator directory. Check `status` and the expected generation before mutation. A current-generation command uses the new catalogue. Do not copy an original mapping over the current mapping or infer generation from the football fixture ID alone.
 
 ## Create a real football market
 
@@ -81,15 +110,17 @@ Schedule this once per minute on the configured operator host:
 node products/streak/scripts/direct-worker.cjs --once
 ```
 
-The worker processes at most four records per invocation, serially, with a durable round-robin cursor. It reconciles existing jobs, waits before kickoff, gathers real results, reports, settles or voids. It does not broadcast merely prepared creation transactions. A selected reporting market normally makes one provider read per invocation. Each network request has a 15-second timeout; chain reads and transaction sizes are also bounded.
+The worker handles lifecycle duties before provisioning. It selects at most four due markets per invocation, serially, with deadline ordering and a durable round-robin cursor. Future kickoffs consume no lifecycle RPC or provider slots. Closed markets are revisited after fifteen minutes for fresh chain checks. It reconciles existing jobs, gathers real results, reports, settles or voids, then attempts one queued creation when enabled. A selected reporting market normally makes one provider read; a newly prepared creation performs two exact fixture reads, including a final check before broadcast. Each network request has a 15-second timeout; chain reads and transaction sizes are also bounded.
 
-Four records is a work budget, not a one-minute completion guarantee. An overlapping invocation fails the worker lease. At the 256-market limit, a full round takes 64 successful invocations. Keep the cohort smaller or implement a reviewed indexed scheduler before promising faster coverage. Closed markets remain discoverable for claims; do not delete funded mappings to improve polling speed.
+Four due records and one creation are work budgets, not a one-minute completion guarantee. An overlapping invocation fails the worker lease. If all 256 current markets become due together, one lifecycle round still needs 64 successful invocations; future markets do not add that delay. Creation also waits for confirmations and can require hours for a large catalogue. Monitor actual deadline coverage and funding progress before inviting a cohort. Closed markets remain discoverable for claims; do not delete funded mappings to improve polling speed.
+
+The worker holds only `worker-lease/operator.lock` while scheduling. Each signing command separately acquires the shared journal's `operator.lock`, then releases it before returning. The worker does not acquire that mutation lease around a recursive `runOperator` call. This permits the serial workflow while excluding a competing signer. A local supervisor can invoke `--once` repeatedly without registering a service; stopping that supervisor or suspending the computer stops automated processing.
 
 Provider failure cannot become a winning result and does not disable the timeout path. Pending, rejected, conflicting or uncertain signed jobs need review. The worker never assumes that an unknown broadcast failed and silently creates another spend. Monitor failures and deadline coverage. No worker is started by the API or installed as a service by this change.
 
 ## Restart, backup and conflicts
 
-Back up the durable journal, provider observations and catalogue together. Signed bytes are public transaction material, but retain restricted filesystem permissions. Keep signing keys in separate secret configuration, outside source control and these state files.
+Back up the durable journal, deployment sentinel, provisioning queue, provider observations and both catalogue generations together. Public progress can be regenerated from those records and fresh chain observations. Signed bytes are public transaction material, but retain restricted filesystem permissions. Keep signing keys in separate secret configuration, outside source control and these state files.
 
 Each financial operation has an immutable signed entry. After a timeout or restart:
 
@@ -99,9 +130,17 @@ Each financial operation has an immutable signed entry. After a timeout or resta
 4. If inputs are spent while the hash is absent, or a node reports rejection, preserve the journal and investigate canonical consuming transactions. Do not delete the journal to force another spend. Automatic conflicting-transaction replacement is not implemented.
 5. Recheck actual chain state after a reorg. A cached committed flag is not entitlement.
 
+The funding barrier applies to creation, reporting, closure and the deployment sentinel. It derives dependency links from actual signed input outpoints and verifies the last transaction on every independent branch. A canonical descendant proves its referenced ancestors; a later timestamp alone proves nothing about an unrelated wallet spend. All unresolved operations are reconciled too. Reads run in batches of at most four, with sequential journal and catalogue writes and an overall 1,536-operation bound. Every independent branch is checked before the barrier clears, so many independent funding cells can increase a cycle's duration.
+
+Before a new signature, every proposed input is also compared against immutable signed entries in both generations. An input that belonged to another signed operation cannot be silently reused after a reorg, even if an older observation had called that operation committed. This policy can require manual recovery review; it deliberately avoids automatic replacement signatures.
+
+A signed creation that remains unconfirmed after its pinned kickoff, or a signed report that remains unconfirmed after the six-hour reporting window, needs manual intervention. Expiry does not cancel signed bytes or release their input reservations. Automatic creation/report resubmission stops when the applicable window closes; the worker cannot silently discard the operation or issue another signature using its funds. Preserve the journal, inspect the canonical original and consuming transactions, and resolve the case before resuming operator funding. An independent keeper can still use the permissionless closure path with its own wallet and journal.
+
 Mutation leases fail closed after a crash. Operator `status` and `reconcile` remain available without that lease. Verify that the old process has stopped and no replacement is running before manually removing an orphan `operator.lock`. The worker lease is under `worker-lease/operator.lock`. There is no automatic stale-lock deletion that could race another process.
 
 This is a single-operator file adapter. Replicated workers need transactional jobs, leases and fencing in PostgreSQL or another reviewed coordinator.
+
+The file adapter flushes signed file contents before publishing their names and uses atomic file publication or replacement. Tests demonstrate process interruption and restart recovery. Windows directory-entry flushes are not implemented, so this does not establish durability through host power loss or storage failure. Keep tested backups and verify the actual filesystem and restore procedure before treating this local adapter as hosted infrastructure.
 
 ## Owner recovery without the API
 
@@ -133,11 +172,12 @@ A claim cell exists only after market closure. If the operator disappears before
 
 Use a separate terminal and dedicated durable recovery directories. Do not point these commands at the running operator's journal or public catalogue. The following helper validates the exported bundle and restores one unchanged public descriptor into a separate local catalogue. It does not create a market, alter its funded terms or edit the original registry.
 
-After building the product, replace `FIXTURE_ID` with the numeric fixture ID in the export:
+After building the product, replace `FIXTURE_ID` with the numeric fixture ID and `MARKET_ID` with the exact generation-specific market ID in the export:
 
 ```powershell
 $env:STREAK_RECOVERY_BUNDLE = (Resolve-Path .\streak-testnet-recovery.json).Path
 $env:STREAK_RECOVERY_FIXTURE = 'api-football-FIXTURE_ID'
+$env:STREAK_RECOVERY_MARKET = 'MARKET_ID'
 $env:STREAK_DIRECT_OPERATOR_DIR = Join-Path $env:LOCALAPPDATA 'StreakRecovery\keeper-journal'
 $env:STREAK_DIRECT_REGISTRY_DIR = Join-Path $env:LOCALAPPDATA 'StreakRecovery\keeper-catalogue'
 
@@ -146,7 +186,7 @@ const { readRecovery } = require('./products/streak/scripts/direct-claim.cjs');
 const { DirectRegistry } = require('./products/streak/dist/modules/direct/registry.js');
 (async () => {
   const bundle = await readRecovery(process.env.STREAK_RECOVERY_BUNDLE);
-  const market = bundle.markets.find(row => row.fixtureId === process.env.STREAK_RECOVERY_FIXTURE);
+  const market = bundle.markets.find(row => row.fixtureId === process.env.STREAK_RECOVERY_FIXTURE && row.id === process.env.STREAK_RECOVERY_MARKET);
   if (!market) throw Error('That fixture is absent from the validated recovery bundle');
   new DirectRegistry(process.env.STREAK_DIRECT_REGISTRY_DIR).add(market);
   console.log(JSON.stringify({ fixtureId: market.fixtureId, cutoffMs: market.cutoffMs, deadlineMs: market.terms.deadlineMs }, null, 2));
@@ -183,5 +223,7 @@ The automatic worker deliberately stops when its own signed report or closure is
 ## Isolated evidence
 
 Five backend groups pass: registry and entry gating; strict raw provider evidence; durable journal and unknown/reorg recovery; report boundary and exact payouts; bounded worker scheduling. HTTP checks cover pinned public config, `no-store`, invalid queries, origin enforcement, source unavailability, unchanged legacy data and malformed registry failure. Four standalone recovery tests cover immutable bytes, restart observations, lock exclusion, import integrity, live-network test isolation and canonical conflict-proof recovery after a reorg.
+
+Seven isolated provisioning groups cover strict catalogue/source validation; all-fixture persistence and explicit 256-market overflow; reserve/shortfall accounting; serial creation and exact-byte restart recovery; capacity failures, per-fixture backoff and due-market priority; four-confirmation barriers and generation preservation; independent funding branches, including an older orphan beside a newer canonical job and more than four independent branches; and deployment-sentinel reorg recovery. Backend TypeScript passes. The complete applicable gate and compatible-contract evidence are tracked separately in the delivery report.
 
 These tests use synthetic local fixtures and stubbed chain reads. Native devnet and separately authorized public-testnet evidence must be reported separately. This runbook does not prove that a worker, real football market, hosted volume or backup is deployed.

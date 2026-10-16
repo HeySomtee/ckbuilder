@@ -12,7 +12,7 @@ export async function getDirectMarkets(
 ): Promise<Descriptor[]> {
   const query = fixtureId ? `?matchId=${encodeURIComponent(fixtureId)}` : '';
   const data = await request(`/direct/markets${query}`, signal);
-  if (!isRecord(data) || !Array.isArray(data.markets) || data.markets.length > 256)
+  if (!isRecord(data) || !Array.isArray(data.markets) || data.markets.length > 512)
     throw Error('The testnet market catalogue could not be verified.');
   const markets = await Promise.all(data.markets.map(parseDescriptor));
   if (
