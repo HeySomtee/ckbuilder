@@ -1,8 +1,8 @@
 # Contributor handoff
 
-Snapshot: **15 October 2026**, Africa/Lagos. Verify [status](../../status.md) and source before relying on this handoff. Latest published Season increment: `70beb34`.
+Snapshot: **16 October 2026**, Africa/Lagos. Verify [status](../../status.md) and source before relying on this handoff. The market/slip increment is based on published Season revision `eb8d151`.
 
-Read the [work tracker](../work-tracker.md) first for current progress and the exact resume point. Market detail and the integrated draft/slip review remain accepted, unfinished work after the landing follow-ups.
+Read the [work tracker](../work-tracker.md) first for current progress and the exact resume point. Market detail and persistent draft/slip review are implemented. Payment remains unavailable in this flow. See the [market/slip milestone](../delivery/market-slip-milestone.md).
 
 ## Read first
 
@@ -22,9 +22,9 @@ The owner approved the UI and architecture, then requested this documentation/te
 
 ## Next implementation increment
 
-The foundation is published as PR 1; Season landing, ranked fixtures and identity are in PR 2. The latest published revision passed 30 local gate steps. Hosted CI remains paused by the owner after the billing lock; local verification remains required.
+The foundation is published as PR 1; Season landing, ranked fixtures and identity are in PR 2. The Season base passed 30 local gate steps. The market/slip increment passed 31, including eighteen integrated browser groups and an independent recovery review. Hosted CI remains paused by the owner after the billing lock; local verification remains required.
 
-After the hero CTA correction, resume the accepted market-detail and integrated draft/slip review increment. Implement the real read-only journey, exact totals, draft persistence and whole-slip server review. Keep payment explicitly unavailable until direct-contract integration exists. Bounded SQL mutations, durable jobs, restore evidence and the direct stake-to-claim journey remain required for rollout. Read the tracker before switching focus so these commitments survive later UI requests.
+The next increment is one direct wallet-to-market stake through settlement and claim. Map app market and fixture IDs to protocol commitments and establish durable pending transaction recovery before adding combined payment. The integrated draft and server review do not reserve stakes or authorize spending. Bounded SQL mutations, durable jobs and restore evidence remain required for rollout. Read the tracker before switching focus so these commitments survive later UI requests.
 
 Use the accepted preview for visual detail and the architecture for authority. A generated sample receipt, local saved team or simulated combined payment must never be presented as real integration. Batch payment support, fixture/rules commitment, account linking and player-scoring coverage each need implementation evidence.
 

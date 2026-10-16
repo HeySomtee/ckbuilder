@@ -267,7 +267,7 @@ async function main() {
         );
         assert.equal(
           await page.getByRole('link', { name: 'View market' }).first().getAttribute('href'),
-          '/index.html#market/m-season-0',
+          '/season/?market=m-season-0',
         );
         assert.ok(
           ![...(await page.locator('script').evaluateAll((nodes) => nodes.map((n) => n.src)))].some(
@@ -641,6 +641,16 @@ async function main() {
       assert.equal(await page.locator('.market-card').count(), 0);
       await context.close();
       groups++;
+      groups += await require('./prediction-journey.cjs')({
+        browser,
+        base,
+        name,
+        update,
+        ensureMarketsForMatches,
+        friday,
+        evidence,
+        loopbackFetch: guardedFetch,
+      });
       await browser.close();
       browser = null;
     }

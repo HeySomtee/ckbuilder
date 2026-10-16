@@ -2,7 +2,7 @@
 
 Active work, earlier commitments and the next resume point are tracked in the [work tracker](docs/work-tracker.md). Read it before starting or switching tasks.
 
-Updated **15 October 2026**, Africa/Lagos. Published Season revision: `70beb34`. The landing page and live fixture ranking are included on the Season review branch and have not been deployed. See the [milestone report](docs/delivery/season-milestone.md) for implementation and rollout limits.
+Updated **16 October 2026**, Africa/Lagos. Published Season base: `eb8d151`, including hero CTA visibility and the work tracker. The market/slip increment is implemented and locally verified on review branch `feat/streak-market-slip`. See the [market/slip report](docs/delivery/market-slip-milestone.md) and earlier [Season report](docs/delivery/season-milestone.md). No deployment is claimed.
 
 ## Owner decisions
 
@@ -14,22 +14,25 @@ Updated **15 October 2026**, Africa/Lagos. Published Season revision: `70beb34`.
 
 ## Implementation state
 
-| Area                   | State                                                                                                                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Season app             | Integrated shell at `/season/`, real API fixture catalogue, Friday-to-Monday filters, search, pagination and error recovery                                                                |
-| Identity               | Durable single-use challenges and hashed sessions, full lock binding, exact origin policy, secure hosted cookies and verified database TLS configuration                                   |
-| Public landing         | New Season design at `/` and `/welcome/`, live API fixture preview with visible-tab refresh and automatic matchweek rollover, browsing before login and clearly labelled Five introduction |
-| Existing app           | Retained at `/index.html`, including custodial market details, activity, wallet and withdrawals; existing root hash links preserved                                                        |
-| Week 20 Rust work      | Separate lab and browser/CLI; direct stake-to-claim integration remains ahead                                                                                                              |
-| Combined slip and Five | Approved simulation only; not integrated production features                                                                                                                               |
-| Quality foundation     | Published in [PR 1](https://github.com/HeySomtee/ckbuilder/pull/1); local hooks and workflow configuration retained                                                                        |
-| Hosted checks          | No successful run claimed; temporary required branch protection removed following the owner's override                                                                                     |
+| Area                      | State                                                                                                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Season app                | Integrated shell at `/season/`, real API fixture catalogue, Friday-to-Monday filters, search, pagination and error recovery                                                                |
+| Identity                  | Durable single-use challenges and hashed sessions, full lock binding, exact origin policy, secure hosted cookies and verified database TLS configuration                                   |
+| Public landing            | New Season design at `/` and `/welcome/`, live API fixture preview with visible-tab refresh and automatic matchweek rollover, browsing before login and clearly labelled Five introduction |
+| Existing app              | Retained at `/index.html`, including custodial market details, activity, wallet and withdrawals; existing root hash links preserved                                                        |
+| Week 20 Rust work         | Separate lab and browser/CLI; direct stake-to-claim integration remains ahead                                                                                                              |
+| Market detail and draft   | Integrated API market detail, persistent independent picks, exact subtotal, explicit recovery and read-only whole-slip server review; payment unavailable                                  |
+| Combined payment and Five | Approved future work; no contract payment or Five scoring integration in the Season app                                                                                                    |
+| Quality foundation        | Published in [PR 1](https://github.com/HeySomtee/ckbuilder/pull/1); local hooks and workflow configuration retained                                                                        |
+| Hosted checks             | No successful run claimed; temporary required branch protection removed following the owner's override                                                                                     |
 
 ## Verification
 
+The 16 October market/slip increment passed all **31 steps** of `npm.cmd run quality:major`. It adds server/domain tests, six draft recovery tests and six browser journeys, bringing integrated coverage to eighteen groups across Chromium/WebKit at 320, 390 and 1440px. The new checks include newer terms arriving before an older review, slow device clocks, retained invalid lines, cross-tab recovery and keyboard focus. Independent review found and resolved review freshness, account-return revival, device-clock expiry, storage denial and missing provider ownership checks. See the tracker for evidence and the next resume point.
+
 The full local gate passed all **30 steps** for published revision `70beb34` on 15 October 2026, including the live fixture ranking follow-up. No required suite was skipped. The local preview at `http://127.0.0.1:4100/` uses real API fixtures in separate local storage with account mutations and payments disabled. Manual inspection confirmed team-logo loading; automated tests used synthetic fixtures and no live provider requests. The tracker records verification for subsequent local changes separately.
 
-The recurring command is `npm.cmd run quality:major`, using a disposable local PostgreSQL database. Exact results are written to `.quality-artifacts/all.json` and repeated against the unchanged staged candidate by the commit and push hooks. The foundation passed all 20 steps before publication. This increment extends the gate with frontend lint/build, identity and provider regressions, and twelve integrated browser groups across Chromium/WebKit at 320, 390 and 1440px, including automatic API refresh, Monday-to-Tuesday rollover, ranking before pagination and chronological sorting. See the [ranking policy](docs/product/fixture-ranking.md) for scoring and remaining data limits.
+The recurring command is `npm.cmd run quality:major`, using a disposable local PostgreSQL database. Exact results are written to `.quality-artifacts/all.json` and repeated against the unchanged staged candidate by the commit and push hooks. The foundation passed all 20 steps before publication. Earlier Season work added frontend lint/build, identity and provider regressions, automatic API refresh, Monday-to-Tuesday rollover, ranking before pagination and chronological sorting. These checks remain in the current gate. See the [ranking policy](docs/product/fixture-ranking.md) for scoring and remaining data limits.
 
 Targeted checks cover Monday fixtures, catalogue-only postponed matches, API logos, paging/search, failed reads, stale responses, real disposable wallet signatures, CCC connector event ordering, cancelled connection, logout failure and delayed account responses. Database tests cover challenge races, audience/expiry enforcement, session persistence across pool recreation, revocation and storage failure. Tests use synthetic data and loopback services; no production data or live settlement was used.
 

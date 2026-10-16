@@ -4,6 +4,8 @@ export type MarketStatus = 'open' | 'closed' | 'resolved' | 'void';
 export type MarketSort = 'featured' | 'kickoff';
 export interface Market {
   id: string;
+  matchId: string;
+  closesAt: string;
   status: MarketStatus;
   available: boolean;
   fixtureStatus: string;
@@ -44,7 +46,7 @@ function logo(value: unknown): string | null {
     return null;
   }
 }
-function market(value: unknown): Market {
+export function parseMarket(value: unknown): Market {
   if (
     !isRecord(value) ||
     !isRecord(value.match) ||
@@ -71,6 +73,11 @@ function market(value: unknown): Market {
     throw new Error('Invalid market totals.');
   return {
     id: text(value.id),
+    matchId: text(value.match.id),
+    closesAt:
+      typeof value.closesAt === 'string' && Number.isFinite(Date.parse(value.closesAt))
+        ? value.closesAt
+        : kickoff,
     status,
     available,
     fixtureStatus: text(value.match.status),
@@ -131,7 +138,7 @@ export async function getMarkets(
     Date.parse(data.coverage.from) <= Date.parse(from) &&
     Date.parse(data.coverage.to) >= Date.parse(to);
   return {
-    markets: data.markets.map(market),
+    markets: data.markets.map(parseMarket),
     total: data.total,
     nextOffset: data.nextOffset,
     covered,

@@ -13,6 +13,8 @@ Approved direction: [ADR 0001](../decisions/0001-approved-foundation.md). Detail
 
 The app's current wallet signatures authenticate users and authorize treasury transfers. They do not remove custody from ledger betting funds. Keep legacy liabilities discoverable and withdrawable throughout migration. Do not rename a ledger balance into a contract position.
 
+The Season market detail and independent prediction draft are integrated read-only journeys. Public detail and whole-slip review use the current ledger snapshot, explicit provider ownership and server terms. Drafts persist only unsent picks in the browser. No funds are moved and no stake is reserved. See the [market/slip milestone](../delivery/market-slip-milestone.md) for validation, freshness, recovery and request budgets. Direct contract preparation and combined payment remain separate dependencies.
+
 ## Ownership
 
 | Owner              | Responsibilities                                                                                      |

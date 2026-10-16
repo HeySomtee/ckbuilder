@@ -1,36 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMarkets, formatCkb, outcomes } from '../features/markets/api';
 import type { Market, MarketSort } from '../features/markets/api';
 import { getAccount, signIn, signOut } from '../features/account/api';
 import { Icon } from '../components/icon';
 import { weekend } from '../features/markets/weekend';
+import { TeamBadge } from '../components/team-badge';
+import { MarketDetail } from '../features/markets/detail';
+import { createDraftStore } from '../features/predictions/draft';
+import type { Outcome } from '../features/predictions/draft';
+import { PredictionSlip } from '../features/predictions/slip';
+import { followMarket, marketHref, navigateMarket, useMarketRoute } from '../lib/market-route';
+import '../design-system/predictions.css';
 
-function TeamBadge({
-  logo,
-  code,
-  side,
+function MarketCard({
+  market,
+  onPick,
+  selected,
 }: {
-  logo: string | null;
-  code: string;
-  side: 'home' | 'away';
+  market: Market;
+  onPick: (market: Market, outcome: Outcome) => void;
+  selected?: Outcome;
 }) {
-  const [failed, setFailed] = useState(false);
-  return logo && !failed ? (
-    <img
-      className="team-logo"
-      src={logo}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
-    />
-  ) : (
-    <span className={`crest ${side}`}>{code.slice(0, 4)}</span>
-  );
-}
-function MarketCard({ market }: { market: Market }) {
   const labels = { home: 'Home', draw: 'Draw', away: 'Away' };
   return (
     <article className="glass market-card">
@@ -93,10 +84,16 @@ function MarketCard({ market }: { market: Market }) {
         <>
           <div className="percentages" aria-label="Current pool percentages">
             {outcomes.map((side) => (
-              <div key={side}>
+              <button
+                key={side}
+                aria-label={`Add ${labels[side]} for ${market.home} vs ${market.away}`}
+                aria-pressed={selected === side}
+                disabled={market.status !== 'open' || market.fixtureStatus !== 'scheduled'}
+                onClick={() => onPick(market, side)}
+              >
                 <span>{labels[side]}</span>
                 <strong>{Math.round(market.prices[side] * 100)}%</strong>
-              </div>
+              </button>
             ))}
           </div>
           <div className="pool-bar" aria-hidden="true">
@@ -108,7 +105,11 @@ function MarketCard({ market }: { market: Market }) {
             <span>{formatCkb(market.totalPoolCkb)} tCKB pooled</span>
             <span>{market.totalBets} predictions</span>
           </div>
-          <a className="market-link" href={`/index.html#market/${encodeURIComponent(market.id)}`}>
+          <a
+            className="market-link"
+            href={marketHref(market.id)}
+            onClick={(event) => followMarket(event, market.id)}
+          >
             View market <Icon name="arrow" />
           </a>
         </>
@@ -124,6 +125,30 @@ function MarketCard({ market }: { market: Market }) {
 
 export function App() {
   const client = useQueryClient();
+  const marketId = useMarketRoute();
+  const [draftStore] = useState(createDraftStore);
+  const draftState = useSyncExternalStore(draftStore.subscribe, draftStore.getSnapshot);
+  const [slipOpen, setSlipOpen] = useState(false);
+  const [selectionNotice, setSelectionNotice] = useState('');
+  function pick(market: Market, outcome: Outcome) {
+    if (
+      market.status !== 'open' ||
+      market.fixtureStatus !== 'scheduled' ||
+      Date.now() >= Math.min(Date.parse(market.closesAt), Date.parse(market.kickoff))
+    ) {
+      setSelectionNotice(
+        'This market has closed. Refresh its details before choosing a prediction.',
+      );
+      return;
+    }
+    const added = draftStore.select(market.id, market.matchId, outcome);
+    setSelectionNotice(
+      added
+        ? 'Prediction added to your draft. Open the slip to review it.'
+        : 'This prediction could not be added. Open your slip for details.',
+    );
+    if (!added) setSlipOpen(true);
+  }
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState<MarketSort>('featured');
   const [week, setWeek] = useState(0);
@@ -165,6 +190,7 @@ export function App() {
     },
   });
   const feed = useInfiniteQuery({
+    enabled: !marketId,
     queryKey: ['markets', status, query, fromIso, toIso, sort],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
@@ -243,219 +269,242 @@ export function App() {
           <span>No real-money stakes</span>
         </div>
         <main id="main" tabIndex={-1}>
-          <div className="page-title">
-            <div>
-              <p className="eyebrow">THE PREDICTION MARKETS</p>
-              <h1>You know the game.</h1>
-              <p>Find your fixture. Read the room. Make your call.</p>
-            </div>
-            <span className="pilot-badge">Early access</span>
-          </div>
-          {(login.isError || logout.isError || account.isError) && (
-            <div className="notice error" role="alert">
-              {logout.isError
-                ? 'Sign-out failed. Your session may still be active. Please retry.'
-                : (login.error?.message ?? 'Unable to check your session.')}
-              {account.isError && (
-                <button onClick={() => void account.refetch()}>Retry account</button>
-              )}
-            </div>
+          {selectionNotice && (
+            <p className="selection-notice" role="status">
+              {selectionNotice}
+            </p>
           )}
-          <section className="weekend-picker" aria-label="Matchweek">
-            <div className="week-navigation">
-              <button
-                disabled={week <= -1}
-                aria-label="Previous weekend"
-                onClick={() => {
-                  setWeek(week - 1);
-                  setDay(null);
-                }}
-              >
-                ‹
-              </button>
+          {marketId && (
+            <MarketDetail
+              key={marketId}
+              id={marketId}
+              onBack={() => navigateMarket(null)}
+              onPick={pick}
+              selected={draftState.draft.picks.find((row) => row.marketId === marketId)?.outcome}
+            />
+          )}
+          <div hidden={!!marketId}>
+            <div className="page-title">
               <div>
-                <strong>
-                  {week === 0 ? 'This matchweek' : week === 1 ? 'Next matchweek' : 'Matchweek'}
-                </strong>
-                <span>
-                  {dates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} –{' '}
-                  {dates.days[3].toLocaleDateString('en-GB', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </span>
+                <p className="eyebrow">THE PREDICTION MARKETS</p>
+                <h1>You know the game.</h1>
+                <p>Find your fixture. Read the room. Make your call.</p>
               </div>
-              <button
-                disabled={week >= 2}
-                aria-label="Next weekend"
-                onClick={() => {
-                  setWeek(week + 1);
-                  setDay(null);
-                }}
-              >
-                ›
-              </button>
+              <span className="pilot-badge">Early access</span>
             </div>
-            <div className="day-filters" role="group" aria-label="Matchweek day">
-              <button aria-pressed={day === null} onClick={() => setDay(null)}>
-                All days
-              </button>
-              {dates.days.map((date, index) => (
-                <button key={index} aria-pressed={day === index} onClick={() => setDay(index)}>
-                  {date.toLocaleDateString('en-GB', { weekday: 'short' })}{' '}
-                  <span>{date.getDate()}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-          <div className="market-tools">
-            <div className="filters" role="group" aria-label="Market status">
-              {[
-                ['all', 'All fixtures'],
-                ['open', 'Open'],
-                ['closed', 'Locked'],
-                ['resolved', 'Results'],
-              ].map(([value, label]) => (
+            {(login.isError || logout.isError || account.isError) && (
+              <div className="notice error" role="alert">
+                {logout.isError
+                  ? 'Sign-out failed. Your session may still be active. Please retry.'
+                  : (login.error?.message ?? 'Unable to check your session.')}
+                {account.isError && (
+                  <button onClick={() => void account.refetch()}>Retry account</button>
+                )}
+              </div>
+            )}
+            <section className="weekend-picker" aria-label="Matchweek">
+              <div className="week-navigation">
                 <button
-                  key={value}
-                  aria-pressed={status === value}
-                  onClick={() => setStatus(value)}
+                  disabled={week <= -1}
+                  aria-label="Previous weekend"
+                  onClick={() => {
+                    setWeek(week - 1);
+                    setDay(null);
+                  }}
                 >
-                  {label}
+                  ‹
                 </button>
-              ))}
+                <div>
+                  <strong>
+                    {week === 0 ? 'This matchweek' : week === 1 ? 'Next matchweek' : 'Matchweek'}
+                  </strong>
+                  <span>
+                    {dates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} –{' '}
+                    {dates.days[3].toLocaleDateString('en-GB', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </div>
+                <button
+                  disabled={week >= 2}
+                  aria-label="Next weekend"
+                  onClick={() => {
+                    setWeek(week + 1);
+                    setDay(null);
+                  }}
+                >
+                  ›
+                </button>
+              </div>
+              <div className="day-filters" role="group" aria-label="Matchweek day">
+                <button aria-pressed={day === null} onClick={() => setDay(null)}>
+                  All days
+                </button>
+                {dates.days.map((date, index) => (
+                  <button key={index} aria-pressed={day === index} onClick={() => setDay(index)}>
+                    {date.toLocaleDateString('en-GB', { weekday: 'short' })}{' '}
+                    <span>{date.getDate()}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+            <div className="market-tools">
+              <div className="filters" role="group" aria-label="Market status">
+                {[
+                  ['all', 'All fixtures'],
+                  ['open', 'Open'],
+                  ['closed', 'Locked'],
+                  ['resolved', 'Results'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    aria-pressed={status === value}
+                    onClick={() => setStatus(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="search">
+                <Icon name="search" />
+                <input
+                  aria-label="Search teams or competitions"
+                  placeholder="Find your next match"
+                  maxLength={80}
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </label>
             </div>
-            <label className="search">
-              <Icon name="search" />
-              <input
-                aria-label="Search teams or competitions"
-                placeholder="Find your next match"
-                maxLength={80}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </label>
-          </div>
-          <div className="feed-meta" aria-live="polite">
-            <label className="fixture-sort">
-              Sort by
-              <select
-                value={sort}
-                onChange={(event) =>
-                  setSort(event.target.value === 'kickoff' ? 'kickoff' : 'featured')
-                }
-              >
-                <option value="featured">Big games first</option>
-                <option value="kickoff">Kickoff time</option>
-              </select>
-            </label>
-            <span>
-              {count === undefined
-                ? 'Finding fixtures'
-                : `${count} ${count === 1 ? 'fixture' : 'fixtures'}`}
-            </span>
-            <span>
-              {feed.isFetching
-                ? 'Updating…'
-                : feed.dataUpdatedAt
-                  ? `Updated ${new Date(feed.dataUpdatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
-                  : ''}
-            </span>
-          </div>
-          {feed.data && !feed.data.pages[0].covered && (
-            <div className="notice" role="status">
-              The full schedule for these dates is not confirmed. Showing the available fixtures
-              from connected competitions.
+            <div className="feed-meta" aria-live="polite">
+              <label className="fixture-sort">
+                Sort by
+                <select
+                  value={sort}
+                  onChange={(event) =>
+                    setSort(event.target.value === 'kickoff' ? 'kickoff' : 'featured')
+                  }
+                >
+                  <option value="featured">Big games first</option>
+                  <option value="kickoff">Kickoff time</option>
+                </select>
+              </label>
+              <span>
+                {count === undefined
+                  ? 'Finding fixtures'
+                  : `${count} ${count === 1 ? 'fixture' : 'fixtures'}`}
+              </span>
+              <span>
+                {feed.isFetching
+                  ? 'Updating…'
+                  : feed.dataUpdatedAt
+                    ? `Updated ${new Date(feed.dataUpdatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+                    : ''}
+              </span>
             </div>
-          )}
-          {feed.isError && (
-            <div className="notice error" role="alert">
-              <div>
-                <strong>
-                  {markets.length
-                    ? 'Showing the last loaded markets'
-                    : 'We could not load the markets'}
-                </strong>
+            {feed.data && !feed.data.pages[0].covered && (
+              <div className="notice" role="status">
+                The full schedule for these dates is not confirmed. Showing the available fixtures
+                from connected competitions.
+              </div>
+            )}
+            {feed.isError && (
+              <div className="notice error" role="alert">
+                <div>
+                  <strong>
+                    {markets.length
+                      ? 'Showing the last loaded markets'
+                      : 'We could not load the markets'}
+                  </strong>
+                  <p>
+                    {markets.length
+                      ? 'Prices may have changed. Refresh before making a prediction.'
+                      : feed.error.message}
+                  </p>
+                </div>
+                <button onClick={() => void feed.refetch()} disabled={feed.isFetching}>
+                  Retry markets
+                </button>
+              </div>
+            )}
+            {feed.isPending && (
+              <div className="market-grid" aria-label="Loading markets" aria-busy="true">
+                {[0, 1, 2].map((id) => (
+                  <div key={id} className="glass skeleton">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ))}
+              </div>
+            )}
+            {!feed.isPending && !feed.isError && markets.length === 0 && (
+              <div className="glass empty">
+                <Icon name="markets" />
+                <h2>
+                  {query
+                    ? 'No matching fixtures'
+                    : feed.data?.pages[0].covered
+                      ? 'No fixtures in this view'
+                      : 'Schedule not fully available'}
+                </h2>
                 <p>
-                  {markets.length
-                    ? 'Prices may have changed. Refresh before making a prediction.'
-                    : feed.error.message}
+                  {query
+                    ? 'Try another team or competition.'
+                    : 'Check another tab, or come back when the next fixtures open.'}
+                </p>
+                <button
+                  onClick={() => {
+                    setSearch('');
+                    setStatus('all');
+                  }}
+                >
+                  Browse all fixtures
+                </button>
+              </div>
+            )}
+            {markets.length > 0 && (
+              <div className="market-grid">
+                {markets.map((market) => (
+                  <MarketCard
+                    key={market.id}
+                    market={market}
+                    onPick={pick}
+                    selected={
+                      draftState.draft.picks.find((row) => row.matchId === market.matchId)?.outcome
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            {feed.hasNextPage && (
+              <div className="load-more">
+                <button disabled={feed.isFetching} onClick={() => void feed.fetchNextPage()}>
+                  {feed.isFetchingNextPage ? 'Loading…' : 'Show more fixtures'}
+                </button>
+              </div>
+            )}
+            <section className="glass trust-note">
+              <Icon name="shield" />
+              <div>
+                <h2>A clearer view of every prediction.</h2>
+                <p>
+                  These markets use the existing Streak treasury-backed ledger. Pool percentages are
+                  not fixed odds. Your balance and withdrawals remain in Wallet.
                 </p>
               </div>
-              <button onClick={() => void feed.refetch()} disabled={feed.isFetching}>
-                Retry markets
-              </button>
-            </div>
-          )}
-          {feed.isPending && (
-            <div className="market-grid" aria-label="Loading markets" aria-busy="true">
-              {[0, 1, 2].map((id) => (
-                <div key={id} className="glass skeleton">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              ))}
-            </div>
-          )}
-          {!feed.isPending && !feed.isError && markets.length === 0 && (
-            <div className="glass empty">
-              <Icon name="markets" />
-              <h2>
-                {query
-                  ? 'No matching fixtures'
-                  : feed.data?.pages[0].covered
-                    ? 'No fixtures in this view'
-                    : 'Schedule not fully available'}
-              </h2>
-              <p>
-                {query
-                  ? 'Try another team or competition.'
-                  : 'Check another tab, or come back when the next fixtures open.'}
-              </p>
-              <button
-                onClick={() => {
-                  setSearch('');
-                  setStatus('all');
-                }}
-              >
-                Browse all fixtures
-              </button>
-            </div>
-          )}
-          {markets.length > 0 && (
-            <div className="market-grid">
-              {markets.map((market) => (
-                <MarketCard key={market.id} market={market} />
-              ))}
-            </div>
-          )}
-          {feed.hasNextPage && (
-            <div className="load-more">
-              <button disabled={feed.isFetching} onClick={() => void feed.fetchNextPage()}>
-                {feed.isFetchingNextPage ? 'Loading…' : 'Show more fixtures'}
-              </button>
-            </div>
-          )}
-          <section className="glass trust-note">
-            <Icon name="shield" />
-            <div>
-              <h2>A clearer view of every prediction.</h2>
-              <p>
-                These markets use the existing Streak treasury-backed ledger. Pool percentages are
-                not fixed odds. Your balance and withdrawals remain in Wallet.
-              </p>
-            </div>
-            <a href="/index.html#wallet">
-              Open Wallet <Icon name="arrow" />
-            </a>
-          </section>
-          <footer>
-            Friday through Monday, in your local time. Fixtures from connected competitions. Testnet
-            CKB has no monetary value. Market details open in the current app while the new
-            prediction flow is being built.
-          </footer>
+              <a href="/index.html#wallet">
+                Open Wallet <Icon name="arrow" />
+              </a>
+            </section>
+            <footer>
+              Friday through Monday, in your local time. Fixtures from connected competitions.
+              Testnet CKB has no monetary value. The new prediction slip saves drafts and checks
+              current rules; direct payment is not available in this flow yet.
+            </footer>
+          </div>
         </main>
       </div>
       <nav className="mobile-dock" aria-label="Mobile navigation">
@@ -472,6 +521,19 @@ export function App() {
           Wallet
         </a>
       </nav>
+      <PredictionSlip
+        store={draftStore}
+        open={slipOpen}
+        onOpen={() => setSlipOpen(true)}
+        onDismiss={() => setSlipOpen(false)}
+        accountKey={
+          account.isPending
+            ? 'pending'
+            : account.isError
+              ? 'unavailable'
+              : (account.data?.id ?? 'guest')
+        }
+      />
     </>
   );
 }

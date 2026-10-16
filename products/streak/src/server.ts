@@ -10,6 +10,7 @@
 
 import "./env";
 import { rankFeaturedFixtures } from './fixture-ranking';
+import { findPublicPredictionMarket, InvalidSlip, parseSlip, reviewPredictions } from './modules/predictions/review';
 
 import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
@@ -609,6 +610,25 @@ async function handleMarketDetail(req: IncomingMessage, res: ServerResponse, id:
   sendJson(res, 200, { market: detail });
 }
 
+async function handlePublicPredictionMarket(res: ServerResponse, id: string): Promise<void> {
+  const detail = await read(db => findPublicPredictionMarket(db, id, match => provider.ownsMatch?.(match) === true, Date.now()));
+  sendJson(res, detail ? 200 : 404, detail ?? { error: 'Market not found.' });
+}
+
+async function handleSlipReview(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  let body: unknown;
+  try { body = await readJson(req); }
+  catch { return sendJson(res, 400, { error: 'Invalid prediction draft.' }); }
+  try {
+    const input = parseSlip(body);
+    const result = await read(db => reviewPredictions(db, input, match => provider.ownsMatch?.(match) === true, Date.now()));
+    sendJson(res, 200, result);
+  } catch (error) {
+    if (error instanceof InvalidSlip) return sendJson(res, 400, { error: error.message });
+    throw error;
+  }
+}
+
 const insightRefreshes = new AsyncSnapshotCache<string, boolean>(60_000);
 const matchdayRefreshes = new AsyncSnapshotCache<string, MatchdayData>(15_000, 128, 20_000);
 
@@ -1087,6 +1107,7 @@ const staticRoutes: Record<string, Handler> = {
   "POST /api/integrations/telegram/disconnect": (req, res) => handleTelegramDisconnect(req, res),
   "GET /api/dashboard": (req, res) => handleDashboard(req, res),
   "GET /api/markets": (req, res, url) => handleMarkets(req, res, url),
+  "POST /api/slips/review": (req, res) => handleSlipReview(req, res),
   "GET /api/portfolio": (req, res) => handlePortfolio(req, res),
   "GET /api/leaderboard": (req, res) => handleLeaderboard(req, res),
   "GET /api/wallet": (req, res) => handleWallet(req, res),
@@ -1119,10 +1140,17 @@ export const server = createServer(async (req, res) => {
       if (direct) return await direct(req, res, url);
 
       // /api/markets/:id, /api/markets/:id/bet and /api/markets/:id/insights
-      const m = url.pathname.match(/^\/api\/markets\/([^\/]+)(?:\/(bet|insights|matchday))?$/);
+      const m = url.pathname.match(/^\/api\/markets\/([^\/]+)(?:\/(bet|insights|matchday|public))?$/);
       if (m) {
         const id = m[1];
         const sub = m[2];
+        if (req.method === "GET" && sub === "public") {
+          let decoded: string;
+          try { decoded = decodeURIComponent(id); }
+          catch { return sendJson(res, 400, { error: "Invalid market identifier." }); }
+          if (!/^[a-zA-Z0-9:_-]{1,120}$/.test(decoded)) return sendJson(res, 400, { error: "Invalid market identifier." });
+          return await handlePublicPredictionMarket(res, decoded);
+        }
         if (req.method === "GET" && !sub) return await handleMarketDetail(req, res, id);
         if (req.method === "GET" && sub === "matchday") return await handleMatchday(req, res, id);
         if (req.method === "GET" && sub === "insights") {
