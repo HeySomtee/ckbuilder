@@ -16,7 +16,8 @@ const ENV_PATHS = [...new Set([
   resolve(__dirname, "..", "..", "..", ".env"),
 ])];
 
-for (const envPath of ENV_PATHS) {
+// Test harnesses opt out before imports so local credentials cannot enter fixtures.
+for (const envPath of process.env.STREAK_SKIP_ENV_FILE === "1" ? [] : ENV_PATHS) {
   try {
     const raw = readFileSync(envPath, "utf8");
     for (const line of raw.split(/\r?\n/)) {

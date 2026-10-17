@@ -1,0 +1,42 @@
+[
+  {
+    "engine": "webkit",
+    "width": 390,
+    "status": "passed",
+    "controls": [
+      {
+        "label": "Minimize",
+        "height": 44,
+        "width": 93.90625
+      },
+      {
+        "label": "Close",
+        "height": 44,
+        "width": 74.875
+      }
+    ],
+    "wheelScroll": null,
+    "keyboardScroll": 236,
+    "thumbScroll": null
+  },
+  {
+    "engine": "webkit",
+    "width": 320,
+    "status": "passed",
+    "controls": [
+      {
+        "label": "Minimize",
+        "height": 44,
+        "width": 93.90625
+      },
+      {
+        "label": "Close",
+        "height": 44,
+        "width": 74.875
+      }
+    ],
+    "wheelScroll": null,
+    "keyboardScroll": 236,
+    "thumbScroll": null
+  }
+]

@@ -1,0 +1,142 @@
+{
+  "capturedAt": "2026-10-16T21:02:47.806Z",
+  "source": "Existing local public market catalogue backed by API-Football",
+  "fixtures": [
+    {
+      "id": "m-api-football-1570420",
+      "kickoff": "2026-10-18T19:00:00.000Z",
+      "league": "La Liga",
+      "home": {
+        "name": "Real Madrid",
+        "code": "RMA",
+        "logo": "assets/team-541.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/541.png"
+      },
+      "away": {
+        "name": "Sevilla",
+        "code": "SEV",
+        "logo": "assets/team-536.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/536.png"
+      }
+    },
+    {
+      "id": "m-api-football-1570413",
+      "kickoff": "2026-10-17T16:30:00.000Z",
+      "league": "La Liga",
+      "home": {
+        "name": "Real Betis",
+        "code": "RBE",
+        "logo": "assets/team-543.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/543.png"
+      },
+      "away": {
+        "name": "Barcelona",
+        "code": "BAR",
+        "logo": "assets/team-529.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/529.png"
+      }
+    },
+    {
+      "id": "m-api-football-1550147",
+      "kickoff": "2026-10-18T16:00:00.000Z",
+      "league": "Serie A",
+      "home": {
+        "name": "AC Milan",
+        "code": "AMI",
+        "logo": "assets/team-489.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/489.png"
+      },
+      "away": {
+        "name": "Atalanta",
+        "code": "ATA",
+        "logo": "assets/team-499.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/499.png"
+      }
+    },
+    {
+      "id": "m-api-football-1550152",
+      "kickoff": "2026-10-18T18:45:00.000Z",
+      "league": "Serie A",
+      "home": {
+        "name": "Juventus",
+        "code": "JUV",
+        "logo": "assets/team-496.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/496.png"
+      },
+      "away": {
+        "name": "Lazio",
+        "code": "LAZ",
+        "logo": "assets/team-487.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/487.png"
+      }
+    },
+    {
+      "id": "m-api-football-1557430",
+      "kickoff": "2026-10-17T11:30:00.000Z",
+      "league": "Premier League",
+      "home": {
+        "name": "Everton",
+        "code": "EVE",
+        "logo": "assets/team-45.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/45.png"
+      },
+      "away": {
+        "name": "Chelsea",
+        "code": "CHE",
+        "logo": "assets/team-49.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/49.png"
+      }
+    },
+    {
+      "id": "m-api-football-1557434",
+      "kickoff": "2026-10-17T16:30:00.000Z",
+      "league": "Premier League",
+      "home": {
+        "name": "Newcastle",
+        "code": "NEW",
+        "logo": "assets/team-34.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/34.png"
+      },
+      "away": {
+        "name": "Aston Villa",
+        "code": "AVI",
+        "logo": "assets/team-66.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/66.png"
+      }
+    },
+    {
+      "id": "m-api-football-1557428",
+      "kickoff": "2026-10-17T14:00:00.000Z",
+      "league": "Premier League",
+      "home": {
+        "name": "Brentford",
+        "code": "BRE",
+        "logo": "assets/team-55.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/55.png"
+      },
+      "away": {
+        "name": "Liverpool",
+        "code": "LIV",
+        "logo": "assets/team-40.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/40.png"
+      }
+    },
+    {
+      "id": "m-api-football-1557433",
+      "kickoff": "2026-10-17T14:00:00.000Z",
+      "league": "Premier League",
+      "home": {
+        "name": "Manchester City",
+        "code": "MCI",
+        "logo": "assets/team-50.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/50.png"
+      },
+      "away": {
+        "name": "Ipswich",
+        "code": "IPS",
+        "logo": "assets/team-57.png",
+        "sourceLogo": "https://media.api-sports.io/football/teams/57.png"
+      }
+    }
+  ]
+}

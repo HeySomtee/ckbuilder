@@ -22,6 +22,7 @@ const deadline = <T>(promise: Promise<T>): Promise<T> => {
 
 async function main() {
   const temp = mkdtempSync(join(tmpdir(), "streak-backend-"));
+  process.env.STREAK_SKIP_ENV_FILE = "1";
   process.env.STREAK_DB_FILE = join(temp, "db.json");
   process.env.MATCH_PROVIDER = "worldcup";
   for (const name of ["DATABASE_URL", "SUPABASE_URL", "SUPABASE_KEY", "SUPABASE_DB_URL", "TELEGRAM_BOT_TOKEN", "API_SPORTS_KEY"])
@@ -75,7 +76,7 @@ async function main() {
   settlement.verifyReceiptOnChain = () => { verificationCalls++; return verification.promise; };
   const { server } = require("./server") as typeof import("./server");
   const { createSession } = require("./auth") as typeof import("./auth");
-  const cookie = `streak_sid=${createSession(user.id)}`;
+  const cookie = `streak_sid=${await createSession(user.id)}`;
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const get = async (path: string) => {
@@ -258,6 +259,37 @@ async function main() {
     chain.verifyPaymentToTreasury = async () => 10000000000n;
     await assert.rejects(wallet.deposit(user.id, "0x" + "A".repeat(64)), /already used/);
     assert.equal(await game.rankOf(user.id), (await game.leaderboard(user.id))[0].rank);
+
+    const depositPayment = deferred<bigint>();
+    const bothDepositsVerifying = deferred<void>();
+    let depositChecks = 0;
+    chain.verifyPaymentToTreasury = () => {
+      if (++depositChecks === 2) bothDepositsVerifying.resolve();
+      return depositPayment.promise;
+    };
+    const beforeDeposit = BigInt(await store.read((db) => db.users[0].escrowShannons));
+    const depositRace = [wallet.deposit(user.id, "0x" + "c".repeat(64)),
+      wallet.deposit(user.id, "0x" + "C".repeat(64))];
+    await deadline(bothDepositsVerifying.promise);
+    depositPayment.resolve(10000000000n);
+    const depositResults = await Promise.allSettled(depositRace);
+    assert.equal(depositResults.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(depositResults.filter((result) => result.status === "rejected" && result.reason.code === "dup").length, 1);
+    assert.equal(await store.read((db) => db.users[0].escrowShannons), (beforeDeposit + 10000000000n).toString(),
+      "A concurrent deposit with mixed-case hashes credits exactly once.");
+    assert.equal(await store.read((db) => db.deposits.length), 1);
+
+    const walletChangedPayment = deferred<bigint>();
+    const walletChangeVerificationStarted = deferred<void>();
+    chain.verifyPaymentToTreasury = () => { walletChangeVerificationStarted.resolve(); return walletChangedPayment.promise; };
+    const changingDeposit = wallet.deposit(user.id, "0x" + "d".repeat(64));
+    await deadline(walletChangeVerificationStarted.promise);
+    await store.update((db) => { db.users[0].wallet.address = "different-synthetic-wallet"; });
+    walletChangedPayment.resolve(10000000000n);
+    await assert.rejects(changingDeposit, (error: any) => error.code === "wallet_changed");
+    assert.equal(await store.read((db) => db.deposits.length), 1,
+      "A payment verified for an old wallet cannot credit a newly connected wallet.");
+    assert.equal(await store.read((db) => db.users[0].escrowShannons), (beforeDeposit + 10000000000n).toString());
 
     await store.update((db) => {
       db.markets[0].closesAt = new Date(Date.now() - 1).toISOString();

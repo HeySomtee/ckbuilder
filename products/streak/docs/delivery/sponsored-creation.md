@@ -1,0 +1,35 @@
+# Sponsored market creation with the first prediction
+
+16 October 2026. The owner changed the creation model after the shared EVM wallet correction: create a market and its first prediction in one transaction, with Streak supplying the market reserve. The earlier wallet correction is commit `189c538`; this follow-up is implemented and verified locally on `feat/streak-direct-testnet`, [PR 4](https://github.com/HeySomtee/ckbuilder/pull/4).
+
+## Contract and funding
+
+The separate v3 protocol requires exactly one pending first prediction in shard zero. Both the configured admin and the prediction owner must authorize inputs. The market control and remaining shards retain their empty starting state. Principal, position storage, payouts, fees, guard rules and six-hour timing are unchanged. Admission checks the first prediction's actual creation-block timestamp. Late creation retains the existing full-principal refund path.
+
+The 30,320-byte protocol is deployed at [transaction 243a71ce](https://pudge.explorer.nervos.org/transaction/0x243a71ceeaa06478fa8b74ba807407de55f184bfd125a03f4432babd1a9c1135), output 0. Four canonical confirmations were observed before pinning the backend/browser dependencies. Its CKB code hash is `0x1adbf49e05f294891e33403f399046d6de907ea18c8c256c069538a4f0508888`. The guard is byte-identical to v2 and reuses the original guard deployment. The [build manifest](../../contracts/direct-v3/build-manifest.json) records the pins.
+
+Streak contributes 3,050 testnet CKB to the market reserves. The bettor contributes the exact principal, 321 CKB recoverable position storage and reviewed network fee. Both the browser and sponsor check each party's net contribution separately. The reserve follows existing recovery rules, including fee-output bases or timeout keeper deductions; it is not an unconditionally refundable sponsorship deposit.
+
+Bulk provisioning is paused locally. Sixteen compatible v2 markets created before that decision remain available, and the original v1 catalogue remains discoverable for recovery. The shared operator continues lifecycle work. Creating every unused fixture upfront is no longer a funding requirement. The sponsor still needs enough available capacity for each new market.
+
+## Application and recovery
+
+The API serves cached fixture availability and forwards authenticated requests to a separate loopback sponsor process. Only the sponsor process loads its signing key. An unsigned offer fixes the transaction, funding input, fixture terms, recipients and expiry. The user signs first; exact partial bytes persist before submission. The sponsor verifies the signature and contribution accounting, adds its signature, saves the completed transaction and broadcasts.
+
+Existing deposits and sponsored creation share browser input reservations. Expiry or an HTTP error cannot release a submitted signature's inputs. Recovery follows the original hash and bytes. Confirmed conflicting-spend evidence is checked again after reorganisation. Ready lifecycle work may cancel unsigned offers; accepted partial signatures are preserved. The operator resumes accepted submissions without requiring the bettor to return. Replacements must be mutually exclusive through shared sponsor inputs or verified ancestry. Canonical selection retains every immutable descriptor and proof, including when an earlier signed creation wins after a reorganisation.
+
+## Evidence and release state
+
+- Independent Rust source review found the change confined to creation. The v3 VM suite passed 12 groups with 123 labelled checks, including authorization, exact capacities, lock bounds and cutoff equality.
+- The isolated local-chain suite passed 38 integration checks plus four harness checks at 14:49 UTC. It uses the actual sponsor and browser adapters, genuine native/OmniLock signatures, same-transaction creation and stake, later winning claims of 615 CKB, and a late six-hour refund of 421 CKB. Actual reorganisations cover an abandoned first bettor, mutually exclusive retry, the original creation winning after a replacement was published, retained catalogue history and recovery past an orphaned report. Evidence: `.quality-artifacts/sponsored-chain/devnet.json` and `harness.json`.
+- Focused backend checks passed seven sponsor groups, seven provisioning groups, five direct groups and an expanded HTTP group. Strict TypeScript passed. These cover signature verification before co-signing, net contributions, owner authorization, loopback IPC, expired offers, automatic recovery, immutable v1/v2 mappings and canonical selection.
+- Eighteen browser-client unit groups passed. Chromium and WebKit journeys passed at 390px and 1440px for sponsored checkout, ordinary direct payment and shared wallet state. Coverage includes exact decimal totals, rejected signing, tampered offers, partial persistence before POST, lost responses, reload, v1 database migration, competing reservations and independent claims. Review controls remain visible above the minimized slip dock.
+- Independent source and recovery review found no remaining blocker within the documented pilot bounds. It reviewed the genesis change, separate contribution accounting, sponsor-last signing, lifecycle priority, conflict recovery and canonical catalogue selection.
+
+The full `npm.cmd run quality:major` gate passed **42/42 steps** at **2026-10-16T14:59:58.224Z**, including disposable PostgreSQL, existing application and browser suites, all three contract generations and both signed product devnets. Evidence: `.quality-artifacts/sponsored-full-gate.json` and `.quality-artifacts/sponsored-full-gate.log`. Mandatory commit and push hooks rerun the complete gate for the exact candidate; hosted Actions remain paused.
+
+The sponsor service and API are active locally at `http://127.0.0.1:4100/season/`. At 15:02 UTC, real-API checks passed at 390px and 1440px with no page errors, no wallet SDK during browsing, and the exact Away/125.00000001 tCKB draft preserved into sponsored checkout. The catalogue exposed 180 unused eligible fixtures and 16 funded markets. This read-only check connected no wallet and moved no funds. Evidence: `.quality-artifacts/sponsored-local-check.json` and `browser/sponsored-local-*.png`.
+
+The lifecycle worker continues separately and bulk creation stays paused. These processes depend on this computer remaining available. No hosted service is claimed. Physical extension testing, combined multi-market payment, Five and community onboarding remain separate commitments. The [design](../architecture/sponsored-creation.md) and [tracker](../work-tracker.md) preserve the remaining acceptance criteria.
+
+A read-only public testnet query at 14:49 UTC found 17,800.44013853 CKB in five plain operator cells. That can cover roughly five additional market reserves before replenishment, excluding lifecycle fees. Sponsorship is conditional on available operator capacity; it is not unlimited. No public first bet or v3 public settlement was submitted in this increment's isolated tests.

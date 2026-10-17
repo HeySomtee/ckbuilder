@@ -1,0 +1,264 @@
+{
+  "group": "all",
+  "node": "24.14.0",
+  "startedAt": "2026-10-17T14:28:53.804Z",
+  "status": "passed",
+  "checks": [
+    {
+      "label": "Foundation formatting",
+      "status": "passed",
+      "durationMs": 3454
+    },
+    {
+      "label": "Static documentation, source and secret policies",
+      "status": "passed",
+      "durationMs": 3811
+    },
+    {
+      "label": "Learning repository TypeScript build",
+      "status": "passed",
+      "durationMs": 1943
+    },
+    {
+      "label": "Season TypeScript and hook lint",
+      "status": "passed",
+      "durationMs": 4737
+    },
+    {
+      "label": "Streak TypeScript build",
+      "status": "passed",
+      "durationMs": 2552
+    },
+    {
+      "label": "Season strict TypeScript",
+      "status": "passed",
+      "durationMs": 4269
+    },
+    {
+      "label": "Season production build",
+      "status": "passed",
+      "durationMs": 542
+    },
+    {
+      "label": "Quality gate regression tests",
+      "status": "passed",
+      "durationMs": 3615
+    },
+    {
+      "label": "Streak src\\backend-performance.test.ts regression",
+      "status": "passed",
+      "durationMs": 3641
+    },
+    {
+      "label": "Streak src\\direct-batch.test.ts regression",
+      "status": "passed",
+      "durationMs": 9633
+    },
+    {
+      "label": "Streak src\\direct-fixture-reader.test.ts regression",
+      "status": "passed",
+      "durationMs": 1750
+    },
+    {
+      "label": "Streak src\\direct-http.test.ts regression",
+      "status": "passed",
+      "durationMs": 3410
+    },
+    {
+      "label": "Streak src\\direct-pools.test.ts regression",
+      "status": "passed",
+      "durationMs": 1617
+    },
+    {
+      "label": "Streak src\\direct-provision.test.ts regression",
+      "status": "passed",
+      "durationMs": 2434
+    },
+    {
+      "label": "Streak src\\direct-sponsor.test.ts regression",
+      "status": "passed",
+      "durationMs": 3691
+    },
+    {
+      "label": "Streak src\\direct.test.ts regression",
+      "status": "passed",
+      "durationMs": 2969
+    },
+    {
+      "label": "Streak src\\fixture-ranking.test.ts regression",
+      "status": "passed",
+      "durationMs": 2002
+    },
+    {
+      "label": "Streak src\\identity.test.ts regression",
+      "status": "passed",
+      "durationMs": 3280
+    },
+    {
+      "label": "Streak src\\insights.test.ts regression",
+      "status": "passed",
+      "durationMs": 2495
+    },
+    {
+      "label": "Streak src\\markets.test.ts regression",
+      "status": "passed",
+      "durationMs": 2112
+    },
+    {
+      "label": "Streak src\\matchday.test.ts regression",
+      "status": "passed",
+      "durationMs": 1965
+    },
+    {
+      "label": "Streak src\\predictions.test.ts regression",
+      "status": "passed",
+      "durationMs": 3063
+    },
+    {
+      "label": "Streak src\\providers\\football.test.ts regression",
+      "status": "passed",
+      "durationMs": 1774
+    },
+    {
+      "label": "Streak src\\providers\\schedule.test.ts regression",
+      "status": "passed",
+      "durationMs": 1922
+    },
+    {
+      "label": "Streak src\\store.test.ts regression",
+      "status": "passed",
+      "durationMs": 1269
+    },
+    {
+      "label": "Streak client runtime regression",
+      "status": "passed",
+      "durationMs": 3363
+    },
+    {
+      "label": "Isolated PostgreSQL store regression",
+      "status": "passed",
+      "durationMs": 3601
+    },
+    {
+      "label": "Season TypeScript and hook lint",
+      "status": "passed",
+      "durationMs": 2727
+    },
+    {
+      "label": "Streak TypeScript build",
+      "status": "passed",
+      "durationMs": 3215
+    },
+    {
+      "label": "Season strict TypeScript",
+      "status": "passed",
+      "durationMs": 4121
+    },
+    {
+      "label": "Season production build",
+      "status": "passed",
+      "durationMs": 955
+    },
+    {
+      "label": "Current Streak browser regression",
+      "status": "passed",
+      "durationMs": 58275
+    },
+    {
+      "label": "Integrated Season browser regression",
+      "status": "passed",
+      "durationMs": 99146
+    },
+    {
+      "label": "Direct testnet wallet and recovery browser regression",
+      "status": "passed",
+      "durationMs": 50689
+    },
+    {
+      "label": "Shared EVM wallet connection browser regression",
+      "status": "passed",
+      "durationMs": 23361
+    },
+    {
+      "label": "Wallet overview and Telegram browser regression",
+      "status": "passed",
+      "durationMs": 14460
+    },
+    {
+      "label": "Account navigation and pinned slip browser regression",
+      "status": "passed",
+      "durationMs": 56802
+    },
+    {
+      "label": "Full application EVM checkout journey",
+      "status": "passed",
+      "durationMs": 161476
+    },
+    {
+      "label": "Atomic combined-payment browser regression",
+      "status": "passed",
+      "durationMs": 44385
+    },
+    {
+      "label": "Sponsored first prediction browser regression",
+      "status": "passed",
+      "durationMs": 38573
+    },
+    {
+      "label": "Approved preview interaction regression",
+      "status": "passed",
+      "durationMs": 28539
+    },
+    {
+      "label": "Independent multi-pick browser regression",
+      "status": "passed",
+      "durationMs": 93089
+    },
+    {
+      "label": "Atomic prediction Rust VM regression",
+      "status": "passed",
+      "durationMs": 12058
+    },
+    {
+      "label": "Streak sponsored creation Rust VM regression",
+      "status": "passed",
+      "durationMs": 10238
+    },
+    {
+      "label": "Streak compatible contract Rust VM regression",
+      "status": "passed",
+      "durationMs": 9934
+    },
+    {
+      "label": "Week 20 Rust VM and format regression",
+      "status": "passed",
+      "durationMs": 9459
+    },
+    {
+      "label": "Week 20 exact accounting regression",
+      "status": "passed",
+      "durationMs": 173
+    },
+    {
+      "label": "Week 20 client transaction regression",
+      "status": "passed",
+      "durationMs": 513
+    },
+    {
+      "label": "Direct prediction signed devnet lifecycle",
+      "status": "passed",
+      "durationMs": 29767
+    },
+    {
+      "label": "Sponsored first prediction signed devnet lifecycle",
+      "status": "passed",
+      "durationMs": 34286
+    },
+    {
+      "label": "Atomic prediction signed devnet lifecycle",
+      "status": "passed",
+      "durationMs": 289190
+    }
+  ],
+  "finishedAt": "2026-10-17T14:48:10.291Z"
+}

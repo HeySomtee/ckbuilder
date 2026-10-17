@@ -7,3 +7,4 @@ dist/
 
 # Local operator tools (standalone scripts)
 clear-users.ts
+/public/season/

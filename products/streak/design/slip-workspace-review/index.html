@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Streak · Slip workspace preview</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.mjs"></script>
+  </head>
+  <body>
+    <div class="preview-bar">
+      <span
+        ><i></i> DESIGN PREVIEW · NO PAYMENTS <span class="desktop-only">· Sample data</span></span
+      >
+      <div class="demo-sizes" aria-label="Preview pick count">
+        <span>Picks</span><button data-count="1">1</button><button data-count="4">4</button
+        ><button data-count="8">8</button>
+      </div>
+    </div>
+    <header class="site-header">
+      <a class="brand" href="#"><b>S</b> streak<span>.</span></a
+      ><span class="quiet desktop-only">Your touchline <span class="slash">/</span> Markets</span
+      ><button class="outline" id="open-slip">Open slip <span id="header-count">6</span></button>
+    </header>
+    <main>
+      <section class="intro">
+        <span class="eyebrow">THE SLIP, RECONSIDERED</span>
+        <h1>More room<br />for your calls<span>.</span></h1>
+        <p>Keep your picks in sight.<br />The paperwork can wait its turn.</p>
+        <div class="proposal-notes">
+          <div>
+            <b>01</b
+            ><span
+              ><strong>Picks stay centre stage</strong>A short footer. One scrolling list. Add
+              matches stays in reach.</span
+            >
+          </div>
+          <div>
+            <b>02</b
+            ><span
+              ><strong>Receipts have their own home</strong>Open Activity when you need it. A past
+              payment never crowds your next one.</span
+            >
+          </div>
+          <div>
+            <b>03</b
+            ><span
+              ><strong>Clear costs. Quieter focus.</strong>See the full debit upfront and open its
+              breakdown on demand.</span
+            >
+          </div>
+        </div>
+        <button class="text-button" id="show-plan">Why repeat payments take time ↗</button>
+        <p class="demo-note">
+          Design simulation only. Preview timing is illustrative.<br />Existing contracts and the
+          live app are unchanged.
+        </p>
+      </section>
+      <section class="market-area" aria-label="Sample markets">
+        <div class="section-title">
+          <h2>On your radar</h2>
+          <span>Sample fixtures</span>
+        </div>
+        <div id="market-list"></div>
+      </section>
+    </main>
+    <aside class="slip" aria-label="Prediction slip" id="slip">
+      <header class="slip-head">
+        <div>
+          <span class="eyebrow">YOUR PREDICTION SLIP</span>
+          <h2 id="slip-title">Make your calls<span>.</span></h2>
+        </div>
+        <button class="icon-button" id="close-slip" aria-label="Close prediction slip">×</button>
+      </header>
+      <div class="slip-tools">
+        <div class="tabs" role="tablist" aria-label="Slip views">
+          <button role="tab" id="picks-tab" aria-controls="picks-panel" aria-selected="true">
+            Picks <span id="pick-count">6</span></button
+          ><button
+            role="tab"
+            id="activity-tab"
+            aria-controls="activity-panel"
+            aria-selected="false"
+          >
+            Activity <span class="activity-dot"></span>
+          </button>
+        </div>
+        <button class="add-button" id="add-matches">＋ Add matches</button>
+      </div>
+      <section id="picks-panel" role="tabpanel" aria-labelledby="picks-tab" class="scroll-panel">
+        <div class="list-caption">
+          <span id="list-caption">6 independent predictions</span
+          ><button class="text-button" id="clear-picks">Clear</button>
+        </div>
+        <div id="pick-list"></div>
+        <p class="list-end">Each prediction settles independently.</p>
+      </section>
+      <section
+        id="activity-panel"
+        role="tabpanel"
+        aria-labelledby="activity-tab"
+        class="scroll-panel"
+        hidden
+      >
+        <div class="list-caption"><span>RECENT PAYMENTS</span><span>Simulated</span></div>
+        <div id="activity-list"></div>
+      </section>
+      <footer class="slip-footer" id="slip-footer">
+        <div class="cost-line">
+          <span>Stakes <b id="stake-total"></b></span
+          ><button id="breakdown-button" aria-expanded="false">
+            Costs &amp; refundable storage <span>↗</span>
+          </button>
+        </div>
+        <div class="total-line">
+          <span>Wallet total <small id="estimate-note">Estimate · plus network fee</small></span
+          ><strong id="wallet-total"></strong>
+        </div>
+        <button class="primary" id="review-button">Review 6 predictions <span>→</span></button>
+        <div class="footer-note">
+          <span id="footer-note">One payment · your picks settle separately</span
+          ><button id="back-edit" class="text-button" hidden>Edit picks</button>
+        </div>
+      </footer>
+      <section
+        class="overlay-panel"
+        id="cost-panel"
+        role="dialog"
+        aria-label="Cost breakdown"
+        hidden
+      >
+        <header>
+          <div>
+            <span class="eyebrow">NOT ALL OF THIS IS A FEE</span>
+            <h3>Your payment, explained.</h3>
+          </div>
+          <button class="icon-button" id="close-cost" aria-label="Close cost breakdown">×</button>
+        </header>
+        <dl>
+          <div>
+            <dt>Your stakes</dt>
+            <dd id="cost-stakes"></dd>
+          </div>
+          <div>
+            <dt>Storage deposit <span class="badge">Refundable</span></dt>
+            <dd id="cost-storage"></dd>
+          </div>
+        </dl>
+        <p class="storage-copy">
+          321 tCKB per prediction, held with your position. Returned when you claim after
+          settlement, win or lose. Claiming has a network fee.
+        </p>
+        <dl>
+          <div>
+            <dt>Network fee</dt>
+            <dd id="cost-fee">Calculated at review</dd>
+          </div>
+          <div class="cost-grand">
+            <dt>Wallet total</dt>
+            <dd id="cost-total"></dd>
+          </div>
+        </dl>
+        <p class="setup-copy">Market setup is on Streak. It is not added to your total.</p>
+        <button class="outline full" id="cost-done">Got it</button>
+      </section>
+      <section
+        class="overlay-panel"
+        id="picker-panel"
+        role="dialog"
+        aria-label="Add matches"
+        hidden
+      >
+        <header>
+          <div>
+            <span class="eyebrow">BUILD YOUR WEEKEND</span>
+            <h3>Add another call.</h3>
+          </div>
+          <button class="icon-button" id="close-picker" aria-label="Close match picker">×</button>
+        </header>
+        <div id="picker-list"></div>
+      </section>
+    </aside>
+    <button class="slip-dock" id="slip-dock" hidden>
+      <span class="dock-symbol">≡</span
+      ><span
+        ><strong id="dock-title">6 picks in your slip</strong
+        ><small>Draft saved in this preview</small></span
+      ><b>Open ↗</b>
+    </button>
+    <aside class="tracker" id="tracker" aria-label="Payment progress" hidden>
+      <button id="tracker-toggle" aria-expanded="false">
+        <span class="orbit" aria-hidden="true">◌</span
+        ><span
+          ><strong id="tracker-title">Checking your payment</strong
+          ><small id="tracker-subtitle">Your signature is saved.</small></span
+        ><span>↗</span>
+      </button>
+      <div id="tracker-details" hidden>
+        <ol id="stage-list"></ol>
+        <p id="tracker-copy"></p>
+        <button class="outline full" id="continue-demo" hidden>Simulate network confirmation</button
+        ><button class="text-button" id="view-receipt" hidden>View receipt in Activity ↗</button>
+      </div>
+    </aside>
+    <dialog id="plan-dialog">
+      <header>
+        <span class="eyebrow">PERFORMANCE PROPOSAL</span
+        ><button class="icon-button" id="close-plan" aria-label="Close performance proposal">
+          ×
+        </button>
+      </header>
+      <h2>An open pool still takes<br />the long route.</h2>
+      <p>
+        Even a repeat bet currently needs the sponsor to co-sign. Review also repeats live wallet,
+        market, fixture and funding-history checks. Some reads run sequentially.
+      </p>
+      <ol>
+        <li>
+          <strong>Measure each stage first.</strong>Record review, sponsor queue, wallet request,
+          broadcast and confirmation separately, without logging signatures.
+        </li>
+        <li>
+          <strong>Shorten the review path.</strong>Share duplicate reads within one request, run
+          independent checks with bounded concurrency and avoid fetching the entire fixture
+          catalogue for every pick.
+        </li>
+        <li>
+          <strong>Keep freshness where it matters.</strong>Cache stable metadata, but recheck
+          spendable inputs, market deadlines, exact totals and wallet identity before signing.
+        </li>
+        <li>
+          <strong>Make waiting legible.</strong>Show the actual stage, preserve the signed
+          transaction and let you keep browsing. Already-open markets never show a setup step.
+        </li>
+      </ol>
+      <p class="demo-note">
+        These are proposed changes, not measured speed gains. Confirmation still depends on the
+        network. The demo's short delays are not a promise.
+      </p>
+      <label class="delay-option"
+        ><input type="checkbox" id="simulate-delay" /> Simulate a delayed network response in the
+        next payment</label
+      ><button class="primary full" id="plan-done">Back to preview</button>
+    </dialog>
+    <div class="sr-only" id="announcement" role="status" aria-live="polite"></div>
+  </body>
+</html>

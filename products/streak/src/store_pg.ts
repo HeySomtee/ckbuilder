@@ -20,6 +20,7 @@
  */
 
 import { Pool, type PoolClient } from "pg";
+import { postgresConfig } from "./infrastructure/postgres-config";
 
 import { DB_SCHEMA } from "./config";
 import type {
@@ -35,15 +36,8 @@ export function getPool(): Pool {
   if (!pool) {
     const raw = process.env.DATABASE_URL;
     if (!raw) throw new Error("DATABASE_URL is not set");
-    // TLS is configured explicitly below, so drop the URL's sslmode/
-    // channel_binding parameters — pg-connection-string warns about how it
-    // reinterprets them, and its interpretation would be ignored regardless.
-    const connectionString = raw.replace(/([?&])(sslmode|channel_binding)=[^&]*/g, "$1")
-      .replace(/[?&]+$/, "").replace(/\?&/, "?");
     pool = new Pool({
-      connectionString,
-      // Hosted Postgres terminates TLS at the pooler with its own chain.
-      ssl: /localhost|127\.0\.0\.1/.test(connectionString) ? false : { rejectUnauthorized: false },
+      ...postgresConfig(raw),
       max: Number(process.env.PG_POOL_MAX ?? 5),
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS ?? 20_000),

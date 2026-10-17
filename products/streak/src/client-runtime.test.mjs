@@ -53,6 +53,20 @@ test("failed reads are not cached and preserve server error details", async () =
   assert.deepEqual(await api("/me"), { user: "current" });
 });
 
+test("an ambiguous payment failure is surfaced once and never retried automatically", async () => {
+  let reads = 0, writes = 0;
+  const api = createApiClient({ fetcher: async (_, { method }) => {
+    if (method === "POST") { writes++; throw new Error("Connection lost after submission"); }
+    return response({ escrow: ++reads === 1 ? 200 : 100 });
+  } });
+  assert.deepEqual(await api("/wallet"), { escrow: 200 });
+  await assert.rejects(api("/wallet/withdraw", { method: "POST", body: { amountCkb: 100 } }),
+    /Connection lost after submission/);
+  assert.equal(writes, 1, "Automatic write retries can duplicate a financial action.");
+  assert.deepEqual(await api("/wallet"), { escrow: 100 }, "A failed write still invalidates the old cached balance.");
+  assert.equal(reads, 2);
+});
+
 test("polling waits for completion, skips hidden tabs, and cannot revive after navigation", async () => {
   const timers = new Map();
   let next = 0, calls = 0, visible = true;

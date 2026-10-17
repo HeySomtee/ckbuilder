@@ -1,0 +1,70 @@
+{
+  "kind": "local design preview screenshots",
+  "images": [
+    "overview-desktop.png",
+    "five-desktop.png",
+    "markets-desktop.png",
+    "prediction-review-desktop.png",
+    "prediction-dock-desktop.png",
+    "matchday-desktop.png",
+    "clubhouse-desktop.png",
+    "welcome-desktop.png",
+    "overview-mobile.png",
+    "five-mobile.png",
+    "player-picker-mobile.png",
+    "prediction-mobile.png",
+    "prediction-dock-mobile.png",
+    "activity-mobile.png",
+    "combined-slip-desktop.png",
+    "combined-slip-bottom-desktop.png",
+    "combined-selected-markets-desktop.png",
+    "combined-payment-review-desktop.png",
+    "combined-payment-review-bottom-desktop.png",
+    "combined-payment-success-desktop.png",
+    "combined-independent-positions-desktop.png",
+    "combined-slip-mobile.png",
+    "combined-slip-bottom-mobile.png",
+    "combined-selected-markets-mobile.png",
+    "combined-payment-review-mobile.png",
+    "combined-payment-review-bottom-mobile.png",
+    "combined-payment-success-mobile.png",
+    "combined-independent-positions-mobile.png"
+  ],
+  "video": "interaction-walkthrough.webm",
+  "motionVideo": "genie-mobile.webm",
+  "combinedPaymentVideo": "multi-pick-mobile.webm",
+  "combinedPayment": {
+    "picks": [
+      {
+        "fixture": "Arsenal vs Chelsea",
+        "outcome": "Arsenal to win",
+        "stake": 200
+      },
+      {
+        "fixture": "Man City vs Liverpool",
+        "outcome": "Liverpool to win",
+        "stake": 300
+      },
+      {
+        "fixture": "Aston Villa vs Tottenham",
+        "outcome": "Draw",
+        "stake": 500
+      }
+    ],
+    "totalStakes": 1000,
+    "recoverableStorage": 963,
+    "estimatedNetworkFee": 0.005,
+    "totalToPay": 1963.005,
+    "settlement": "Three independent simulated positions, one sample payment"
+  },
+  "sizes": [
+    "1440x1000",
+    "390x844"
+  ],
+  "network": "loopback preview only",
+  "limitations": [
+    "Synthetic data",
+    "No actual wallet approval",
+    "No real-device motion profile"
+  ]
+}

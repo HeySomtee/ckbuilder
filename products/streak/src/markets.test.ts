@@ -24,10 +24,14 @@ function match(id: string): Match {
 async function run(): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), "streak-markets-test-"));
   const originalEnv = { ...process.env };
+  const originalFetch = globalThis.fetch;
+  process.env.STREAK_SKIP_ENV_FILE = "1";
+  process.env.DATABASE_URL = "";
   process.env.STREAK_DB_FILE = join(directory, "db.json");
   process.env.STORE_READ_TTL_MS = "60000";
   delete process.env.SUPABASE_URL;
   delete process.env.SUPABASE_KEY;
+  globalThis.fetch = async () => { throw new Error("External requests are forbidden in market tests."); };
   try {
     const { read, update } = await import("./store");
     const { ensureMarketsForMatches, getMarketDetail, listMarkets, placeBet, portfolio, settleMarkets } = await import("./markets");
@@ -38,6 +42,16 @@ async function run(): Promise<void> {
       ensureMarketsForMatches(db);
       assert.equal(db.markets.length, 4);
     });
+    const untouched = await read((db) => JSON.stringify(db));
+    for (const [amountCkb, code] of [[NaN, "min_bet"], [Infinity, "min_bet"], [-10, "min_bet"],
+      [9.99, "min_bet"], [100_001, "max_bet"], [201, "insufficient_escrow"]] as const) {
+      await assert.rejects(placeBet({ userId: "alice", matchId: "normal", outcome: "home", amountCkb }),
+        (error: any) => error.code === code);
+    }
+    await assert.rejects(placeBet({ userId: "alice", matchId: "normal", outcome: "invalid" as any, amountCkb: 10 }),
+      (error: any) => error.code === "bad_outcome");
+    assert.equal(await read((db) => JSON.stringify(db)), untouched,
+      "Rejected input must leave balances, pools, creator ownership and history unchanged.");
     const bets = await Promise.all([
       placeBet({ userId: "alice", matchId: "normal", outcome: "home", amountCkb: 10, asStreakPick: true }),
       placeBet({ userId: "bob", matchId: "normal", outcome: "away", amountCkb: 20 }),
@@ -113,8 +127,43 @@ async function run(): Promise<void> {
     assert.equal(await read((db) => JSON.stringify(db)), before, "repeated settlement never pays twice");
     await assert.rejects(placeBet({ userId: "alice", matchId: "normal", outcome: "home", amountCkb: 10 }),
       (error: any) => error.code === "locked");
-    console.log("Market regression checks passed (concurrent bets, indexed views, fees, refunds, idempotent settlement).");
+
+    await update((db) => {
+      db.users = [user("race")];
+      db.matches = [match("race")]; db.markets = []; db.bets = [];
+      ensureMarketsForMatches(db);
+    });
+    const race = await Promise.allSettled(Array.from({ length: 3 }, () =>
+      placeBet({ userId: "race", matchId: "race", outcome: "home", amountCkb: 100 })));
+    assert.equal(race.filter((result) => result.status === "fulfilled").length, 2);
+    assert.equal(race.filter((result) => result.status === "rejected" && result.reason.code === "insufficient_escrow").length, 1);
+    assert.equal(await read((db) => db.users[0].escrowShannons), "0", "Concurrent bets cannot overspend one balance.");
+    assert.equal(await read((db) => db.markets[0].pools.home), ckb(200));
+    assert.equal(await read((db) => db.bets.length), 2);
+
+    await update((db) => {
+      db.users = [user("daily")];
+      db.matches = [match("daily-one"), match("daily-two")]; db.markets = []; db.bets = [];
+      ensureMarketsForMatches(db);
+    });
+    const daily = await Promise.allSettled(["daily-one", "daily-two"].map((matchId) =>
+      placeBet({ userId: "daily", matchId, outcome: "home", amountCkb: 10, asStreakPick: true })));
+    assert.equal(daily.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(daily.filter((result) => result.status === "rejected" && result.reason.code === "already_picked").length, 1);
+    assert.equal(await read((db) => db.users[0].escrowShannons), ckb(190));
+    assert.equal(await read((db) => db.markets.filter((market) => market.creatorId === "system").length), 1,
+      "A rejected competing streak pick must not claim an empty market.");
+    const atKickoff = Date.now();
+    await update((db) => { db.matches[0].kickoff = new Date(atKickoff).toISOString(); });
+    const clock = Date.now;
+    Date.now = () => atKickoff;
+    try {
+      await assert.rejects(placeBet({ userId: "daily", matchId: "daily-one", outcome: "home", amountCkb: 10 }),
+        (error: any) => error.code === "locked", "Betting closes at the exact kickoff boundary.");
+    } finally { Date.now = clock; }
+    console.log("Market regression checks passed (validation rollback, overspend/streak races, kickoff cutoff, indexed views, fees, refunds, idempotent settlement).");
   } finally {
+    globalThis.fetch = originalFetch;
     for (const key of Object.keys(process.env)) if (!(key in originalEnv)) delete process.env[key];
     Object.assign(process.env, originalEnv);
     assert.equal(dirname(resolve(directory)), resolve(tmpdir()));

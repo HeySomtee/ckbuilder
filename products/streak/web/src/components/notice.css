@@ -1,0 +1,123 @@
+.feedback-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 14px;
+  margin: 12px 0;
+  border: 1px solid #a7c9e52b;
+  border-radius: 12px;
+  background: linear-gradient(125deg, #a7c9e50a, #a7c9e503);
+  box-shadow: inset 0 1px #ffffff08;
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: left;
+}
+.feedback-card.attention {
+  border-color: #d1bb8733;
+  background: linear-gradient(125deg, #d1bb870b, transparent);
+}
+.feedback-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  height: 20px;
+  border: 1px solid #a7c9e54a;
+  border-radius: 50%;
+  color: #b0cbe2;
+  font: 600 11px var(--font);
+  margin-top: 1px;
+}
+.attention .feedback-icon {
+  color: #ddcca8;
+  border-color: #d1bb874a;
+}
+.feedback-content {
+  min-width: 0;
+  flex: 1;
+}
+.feedback-content > strong {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.feedback-description {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  margin-top: 3px;
+}
+.feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+.feedback-actions button,
+.feedback-description button {
+  min-height: 44px;
+  border-radius: 8px;
+  font-size: 11px;
+  padding: 8px 12px;
+}
+.feedback-actions .feedback-keep {
+  background: #b9ed8a10;
+  color: var(--mint);
+  border-color: #b9ed8a30;
+}
+.feedback-description > button {
+  margin-top: 8px;
+}
+.batch-checkout .pick-error,
+.slip-pick .pick-error,
+.wallet-telegram .wallet-error,
+.wallet-funds .wallet-error {
+  color: #ddcca8;
+}
+.wallet-nav-summary {
+  position: relative;
+}
+.wallet-nav-summary > .feedback-card {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+  width: min(330px, 80vw);
+  background: #182322;
+}
+.wallet-nav-reconnect {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  background: #ffffff03;
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 8px 12px;
+}
+.card-meta .card-details-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 44px;
+  color: #bfd2df;
+  font-size: 11px;
+}
+.card-details-link svg {
+  width: 14px;
+  height: 14px;
+}
+@media (forced-colors: active) {
+  .feedback-card,
+  .feedback-card.attention {
+    background: Canvas;
+    border-color: CanvasText;
+  }
+  .feedback-icon,
+  .feedback-card.attention .feedback-icon {
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+}

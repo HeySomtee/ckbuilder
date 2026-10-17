@@ -30,7 +30,7 @@ export function createApiClient({
         const res = await fetcher(`/api${path}`, {
           method,
           headers:
-            body === undefined
+            read && body === undefined
               ? undefined
               : { "Content-Type": "application/json" },
           body: body === undefined ? undefined : JSON.stringify(body),

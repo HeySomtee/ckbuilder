@@ -5,7 +5,19 @@
   "description": "Weekly TypeScript replicas of CKB fundamentals while learning Nervos CKB",
   "scripts": {
     "build": "tsc",
-    "postinstall": "npm --prefix products/streak install",
+    "postinstall": "npm --prefix products/streak ci",
+    "quality": "node scripts/quality/verify.mjs all",
+    "quality:major": "node scripts/quality/verify.mjs all",
+    "verify": "node scripts/quality/verify.mjs all",
+    "quality:static": "node scripts/quality/verify.mjs static",
+    "quality:unit": "node scripts/quality/verify.mjs unit",
+    "quality:postgres": "node scripts/quality/verify.mjs postgres",
+    "quality:browser": "node scripts/quality/verify.mjs browser",
+    "quality:contracts": "node scripts/quality/verify.mjs contracts",
+    "hooks:install": "node scripts/quality/install-hooks.mjs",
+    "test:tooling": "node --test scripts/quality/*.test.mjs",
+    "format:foundation": "node scripts/quality/format.mjs --write",
+    "format:check": "node scripts/quality/format.mjs --check",
     "week1": "ts-node src/week1/cell-model/demo.ts",
     "test:week1": "ts-node src/week1/cell-model/demo.ts",
     "test:week14": "npm --prefix products/streak run test:football",
@@ -29,8 +41,10 @@
     "streak": "npm --prefix products/streak start",
     "start": "npm run streak"
   },
+  "packageManager": "npm@11.9.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=24.14.0 <25",
+    "npm": ">=11.9.0 <12"
   },
   "dependencies": {
     "@ckb-ccc/core": "^1.12.5",
@@ -38,6 +52,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "prettier": "3.9.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.0"
   }

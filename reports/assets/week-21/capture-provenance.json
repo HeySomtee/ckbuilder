@@ -1,0 +1,124 @@
+{
+  "capturedAt": "2026-10-17T15:11:05.312Z",
+  "errors": [],
+  "blockedWrites": [],
+  "records": [
+    {
+      "name": "overview-desktop.png",
+      "description": "Overview, real weekend fixture ranking, clear glass and Streak Five coming-soon banner.",
+      "viewport": {
+        "width": 1440,
+        "height": 1080
+      },
+      "url": "http://127.0.0.1:4100/season/?view=overview",
+      "scope": "Read-only local app with real API fixtures. No wallet connection or financial operation."
+    },
+    {
+      "name": "market-analysis-desktop.png",
+      "description": "Detail capture of the actual AC Milan vs Atalanta intelligence panel: provider forecasts, normalized bookmaker comparison, table form and last five meetings. This is not fabricated player or match data.",
+      "viewport": {
+        "width": 1440,
+        "height": 1120
+      },
+      "url": "http://127.0.0.1:4100/season/?market=m-api-football-1550147",
+      "scope": "Read-only local app with real API fixtures. No wallet connection or financial operation.",
+      "capture": "Element screenshot of Match intelligence"
+    },
+    {
+      "name": "markets-desktop.png",
+      "description": "Real football catalogue and compact Home, Draw and Away choices.",
+      "viewport": {
+        "width": 1440,
+        "height": 1080
+      },
+      "url": "http://127.0.0.1:4100/season/",
+      "scope": "Read-only local app with real API fixtures. No wallet connection or financial operation."
+    },
+    {
+      "name": "slip-mobile.png",
+      "description": "Four real fixture drafts, compact Picks and Activity workspace and full estimated wallet debit. Draft only, no payment.",
+      "viewport": {
+        "width": 430,
+        "height": 932
+      },
+      "url": "http://127.0.0.1:4100/season/",
+      "scope": "Read-only local app with real API fixtures. No wallet connection or financial operation."
+    },
+    {
+      "name": "refundable-costs-mobile.png",
+      "description": "On-demand cost explanation separates stakes, refundable position storage and the network fee. Unsigned draft estimate.",
+      "viewport": {
+        "width": 430,
+        "height": 932
+      },
+      "url": "http://127.0.0.1:4100/season/",
+      "scope": "Read-only local app with real API fixtures. No wallet connection or financial operation."
+    },
+    {
+      "name": "funded-market-desktop.png",
+      "description": "Actual Manchester City vs Ipswich market after kickoff: current on-chain read model shows 10,000 tCKB principal and 100% Home share. The chart is flat because observed principal is entirely Home; no artificial trading history added.",
+      "viewport": {
+        "width": 1440,
+        "height": 1120
+      },
+      "url": "http://127.0.0.1:4100/season/?market=m-api-football-1557433",
+      "scope": "Read-only local app with real API fixtures. No wallet connection or financial operation.",
+      "capture": "Viewport screenshot"
+    }
+  ],
+  "build": {
+    "baseRevision": "07b427cab304c2f02b51ccc6e5d5fbe22cf4c29d",
+    "state": "Local Week 21 candidate before commit",
+    "publicAssets": [
+      {
+        "name": "batch-client-B-wKJRF-.js",
+        "sha256": "de4fe1b1ff7f94658dcc9f5c1f7494b61503d47f856219ab7880868322273d03"
+      },
+      {
+        "name": "batch-ui-DoRhuWHQ.css",
+        "sha256": "bd8c840d3eba57f23a9039f5d1a0833955d8adf1853a6bff1923f0e29562fe44"
+      },
+      {
+        "name": "batch-ui-Dx0rwkEP.js",
+        "sha256": "f44d0ffac3ba6709ef666a9d1af913f14daa917a5cab671b08ba4bfc08adee7e"
+      },
+      {
+        "name": "client-BSFNHBbH.js",
+        "sha256": "ebb3128da1118a34958eabee549d36784a129f8f057f61db7e60f1b2d78dc38b"
+      },
+      {
+        "name": "dist-8lty5J09.js",
+        "sha256": "be99e902aa3ebabab4f78ff406e66cc7cd935a0209e591f904342e778284a791"
+      },
+      {
+        "name": "dist-CMcoA6Ok.js",
+        "sha256": "209d742c70b340af4af722d32794922a7456e9f291e3cc7ee6f664bfc75c105c"
+      },
+      {
+        "name": "index-C5Kzl19B.js",
+        "sha256": "f6778c8fda01cc92878e58eccc5fc0909cefeeacdcf9630ba6823a6f9a00f9bf"
+      },
+      {
+        "name": "index-DlIsLzdg.css",
+        "sha256": "6044c830662144bc243add0d72150c4de21f3c4642461b24046283b432a2abcf"
+      },
+      {
+        "name": "protocol-BJFavzwq.js",
+        "sha256": "53b6012f3d5757918ea38d6f5a7589d555d30795fe8bab7957ee9f69e1688e35"
+      },
+      {
+        "name": "rolldown-runtime-BWaJ3C7D.js",
+        "sha256": "d0e9044430006c5bb48f477501a5af465f0a6377d2fcd7495aa215b8b75aaee3"
+      },
+      {
+        "name": "ui-BOEbNDEf.css",
+        "sha256": "2ca434bd5e0ab8ff72c0b759f302bbc2a6883f1dda26eb9e42e6893752453579"
+      },
+      {
+        "name": "ui-CRTVtz6Q.js",
+        "sha256": "835341483cd987e08be97fd8f33e304498e865c549ac0031b6ef263dfa1bc525"
+      }
+    ]
+  },
+  "evidenceBoundary": "These screenshots are presentation evidence from a fresh anonymous browser. They are not evidence of wallet signing, settlement, community user activity or hosted deployment. Pool data reflects the local app public read model at capture time."
+}

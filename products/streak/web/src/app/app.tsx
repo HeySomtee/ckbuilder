@@ -1,0 +1,667 @@
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getMarkets, outcomes } from '../features/markets/api';
+import type { Market, MarketSort } from '../features/markets/api';
+import { getAccount, signIn, signOut } from '../features/account/api';
+import { WalletOverview, WalletSummary } from '../features/account/wallet-ui';
+import { Icon } from '../components/icon';
+import { useMatchweek } from '../features/markets/use-matchweek';
+import { TeamBadge } from '../components/team-badge';
+import { MarketDetail } from '../features/markets/detail';
+import { createDraftStore } from '../features/predictions/draft';
+import type { Outcome } from '../features/predictions/draft';
+import { PredictionSlip } from '../features/predictions/slip';
+import { followMarket, marketHref, navigateMarket, useMarketRoute } from '../lib/market-route';
+import { navigateActivity, useDirectRoute } from '../lib/direct-route';
+import { useSectionRoute, sectionHref, followSection } from '../lib/section-route';
+import { AppNavigation } from './navigation';
+import { SectionPage } from './sections';
+import { getAtomicEntryEnabled } from '../features/direct/availability-api';
+import { Notice } from '../components/notice';
+import { poolLabel } from '../features/markets/pools';
+import { usePools } from '../features/markets/use-pools';
+import '../design-system/predictions.css';
+import {
+  assertWalletAccount,
+  disconnectWallet,
+  getWalletState,
+  subscribeWallet,
+} from '../lib/wallet';
+
+const DirectPage = lazy(() => import('../features/direct/ui'));
+
+function MarketCard({
+  market,
+  onPick,
+  selected,
+}: {
+  market: Market;
+  onPick: (market: Market, outcome: Outcome) => void;
+  selected?: Outcome;
+}) {
+  const labels = { home: 'Home', draw: 'Draw', away: 'Away' };
+  return (
+    <article className="glass market-card">
+      <div className="card-top">
+        <span className="competition">
+          {market.competitionLogo && (
+            <img
+              src={market.competitionLogo}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={(event) => {
+                event.currentTarget.hidden = true;
+              }}
+            />
+          )}
+          {market.competition}
+        </span>
+        <span className={`status ${market.status}`}>
+          {!market.available
+            ? market.fixtureStatus
+            : market.status === 'closed'
+              ? 'Locked'
+              : market.status === 'void'
+                ? 'Voided'
+                : market.status}
+        </span>
+      </div>
+      <time dateTime={market.kickoff}>
+        {new Date(market.kickoff).toLocaleString('en-GB', {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        })}
+      </time>
+      <a
+        className="teams"
+        href={market.available ? marketHref(market.id) : undefined}
+        aria-label={
+          market.available ? `Match details for ${market.home} vs ${market.away}` : undefined
+        }
+        onClick={(event) => {
+          if (market.available) followMarket(event, market.id);
+        }}
+      >
+        <div>
+          <TeamBadge
+            key={market.homeLogo}
+            logo={market.homeLogo}
+            code={market.homeCode}
+            side="home"
+          />
+          <h2>{market.home}</h2>
+        </div>
+        <span className="versus">vs</span>
+        <div>
+          <TeamBadge
+            key={market.awayLogo}
+            logo={market.awayLogo}
+            code={market.awayCode}
+            side="away"
+          />
+          <h2>{market.away}</h2>
+        </div>
+      </a>
+      {market.available ? (
+        <>
+          <div className="percentages" aria-label="Current pool percentages">
+            {outcomes.map((side) => (
+              <button
+                key={side}
+                className="outcome-glass"
+                data-outcome={side}
+                aria-label={`Add ${labels[side]} for ${market.home} vs ${market.away}`}
+                aria-pressed={selected === side}
+                disabled={market.status !== 'open' || market.fixtureStatus !== 'scheduled'}
+                onClick={() => onPick(market, side)}
+              >
+                <span>{labels[side]}</span>
+                <strong>
+                  {poolLabel(
+                    market.directPool,
+                    side,
+                    side === 'home' ? '1' : side === 'draw' ? 'X' : '2',
+                  )}
+                </strong>
+                {selected === side && (
+                  <i className="pick-check" aria-hidden="true">
+                    ✓
+                  </i>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="card-meta">
+            <span>
+              {market.directPool?.state === 'ready'
+                ? 'On-chain pool share'
+                : market.directPool?.state === 'uninitialized'
+                  ? 'Be the first to predict'
+                  : 'Pool shares updating'}
+            </span>
+            <a
+              className="card-details-link"
+              href={marketHref(market.id)}
+              onClick={(event) => followMarket(event, market.id)}
+              aria-label={`View market: ${market.home} vs ${market.away}`}
+            >
+              View market <Icon name="arrow" />
+            </a>
+          </div>
+        </>
+      ) : (
+        <div className="schedule-only">
+          <strong>Fixture on the schedule</strong>
+          <p>No prediction market is available for this match.</p>
+        </div>
+      )}
+    </article>
+  );
+}
+
+export function App() {
+  const client = useQueryClient();
+  const wallet = useSyncExternalStore(subscribeWallet, getWalletState);
+  useEffect(
+    () =>
+      subscribeWallet(() => {
+        void client.cancelQueries({ queryKey: ['direct-private'] });
+        client.removeQueries({ queryKey: ['direct-private'] });
+      }),
+    [client],
+  );
+  const marketId = useMarketRoute();
+  const directRoute = useDirectRoute();
+  const directEntry = !!directRoute && !['wallet', 'activity'].includes(directRoute);
+  const entryMode = useQuery({
+    queryKey: ['atomic-entry-mode'],
+    queryFn: ({ signal }) => getAtomicEntryEnabled(signal),
+    enabled: directEntry,
+    retry: false,
+    staleTime: 15_000,
+  });
+  const currentEntry = directEntry && entryMode.data === true;
+  const section = useSectionRoute();
+  const activePage =
+    directRoute === 'wallet' || directRoute === 'activity'
+      ? directRoute
+      : directRoute || marketId
+        ? 'markets'
+        : (section ?? 'markets');
+  const [draftStore] = useState(createDraftStore);
+  const draftState = useSyncExternalStore(draftStore.subscribe, draftStore.getSnapshot);
+  const [slipOpen, setSlipOpen] = useState(false);
+  const [selectionNotice, setSelectionNotice] = useState('');
+  function pick(market: Market, outcome: Outcome) {
+    if (
+      market.status !== 'open' ||
+      market.fixtureStatus !== 'scheduled' ||
+      Date.now() >= Math.min(Date.parse(market.closesAt), Date.parse(market.kickoff))
+    ) {
+      setSelectionNotice(
+        'This market has closed. Refresh its details before choosing a prediction.',
+      );
+      return;
+    }
+    const picks = draftStore.getSnapshot().draft.picks;
+    const existing = picks.find((pick) => pick.matchId === market.matchId);
+    const openSlip = picks.length === 0 || existing?.outcome === outcome;
+    const added = draftStore.select(market.id, market.matchId, outcome);
+    setSelectionNotice(
+      added
+        ? `Prediction added: ${market.home} vs ${market.away}. ${draftStore.getSnapshot().draft.picks.length} in your slip.`
+        : 'This prediction could not be added. Open your slip for details.',
+    );
+    if (openSlip || !added) setSlipOpen(true);
+  }
+  const [status, setStatus] = useState('all');
+  const [sort, setSort] = useState<MarketSort>('featured');
+  const [week, setWeek] = useState(0);
+  const [day, setDay] = useState<number | null>(null);
+  const dates = useMatchweek(week);
+  const from = day === null ? dates.start : dates.days[day];
+  const to =
+    day === null ? dates.end : new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
+  const fromIso = from.toISOString();
+  const toIso = to.toISOString();
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    const timeout = setTimeout(() => setQuery(search.trim()), 250);
+    return () => clearTimeout(timeout);
+  }, [search]);
+  const account = useQuery({
+    queryKey: ['account'],
+    queryFn: ({ signal }) => getAccount(signal),
+    retry: false,
+    staleTime: 30_000,
+  });
+  useEffect(() => {
+    const connection = wallet.connection;
+    if (!connection || !account.data) return;
+    void assertWalletAccount(connection, account.data.walletAddress).catch((error: unknown) => {
+      disconnectWallet(
+        error instanceof Error ? error.message : 'Your wallet account changed. Connect again.',
+        connection,
+      );
+    });
+  }, [wallet.connection, account.data]);
+  const login = useMutation({
+    mutationFn: signIn,
+    retry: false,
+    onSuccess: async () => {
+      client.removeQueries({ queryKey: ['private'] });
+      client.removeQueries({ queryKey: ['direct-private'] });
+      await client.invalidateQueries({ queryKey: ['account'] });
+    },
+  });
+  const logout = useMutation({
+    mutationFn: signOut,
+    retry: false,
+    onSuccess: async () => {
+      await client.cancelQueries({ queryKey: ['account'] });
+      await client.cancelQueries({ queryKey: ['private'] });
+      await client.cancelQueries({ queryKey: ['direct-private'] });
+      client.removeQueries({ queryKey: ['private'] });
+      client.removeQueries({ queryKey: ['direct-private'] });
+      client.setQueryData(['account'], null);
+    },
+  });
+  const feed = useInfiniteQuery({
+    enabled: !marketId && !directRoute && !section,
+    queryKey: ['markets', status, query, fromIso, toIso, sort],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      getMarkets(status, query, pageParam, fromIso, toIso, signal, sort),
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    retry: 1,
+  });
+  const markets = [
+    ...new Map(
+      feed.data?.pages.flatMap((page) => page.markets).map((market) => [market.id, market]),
+    ).values(),
+  ];
+  const count = feed.data?.pages[0]?.total;
+  const pools = usePools(markets.map((m) => m.matchId));
+  const accountAction = account.data ? (
+    <button className="quiet" onClick={() => logout.mutate()} disabled={logout.isPending}>
+      {logout.isPending ? 'Signing out…' : 'Sign out'}
+    </button>
+  ) : (
+    <button
+      className="connect"
+      onClick={() => login.mutate()}
+      disabled={login.isPending || account.isPending}
+    >
+      <Icon name="wallet" />
+      {login.isPending ? 'Connecting…' : 'Sign in with wallet'}
+    </button>
+  );
+  return (
+    <>
+      <a className="skip" href="#main">
+        Skip to content
+      </a>
+      <aside className="rail">
+        <a
+          href={sectionHref('overview')}
+          className="wordmark"
+          onClick={(event) => followSection(event, 'overview')}
+        >
+          <img src="/mark.svg" alt="" width="34" height="34" />
+          streak<span className="dot">.</span>
+        </a>
+        <p className="eyebrow">YOUR TOUCHLINE</p>
+        <AppNavigation active={activePage} />
+      </aside>
+      <div className="workspace">
+        <header className="topbar">
+          <span className="breadcrumb">
+            Your touchline <span>/</span>{' '}
+            <strong>
+              {directRoute === 'wallet'
+                ? 'My Account'
+                : directRoute === 'activity'
+                  ? 'My activity'
+                  : directRoute
+                    ? 'Prediction'
+                    : section === 'overview'
+                      ? 'Overview'
+                      : section === 'five'
+                        ? 'Streak Five'
+                        : section === 'matchday'
+                          ? 'Matchday'
+                          : section === 'clubhouse'
+                            ? 'Clubhouse'
+                            : 'Markets'}
+            </strong>
+          </span>
+          <div className="account-actions">
+            <WalletSummary account={account.data ?? null} accountReady={!account.isPending} />
+            {accountAction}
+          </div>
+        </header>
+        <div className="network-strip">
+          <span>
+            <img src="/ckb-mark.png" width="11" height="11" alt="" /> CKB Pudge testnet
+          </span>
+          {/* <span>No real-money stakes</span> */}
+        </div>
+        <main id="main" tabIndex={-1}>
+          {(login.isError || logout.isError || account.isError) && (
+            <div className="notice error" role="alert">
+              {logout.isError
+                ? 'Sign-out failed. Your session may still be active. Please retry.'
+                : (login.error?.message ?? 'Unable to check your session.')}
+              {account.isError && (
+                <button onClick={() => void account.refetch()}>Retry account</button>
+              )}
+            </div>
+          )}
+          {selectionNotice && (
+            <p
+              className={
+                selectionNotice.startsWith('Prediction added') ? 'sr-only' : 'notice error'
+              }
+              role="status"
+            >
+              {selectionNotice}
+            </p>
+          )}
+          {section && !directRoute && !marketId && (
+            <SectionPage section={section} onPick={pick} picks={draftState.draft.picks} />
+          )}
+          {directRoute === 'wallet' && (
+            <WalletOverview
+              account={account.data ?? null}
+              accountReady={!account.isPending}
+              onSignIn={() => login.mutate()}
+              signInPending={login.isPending}
+              onActivity={navigateActivity}
+              onRecovery={navigateActivity}
+            />
+          )}
+          {directEntry &&
+            (entryMode.data === undefined || (entryMode.isError && !currentEntry)) && (
+              <Notice
+                title={entryMode.isError ? 'Unable to open payment' : 'Opening your match'}
+                tone={entryMode.isError ? 'attention' : 'info'}
+                actions={
+                  entryMode.isError ? (
+                    <button onClick={() => void entryMode.refetch()}>Try again</button>
+                  ) : undefined
+                }
+              >
+                {entryMode.isError
+                  ? 'Your picks are saved. Retry to check the available checkout.'
+                  : 'Checking the current payment flow.'}
+              </Notice>
+            )}
+          {directRoute &&
+            (directRoute === 'activity' ||
+              (directEntry && entryMode.data === false && !entryMode.isError)) && (
+              <Suspense
+                fallback={
+                  <section className="glass detail-state">
+                    <h1>
+                      {directRoute === 'activity'
+                        ? 'Loading your activity...'
+                        : 'Opening prediction...'}
+                    </h1>
+                    <p>Your saved predictions are safe.</p>
+                  </section>
+                }
+              >
+                <DirectPage
+                  key={`${directRoute}:${account.data?.id ?? 'guest'}:${wallet.revision}`}
+                  marketId={directRoute === 'activity' ? undefined : directRoute}
+                  activityOnly={directRoute === 'activity'}
+                  draftStore={draftStore}
+                  account={account.data ?? null}
+                  accountReady={!account.isPending}
+                  draftPick={draftState.draft.picks.find((row) => row.marketId === directRoute)}
+                />
+              </Suspense>
+            )}
+          {((marketId && !directRoute) || currentEntry) && (
+            <MarketDetail
+              key={currentEntry ? directRoute : marketId}
+              id={(currentEntry ? directRoute : marketId)!}
+              onBack={() => navigateMarket(null)}
+              onPick={pick}
+              selected={
+                draftState.draft.picks.find(
+                  (row) => row.marketId === (currentEntry ? directRoute : marketId),
+                )?.outcome
+              }
+            />
+          )}
+          <div hidden={!!marketId || !!directRoute || !!section}>
+            <div className="page-title">
+              <div>
+                <p className="eyebrow">THE PREDICTION MARKETS</p>
+                <h1>You know the game.</h1>
+                <p>Choose a fixture. Make your call. Follow it to the final whistle.</p>
+              </div>
+              <span className="pilot-badge">Early access</span>
+            </div>
+            <section className="weekend-picker" aria-label="Matchweek">
+              <div className="week-navigation">
+                <button
+                  disabled={week <= -1}
+                  aria-label="Previous weekend"
+                  onClick={() => {
+                    setWeek(week - 1);
+                    setDay(null);
+                  }}
+                >
+                  ‹
+                </button>
+                <div>
+                  <strong>
+                    {week === 0 ? 'This matchweek' : week === 1 ? 'Next matchweek' : 'Matchweek'}
+                  </strong>
+                  <span>
+                    {dates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} –{' '}
+                    {dates.days[3].toLocaleDateString('en-GB', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </div>
+                <button
+                  disabled={week >= 2}
+                  aria-label="Next weekend"
+                  onClick={() => {
+                    setWeek(week + 1);
+                    setDay(null);
+                  }}
+                >
+                  ›
+                </button>
+              </div>
+              <div className="day-filters" role="group" aria-label="Matchweek day">
+                <button aria-pressed={day === null} onClick={() => setDay(null)}>
+                  All days
+                </button>
+                {dates.days.map((date, index) => (
+                  <button key={index} aria-pressed={day === index} onClick={() => setDay(index)}>
+                    {date.toLocaleDateString('en-GB', { weekday: 'short' })}{' '}
+                    <span>{date.getDate()}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+            <div className="market-tools">
+              <div className="filters" role="group" aria-label="Market status">
+                {[
+                  ['all', 'All fixtures'],
+                  ['open', 'Open'],
+                  ['closed', 'Locked'],
+                  ['resolved', 'Results'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    aria-pressed={status === value}
+                    onClick={() => setStatus(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="search">
+                <Icon name="search" />
+                <input
+                  aria-label="Search teams or competitions"
+                  placeholder="Find your next match"
+                  maxLength={80}
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="feed-meta" aria-live="polite">
+              <label className="fixture-sort">
+                Sort by
+                <select
+                  value={sort}
+                  onChange={(event) =>
+                    setSort(event.target.value === 'kickoff' ? 'kickoff' : 'featured')
+                  }
+                >
+                  <option value="featured">Big games first</option>
+                  <option value="kickoff">Kickoff time</option>
+                </select>
+              </label>
+              <span>
+                {count === undefined
+                  ? 'Finding fixtures'
+                  : `${count} ${count === 1 ? 'fixture' : 'fixtures'}`}
+              </span>
+              <span>
+                {feed.isFetching
+                  ? 'Updating…'
+                  : feed.dataUpdatedAt
+                    ? `Updated ${new Date(feed.dataUpdatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+                    : ''}
+              </span>
+            </div>
+            {feed.data && !feed.data.pages[0].covered && (
+              <div className="notice" role="status">
+                The full schedule for these dates is not confirmed. Showing the available fixtures
+                from connected competitions.
+              </div>
+            )}
+            {feed.isError && (
+              <div className="notice error" role="alert">
+                <div>
+                  <strong>
+                    {markets.length
+                      ? 'Showing the last loaded markets'
+                      : 'We could not load the markets'}
+                  </strong>
+                  <p>
+                    {markets.length
+                      ? 'Prices may have changed. Refresh before making a prediction.'
+                      : feed.error.message}
+                  </p>
+                </div>
+                <button onClick={() => void feed.refetch()} disabled={feed.isFetching}>
+                  Retry markets
+                </button>
+              </div>
+            )}
+            {feed.isPending && (
+              <div className="market-grid" aria-label="Loading markets" aria-busy="true">
+                {[0, 1, 2].map((id) => (
+                  <div key={id} className="glass skeleton">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ))}
+              </div>
+            )}
+            {!feed.isPending && !feed.isError && markets.length === 0 && (
+              <div className="glass empty">
+                <Icon name="markets" />
+                <h2>
+                  {query
+                    ? 'No matching fixtures'
+                    : feed.data?.pages[0].covered
+                      ? 'No fixtures in this view'
+                      : 'Schedule not fully available'}
+                </h2>
+                <p>
+                  {query
+                    ? 'Try another team or competition.'
+                    : 'Check another tab, or come back when the next fixtures open.'}
+                </p>
+                <button
+                  onClick={() => {
+                    setSearch('');
+                    setStatus('all');
+                  }}
+                >
+                  Browse all fixtures
+                </button>
+              </div>
+            )}
+            {markets.length > 0 && (
+              <div className="market-grid">
+                {markets.map((market) => (
+                  <MarketCard
+                    key={market.id}
+                    market={{ ...market, directPool: pools.get(market.matchId) }}
+                    onPick={pick}
+                    selected={
+                      draftState.draft.picks.find((row) => row.matchId === market.matchId)?.outcome
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            {feed.hasNextPage && (
+              <div className="load-more">
+                <button disabled={feed.isFetching} onClick={() => void feed.fetchNextPage()}>
+                  {feed.isFetchingNextPage ? 'Loading…' : 'Show more fixtures'}
+                </button>
+              </div>
+            )}
+            <footer>
+              Friday through Monday, in your local time. Fixtures from connected competitions.
+              Testnet CKB has no monetary value.
+            </footer>
+          </div>
+        </main>
+      </div>
+      <AppNavigation active={activePage} mobile />
+      <PredictionSlip
+        store={draftStore}
+        open={slipOpen}
+        onOpen={() => setSlipOpen(true)}
+        onDismiss={() => setSlipOpen(false)}
+        onAddMatches={() => navigateMarket(null)}
+        account={account.data ?? null}
+        accountReady={!account.isPending}
+        onSignIn={() => login.mutate()}
+        signInPending={login.isPending}
+        accountKey={
+          account.isPending
+            ? 'pending'
+            : account.isError
+              ? 'unavailable'
+              : (account.data?.id ?? 'guest')
+        }
+      />
+    </>
+  );
+}

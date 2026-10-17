@@ -5,12 +5,17 @@ services:
     region: oregon
     plan: free
     # Root `npm install` also installs the streak product's deps (via postinstall).
-    buildCommand: npm install
-    startCommand: npm run streak
+    buildCommand: npm ci --include=dev && npm --prefix products/streak run build
+    startCommand: node products/streak/dist/server.js
     envVars:
       # Render sets PORT at runtime; Streak reads process.env.PORT.
       - key: PORT
         value: 10000
+      - key: NODE_ENV
+        value: production
+      # Exact public HTTPS origin, without a trailing slash. Required for auth.
+      - key: STREAK_PUBLIC_ORIGIN
+        sync: false
       # Real multi-league API-SPORTS football feed.
       - key: MATCH_PROVIDER
         value: football

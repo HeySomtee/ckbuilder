@@ -170,6 +170,8 @@ async function getConnector() {
   el.addEventListener("close", () => {
     el.style.display = "none";
   });
+  const originalClose = el.onClose.bind(el);
+  el.onClose = (callback) => { el.streakConnecting = !!callback; originalClose(callback); };
   cccConnector = el;
   return el;
 }
@@ -198,6 +200,7 @@ async function connectWallet() {
       }
     };
     const onClose = () => {
+      if (el.streakConnecting) return;
       cleanup();
       if (!el.signer?.signer) reject(new Error("Wallet connection cancelled."));
     };
@@ -221,12 +224,12 @@ function disconnectWallet() {
 async function walletLogin() {
   const signer = await connectWallet();
   const address = await signer.getRecommendedAddress();
-  const { message } = await api("/auth/nonce", {
+  const { message, challengeId } = await api("/auth/nonce", {
     method: "POST",
     body: { address },
   });
   const signature = await signer.signMessage(message);
-  return api("/auth/verify", { method: "POST", body: { address, signature } });
+  return api("/auth/verify", { method: "POST", body: { address, signature, challengeId } });
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -767,7 +770,12 @@ function ensureNavDelegation() {
       button.textContent = "Signing out…";
       try {
         await api("/logout", { method: "POST" });
-      } catch {}
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = "Sign out";
+        toast("Sign-out failed. Your session is still active. Please try again.", "error");
+        return;
+      }
       disconnectWallet();
       state.user = null;
       state.dashboard = null;

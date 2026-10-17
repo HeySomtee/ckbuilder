@@ -128,10 +128,10 @@ export async function rebroadcastTransfer(bytes: string, expectedHash: string): 
 /** Verify a wallet-login signature (from CCC's signMessage) against a message. */
 export async function verifyWalletSignature(
   message: string,
-  signature: { signature: string; identity: string; signer: string },
+  signature: ccc.Signature,
 ): Promise<boolean> {
   try {
-    return await ccc.Signer.verifyMessage(message, signature as unknown as ccc.Signature);
+    return await ccc.Signer.verifyMessage(message, signature);
   } catch {
     return false;
   }

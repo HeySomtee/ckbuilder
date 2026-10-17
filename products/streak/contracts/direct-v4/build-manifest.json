@@ -1,0 +1,27 @@
+{
+  "version": "direct-v4",
+  "networkDeployment": {
+    "network": "testnet",
+    "protocolOutPoint": {
+      "txHash": "0x930bba6cce8cd6b1dc254cc3469249d7ba32f09b44bc20ea784f45e172cd606f",
+      "index": 0
+    },
+    "guardOutPoint": {
+      "txHash": "0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11",
+      "index": 1
+    }
+  },
+  "rustToolchain": "1.97.1",
+  "target": "riscv64imac-unknown-none-elf",
+  "maximumLockArgsBytes": 59,
+  "protocol": {
+    "binary": "streak-protocol-v4",
+    "codeHash": "0x6c03d7942bd133c713c501df7a6e263699a0ea731339eda993548640e900405c",
+    "sizeBytes": 40768
+  },
+  "guard": {
+    "binary": "streak-guard",
+    "codeHash": "0x096ebfed6452d654dcfbf43379c2b6c745dba9af1dabcc3463bbd501a6fdeada",
+    "sizeBytes": 12664
+  }
+}

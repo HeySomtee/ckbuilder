@@ -6,6 +6,20 @@ mirrors the mental model, then as a real interaction with the live network.
 
 ## Structure
 
+Streak's Season UI and architecture were approved on 15 October 2026. Start with
+the [documentation map](products/streak/docs/README.md),
+[agent instructions](AGENTS.md), and [delivery status](products/streak/status.md).
+The Season app now integrates direct testnet predictions while preserving legacy
+account recovery. See the [Week 21 report](reports/week-21.md) for public payment
+evidence, screenshots and the remaining hosted operator requirements.
+
+Use Node 24.14.0 and npm 11.9.0. `npm ci` installs both locked dependency trees.
+Run `npm run hooks:install` once per checkout. `npm run quality:major` is the
+complete local quality gate, including required isolated PostgreSQL, browser and
+Rust checks. See [test setup and CI](products/streak/docs/delivery/quality.md)
+for prerequisites. PowerShell users with script execution disabled can use
+`npm.cmd` in place of `npm`. The gate never runs live settlement.
+
 ```
 src/
   week1/
@@ -48,6 +62,7 @@ reports/
   week-18.md         # Rust contract foundations: admission, deadlines and refunds
   week-19.md         # Sharded parimutuel pools, backed shares and payouts
   week-20.md         # Public testnet settlement and independent claim cells
+  week-21.md         # Integrated predictions, sponsored markets and the Season UI
 ```
 
 ## Weekly Index
@@ -74,6 +89,7 @@ reports/
 | 18 | Rust contracts: stake admission, result deadlines and refunds | [reports/week-18.md](reports/week-18.md) | [src/week18/contract-lab](src/week18/contract-lab) |
 | 19 | Sharded parimutuel pools, backed shares and payouts | [reports/week-19.md](reports/week-19.md) | [src/week19/contract-lab](src/week19/contract-lab) |
 | 20 | Independent claims and public testnet settlement | [reports/week-20.md](reports/week-20.md) | [src/week20/contract-lab](src/week20/contract-lab) |
+| 21 | Real fixtures, sponsored market creation and combined payments | [reports/week-21.md](reports/week-21.md) | [products/streak](products/streak) |
 
 ## Setup
 
