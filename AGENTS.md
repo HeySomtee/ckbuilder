@@ -15,9 +15,13 @@ Preserve unrelated work and historical weekly exercises. Never load live keys,
 the production database or football provider credentials into a test. Production
 fund movement and a synthetic test are different evidence and must be labelled.
 
-Run `npm run quality:major` after major changes and the complete applicable gate
-before every commit. `npm run hooks:install` installs the local commit and push
-gates. Never bypass a failed gate, silently skip a required suite, or claim a
+Run `npm run quality:major` after major runtime changes. Owner direction on
+17 October 2026 replaces blanket commit/push reruns with scoped hooks: docs use
+formatting and static policies; CSS adds the frontend build; delivery tooling
+adds its regression tests; other code changes retain the full gate. Push can
+reuse a successful check for the exact tree, runtime and required coverage for
+up to 24 hours. See Streak's quality guide. `npm run hooks:install` installs the
+hooks. Never bypass a failed gate, silently skip a required suite, or claim a
 GitHub check passed without a successful run for the exact revision. Do not
 commit secrets or generated private state. Stage only the intended change.
 

@@ -1,6 +1,21 @@
 # Quality gates and release procedure
 
-The owner's requirement is that major changes receive repeatable tests and every commit passes CI checks. The local gate therefore runs the same substantive checks before a commit; GitHub confirms the committed revision separately after publication. A commit cannot have a hosted result before its SHA exists. Neither a local pass nor a workflow file proves remote enforcement.
+The owner initially required the complete gate before every commit and push. On **17 October 2026**, after a small hero update took over an hour because of repeated full hooks and a transport retry, the owner explicitly requested smaller hooks. Local checks now follow the changed paths and reuse successful exact-content evidence. Neither a local pass nor a workflow file proves hosted enforcement; hosted Actions remain paused.
+
+## Scoped hooks
+
+| Changed paths                                                                                                     | Required local checks                                                                 |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Recognized documentation and reports only                                                                         | Changed-file formatting and repository static policies                                |
+| Streak frontend CSS, optionally with docs                                                                         | Those checks plus strict frontend TypeScript and a production web build               |
+| Quality tooling or hook launchers, optionally with docs/CSS                                                       | Static checks and quality-tooling regressions, plus the frontend build if CSS changed |
+| Other paths, including application code, contracts, identity, payments, recovery, dependencies and test harnesses | Complete existing gate                                                                |
+
+The allowlist in `scripts/quality/gate-plan.mjs` is deliberately narrow. Unknown paths and missing ancestry fall back conservatively. Rename detection is disabled for classification so renaming sensitive code into a documentation directory cannot hide its deletion. Push classification covers every commit since the remote tip, not just the final commit.
+
+A successful hook writes a receipt under ignored `.quality-artifacts/hook-receipts/`. Commit, push and transport retries may reuse it only for an identical Git tree, the same pinned Node runtime, sufficient check coverage and a timestamp within the past 24 hours. Failed checks never create a successful receipt. A full pass can cover a smaller scope; a documentation pass cannot cover application changes. Dirty worktrees, unstaged edits and untracked source remain rejected. Receipts are local developer evidence, not tamper-resistant CI attestations.
+
+Full tests are retained. Run `npm run quality:major` for major runtime changes and the full release acceptance suite when releasing broader behavior. Focused hook success must be described by its actual scope, not as all 51 checks passing. A small CSS correction still needs relevant visual inspection, but it no longer starts PostgreSQL and local blockchain nodes merely to push.
 
 ## Reproducible setup
 
@@ -53,7 +68,7 @@ Run these from the repository root:
 | `npm run format:check`      | Prettier check for the new documentation and quality foundation                |
 | `npm run format:foundation` | Format that same scope locally before staging                                  |
 
-The runner writes per-lane results and safe browser evidence to the ignored `.quality-artifacts/` directory. Preserve a dated result summary in status; artifacts alone are not hosted CI evidence. The local pre-commit and pre-push hooks both run the complete gate.
+The runner writes per-lane results and safe browser evidence to the ignored `.quality-artifacts/` directory. Preserve a dated result summary in status; artifacts alone are not hosted CI evidence. The hooks select the scope above and share fresh successful receipts rather than automatically repeating the complete gate.
 
 Static checks currently cover scoped formatting, strict TypeScript builds, maintained JavaScript syntax, documentation links, sensitive paths and credential patterns, and direct browser/server import rules. They are not a full historical secret audit or a transitive dependency analysis. The React/Vite increment adds TypeScript/React-hook linting, strict browser compilation, a production build and integrated component journeys against the local API in Chromium and WebKit. The unit runner discovers new `src/**/*.test.ts`, `.test.mjs`, `.test.cjs` and `web/**/*.test.mjs` files automatically; PostgreSQL remains in its own mandatory lane.
 
@@ -63,7 +78,7 @@ The contract lane also requires `scripts/direct-devnet-run.cjs`. It starts an ow
 
 `scripts/direct-testnet-verify.cjs` is a separate explicitly acknowledged public-network command. It uses an isolated synthetic fixture, records source file hashes and real transaction hashes, and never publishes that fixture to the football registry. Its evidence cannot establish a real football result, community use or a hosted deployment. It is never part of the recurring quality gate.
 
-Inspect the current package scripts and runner when a lane changes. Keep this table synchronized in that change. While iterating, run the focused lane that can reveal the change's failure. Before each commit and after a major change, run the complete gate. Major changes include domain behavior, identity, persistence, financial handling, contracts/builders, dependencies, security, architecture, the application shell and delivery tooling.
+Inspect the current package scripts and runner when a lane changes. Keep this table synchronized in that change. While iterating, run the focused lane that can reveal the change's failure. Before each commit, pass the applicable scoped hook. Major runtime changes require the complete gate, including domain behavior, identity, persistence, financial handling, contracts/builders, dependencies, security and the application shell. Delivery-only hook changes require their static and tooling regression checks under the owner's revised policy.
 
 `products/streak` already has an `npm run verify -- <marketId>` command for receipt verification. That is not the root quality gate and may contact a configured service. Do not confuse the two or invoke live receipt verification as a routine test.
 
@@ -95,7 +110,7 @@ Integrated Season coverage now includes `prediction-motion.cjs` through the brow
 ## Commit and CI procedure
 
 1. Inspect the working tree and stage only intended files. Preserve unrelated changes. Ensure the candidate index is exactly what the verification will evaluate; the hook rejects a mismatch that could test one version and commit another.
-2. Run the complete quality gate. Resolve failures and rerun affected checks, then complete the gate for the final candidate. Record actual results and any missing environment prerequisites.
+2. Run the applicable scoped hook. Resolve failures, then verify the exact final candidate. A valid receipt may be reused at push. Record the actual check scope and any missing prerequisites; run the complete gate for major runtime changes.
 3. Review the diff, including generated artifacts, dependencies, trust boundaries and docs. Financial, identity and recovery changes receive an independent review.
 4. Commit only after the applicable gates pass. Use a focused Conventional Commit describing the final change. Do not create a knowingly failing checkpoint merely to obtain a GitHub SHA.
 5. When publication is authorized, push and inspect all required GitHub checks for that exact SHA. Fix failures on a new commit and verify that SHA. Do not merge or release on a result from an older revision.

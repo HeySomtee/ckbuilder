@@ -12,7 +12,7 @@ The owner approved the Streak UI and architecture on **15 October 2026**, includ
 2. Choose a complete, reviewable increment with explicit acceptance criteria, state ownership and failure/recovery behavior. Work on one coherent journey at a time. Do not count mock buttons as integrated features.
 3. Preserve unrelated changes. Assign explicit file ownership when using parallel agents. Independent review is required for changes to money, contract rules, identity or recovery. Record what was reviewed, including concerns that remain.
 4. Implement UI and behavior together within the approved architecture. Carry forward accessibility, measured performance and the approved small interaction details. A materially different design needs review; a routine implementation choice does not.
-5. Run the [quality gates](docs/delivery/quality.md). Major changes require `npm run quality:major`. Before each commit, all applicable CI-equivalent checks must pass for the exact candidate contents. Never bypass a hook or lower an assertion to hide a failure. Hosted CI is confirmed separately for the resulting commit SHA.
+5. Run the [quality gates](docs/delivery/quality.md). Owner direction on 17 October replaces blanket commit/push reruns with scoped checks: documentation uses formatting/static policies; CSS adds the frontend build; delivery tooling adds its regression tests; other code changes retain the full gate. Major runtime changes still require `npm run quality:major`. A push can reuse a successful receipt for identical contents, runtime and sufficient coverage for up to 24 hours. Never bypass a failed check or lower an assertion to hide a failure. Hosted CI is confirmed separately for the resulting commit SHA.
 6. Review the final diff, update governing docs and `status.md`, and report actual checks, limitations and release state. Documentation is part of the same change. Do not claim deployment, capacity or live-chain verification from a local test.
 
 ## Product and trust boundaries
@@ -49,6 +49,8 @@ The owner removed the Genie effect on 16 October. Use immediate slip opening and
 - Follow [engineering conventions](docs/engineering/conventions.md) and the [operations runbook](docs/operations/runbook.md). Test failure and recovery paths, including interrupted submissions and restarts, rather than only successful screenshots.
 
 ## Delivery and evidence
+
+Owner correction, 17 October 2026: the hour-long hero release showed that running the full suite before both commit and push is disproportionate for small changes. Use the scoped hook policy above. Preserve all full-suite tests and the explicit major/release commands; do not interpret reduced hook scope as proof that unrun browser or contract lanes passed.
 
 Owner direction, 17 October 2026: the Week 21 release is explicitly authorized, including the report, screenshots, commit, push, review of outstanding PRs and integration into main for Render deployment. This supersedes the earlier commit/push pause for this release. Exact-candidate local gates still apply; hosted CI remains paused. Keep the account destination My Account and historical wallet deep links. Keep Streak Five clearly marked coming soon until its actual entry and scoring workflow exists. Additional campaign proposals need owner review; the proposed Founders Weekend was declined for this report.
 

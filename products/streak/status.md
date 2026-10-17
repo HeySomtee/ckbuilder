@@ -2,7 +2,9 @@
 
 ## Current follow-up, 17 October 2026
 
-The owner has now authorized committing and pushing the hero correction to main for Render. The release requires the complete local commit and push gates; their exact results and the separate Render deployment result are recorded in `.quality-artifacts/hero-release-*`. Earlier local-only language below describes the state before this authorization.
+The hero correction is published as `8e32db6`. Render deployed it successfully at 19:00:07 UTC, and the live root stylesheet matches the tested build. All 51 checks passed for commit and both push attempts; the first upload disconnected after checks and the HTTP/1.1 retry succeeded. Evidence: `.quality-artifacts/hero-release-*`. Earlier local-only language below is historical.
+
+The owner then requested smaller hooks. The [revised quality policy](docs/delivery/quality.md#scoped-hooks) uses focused docs/CSS/tooling checks and reuses a successful exact-tree receipt for up to 24 hours. Other code and major runtime changes retain full validation. The focused tooling suite has 13 passing tests, including actual commit-hook/push-hook reuse and fail-closed coverage. Publication evidence for this separate tooling increment belongs in `.quality-artifacts/hook-scope-*`; no new application behavior or security clearance is implied.
 
 The landing hero copy now centers in the viewport space below the navigation without depending on the fixture board's height. The local web build, all 26 existing Season browser groups and 22 additional Chromium/WebKit viewport profiles passed, with visible, clickable CTAs and no horizontal overflow or page errors. Evidence is in `.quality-artifacts/hero-centering-*`. This CSS correction is local and uncommitted.
 
