@@ -8,7 +8,7 @@ import { parseBatchOffer } from './src/features/direct/batch-protocol.ts';
 import { parseReservation, reservationReleased } from './src/features/direct/reservations.ts';
 import { CKB, BATCH_MANIFEST, pointKey } from './src/features/direct/protocol.ts';
 
-async function setup() {
+async function setup(options = {}) {
   let now = Date.now();
   const chain = await batchChain(now + 7_200_000),
     rpc = attachBatchRpc(
@@ -33,6 +33,7 @@ async function setup() {
   const client = new BatchClient(signer, transport, journal, {
     now: () => now,
     exclusive: async (_name, action) => action(),
+    ...options,
   });
   return {
     chain,
@@ -95,6 +96,48 @@ test('All eight independent predictions have exact participant contributions and
     8,
   );
   await assert.rejects(s.client.signAndPersist(review, s.chain.fixtures()), /review changed/);
+});
+
+test('Background recovery queues behind submission and retains the same saved signature', async () => {
+  let tail = Promise.resolve();
+  const exclusive = (_name, action) => {
+    const run = tail.then(action);
+    tail = run.catch(() => {});
+    return run;
+  };
+  const s = await setup({ exclusive });
+  const review = await s.client.prepare(picks(s.chain.fixtures()));
+  const record = await s.client.signAndPersist(review, s.chain.fixtures());
+  let release, started;
+  const waiting = new Promise((resolve) => {
+    started = resolve;
+  });
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const submit = s.transport.submit;
+  s.transport.submit = async (request) => {
+    started();
+    await gate;
+    return submit(request);
+  };
+  const sending = s.client.submit(record);
+  await waiting;
+  let recovered = false;
+  const recovery = s.client.recover(record).then((value) => {
+    recovered = true;
+    return value;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(recovered, false, 'Background journal writes wait for the submission lock.');
+  release();
+  const results = await Promise.all([sending, recovery]);
+  assert.ok(results.every((value) => value.status === 'confirmed'));
+  const saved = s.records.get(record.hash);
+  assert.equal(saved.ownerSignedBytes, record.ownerSignedBytes);
+  assert.ok(saved.finalSignedBytes);
+  assert.ok(saved.submissionAttemptedAt);
+  assert.equal(s.chain.submissions.length, 1);
 });
 test('Mixed funded and new markets parse 172-byte types, preserve pending ticket admission and sponsor only new reserves', async () => {
   const s = await setup();

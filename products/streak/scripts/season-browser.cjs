@@ -261,10 +261,10 @@ async function main() {
         // URL again here would abort its just-started market and account reads.
         await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
         await accountReadFinished(page);
-        await page.getByRole('link', { name: 'Skip to markets' }).focus();
+        await page.getByRole('link', { name: 'Skip to content' }).focus();
         assert.equal(
           await page.evaluate(() => document.activeElement.textContent),
-          'Skip to markets',
+          'Skip to content',
         );
         await page.keyboard.press('Enter');
         assert.equal(await page.evaluate(() => document.activeElement.id), 'main');
@@ -309,7 +309,7 @@ async function main() {
         await page.getByRole('button', { name: 'Browse all fixtures' }).click();
         await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
         await page.keyboard.press('Control+Home');
-        await page.getByRole('link', { name: 'Skip to markets' }).focus();
+        await page.getByRole('link', { name: 'Skip to content' }).focus();
         await reads.settled();
         if (errors.length || external.length)
           fs.writeFileSync(

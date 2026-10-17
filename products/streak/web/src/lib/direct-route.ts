@@ -8,11 +8,15 @@ const subscribe = (listener: () => void) => {
 const snapshot = () => {
   const query = new URLSearchParams(location.search);
   const view = query.get('view');
-  return view === 'wallet' || view === 'activity' ? view : query.get('direct');
+  return view === 'account'
+    ? 'wallet'
+    : view === 'wallet' || view === 'activity'
+      ? view
+      : query.get('direct');
 };
 export const useDirectRoute = () => useSyncExternalStore(subscribe, snapshot);
 export const directHref = (marketId?: string) =>
-  marketId ? `/season/?direct=${encodeURIComponent(marketId)}` : '/season/?view=wallet';
+  marketId ? `/season/?direct=${encodeURIComponent(marketId)}` : '/season/?view=account';
 export const activityHref = '/season/?view=activity';
 export function navigateActivity() {
   history.pushState(null, '', activityHref);

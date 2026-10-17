@@ -144,6 +144,11 @@ export class BatchService extends SponsorService {
     }
   }
   private async readFixtures(ids: string[]): Promise<Match[]> {
+    if (this.options.fixtures) {
+      const matches = await this.options.fixtures(ids);
+      if (matches.length !== ids.length) throw Error('Incomplete fresh fixture batch');
+      return matches.map((match, index) => this.validateFixture(ids[index], match));
+    }
     const matches: Match[] = [];
     for (let offset = 0; offset < ids.length; offset += 4) {
       const results = await Promise.allSettled(

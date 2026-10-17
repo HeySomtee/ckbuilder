@@ -1,5 +1,54 @@
 import { isRecord, request } from '../../lib/http';
 
+/** Entry routing only. Financial validation still belongs to BatchClient. */
+export async function getAtomicEntryEnabled(signal?: AbortSignal): Promise<boolean> {
+  const value = await request('/direct/entry-mode', signal);
+  if (!isRecord(value) || !['atomic', 'legacy'].includes(String(value.mode)))
+    throw Error('Payment availability could not be checked. Please retry.');
+  return value.mode === 'atomic';
+}
+
+export async function getEntryAvailability(fixtureId: string, signal?: AbortSignal) {
+  if (!/^api-football-[1-9]\d{0,14}$/.test(fixtureId))
+    return { available: false, state: 'unavailable', minimum: null, storage: null };
+  const [value, config] = await Promise.all([
+    request('/direct/batch/demand?matchId=' + encodeURIComponent(fixtureId), signal),
+    request('/direct/batch/config', signal),
+  ]);
+  if (
+    !isRecord(value) ||
+    typeof value.enabled !== 'boolean' ||
+    !Array.isArray(value.fixtures) ||
+    value.fixtures.length > 1 ||
+    !isRecord(config) ||
+    !isRecord(config.limits)
+  )
+    throw Error('Payment availability could not be checked.');
+  const { minPrincipalShannons, claimStorageShannons } = config.limits;
+  if (
+    typeof minPrincipalShannons !== 'string' ||
+    !/^\d{1,20}$/.test(minPrincipalShannons) ||
+    typeof claimStorageShannons !== 'string' ||
+    !/^\d{1,20}$/.test(claimStorageShannons)
+  )
+    throw Error('Payment amounts could not be checked.');
+  const row = value.fixtures[0];
+  if (
+    row !== undefined &&
+    (!isRecord(row) ||
+      row.fixtureId !== fixtureId ||
+      !['available', 'funded', 'reserved', 'confirming', 'unavailable'].includes(String(row.state)))
+  )
+    throw Error('Payment availability does not match this fixture.');
+  const state = isRecord(row) ? String(row.state) : 'unavailable';
+  return {
+    available: value.enabled && ['available', 'funded'].includes(state),
+    state,
+    minimum: minPrincipalShannons,
+    storage: claimStorageShannons,
+  };
+}
+
 export interface MarketAvailability {
   id: string;
   fixtureId: string;

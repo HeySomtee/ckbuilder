@@ -275,6 +275,72 @@ async function main(): Promise<void> {
           'the real account response uses the nested field consumed by Wallet',
         );
         assert.equal(JSON.stringify(readyAccount).includes(telegram.TELEGRAM_BOT_TOKEN!), false);
+        // Exercise the real webhook against a stub transport. No Telegram network or messages.
+        const originalFetch = global.fetch;
+        const confirmations: string[] = [];
+        global.fetch = async (input, init) => {
+          const url = String(input);
+          if (url === `https://api.telegram.org/bot${telegram.TELEGRAM_BOT_TOKEN}/sendMessage`) {
+            const payload = JSON.parse(String(init?.body)) as { text: string; chat_id: string };
+            assert.equal(payload.chat_id, 'synthetic-chat');
+            confirmations.push(payload.text);
+            return new Response(JSON.stringify({ ok: true }), { status: 200 });
+          }
+          assert.ok(url.startsWith(origin + '/'), 'No nonlocal test request is permitted');
+          return originalFetch(input, init);
+        };
+        try {
+          for (const username of [undefined, 'named_player']) {
+            await (
+              await import('./store')
+            ).update((db) => {
+              const user = db.users.find((user) => user.wallet.address === address);
+              assert.ok(user);
+              if (username) user.username = username;
+              else delete user.username;
+            });
+            const linkResponse = await post('/api/integrations/telegram/connect', {}, { cookie });
+            assert.equal(linkResponse.status, 200);
+            const link = (await linkResponse.json()) as { url: string };
+            const start = new URL(link.url).searchParams.get('start');
+            assert.ok(start?.startsWith('link_'));
+            const update = {
+              message: {
+                text: `/start ${start}`,
+                chat: { id: 'synthetic-chat' },
+                from: { username: 'telegram_person' },
+              },
+            };
+            const prior = confirmations.length;
+            assert.equal(
+              (await post('/api/integrations/telegram/webhook/wrong-secret', update)).status,
+              403,
+            );
+            assert.equal(confirmations.length, prior);
+            assert.equal(
+              (
+                await post(
+                  `/api/integrations/telegram/webhook/${telegram.TELEGRAM_WEBHOOK_SECRET}`,
+                  update,
+                )
+              ).status,
+              200,
+            );
+            assert.equal(confirmations.at(-1), 'Your Telegram account is now connected to Streak.');
+            const linked = (await (
+              await fetch(origin + '/api/me', { headers: { cookie } })
+            ).json()) as { user: { telegramConnected: boolean } };
+            assert.equal(linked.user.telegramConnected, true);
+            await post(
+              `/api/integrations/telegram/webhook/${telegram.TELEGRAM_WEBHOOK_SECRET}`,
+              update,
+            );
+            assert.match(confirmations.at(-1)!, /invalid or expired/);
+            assert.equal(confirmations.length, prior + 2, 'A token cannot link twice');
+          }
+        } finally {
+          global.fetch = originalFetch;
+        }
         const disconnected = await post('/api/integrations/telegram/disconnect', {}, { cookie });
         assert.equal(disconnected.status, 200);
         const disconnectedAccount = (await disconnected.json()) as {

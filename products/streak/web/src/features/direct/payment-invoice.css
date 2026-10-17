@@ -1,0 +1,227 @@
+.payment-invoice {
+  margin: 14px 0;
+  border: 1px solid #d8ecdf20;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #101b17;
+}
+.compact-cost-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.compact-cost-top .slip-total {
+  font-size: 10px;
+  gap: 6px;
+}
+.compact-cost-top .slip-total strong {
+  font-size: 11px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+}
+.compact-cost-top > button {
+  min-height: 28px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #a5c4dc;
+  font-size: 10px;
+}
+.compact-wallet-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin: 5px 0 7px;
+}
+.compact-wallet-total > span {
+  font-size: 11px;
+}
+.compact-wallet-total small {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.compact-wallet-total > strong {
+  font:
+    600 19px 'SFMono-Regular',
+    Consolas,
+    monospace;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.payment-cost-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  padding: 18px;
+  border: 1px solid #c6dece69;
+  border-radius: 16px;
+  background: #1b2922;
+  color: var(--text);
+  overflow-y: auto;
+  box-shadow: 0 20px 80px #0009;
+}
+.payment-cost-dialog::backdrop {
+  background: #06110bc9;
+}
+.payment-cost-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.payment-cost-dialog header h3 {
+  font-size: 18px;
+  margin: 7px 0 0;
+}
+.payment-cost-dialog header button {
+  width: 44px;
+  height: 44px;
+  font-size: 21px;
+  padding: 0;
+}
+.compact-invoice dl {
+  margin: 0;
+}
+.compact-invoice dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 0;
+  font-size: 12px;
+}
+.compact-invoice dd {
+  margin: 0;
+  text-align: right;
+  font:
+    12px 'SFMono-Regular',
+    Consolas,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.compact-invoice p {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 4px 0 12px;
+}
+.compact-invoice-total {
+  border-top: 1px solid var(--line);
+}
+.payment-cost-dialog > .quiet {
+  margin-top: 12px;
+  width: 100%;
+  min-height: 44px;
+}
+@media (max-width: 360px) {
+  .compact-cost-top > button {
+    font-size: 9px;
+  }
+  .compact-wallet-total > strong {
+    font-size: 16px;
+  }
+}
+.batch-review .payment-invoice dl {
+  margin: 0;
+  padding: 11px 13px;
+}
+.batch-review .payment-invoice dl > div,
+.storage-estimate > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.payment-invoice dt {
+  color: var(--text);
+  font-size: 12px;
+}
+.payment-invoice dt small,
+.storage-estimate small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.payment-invoice dd {
+  white-space: nowrap;
+  font-size: 13px;
+}
+.invoice-extras {
+  padding: 10px 13px;
+  background: #b6cfe506;
+  border-block: 1px solid #d8ecdf13;
+}
+.invoice-caption {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.batch-review .invoice-extras dl {
+  padding: 9px 0 0;
+}
+.invoice-refundable {
+  display: inline-block;
+  color: #bfdfa8;
+  font-size: 9px;
+  border: 1px solid #bce6a52a;
+  padding: 3px 5px;
+  border-radius: 5px;
+  margin-left: 4px;
+}
+.invoice-extras p,
+.invoice-sponsored,
+.storage-estimate p {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 7px 0 0;
+}
+.invoice-extras dd {
+  font-size: 12px;
+  color: #cbd9d2;
+}
+.batch-review .invoice-total dt {
+  color: var(--text);
+  font-weight: 600;
+}
+.invoice-total dd {
+  font-size: 17px;
+  color: var(--text);
+}
+.invoice-sponsored {
+  padding: 0 14px 13px;
+  margin: 0;
+  font-size: 10px;
+}
+.invoice-sponsored > span {
+  color: #bfdfa8;
+  padding-right: 4px;
+}
+.storage-estimate {
+  margin: 0 0 13px;
+  padding: 11px 12px;
+  background: #b6cfe506;
+  border: 1px solid #d8ecdf13;
+  border-radius: 10px;
+  font-size: 11px;
+}
+.storage-estimate strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.storage-estimate .estimate-total {
+  border-top: 1px solid #d8ecdf13;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+@media (max-width: 350px) {
+  .invoice-refundable {
+    display: table;
+    margin: 5px 0 0;
+  }
+}

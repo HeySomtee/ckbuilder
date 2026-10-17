@@ -129,7 +129,16 @@ async function browserChecks() {
     [join(product, 'scripts/wallet-overview-browser.cjs')],
     { cwd: product, isolated: true },
   );
+  run(
+    'Account navigation and pinned slip browser regression',
+    [join(product, 'scripts/account-navigation-browser.cjs')],
+    { cwd: product, isolated: true },
+  );
   const base = `http://127.0.0.1:${previewPort}`;
+  run('Full application EVM checkout journey', [join(product, 'scripts/checkout-browser.cjs')], {
+    cwd: product,
+    isolated: true,
+  });
   run('Atomic combined-payment browser regression', [join(product, 'scripts/batch-browser.cjs')], {
     cwd: product,
     isolated: true,

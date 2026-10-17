@@ -15,6 +15,7 @@ import { DirectRegistry, PUBLIC_DIRECT_CONFIG, LEGACY_DIRECT_CONFIG, V3_DIRECT_C
 import { telegramAvailable } from './modules/identity/integration-config';
 import { readProvisioningProgress, PROVISION_QUEUE_LIMIT } from './modules/direct/provision';
 import { sponsorProxy, SponsorProxyError } from './modules/direct/sponsor-proxy';
+import { activePoolRecord, PublicPoolCache } from './modules/direct/pools';
 
 import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
@@ -500,7 +501,7 @@ async function handleTelegramWebhook(req: IncomingMessage, res: ServerResponse, 
   });
 
   if (linkedUser) {
-    await telegramSendText(String(chatId), `Connected to Streak as @${linkedUser.username}. Your Telegram account is now linked.`);
+    await telegramSendText(String(chatId), "Your Telegram account is now connected to Streak.");
   } else {
     await telegramSendText(String(chatId), "This connect link is invalid or expired. Please create a new one from the app.");
   }
@@ -1136,6 +1137,7 @@ type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<
 const directRegistry = new DirectRegistry(process.env.STREAK_DIRECT_REGISTRY_DIR);
 const legacyDirectRegistry = new DirectRegistry(process.env.STREAK_DIRECT_LEGACY_REGISTRY_DIR);
 const batchDirectRegistry = new DirectRegistry(process.env.STREAK_DIRECT_BATCH_REGISTRY_DIR,V4_DIRECT_CONFIG);
+const publicPools = new PublicPoolCache();
 const atomicConfigured = !!process.env.STREAK_DIRECT_BATCH_REGISTRY_DIR && V4_DIRECT_CONFIG.codeDeps.length===2;
 const sponsorConfigurationCache=new AsyncSnapshotCache<string,unknown>(5_000,2);
 const sponsorRequests = new Map<string,{start:number;count:number}>();
@@ -1237,8 +1239,15 @@ async function handleDirectFixtures(res: ServerResponse): Promise<void> {
 }
 
 const staticRoutes: Record<string, Handler> = {
+  "GET /api/direct/pools": async (req,res,url) => {
+    const ids = (url.searchParams.get('fixtures') ?? '').split(',');
+    if (ids.length > 24 || new Set(ids).size !== ids.length || ids.some(id=>!/^api-football-[1-9][0-9]{0,14}$/.test(id))) return sendJson(res,400,{error:'Provide up to 24 unique football fixtures.'});
+    if (!sponsorRate(`pools:${req.socket.remoteAddress}`,120)) return sendJson(res,429,{error:'Please wait before refreshing pool shares.'});
+    return sendJson(res,200,{pools:ids.map(id=>publicPools.read(id,activePoolRecord(atomicConfigured,atomicConfigured ? batchDirectRegistry.get(id) : undefined,atomicConfigured ? undefined : directRegistry.get(id) ?? legacyDirectRegistry.get(id))))});
+  },
   "GET /api/direct/config": async (_req, res) => sendJson(res, 200, PUBLIC_DIRECT_CONFIG),
   "GET /api/direct/sponsor/config": async (_req,res) => sendJson(res,200,V3_DIRECT_CONFIG),
+  "GET /api/direct/entry-mode": async (_req,res) => sendJson(res,200,{mode:atomicConfigured?'atomic':'legacy'}),
   "GET /api/direct/batch/config": async (_req,res) => sendJson(res,200,V4_DIRECT_CONFIG),
   "GET /api/direct/batch/demand": (req,res,url)=>handleDemand(req,res,url,true),
   "POST /api/direct/batch/offer": (req,res,url)=>handleSponsor(req,res,url,'offer',true),

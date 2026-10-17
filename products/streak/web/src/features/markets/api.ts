@@ -1,8 +1,10 @@
 import { isRecord, request, text } from '../../lib/http';
+import type { DirectPool } from './pools';
 
 export type MarketStatus = 'open' | 'closed' | 'resolved' | 'void';
 export type MarketSort = 'featured' | 'kickoff';
 export interface Market {
+  directPool?: DirectPool;
   id: string;
   matchId: string;
   closesAt: string;
@@ -21,6 +23,7 @@ export interface Market {
   totalPoolCkb: string;
   totalBets: number;
   prices: { home: number; draw: number; away: number };
+  history?: { t: number; p: { home: number; draw: number; away: number } }[];
 }
 export interface MarketPage {
   markets: Market[];
@@ -64,6 +67,27 @@ export function parseMarket(value: unknown): Market {
   const totalPoolCkb = available ? text(value.totalPoolCkb) : '0';
   const totalBets = available ? value.totalBets : 0;
   const prices = isRecord(value.prices) ? value.prices : { home: 0, draw: 0, away: 0 };
+  const history = Array.isArray(value.spark)
+    ? value.spark
+        .slice(-32)
+        .flatMap((tick) => {
+          if (
+            !isRecord(tick) ||
+            !Number.isSafeInteger(tick.t) ||
+            typeof tick.t !== 'number' ||
+            tick.t <= 0 ||
+            !isRecord(tick.p)
+          )
+            return [];
+          return [
+            {
+              t: tick.t,
+              p: { home: price(tick.p.home), draw: price(tick.p.draw), away: price(tick.p.away) },
+            },
+          ];
+        })
+        .sort((a, b) => a.t - b.t)
+    : [];
   if (
     !/^\d+(\.\d{1,8})?$/.test(totalPoolCkb) ||
     typeof totalBets !== 'number' ||
@@ -95,6 +119,7 @@ export function parseMarket(value: unknown): Market {
       ? text(value.match.competition.name)
       : text(value.match.stage),
     prices: { home: price(prices.home), draw: price(prices.draw), away: price(prices.away) },
+    history,
   };
 }
 export async function getMarkets(

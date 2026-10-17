@@ -101,12 +101,18 @@ async function retainWallet(signer: ccc.Signer, revision: number): Promise<ccc.S
     revision: revision + 1,
   });
   stopReplacement?.();
-  stopReplacement = signer.onReplaced(() => {
-    disconnectWallet(
-      'Your wallet account changed or disconnected. Connect again to continue.',
-      connection,
-    );
-  });
+  const watchReplacement = () =>
+    signer.onReplaced(() => {
+      // Some providers repeat accountsChanged with the same account. Revalidate
+      // instead of dropping a healthy signer. CCC's listener is one-shot, so rearm.
+      if (state.connection !== connection) return;
+      stopReplacement?.();
+      stopReplacement = watchReplacement();
+      void assertActiveWallet(connection).catch(() => {
+        /* assertActiveWallet invalidates a changed connection. */
+      });
+    });
+  stopReplacement = watchReplacement();
   publish(connection, null);
   return guarded;
 }
@@ -115,8 +121,14 @@ async function retainWallet(signer: ccc.Signer, revision: number): Promise<ccc.S
 export async function chooseWallet(): Promise<ccc.Signer> {
   const current = state.connection;
   if (current) {
-    await assertActiveWallet(current);
-    return current.signer;
+    try {
+      await assertActiveWallet(current);
+      return current.signer;
+    } catch (error) {
+      // A stale connection is cleared by the guard. Let this same user gesture
+      // open the chooser; never require a second click just to reconnect.
+      if (state.connection) throw error;
+    }
   }
   if (selection) return selection;
   const revision = state.revision;

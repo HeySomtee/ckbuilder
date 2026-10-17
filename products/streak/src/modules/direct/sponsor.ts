@@ -94,6 +94,7 @@ export interface SponsorOptions {
   registry: DirectRegistry;
   config: DirectProtocolConfig;
   fixture: (fixtureId: string) => Promise<Match>;
+  fixtures?: (fixtureIds: string[]) => Promise<Match[]>;
   now?: () => number;
   existingRegistry?: DirectRegistry[];
 }
@@ -246,6 +247,9 @@ export class SponsorService {
   }
   protected async fixture(id: string): Promise<Match> {
     const fixture = await this.options.fixture(id);
+    return this.validateFixture(id, fixture);
+  }
+  protected validateFixture(id: string, fixture: Match): Match {
     if (
       fixture.id !== id ||
       fixture.status !== 'scheduled' ||

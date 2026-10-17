@@ -1,6 +1,6 @@
 .direct-page {
   display: grid;
-  gap: 24px;
+  gap: 18px;
   max-width: 1180px;
   margin: 0 auto;
   padding-bottom: 100px;
@@ -16,11 +16,11 @@
 .direct-review,
 .direct-history,
 .direct-positions {
-  padding: clamp(20px, 3vw, 32px);
+  padding: clamp(16px, 2vw, 24px);
 }
 .direct-page h2 {
   margin: 8px 0 16px;
-  font-size: clamp(18px, 1.5vw, 22px);
+  font-size: clamp(17px, 1.5vw, 20px);
   letter-spacing: -0.04em;
 }
 .direct-page h3 {
@@ -202,7 +202,7 @@
 .direct-transaction,
 .direct-position-market {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 22px 0;
+  padding: 16px 0;
 }
 .direct-transaction:first-of-type {
   margin-top: 16px;

@@ -8,7 +8,7 @@ import * as ccc from '@ckb-ccc/core';
 import { SponsorService, verifySponsorOwnerWitness } from './modules/direct/sponsor';
 import { createSponsorServer } from './modules/direct/sponsor-http';
 import { SponsorJournal, cancelUnsignedSponsorOffers } from './modules/direct/sponsor-journal';
-import { OperatorJournal } from './modules/direct/journal';
+import { OperatorBusyError, OperatorJournal } from './modules/direct/journal';
 import { operatorFundingBarrier, assertFreshOperatorInputs } from './modules/direct/cli';
 import {
   DirectRegistry,
@@ -359,6 +359,31 @@ async function main(): Promise<void> {
         }),
       });
       assert.equal(denied.status, 403);
+      const prepare = restarted.prepareOffer;
+      const sendReview = () =>
+        fetch(`${base}/offer`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ authenticatedOwnerAddress: request.ownerAddress, request }),
+        });
+      try {
+        restarted.prepareOffer = async () => {
+          throw new OperatorBusyError();
+        };
+        const busy = await sendReview();
+        assert.equal(busy.status, 429);
+        assert.match(JSON.stringify(await busy.json()), /Sponsor queue is busy/);
+        restarted.prepareOffer = async () => {
+          throw Error('private RPC payload and signing context');
+        };
+        const unavailable = await sendReview();
+        const reviewMessage = JSON.stringify(await unavailable.json());
+        assert.equal(unavailable.status, 409);
+        assert.match(reviewMessage, /No payment was sent by this review/);
+        assert.doesNotMatch(reviewMessage, /private RPC|signing context|Preserve any signed/);
+      } finally {
+        restarted.prepareOffer = prepare;
+      }
     } finally {
       await new Promise<void>((done, reject) =>
         server.close((error) => (error ? reject(error) : done())),

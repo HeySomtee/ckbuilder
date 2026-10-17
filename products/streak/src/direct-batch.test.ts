@@ -21,6 +21,7 @@ import {
   createRecord,
 } from './modules/direct/registry';
 import { operatorFundingBarrier } from './modules/direct/cli';
+import { loadOperatorMarket } from './modules/direct/operator';
 import type { Match } from './types';
 import type { BatchPick } from '../shared/batch-wire';
 
@@ -286,6 +287,41 @@ async function main() {
     );
     assert.equal(registry.all().length, 8);
     assert.equal((await operatorFundingBarrier(client, journal, registry)).clear, true);
+    const originalCreationRead = client.getTransactionNoCache;
+    const originalLiveRead = client.getCellLiveNoCache;
+    const originalHeaderRead = client.getHeaderByNumberNoCache;
+    let creationReads = 0,
+      liveReads = 0,
+      headerReads = 0;
+    client.getTransactionNoCache = async (...args) => {
+      creationReads++;
+      return originalCreationRead(...args);
+    };
+    client.getCellLiveNoCache = async (...args) => {
+      liveReads++;
+      return originalLiveRead(...args);
+    };
+    client.getHeaderByNumberNoCache = async (...args) => {
+      headerReads++;
+      return originalHeaderRead(...args);
+    };
+    await loadOperatorMarket(client, registry.all()[0], config);
+    assert.equal(creationReads, 1, 'One immutable transaction read for shared creation outputs');
+    assert.equal(liveReads, 5);
+    assert.equal(headerReads, 5, 'Every cell retains a fresh canonical-header check');
+    await loadOperatorMarket(client, registry.all()[0], config);
+    assert.equal(creationReads, 2, 'Creation lookup is not cached between operations');
+    client.getHeaderByNumberNoCache = async () => header(H('9'), 10);
+    await assert.rejects(
+      () => loadOperatorMarket(client, registry.all()[0], config),
+      /no longer canonical/,
+    );
+    client.getTransactionNoCache = originalCreationRead;
+    client.getCellLiveNoCache = originalLiveRead;
+    client.getHeaderByNumberNoCache = originalHeaderRead;
+    console.log(
+      'PASS funded market reads: five creation lookups become one, fresh live cells and reorg rejection retained',
+    );
     const canonicalCells = new Map(cells);
     history.delete(committed.hash());
     cells.clear();

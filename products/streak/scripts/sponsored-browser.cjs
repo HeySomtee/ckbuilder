@@ -122,6 +122,9 @@ async function main() {
                 walletAddress: chain.address,
               },
             });
+          // This lane retains v3 signing/recovery. Current v4 entry is exercised
+          // by checkout-browser.cjs through the actual application and shared slip.
+          if (url.pathname === '/api/direct/entry-mode') return json({ mode: 'legacy' });
           if (url.pathname === '/api/direct/markets')
             return json({ markets: chain.descriptor ? [chain.descriptor] : [] });
           if (url.pathname === '/api/direct/demand') return json({ fixtures: [chain.fixture] });
@@ -179,7 +182,7 @@ async function main() {
         await reads.goto(base + '/season/?market=m-api-football-900003');
         await accountReadFinished(page, 'Sign out');
         await page.getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true }).waitFor();
-        await page.getByText(/Your first prediction opens this market/).waitFor();
+        await page.getByRole('heading', { name: 'Who takes it?', exact: true }).waitFor();
         assert.equal(requests.includes('/qa-sponsored-fixture.js'), false);
         const assets = path.join(__dirname, '../public/season/assets');
         const sdk = fs

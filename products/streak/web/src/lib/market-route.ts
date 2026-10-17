@@ -18,7 +18,7 @@ export function navigateMarket(id: string | null) {
   window.dispatchEvent(new PopStateEvent('popstate'));
   window.scrollTo(0, 0);
 }
-export function followMarket(event: MouseEvent<HTMLAnchorElement>, id: string) {
+export function followMarket(event: MouseEvent<HTMLAnchorElement>, id: string | null) {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
     return;
   event.preventDefault();

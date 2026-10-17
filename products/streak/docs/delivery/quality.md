@@ -35,6 +35,8 @@ npm.cmd run quality:major
 
 ## Command contract
 
+The market checkout correction adds `scripts/checkout-browser.cjs` as a mandatory full-application EVM journey. It starts at the built market card and detail routes, creates the first market in its payment, repeats a mixed existing/new combined payment, and checks inline reconnect and failure-safe historical entry routing. It complements the lower-level batch and historical recovery lanes; none of those lanes are removed.
+
 Run these from the repository root:
 
 | Command                     | Required scope                                                                 |

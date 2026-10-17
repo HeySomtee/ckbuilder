@@ -135,7 +135,7 @@ async function main() {
           await page.getByRole('button', { name: 'Disconnect wallet', exact: true }).waitFor();
         }
         await connect();
-        const overview = page.getByRole('region', { name: 'Wallet overview' });
+        const overview = page.getByRole('region', { name: 'My Account overview' });
         await overview.getByText('1,234.00000001 tCKB', { exact: true }).waitFor();
         const address = await page.evaluate(() => window.syntheticEvm.address);
         await overview.getByRole('button', { name: 'Copy wallet address', exact: true }).click();

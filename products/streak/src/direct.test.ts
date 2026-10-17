@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
+import { setTimeout as delay } from 'node:timers/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import * as ccc from '@ckb-ccc/core';
 import type { Match } from './types';
@@ -18,7 +19,12 @@ import {
   validateFootballEvidence,
   validateScheduledFixture,
 } from './modules/direct/oracle';
-import { OperatorJournal, broadcastOperation, reconcileOperation } from './modules/direct/journal';
+import {
+  OperatorBusyError,
+  OperatorJournal,
+  broadcastOperation,
+  reconcileOperation,
+} from './modules/direct/journal';
 import { buildReport, fundedPayout } from './modules/direct/operator';
 import { runOperator } from './modules/direct/cli';
 import { workerCycle, runWorkerOnce, type WorkerState } from './modules/direct/worker';
@@ -260,6 +266,61 @@ async function main(): Promise<void> {
     release();
     await held;
     await journal.exclusive(async () => {});
+
+    const order: string[] = [];
+    const lockHolder = journal.exclusive(async () => {
+      order.push('first-start');
+      await delay(150);
+      order.push('first-end');
+    });
+    const queued = new OperatorJournal(journal.directory, undefined, 1000);
+    const queuedPayment = queued.exclusive(async () => {
+      order.push('second');
+    });
+    await Promise.all([lockHolder, queuedPayment]);
+    assert.deepEqual(
+      order,
+      ['first-start', 'first-end', 'second'],
+      'busy sponsor waits without overlapping or rerunning work',
+    );
+    const occupied = journal.exclusive(
+      () =>
+        new Promise<void>((done) => {
+          release = done;
+        }),
+    );
+    let calls = 0;
+    try {
+      await assert.rejects(
+        new OperatorJournal(journal.directory, undefined, 50).exclusive(async () => {
+          calls++;
+        }),
+        OperatorBusyError,
+      );
+      assert.equal(calls, 0, 'queue timeout cannot execute the payment');
+    } finally {
+      release();
+      await occupied;
+    }
+    const foreignDirectory = join(directory, 'foreign-lock');
+    const foreign = new OperatorJournal(foreignDirectory, undefined, 1000);
+    const foreignBytes = JSON.stringify({
+      hostname: `${hostname()}-other`,
+      pid: process.pid,
+      token: 'foreign',
+    });
+    writeFileSync(join(foreignDirectory, 'operator.lock'), foreignBytes);
+    await assert.rejects(
+      foreign.exclusive(async () => {
+        calls++;
+      }),
+      /another host/,
+    );
+    assert.equal(readFileSync(join(foreignDirectory, 'operator.lock'), 'utf8'), foreignBytes);
+    assert.equal(calls, 0);
+    console.log(
+      'PASS sponsor lock waits, times out without executing and preserves foreign ownership',
+    );
 
     const client = new ccc.ClientPublicTestnet({ url: 'http://127.0.0.1:1', fallbacks: [] });
     let transaction: ccc.ClientTransactionResponse | undefined;

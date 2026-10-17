@@ -36,6 +36,7 @@ export interface OperatorMarket {
   market?: OperatorCell;
   shards: OperatorCell[];
   closed: boolean;
+  closedReserve?: OperatorCell;
 }
 
 /** One bounded indexer page plus authoritative live-cell and canonical-header checks. */
@@ -54,10 +55,18 @@ export async function loadOperatorMarket(
   );
   if (page.cells.length >= 64) throw Error('Market indexer result exceeds protocol bounds');
   const result: OperatorMarket = { shards: [], closed: false };
+  // Outputs from one funding transaction share its immutable bytes. Keep this
+  // lookup inside this invocation; live cells and canonical headers stay fresh.
+  const creations = new Map<string, Promise<ccc.ClientTransactionResponse | undefined>>();
   for (const indexed of page.cells) {
     const cell = await client.getCellLiveNoCache(indexed.outPoint, true, false);
     if (!cell) throw Error('Market changed during lookup; reconcile before building');
-    const creation = await client.getTransactionNoCache(cell.outPoint.txHash);
+    let lookup = creations.get(cell.outPoint.txHash);
+    if (!lookup) {
+      lookup = client.getTransactionNoCache(cell.outPoint.txHash);
+      creations.set(cell.outPoint.txHash, lookup);
+    }
+    const creation = await lookup;
     if (
       creation?.status !== 'committed' ||
       !creation.blockHash ||
@@ -90,9 +99,13 @@ export async function loadOperatorMarket(
       parseShard(data);
       if (result.shards[data[1]]) throw Error('Market has duplicate shards');
       result.shards[data[1]] = entry;
-    } else if ((data[0] === 2 && data.length === 34) || (data[0] === 3 && data.length === 43))
+    } else if ((data[0] === 2 && data.length === 34) || (data[0] === 3 && data.length === 43)) {
       result.closed = true;
-    else throw Error('Unknown deployed contract cell layout');
+      if (data[0] === 2) {
+        if (result.closedReserve) throw Error('Market has duplicate settlement reserves');
+        result.closedReserve = entry;
+      }
+    } else throw Error('Unknown deployed contract cell layout');
   }
   if (result.closed && (result.market || result.shards.length))
     throw Error('Indexer returned inconsistent market phases');
@@ -296,7 +309,7 @@ interface Ticket {
   principal: bigint;
   bytes: Buffer;
 }
-function parseShard(data: Buffer): { accepted: Ticket[]; pending?: Ticket } {
+export function parseShard(data: Buffer): { accepted: Ticket[]; pending?: Ticket } {
   if (
     data.length < 4 ||
     data[0] !== 1 ||

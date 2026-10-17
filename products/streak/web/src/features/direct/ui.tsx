@@ -708,6 +708,8 @@ export default function DirectPage({
                       {outcomeNames.map((label, index) => (
                         <button
                           key={label}
+                          className="outcome-glass"
+                          data-outcome={['home', 'draw', 'away'][index]}
                           aria-pressed={outcome === index}
                           disabled={working || !descriptor.entryEnabled}
                           onClick={() => {

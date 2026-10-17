@@ -46,6 +46,9 @@ export async function connectEvm(element, options = {}) {
       mode = 'accept';
       release?.();
     },
+    repeatAccount: () => {
+      [...(events.get('accountsChanged') ?? [])].forEach((callback) => callback([wallet.address]));
+    },
     replace: () => {
       wallet = new Wallet(`0x${'33'.repeat(32)}`);
       [...(events.get('accountsChanged') ?? [])].forEach((callback) => callback([wallet.address]));

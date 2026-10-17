@@ -1,26 +1,25 @@
 import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
-import type { MouseEvent } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getMarkets, formatCkb, outcomes } from '../features/markets/api';
+import { getMarkets, outcomes } from '../features/markets/api';
 import type { Market, MarketSort } from '../features/markets/api';
 import { getAccount, signIn, signOut } from '../features/account/api';
 import { WalletOverview, WalletSummary } from '../features/account/wallet-ui';
 import { Icon } from '../components/icon';
-import { weekend } from '../features/markets/weekend';
+import { useMatchweek } from '../features/markets/use-matchweek';
 import { TeamBadge } from '../components/team-badge';
 import { MarketDetail } from '../features/markets/detail';
 import { createDraftStore } from '../features/predictions/draft';
 import type { Outcome } from '../features/predictions/draft';
 import { PredictionSlip } from '../features/predictions/slip';
 import { followMarket, marketHref, navigateMarket, useMarketRoute } from '../lib/market-route';
-import {
-  activityHref,
-  followActivity,
-  navigateActivity,
-  directHref,
-  followDirect,
-  useDirectRoute,
-} from '../lib/direct-route';
+import { navigateActivity, useDirectRoute } from '../lib/direct-route';
+import { useSectionRoute, sectionHref, followSection } from '../lib/section-route';
+import { AppNavigation } from './navigation';
+import { SectionPage } from './sections';
+import { getAtomicEntryEnabled } from '../features/direct/availability-api';
+import { Notice } from '../components/notice';
+import { poolLabel } from '../features/markets/pools';
+import { usePools } from '../features/markets/use-pools';
 import '../design-system/predictions.css';
 import {
   assertWalletAccount,
@@ -30,12 +29,6 @@ import {
 } from '../lib/wallet';
 
 const DirectPage = lazy(() => import('../features/direct/ui'));
-function browseMarkets(event: MouseEvent<HTMLAnchorElement>) {
-  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-    return;
-  event.preventDefault();
-  navigateMarket(null);
-}
 
 function MarketCard({
   market,
@@ -86,7 +79,9 @@ function MarketCard({
       <a
         className="teams"
         href={market.available ? marketHref(market.id) : undefined}
-        aria-label={market.available ? 'View market' : undefined}
+        aria-label={
+          market.available ? `Match details for ${market.home} vs ${market.away}` : undefined
+        }
         onClick={(event) => {
           if (market.available) followMarket(event, market.id);
         }}
@@ -117,13 +112,21 @@ function MarketCard({
             {outcomes.map((side) => (
               <button
                 key={side}
+                className="outcome-glass"
+                data-outcome={side}
                 aria-label={`Add ${labels[side]} for ${market.home} vs ${market.away}`}
                 aria-pressed={selected === side}
                 disabled={market.status !== 'open' || market.fixtureStatus !== 'scheduled'}
                 onClick={() => onPick(market, side)}
               >
                 <span>{labels[side]}</span>
-                <strong>{Math.round(market.prices[side] * 100)}%</strong>
+                <strong>
+                  {poolLabel(
+                    market.directPool,
+                    side,
+                    side === 'home' ? '1' : side === 'draw' ? 'X' : '2',
+                  )}
+                </strong>
                 {selected === side && (
                   <i className="pick-check" aria-hidden="true">
                     ✓
@@ -132,14 +135,22 @@ function MarketCard({
               </button>
             ))}
           </div>
-          <div className="pool-bar" aria-hidden="true">
-            {outcomes.map((side) => (
-              <span key={side} className={side} style={{ flex: market.prices[side] }} />
-            ))}
-          </div>
           <div className="card-meta">
-            <span>{formatCkb(market.totalPoolCkb)} tCKB in legacy pool</span>
-            <span>Independent prediction</span>
+            <span>
+              {market.directPool?.state === 'ready'
+                ? 'On-chain pool share'
+                : market.directPool?.state === 'uninitialized'
+                  ? 'Be the first to predict'
+                  : 'Pool shares updating'}
+            </span>
+            <a
+              className="card-details-link"
+              href={marketHref(market.id)}
+              onClick={(event) => followMarket(event, market.id)}
+              aria-label={`View market: ${market.home} vs ${market.away}`}
+            >
+              View market <Icon name="arrow" />
+            </a>
           </div>
         </>
       ) : (
@@ -165,6 +176,22 @@ export function App() {
   );
   const marketId = useMarketRoute();
   const directRoute = useDirectRoute();
+  const directEntry = !!directRoute && !['wallet', 'activity'].includes(directRoute);
+  const entryMode = useQuery({
+    queryKey: ['atomic-entry-mode'],
+    queryFn: ({ signal }) => getAtomicEntryEnabled(signal),
+    enabled: directEntry,
+    retry: false,
+    staleTime: 15_000,
+  });
+  const currentEntry = directEntry && entryMode.data === true;
+  const section = useSectionRoute();
+  const activePage =
+    directRoute === 'wallet' || directRoute === 'activity'
+      ? directRoute
+      : directRoute || marketId
+        ? 'markets'
+        : (section ?? 'markets');
   const [draftStore] = useState(createDraftStore);
   const draftState = useSyncExternalStore(draftStore.subscribe, draftStore.getSnapshot);
   const [slipOpen, setSlipOpen] = useState(false);
@@ -195,7 +222,7 @@ export function App() {
   const [sort, setSort] = useState<MarketSort>('featured');
   const [week, setWeek] = useState(0);
   const [day, setDay] = useState<number | null>(null);
-  const dates = weekend(week);
+  const dates = useMatchweek(week);
   const from = day === null ? dates.start : dates.days[day];
   const to =
     day === null ? dates.end : new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
@@ -245,7 +272,7 @@ export function App() {
     },
   });
   const feed = useInfiniteQuery({
-    enabled: !marketId && !directRoute,
+    enabled: !marketId && !directRoute && !section,
     queryKey: ['markets', status, query, fromIso, toIso, sort],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
@@ -262,6 +289,7 @@ export function App() {
     ).values(),
   ];
   const count = feed.data?.pages[0]?.total;
+  const pools = usePools(markets.map((m) => m.matchId));
   const accountAction = account.data ? (
     <button className="quiet" onClick={() => logout.mutate()} disabled={logout.isPending}>
       {logout.isPending ? 'Signing out…' : 'Sign out'}
@@ -279,46 +307,19 @@ export function App() {
   return (
     <>
       <a className="skip" href="#main">
-        Skip to markets
+        Skip to content
       </a>
       <aside className="rail">
-        <a href="/season/" className="wordmark" onClick={browseMarkets}>
+        <a
+          href={sectionHref('overview')}
+          className="wordmark"
+          onClick={(event) => followSection(event, 'overview')}
+        >
           <img src="/mark.svg" alt="" width="34" height="34" />
           streak<span className="dot">.</span>
         </a>
         <p className="eyebrow">YOUR TOUCHLINE</p>
-        <nav aria-label="Main navigation">
-          <a
-            href="/season/"
-            onClick={browseMarkets}
-            aria-current={!directRoute ? 'page' : undefined}
-          >
-            <Icon name="markets" />
-            Markets
-          </a>
-          <a
-            href={activityHref}
-            onClick={followActivity}
-            aria-current={directRoute === 'activity' ? 'page' : undefined}
-          >
-            <Icon name="activity" />
-            My activity
-          </a>
-          <a
-            href={directHref()}
-            onClick={(event) => followDirect(event)}
-            aria-current={directRoute === 'wallet' ? 'page' : undefined}
-          >
-            <Icon name="wallet" />
-            Wallet
-          </a>
-        </nav>
-        <div className="rail-note">
-          <Icon name="shield" />
-          <strong>Your next chapter.</strong>
-          <p>A new matchday experience, built around your game.</p>
-          <span>CKB testnet</span>
-        </div>
+        <AppNavigation active={activePage} />
       </aside>
       <div className="workspace">
         <header className="topbar">
@@ -326,12 +327,20 @@ export function App() {
             Your touchline <span>/</span>{' '}
             <strong>
               {directRoute === 'wallet'
-                ? 'Wallet'
+                ? 'My Account'
                 : directRoute === 'activity'
                   ? 'My activity'
                   : directRoute
                     ? 'Prediction'
-                    : 'Markets'}
+                    : section === 'overview'
+                      ? 'Overview'
+                      : section === 'five'
+                        ? 'Streak Five'
+                        : section === 'matchday'
+                          ? 'Matchday'
+                          : section === 'clubhouse'
+                            ? 'Clubhouse'
+                            : 'Markets'}
             </strong>
           </span>
           <div className="account-actions">
@@ -341,9 +350,9 @@ export function App() {
         </header>
         <div className="network-strip">
           <span>
-            <i /> CKB Pudge testnet
+            <img src="/ckb-mark.png" width="11" height="11" alt="" /> CKB Pudge testnet
           </span>
-          <span>No real-money stakes</span>
+          {/* <span>No real-money stakes</span> */}
         </div>
         <main id="main" tabIndex={-1}>
           {(login.isError || logout.isError || account.isError) && (
@@ -366,6 +375,9 @@ export function App() {
               {selectionNotice}
             </p>
           )}
+          {section && !directRoute && !marketId && (
+            <SectionPage section={section} onPick={pick} picks={draftState.draft.picks} />
+          )}
           {directRoute === 'wallet' && (
             <WalletOverview
               account={account.data ?? null}
@@ -376,40 +388,62 @@ export function App() {
               onRecovery={navigateActivity}
             />
           )}
-          {directRoute && directRoute !== 'wallet' && (
-            <Suspense
-              fallback={
-                <section className="glass detail-state">
-                  <h1>
-                    {directRoute === 'activity'
-                      ? 'Loading your activity...'
-                      : 'Opening prediction...'}
-                  </h1>
-                  <p>Your saved predictions are safe.</p>
-                </section>
-              }
-            >
-              <DirectPage
-                key={`${directRoute}:${account.data?.id ?? 'guest'}:${wallet.revision}`}
-                marketId={directRoute === 'activity' ? undefined : directRoute}
-                activityOnly={directRoute === 'activity'}
-                draftStore={draftStore}
-                account={account.data ?? null}
-                accountReady={!account.isPending}
-                draftPick={draftState.draft.picks.find((row) => row.marketId === directRoute)}
-              />
-            </Suspense>
-          )}
-          {marketId && !directRoute && (
+          {directEntry &&
+            (entryMode.data === undefined || (entryMode.isError && !currentEntry)) && (
+              <Notice
+                title={entryMode.isError ? 'Unable to open payment' : 'Opening your match'}
+                tone={entryMode.isError ? 'attention' : 'info'}
+                actions={
+                  entryMode.isError ? (
+                    <button onClick={() => void entryMode.refetch()}>Try again</button>
+                  ) : undefined
+                }
+              >
+                {entryMode.isError
+                  ? 'Your picks are saved. Retry to check the available checkout.'
+                  : 'Checking the current payment flow.'}
+              </Notice>
+            )}
+          {directRoute &&
+            (directRoute === 'activity' ||
+              (directEntry && entryMode.data === false && !entryMode.isError)) && (
+              <Suspense
+                fallback={
+                  <section className="glass detail-state">
+                    <h1>
+                      {directRoute === 'activity'
+                        ? 'Loading your activity...'
+                        : 'Opening prediction...'}
+                    </h1>
+                    <p>Your saved predictions are safe.</p>
+                  </section>
+                }
+              >
+                <DirectPage
+                  key={`${directRoute}:${account.data?.id ?? 'guest'}:${wallet.revision}`}
+                  marketId={directRoute === 'activity' ? undefined : directRoute}
+                  activityOnly={directRoute === 'activity'}
+                  draftStore={draftStore}
+                  account={account.data ?? null}
+                  accountReady={!account.isPending}
+                  draftPick={draftState.draft.picks.find((row) => row.marketId === directRoute)}
+                />
+              </Suspense>
+            )}
+          {((marketId && !directRoute) || currentEntry) && (
             <MarketDetail
-              key={marketId}
-              id={marketId}
+              key={currentEntry ? directRoute : marketId}
+              id={(currentEntry ? directRoute : marketId)!}
               onBack={() => navigateMarket(null)}
               onPick={pick}
-              selected={draftState.draft.picks.find((row) => row.marketId === marketId)?.outcome}
+              selected={
+                draftState.draft.picks.find(
+                  (row) => row.marketId === (currentEntry ? directRoute : marketId),
+                )?.outcome
+              }
             />
           )}
-          <div hidden={!!marketId || !!directRoute}>
+          <div hidden={!!marketId || !!directRoute || !!section}>
             <div className="page-title">
               <div>
                 <p className="eyebrow">THE PREDICTION MARKETS</p>
@@ -586,7 +620,7 @@ export function App() {
                 {markets.map((market) => (
                   <MarketCard
                     key={market.id}
-                    market={market}
+                    market={{ ...market, directPool: pools.get(market.matchId) }}
                     onPick={pick}
                     selected={
                       draftState.draft.picks.find((row) => row.matchId === market.matchId)?.outcome
@@ -609,33 +643,13 @@ export function App() {
           </div>
         </main>
       </div>
-      <nav className="mobile-dock" aria-label="Mobile navigation">
-        <a href="/season/" onClick={browseMarkets} aria-current={!directRoute ? 'page' : undefined}>
-          <Icon name="markets" />
-          Markets
-        </a>
-        <a
-          href={activityHref}
-          onClick={followActivity}
-          aria-current={directRoute === 'activity' ? 'page' : undefined}
-        >
-          <Icon name="activity" />
-          Activity
-        </a>
-        <a
-          href={directHref()}
-          onClick={(event) => followDirect(event)}
-          aria-current={directRoute === 'wallet' ? 'page' : undefined}
-        >
-          <Icon name="wallet" />
-          Wallet
-        </a>
-      </nav>
+      <AppNavigation active={activePage} mobile />
       <PredictionSlip
         store={draftStore}
         open={slipOpen}
         onOpen={() => setSlipOpen(true)}
         onDismiss={() => setSlipOpen(false)}
+        onAddMatches={() => navigateMarket(null)}
         account={account.data ?? null}
         accountReady={!account.isPending}
         onSignIn={() => login.mutate()}

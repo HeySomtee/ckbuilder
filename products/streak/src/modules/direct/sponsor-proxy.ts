@@ -66,7 +66,7 @@ export async function sponsorProxy(
         : '';
     if (
       message.length <= 240 &&
-      /^(Sponsor is completing|Streak needs additional|Streak is at|Unsigned sponsor offer expired|Invalid owner transaction signature|Fixture terms changed|This fixture already has|Sponsored contract deployment|Sponsor funding is awaiting|Owner needs principal|Owner input must be live|Sponsor queue is busy|This fixture has reached|Use the wallet linked|This proposal belongs|Sponsor request could not complete|Atomic payment is awaiting|New predictions use|This fixture has positions|This fixture has no available|This fixture is closed)/.test(
+      /^(Sponsor is completing|Streak needs additional|Streak is at|Unsigned sponsor offer expired|Invalid owner transaction signature|Fixture terms changed|This fixture already has|Sponsored contract deployment|Sponsor funding is awaiting|Owner needs principal|Owner input must be live|Sponsor queue is busy|This fixture has reached|Use the wallet linked|This proposal belongs|Sponsor request could not complete|Payment review is temporarily unavailable|Atomic payment is awaiting|New predictions use|This fixture has positions|This fixture has no available|This fixture is closed)/.test(
         message,
       )
     )

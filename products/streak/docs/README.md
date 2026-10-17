@@ -1,5 +1,23 @@
 # Streak documentation
 
+17 October Week 21 release: the owner authorized the report, screenshots, commit, push and PR integration into main. The [report](../../../reports/week-21.md) distinguishes confirmed public payments, local regression evidence and the hosted sponsor/worker configuration still required. This supersedes earlier publication pauses below. Five and an original logo remain upcoming; no new campaign or prize commitment is included.
+
+17 October approved implementation: [compact Picks/Activity slip, animated payment button and repeat-payment reads](delivery/compact-slip-implementation.md). All 51 local major-gate checks passed; the implementation is active locally.
+
+Approved reference: [compact slip workspace and repeat-payment performance plan](../design/slip-workspace-review/README.md), with the isolated simulation retained on port 4187.
+
+17 October sponsor correction: [review contention and signed-payment recovery](delivery/sponsor-review-recovery.md) distinguishes the confirmed owner payment from unsigned review failure and records the queue/status changes.
+
+17 October terminal and payment upgrade: [match intelligence, background tracking and refundable storage](delivery/terminal-payment-upgrade.md) records the new experience, actual three-pick cost and the storage-sponsorship decision still needed.
+
+17 October payment correction: [market checkout and wallet continuity](delivery/checkout-route-correction.md) records the obsolete-entry fix, inline EVM reconnect, redesigned match details and full-application payment regression.
+
+17 October Overview update: [clear glass and CKB details](delivery/overview-glass-correction.md) records the reference-led match rows, blue side-panel reflections, shared Home/Draw/Away colours and jersey crests.
+
+17 October compact layout: [density correction](delivery/compact-layout-correction.md) records the owner's normal-zoom layout change, viewport-fitting navigation and verification.
+
+17 October local work: [My Account and restored navigation](delivery/account-navigation-correction.md) implements the approved account/slip proposal, restores all original destinations and fixes Telegram's optional-username confirmation. Follow the work tracker for verification and release evidence.
+
 Canonical foundation approved **15 October 2026**. Start with [status](../status.md), then the document governing the task. [AGENTS.md](../AGENTS.md) is the single contributor contract; tool-specific guidance should link to it instead of maintaining competing rules.
 
 Current implementation: the [atomic slip correction](delivery/atomic-slip-correction.md) adds one reviewed payment for up to eight independent predictions, same-transaction sponsored market creation, separate Wallet and Activity routes, and compact balance/address controls. The v4 contract is deployed on public testnet. All 47 local major-gate steps passed at 19:33 UTC on 16 October. The API, separate sponsor and lifecycle worker are active locally. Phone and desktop live-provider checks passed with no page errors, distinct Wallet/Activity routes and preserved drafts. Exact-candidate commit and push gates remain mandatory. Public deployment is not evidence of a public eight-prediction payment. Five, durable operation, physical-wallet checks, direct v4 Telegram notifications and community onboarding remain open.

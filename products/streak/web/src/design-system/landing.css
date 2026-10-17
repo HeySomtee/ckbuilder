@@ -10,7 +10,7 @@
   padding-inline: clamp(22px, 4vw, 56px);
 }
 .welcome-header {
-  min-height: 108px;
+  min-height: 80px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -20,7 +20,7 @@
 .welcome-brand {
   display: inline-flex;
   align-items: center;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: -1.8px;
   min-height: 44px;
@@ -69,8 +69,8 @@
   align-items: center;
   justify-content: center;
   gap: 24px;
-  padding: 16px 22px;
-  min-height: 52px;
+  padding: 12px 18px;
+  min-height: 44px;
   border: 1px solid var(--line-strong);
   border-radius: 14px;
   font-weight: 650;
@@ -115,7 +115,7 @@
   grid-template-columns: 1.1fr 1fr;
   align-items: center;
   gap: clamp(28px, 5vw, 74px);
-  padding-block: 86px 92px;
+  padding-block: 54px 64px;
 }
 .welcome-kicker,
 .welcome-label {
@@ -138,11 +138,11 @@
   border-radius: 50%;
 }
 .welcome-copy h1 {
-  font-size: clamp(56px, 6.7vw, 90px);
+  font-size: clamp(46px, 5.6vw, 72px);
   line-height: 0.98;
   font-weight: 650;
   letter-spacing: -0.065em;
-  margin: 25px 0 28px;
+  margin: 20px 0 22px;
 }
 .welcome h1 em,
 .welcome-finale em {
@@ -152,7 +152,7 @@
 .welcome-intro {
   max-width: 365px;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.8;
 }
 .welcome-actions {
@@ -512,7 +512,7 @@
 .welcome-section-heading h2,
 .welcome-five h2,
 .welcome-faq h2 {
-  font-size: clamp(32px, 4vw, 48px);
+  font-size: clamp(28px, 3.3vw, 40px);
   line-height: 1.08;
   letter-spacing: -2px;
   font-weight: 550;
@@ -761,7 +761,7 @@
   z-index: -1;
 }
 .welcome-finale h2 {
-  font-size: clamp(40px, 5vw, 68px);
+  font-size: clamp(34px, 4.2vw, 56px);
   line-height: 1.05;
   font-weight: 550;
   letter-spacing: -0.055em;
@@ -824,7 +824,7 @@
     padding-top: 60px;
   }
   .welcome-copy h1 {
-    font-size: clamp(54px, 7.2vw, 74px);
+    font-size: clamp(44px, 6vw, 60px);
   }
   .welcome-header nav {
     gap: 14px;
@@ -864,7 +864,7 @@
     gap: 38px;
   }
   .welcome-copy h1 {
-    font-size: clamp(56px, 11vw, 80px);
+    font-size: clamp(44px, 9vw, 60px);
   }
   .welcome-intro {
     max-width: 400px;
@@ -968,7 +968,7 @@
     display: none;
   }
   .welcome-copy h1 {
-    font-size: 53px;
+    font-size: 42px;
   }
   .welcome-kicker {
     font-size: 8px;
@@ -1003,7 +1003,7 @@
     padding-block: clamp(20px, 4svh, 32px) 56px;
   }
   .welcome-copy h1 {
-    font-size: clamp(44px, min(6.7vw, 10svh), 76px);
+    font-size: clamp(42px, min(5.6vw, 9svh), 64px);
     margin-block: 16px 18px;
   }
   .welcome-intro {
@@ -1022,7 +1022,7 @@
     grid-template-columns: 1fr;
   }
   .welcome-copy h1 {
-    font-size: clamp(44px, min(11vw, 9svh), 64px);
+    font-size: clamp(40px, min(9vw, 8svh), 56px);
   }
   .welcome-showcase {
     max-width: 480px;

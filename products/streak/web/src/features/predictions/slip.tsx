@@ -6,6 +6,9 @@ import type { DraftStore } from './draft';
 import type { Account } from '../account/api';
 import { useNow } from '../../lib/use-now';
 import { TeamBadge } from '../../components/team-badge';
+import { Notice } from '../../components/notice';
+import { subscribeWallet, getWalletState } from '../../lib/wallet';
+import './slip-workspace.css';
 const BatchCheckout = lazy(() =>
   import('../direct/batch-ui').then((module) => ({ default: module.BatchCheckout })),
 );
@@ -20,6 +23,7 @@ export function PredictionSlip({
   accountReady,
   onSignIn,
   signInPending,
+  onAddMatches,
 }: {
   store: DraftStore;
   open: boolean;
@@ -30,20 +34,32 @@ export function PredictionSlip({
   accountReady: boolean;
   onSignIn: () => void;
   signInPending: boolean;
+  onAddMatches?: () => void;
 }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { draft } = snapshot;
   const dialog = useRef<HTMLDialogElement>(null);
-  const title = useRef<HTMLHeadingElement>(null);
+  const closeControl = useRef<HTMLButtonElement>(null);
   const dock = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const focusFrame = useRef(0);
   const [confirmClear, setConfirmClear] = useState(false);
   const [checkoutWorking, setCheckoutWorking] = useState(false);
   const [checkoutOpened, setCheckoutOpened] = useState(false);
+  const [view, setView] = useState<'picks' | 'activity'>('picks');
+  const [activityTarget, setActivityTarget] = useState<HTMLDivElement | null>(null);
+  const [feedbackTarget, setFeedbackTarget] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (open) setCheckoutOpened(true);
+    if (open) setView('picks');
   }, [open]);
+  useEffect(() => {
+    setView('picks');
+    setConfirmClear(false);
+  }, [accountKey]);
+  const wallet = useSyncExternalStore(subscribeWallet, getWalletState);
+  useEffect(() => {
+    if (open || wallet.connection) setCheckoutOpened(true);
+  }, [open, wallet.connection]);
   const editingDisabled = snapshot.blocked || snapshot.conflict || checkoutWorking;
   const now = useNow(open);
   const details = useQueries({
@@ -82,7 +98,7 @@ export function PredictionSlip({
           ? document.activeElement
           : dock.current;
       element.showModal();
-      title.current?.focus({ preventScroll: true });
+      closeControl.current?.focus({ preventScroll: true });
     }
     if (!open && element.open) element.close();
   }, [open]);
@@ -153,7 +169,12 @@ export function PredictionSlip({
       >
         <header className="slip-head">
           <div className="slip-controls">
-            <button onClick={dismiss} aria-label="Close prediction slip" title="Close slip">
+            <button
+              ref={closeControl}
+              onClick={dismiss}
+              aria-label="Close prediction slip"
+              title="Close slip"
+            >
               <svg
                 viewBox="0 0 16 16"
                 fill="none"
@@ -167,24 +188,96 @@ export function PredictionSlip({
           </div>
           <div>
             <p className="eyebrow">YOUR PREDICTION SLIP</p>
-            <h2 ref={title} id="slip-title" tabIndex={-1}>
-              Make your calls.
+            <h2 id="slip-title">
+              Your slip <span className="slip-title-count">{draft.picks.length}</span>
             </h2>
           </div>
-        </header>
-        <div className="slip-body">
-          <div className="slip-summary">
-            <span className="slip-count">{draft.picks.length}</span>
-            <div>
-              <strong>
-                {draft.picks.length === 1
-                  ? 'One pick to start.'
-                  : `${draft.picks.length} picks. Your call.`}
-              </strong>
-              <p>Every prediction settles independently.</p>
+          <div className="slip-toolbar">
+            <div className="slip-tabs" role="tablist" aria-label="Slip views">
+              {(['picks', 'activity'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  id={`slip-${tab}-tab`}
+                  role="tab"
+                  aria-selected={view === tab}
+                  aria-controls={`slip-${tab}-panel`}
+                  tabIndex={view === tab ? 0 : -1}
+                  onClick={() => setView(tab)}
+                  onKeyDown={(event) => {
+                    if (['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+                      event.preventDefault();
+                      const next = tab === 'picks' ? 'activity' : 'picks';
+                      setView(next);
+                      document.getElementById(`slip-${next}-tab`)?.focus();
+                    }
+                  }}
+                >
+                  {tab === 'picks' ? (
+                    <>
+                      Picks <span>{draft.picks.length}</span>
+                    </>
+                  ) : (
+                    'Activity'
+                  )}
+                </button>
+              ))}
             </div>
-            <span className="slip-capacity">{draft.picks.length}/8</span>
+            <button
+              className="slip-add-more"
+              hidden={view !== 'picks'}
+              disabled={draft.picks.length >= 8 || editingDisabled}
+              onClick={() => {
+                dismiss();
+                onAddMatches?.();
+              }}
+            >
+              <span aria-hidden="true">+</span>{' '}
+              {draft.picks.length >= 8 ? 'Slip full' : 'Add matches'}
+            </button>
           </div>
+        </header>
+        <div
+          className="slip-body"
+          id="slip-picks-panel"
+          role="tabpanel"
+          aria-labelledby="slip-picks-tab"
+          hidden={view !== 'picks'}
+        >
+          <div className="slip-list-caption">
+            <span>{draft.picks.length} of 8 independent picks</span>
+            <button
+              className="clear-slip"
+              disabled={checkoutWorking || !draft.picks.length}
+              onClick={() => setConfirmClear(true)}
+            >
+              Clear slip
+            </button>
+          </div>
+          <div ref={setFeedbackTarget} />
+          {confirmClear && (
+            <Notice
+              title="Clear your slip?"
+              actions={
+                <>
+                  <button className="feedback-keep" onClick={() => setConfirmClear(false)}>
+                    Keep predictions
+                  </button>
+                  <button
+                    disabled={checkoutWorking}
+                    onClick={() => {
+                      store.clear();
+                      setConfirmClear(false);
+                    }}
+                  >
+                    Clear all predictions
+                  </button>
+                </>
+              }
+            >
+              Remove {draft.picks.length} saved {draft.picks.length === 1 ? 'pick' : 'picks'} from
+              this slip. Submitted payments stay in My activity.
+            </Notice>
+          )}
           {snapshot.warning && (
             <div className="notice" role="alert">
               <p>{snapshot.warning}</p>
@@ -203,7 +296,14 @@ export function PredictionSlip({
             <div className="slip-empty">
               <h3>A weekend of possibilities.</h3>
               <p>Choose home, draw or away on a market to start your slip.</p>
-              <button onClick={dismiss}>Explore matches</button>
+              <button
+                onClick={() => {
+                  dismiss();
+                  onAddMatches?.();
+                }}
+              >
+                Explore matches
+              </button>
             </div>
           )}
           <div className="slip-picks">
@@ -219,6 +319,22 @@ export function PredictionSlip({
                 <article key={pick.lineId} className="slip-pick">
                   <div className="slip-pick-heading">
                     <div>
+                      {market && (
+                        <span className="slip-crests" aria-hidden="true">
+                          <TeamBadge
+                            key={`home:${market.homeLogo ?? market.homeCode}`}
+                            logo={market.homeLogo}
+                            code={market.homeCode}
+                            side="home"
+                          />
+                          <TeamBadge
+                            key={`away:${market.awayLogo ?? market.awayCode}`}
+                            logo={market.awayLogo}
+                            code={market.awayCode}
+                            side="away"
+                          />
+                        </span>
+                      )}
                       <span className="eyebrow">
                         {market ? (
                           <time dateTime={market.kickoff}>
@@ -258,22 +374,6 @@ export function PredictionSlip({
                     </p>
                   )}
                   <div className="slip-pick-choice">
-                    {market && (
-                      <span className="slip-crests" aria-hidden="true">
-                        <TeamBadge
-                          key={`home:${market.homeLogo ?? market.homeCode}`}
-                          logo={market.homeLogo}
-                          code={market.homeCode}
-                          side="home"
-                        />
-                        <TeamBadge
-                          key={`away:${market.awayLogo ?? market.awayCode}`}
-                          logo={market.awayLogo}
-                          code={market.awayCode}
-                          side="away"
-                        />
-                      </span>
-                    )}
                     <span className="slip-choice">
                       {pick.outcome === 'draw'
                         ? 'Draw'
@@ -335,63 +435,35 @@ export function PredictionSlip({
               );
             })}
           </div>
-          {draft.picks.length > 0 && (
-            <button className="slip-add-more" onClick={dismiss}>
-              <span aria-hidden="true">+</span> Add more matches
-            </button>
-          )}
         </div>
-        <footer className="slip-footer">
-          {confirmClear ? (
-            <div className="notice" role="alert">
-              <p>Discard every prediction in this saved slip?</p>
-              <div className="slip-choices">
-                <button
-                  disabled={checkoutWorking}
-                  onClick={() => {
-                    store.clear();
-                    setConfirmClear(false);
-                  }}
-                >
-                  Clear all predictions
-                </button>
-                <button onClick={() => setConfirmClear(false)}>Keep predictions</button>
-              </div>
-            </div>
-          ) : null}
-          <div className="slip-total">
-            <span>Stake subtotal</span>
-            <strong>{total === null ? 'Check amounts' : `${displayShannons(total)} tCKB`}</strong>
-          </div>
+        <div
+          className="slip-body slip-activity"
+          id="slip-activity-panel"
+          role="tabpanel"
+          aria-labelledby="slip-activity-tab"
+          hidden={view !== 'activity'}
+          ref={setActivityTarget}
+        />
+        <footer className="slip-footer" hidden={view !== 'picks'}>
           <Suspense fallback={<p role="status">Loading payment...</p>}>
             {checkoutOpened && (
               <BatchCheckout
                 onDismiss={dismiss}
+                onOpen={onOpen}
                 store={store}
                 account={account}
                 accountReady={accountReady}
                 onSignIn={onSignIn}
                 signInPending={signInPending}
                 active={open}
+                activityTarget={activityTarget}
+                feedbackTarget={feedbackTarget}
+                view={view}
+                onActivity={() => setView('activity')}
                 onBusy={setCheckoutWorking}
               />
             )}
           </Suspense>
-
-          <div className="slip-footer-meta">
-            <span className="slip-save-state">
-              {snapshot.saved ? 'Saved on this device' : 'Draft in this tab'}
-            </span>
-            {draft.picks.length > 0 && (
-              <button
-                className="clear-slip"
-                disabled={checkoutWorking}
-                onClick={() => setConfirmClear(true)}
-              >
-                Clear slip
-              </button>
-            )}
-          </div>
         </footer>
       </dialog>
     </>

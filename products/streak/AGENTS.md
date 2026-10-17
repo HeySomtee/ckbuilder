@@ -17,8 +17,8 @@ The owner approved the Streak UI and architecture on **15 October 2026**, includ
 
 ## Product and trust boundaries
 
-- The current application is a custodial treasury-backed ledger. Wallet login and receipt publication do not make its betting balances non-custodial. Keep legacy liabilities and withdrawals separate from future direct-market positions.
-- The Week 20 Rust lab at `../../src/week20/contract-lab` is independent of this app. Its scripts own bounded market and claim rules; its browser demo is not an integration with the Streak backend.
+- Legacy balances use a custodial treasury-backed ledger. The Season app integrates direct testnet market positions with separate claims. Keep legacy liabilities and withdrawals separate from those positions; wallet login alone does not change custody.
+- The Week 20 Rust lab at `../../src/week20/contract-lab` retains its independent historical demo. The app's later versioned contracts and direct modules integrate bounded market and claim rules. Local integration and public payments do not establish hosted operator readiness.
 - The approved target gives CKB authority over new prediction funds and claims. The configured football oracle remains trusted for results. PostgreSQL owns identity, fantasy competition state and read models. A read model is never an entitlement to spend a cell.
 - Five, daily streaks, revivals, crews, badges and campaign awards remain application features initially. They cannot change contract principal, payouts or refunds. Campaign awards need a separately approved budget and published rules.
 - The preview is synthetic. Never reuse sample balances, fees, player scores, transaction success or fixture results as a production fallback.
@@ -49,6 +49,8 @@ The owner removed the Genie effect on 16 October. Use immediate slip opening and
 - Follow [engineering conventions](docs/engineering/conventions.md) and the [operations runbook](docs/operations/runbook.md). Test failure and recovery paths, including interrupted submissions and restarts, rather than only successful screenshots.
 
 ## Delivery and evidence
+
+Owner direction, 17 October 2026: the Week 21 release is explicitly authorized, including the report, screenshots, commit, push, review of outstanding PRs and integration into main for Render deployment. This supersedes the earlier commit/push pause for this release. Exact-candidate local gates still apply; hosted CI remains paused. Keep the account destination My Account and historical wallet deep links. Keep Streak Five clearly marked coming soon until its actual entry and scoring workflow exists. Additional campaign proposals need owner review; the proposed Founders Weekend was declined for this report.
 
 Owner override, 15 October 2026: hosted CI work is paused because GitHub jobs
 cannot start under the account billing lock. Local gates remain mandatory.

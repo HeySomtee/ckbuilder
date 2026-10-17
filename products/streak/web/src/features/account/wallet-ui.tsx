@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icon } from '../../components/icon';
+import { Notice } from '../../components/notice';
 import {
   assertWalletAccount,
   chooseWallet,
@@ -78,18 +79,42 @@ function capacityLabel(value: bigint | undefined, failed: boolean, connected: bo
 /** Compact, reusable navigation summary. It never connects a wallet by itself. */
 export function WalletSummary({ account, accountReady }: WalletProps) {
   const { connection, balance, address } = useWalletBalance(account, accountReady);
+  const reconnect = useMutation({
+    mutationFn: async () => {
+      await chooseWallet();
+      const selected = getWalletState().connection;
+      if (selected && account) await assertWalletAccount(selected, account.walletAddress);
+    },
+    retry: false,
+  });
   if (!address) return null;
   return (
     <div className="wallet-nav-summary" aria-label="Wallet summary">
-      <a
-        href={directHref()}
-        onClick={(event) => followDirect(event)}
-        aria-label="Open wallet overview"
-      >
-        <Icon name="wallet" />
-        <span>{capacityLabel(balance.data, balance.isError, !!connection)}</span>
-      </a>
+      {connection ? (
+        <a
+          href={directHref()}
+          onClick={(event) => followDirect(event)}
+          aria-label="Open My Account"
+        >
+          <Icon name="wallet" />
+          <span>{capacityLabel(balance.data, balance.isError, true)}</span>
+        </a>
+      ) : (
+        <button
+          className="wallet-nav-reconnect"
+          disabled={reconnect.isPending || !accountReady}
+          onClick={() => reconnect.mutate()}
+        >
+          <Icon name="wallet" />
+          {reconnect.isPending ? 'Connecting...' : 'Reconnect wallet'}
+        </button>
+      )}
       <CopyAddress address={address} compact />
+      {reconnect.error && (
+        <Notice tone="attention" title="Wallet connection needs attention">
+          {reconnect.error.message}
+        </Notice>
+      )}
     </div>
   );
 }
@@ -131,67 +156,69 @@ function TelegramPanel({
   }, [account?.telegramConnected]);
   const error = connect.error ?? unlink.error ?? (link ? confirmation.error : null);
   return (
-    <section className="glass wallet-telegram" aria-label="Telegram connection">
+    <section className="wallet-telegram" aria-label="Telegram connection">
       <div className="wallet-section-title">
         <span className="wallet-telegram-symbol" aria-hidden="true">
           ↗
         </span>
         <div>
-          <h2>Stay in the game</h2>
-          <p>Connect Telegram for Streak updates.</p>
+          <h2>Telegram</h2>
+          <p>Keep your Streak account connected.</p>
         </div>
       </div>
-      {account?.telegramConnected ? (
-        <>
-          <p className="wallet-connected">
-            Connected{account.telegramUsername ? ` as @${account.telegramUsername}` : ''}
+      <div className="wallet-telegram-actions">
+        {account?.telegramConnected ? (
+          <>
+            <p className="wallet-connected">
+              Connected{account.telegramUsername ? ` as @${account.telegramUsername}` : ''}
+            </p>
+            <button className="quiet" disabled={unlink.isPending} onClick={() => unlink.mutate()}>
+              {unlink.isPending ? 'Disconnecting...' : 'Disconnect Telegram'}
+            </button>
+          </>
+        ) : !account ? (
+          <button className="quiet" disabled={signInPending} onClick={onSignIn}>
+            Sign in to connect Telegram
+          </button>
+        ) : !account.telegramAvailable ? (
+          <p className="wallet-caption">Telegram connection is not available yet.</p>
+        ) : link && !expired ? (
+          <>
+            <a className="wallet-primary" href={link.url} target="_blank" rel="noreferrer">
+              Open Telegram
+            </a>
+            <p className="wallet-caption">
+              Tap Start in Telegram, then return here. This link expires in{' '}
+              {Math.max(1, Math.ceil((link.expiresAt - now) / 60_000))} min.
+            </p>
+            <button
+              className="quiet"
+              disabled={confirmation.isFetching}
+              onClick={() => void confirmation.refetch()}
+            >
+              Check connection
+            </button>
+          </>
+        ) : (
+          <>
+            {expired && (
+              <p className="wallet-caption">That link expired. Create a fresh one to continue.</p>
+            )}
+            <button
+              className="wallet-primary"
+              disabled={connect.isPending}
+              onClick={() => connect.mutate()}
+            >
+              {connect.isPending ? 'Preparing link...' : 'Connect Telegram'}
+            </button>
+          </>
+        )}
+        {error && (
+          <p className="wallet-error" role="alert">
+            {error.message}
           </p>
-          <button className="quiet" disabled={unlink.isPending} onClick={() => unlink.mutate()}>
-            {unlink.isPending ? 'Disconnecting...' : 'Disconnect Telegram'}
-          </button>
-        </>
-      ) : !account ? (
-        <button className="quiet" disabled={signInPending} onClick={onSignIn}>
-          Sign in to connect Telegram
-        </button>
-      ) : !account.telegramAvailable ? (
-        <p className="wallet-caption">Telegram connection is not available yet.</p>
-      ) : link && !expired ? (
-        <>
-          <a className="wallet-primary" href={link.url} target="_blank" rel="noreferrer">
-            Open Telegram
-          </a>
-          <p className="wallet-caption">
-            Tap Start in Telegram, then return here. This link expires in{' '}
-            {Math.max(1, Math.ceil((link.expiresAt - now) / 60_000))} min.
-          </p>
-          <button
-            className="quiet"
-            disabled={confirmation.isFetching}
-            onClick={() => void confirmation.refetch()}
-          >
-            Check connection
-          </button>
-        </>
-      ) : (
-        <>
-          {expired && (
-            <p className="wallet-caption">That link expired. Create a fresh one to continue.</p>
-          )}
-          <button
-            className="wallet-primary"
-            disabled={connect.isPending}
-            onClick={() => connect.mutate()}
-          >
-            {connect.isPending ? 'Preparing link...' : 'Connect Telegram'}
-          </button>
-        </>
-      )}
-      {error && (
-        <p className="wallet-error" role="alert">
-          {error.message}
-        </p>
-      )}
+        )}
+      </div>
     </section>
   );
 }
@@ -229,26 +256,56 @@ export function WalletOverview({
     retry: false,
   });
   return (
-    <section className="wallet-overview" aria-label="Wallet overview">
+    <section className="wallet-overview" aria-label="My Account overview">
       <header className="wallet-page-heading">
-        <p className="eyebrow">YOUR STREAK WALLET</p>
-        <h1>Wallet</h1>
-        <p>Manage your testnet CKB and stay close to the action.</p>
+        <div>
+          <p className="eyebrow">YOUR ACCOUNT</p>
+          <h1>My Account</h1>
+          <p>Your wallet, connections and preferences.</p>
+        </div>
+        <span className="wallet-network">CKB testnet</span>
       </header>
-      <div className="wallet-overview-grid">
-        <section className="glass wallet-funds" aria-label="Wallet balance and connection">
-          <div className="wallet-section-title">
-            <h2>Available balance</h2>
-            <span className="wallet-network">CKB testnet</span>
+      <div className="glass wallet-account-panel">
+        <section className="wallet-funds" aria-label="Wallet balance and connection">
+          <div className="wallet-account-top">
+            <span>
+              <Icon name="wallet" />
+              {connection ? 'Connected wallet' : 'Your wallet'}
+            </span>
+            {connection && (
+              <button
+                className="quiet wallet-disconnect"
+                disabled={busy}
+                onClick={() => disconnectWallet()}
+              >
+                Disconnect wallet
+              </button>
+            )}
           </div>
-          <strong className="wallet-capacity">
-            {capacityLabel(balance.data, balance.isError, !!connection)}
-          </strong>
-          {address && <CopyAddress address={address} />}
-          <p className="wallet-caption">
-            Spendable CKB in your wallet. Testnet tokens have no monetary value.
-          </p>
+          <div className="wallet-balance-row">
+            <div>
+              <h2 className="wallet-balance-label">Available balance</h2>
+              <strong className="wallet-capacity">
+                {capacityLabel(balance.data, balance.isError, !!connection)}
+              </strong>
+              <p className="wallet-caption">Spendable CKB. Test tokens have no monetary value.</p>
+            </div>
+            {address && (
+              <div className="wallet-identity">
+                <span>YOUR ADDRESS</span>
+                <CopyAddress address={address} />
+              </div>
+            )}
+          </div>
           <div className="wallet-action-row">
+            <a
+              className={connection ? 'wallet-primary' : 'quiet'}
+              href="https://faucet.nervos.org/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Get testnet CKB <Icon name="arrow" />
+            </a>
             {connection ? (
               <>
                 <button
@@ -257,9 +314,6 @@ export function WalletOverview({
                   onClick={() => void balance.refetch()}
                 >
                   {balance.isFetching ? 'Refreshing...' : 'Refresh balance'}
-                </button>
-                <button className="quiet" disabled={busy} onClick={() => disconnectWallet()}>
-                  Disconnect wallet
                 </button>
               </>
             ) : (
@@ -271,9 +325,6 @@ export function WalletOverview({
                 {connect.isPending ? 'Connecting...' : 'Connect testnet wallet'}
               </button>
             )}
-            <a className="quiet" href="https://faucet.nervos.org/" target="_blank" rel="noreferrer">
-              Get testnet CKB <span aria-hidden="true">↗</span>
-            </a>
           </div>
           {!connection && account && (
             <p className="wallet-caption">
@@ -297,25 +348,29 @@ export function WalletOverview({
           onSignIn={onSignIn}
           signInPending={signInPending}
         />
+        <div className="wallet-shortcuts">
+          <button onClick={onActivity}>
+            <Icon name="activity" />
+            <span>
+              <strong>Your predictions</strong>
+              <small>Results, payouts and refunds</small>
+            </span>
+            <Icon name="arrow" />
+          </button>
+          <button onClick={onRecovery}>
+            <Icon name="shield" />
+            <span>
+              <strong>Transaction recovery</strong>
+              <small>Resume a saved transaction</small>
+            </span>
+            <Icon name="arrow" />
+          </button>
+        </div>
       </div>
-      <div className="wallet-shortcuts">
-        <button className="glass" onClick={onActivity}>
-          <Icon name="activity" />
-          <span>
-            <strong>Your predictions</strong>
-            <small>Results, payouts and refunds</small>
-          </span>
-          <Icon name="arrow" />
-        </button>
-        <button className="glass" onClick={onRecovery}>
-          <Icon name="shield" />
-          <span>
-            <strong>Transaction recovery</strong>
-            <small>Resume a saved transaction</small>
-          </span>
-          <Icon name="arrow" />
-        </button>
-      </div>
+      <p className="wallet-security-note">
+        <Icon name="shield" />
+        Your wallet approves each payment. Streak never asks for your seed phrase.
+      </p>
     </section>
   );
 }

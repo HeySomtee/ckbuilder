@@ -73,11 +73,8 @@ async function exclusive<T>(name: string, action: () => Promise<T>): Promise<T> 
     throw Error(
       'This browser cannot safely coordinate wallet submissions. Use a browser with Web Locks support.',
     );
-  return navigator.locks.request(name, { mode: 'exclusive', ifAvailable: true }, async (lock) => {
-    if (!lock)
-      throw Error('Another Streak tab is using this wallet. Finish that submission first.');
-    return action();
-  });
+  // Recovery also writes the journal. Queue it with submissions, including across tabs.
+  return navigator.locks.request(name, { mode: 'exclusive' }, action);
 }
 async function walletMode(client: ccc.Client, lock: ccc.Script) {
   const native = await ccc.Script.fromKnownScript(
@@ -470,6 +467,7 @@ export class BatchClient {
     review: BatchReview,
     currentFixtures: readonly BatchFixture[],
     sourcePicks?: readonly Pick[],
+    onStage?: (stage: 'wallet' | 'saving') => void,
   ): Promise<BatchRecord> {
     const identity = await this.identity();
     return this.lock(`streak-direct:${identity.ownerHash}`, async () => {
@@ -515,7 +513,9 @@ export class BatchClient {
         review.expiresAt,
       );
       await this.verify(review.offer);
+      onStage?.('wallet');
       const signed = await this.signer.signTransaction(intent.tx.clone());
+      onStage?.('saving');
       assertOwnerSigned(intent.tx, signed);
       if (signed.estimateFee(1000n) > BigInt(review.feeShannons))
         throw Error('The signature exceeds the reviewed fee. Nothing was submitted.');
@@ -561,7 +561,7 @@ export class BatchClient {
     const identity = await this.identity();
     return this.lock(`streak-direct:${identity.ownerHash}`, async () => {
       let record = await this.saved(raw);
-      const previous = await this.recover(record);
+      const previous = await this.recoverUnlocked(record);
       record = previous.record;
       if (
         ['submitted', 'committed', 'confirmed', 'conflict', 'resolved', 'discarded'].includes(
@@ -608,7 +608,7 @@ export class BatchClient {
       } catch {
         await this.journal.put({ ...record, status: 'unknown' });
       }
-      return this.recover(record);
+      return this.recoverUnlocked(record);
     });
   }
   private async acceptStatus(
@@ -637,6 +637,10 @@ export class BatchClient {
     return record;
   }
   async recover(raw: BatchRecord): Promise<BatchRecovery> {
+    const identity = await this.identity();
+    return this.lock(`streak-direct:${identity.ownerHash}`, () => this.recoverUnlocked(raw));
+  }
+  private async recoverUnlocked(raw: BatchRecord): Promise<BatchRecovery> {
     let record = await this.saved(raw);
     if (record.status === 'discarded')
       return {
@@ -815,7 +819,7 @@ export class BatchClient {
           );
       }
       await this.journal.put({ ...record, status: 'resolved', conflictProof: proof });
-      return this.recover(record);
+      return this.recoverUnlocked(record);
     });
   }
   async discardUnsubmitted(raw: BatchRecord): Promise<BatchRecovery> {
@@ -846,7 +850,7 @@ export class BatchClient {
         discardedAt: this.now(),
       };
       await this.journal.put(discarded);
-      return this.recover(discarded);
+      return this.recoverUnlocked(discarded);
     });
   }
 }

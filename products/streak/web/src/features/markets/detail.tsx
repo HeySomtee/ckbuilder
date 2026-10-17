@@ -3,13 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { getPublicMarket } from '../predictions/api';
 import { displayShannons } from '../predictions/draft';
 import type { Outcome } from '../predictions/draft';
-import { outcomes, formatCkb } from './api';
+import { outcomes } from './api';
 import type { Market } from './api';
 import { TeamBadge } from '../../components/team-badge';
+import { Icon } from '../../components/icon';
+import { Notice } from '../../components/notice';
 import { useNow } from '../../lib/use-now';
-import { directHref, followDirect } from '../../lib/direct-route';
-import { useDirectCatalogue, useDemandAvailability } from '../direct/availability';
-import { acceptsPayment } from '../direct/availability-api';
+import { getEntryAvailability } from '../direct/availability-api';
+import { PoolChart } from './pool-chart';
+import { currentPool, getPublicPools, poolLabel } from './pools';
+import './match-room.css';
+import { MatchIntelligence, PoolComposition } from './intelligence';
 
 export function MarketDetail({
   id,
@@ -31,9 +35,25 @@ export function MarketDetail({
     refetchIntervalInBackground: false,
     retry: 1,
   });
+  const payment = useQuery({
+    queryKey: ['match-payment', detail.data?.market.matchId],
+    queryFn: ({ signal }) => getEntryAvailability(detail.data!.market.matchId, signal),
+    enabled: !!detail.data,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    retry: false,
+  });
   const now = useNow(true);
-  const catalogue = useDirectCatalogue();
-  const demand = useDemandAvailability(detail.data ? [detail.data.market.matchId] : []);
+  const pool = useQuery({
+    queryKey: ['direct-pool', detail.data?.market.matchId],
+    queryFn: async ({ signal }) => (await getPublicPools([detail.data!.market.matchId], signal))[0],
+    enabled: !!detail.data,
+    staleTime: 10_000,
+    refetchInterval: (query) => (query.state.data?.state === 'loading' ? 3_000 : 20_000),
+    refetchIntervalInBackground: false,
+    retry: false,
+  });
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
   }, [detail.data?.market.id]);
@@ -46,276 +66,258 @@ export function MarketDetail({
         </button>
         <h1>{detail.isPending ? 'Loading your match...' : 'This market could not be loaded'}</h1>
         {detail.isError && (
-          <>
-            <p role="alert">{detail.error.message}</p>
-            <button onClick={() => void detail.refetch()}>Retry market</button>
-          </>
+          <Notice
+            title="Try loading the match again"
+            tone="attention"
+            actions={<button onClick={() => void detail.refetch()}>Retry market</button>}
+          >
+            {detail.error.message}
+          </Notice>
         )}
       </section>
     );
   const { market, terms } = data;
-  const contract =
-    (!catalogue.isError
-      ? catalogue.data?.find((row) => row.fixtureId === market.matchId && row.entryEnabled)
-      : undefined) ?? demand.data?.find((row) => row.fixtureId === market.matchId);
-  const payable = !!contract && acceptsPayment(contract, now);
   const accepting =
     data.accepting &&
     now < Date.parse(terms.closesAt) &&
     now < Date.parse(terms.kickoff) &&
     !detail.isError;
-  const labels = { home: market.home, draw: 'Draw', away: market.away };
-  const marketState = accepting
+  const state = accepting
     ? 'Open for predictions'
     : market.status === 'resolved'
       ? 'Resolved'
       : market.status === 'void'
-        ? 'Void'
-        : market.fixtureStatus === 'scheduled'
-          ? 'Locked'
-          : market.fixtureStatus;
-  const closesAt = new Date(Math.min(Date.parse(terms.closesAt), Date.parse(terms.kickoff)));
+        ? 'Voided'
+        : 'Predictions closed';
+  const dateLabel = new Date(market.kickoff).toLocaleString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const names = { home: 'Home', draw: 'Draw', away: 'Away' };
   return (
-    <section className="market-detail" aria-label="Market detail">
-      <div className="detail-page-head">
-        <div>
-          <p className="eyebrow">{market.competition}</p>
-          <h1 ref={heading} tabIndex={-1}>
-            {market.home} vs {market.away}
-          </h1>
-          <p>The match, the crowd and your call.</p>
-          {payable && (
-            <a className="quiet" href={directHref(id)} onClick={(event) => followDirect(event, id)}>
-              Open wallet payment ↗
-            </a>
-          )}
-        </div>
-        <button className="quiet detail-back" onClick={onBack}>
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            aria-hidden="true"
-          >
-            <path d="M19 12H5m6-6-6 6 6 6" />
-          </svg>
-          Back to markets
+    <section className="market-detail match-room" aria-label="Market detail">
+      <div className="match-breadcrumb">
+        <button className="quiet" onClick={onBack}>
+          ← Back to markets
         </button>
+        <span>{market.competition}</span>
+        <span>Match market</span>
       </div>
-      {detail.isError && (
-        <div className="notice error" role="alert">
-          The refresh failed. Review is unavailable until this market refreshes.{' '}
-          <button onClick={() => void detail.refetch()}>Retry market</button>
+      <header className="glass match-scoreboard">
+        <div className="detail-match-meta">
+          <span className={`detail-status ${accepting ? 'is-open' : ''}`}>
+            <i aria-hidden="true" />
+            {state}
+          </span>
+          <time dateTime={market.kickoff}>{dateLabel} · Local time</time>
         </div>
-      )}
-      <div className="detail-layout">
-        <div className="detail-context">
-          <div className="glass detail-match">
-            <div className="detail-match-meta">
-              <span className={`detail-status ${accepting ? 'is-open' : ''}`}>
-                <i aria-hidden="true" />
-                {marketState}
-              </span>
-              <time dateTime={market.kickoff}>
-                {new Date(market.kickoff).toLocaleString('en-GB', {
-                  weekday: 'short',
-                  day: 'numeric',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </time>
-            </div>
-            <div className="detail-crests">
-              <div className="detail-team">
-                <TeamBadge
-                  key={market.homeLogo}
-                  logo={market.homeLogo}
-                  code={market.homeCode}
-                  side="home"
-                />
-                <strong>{market.home}</strong>
-              </div>
-              <div className="detail-versus">
-                <small>{market.fixtureStatus === 'scheduled' ? 'PRE-MATCH' : 'MATCH'}</small>
-                <span>vs</span>
-              </div>
-              <div className="detail-team">
-                <TeamBadge
-                  key={market.awayLogo}
-                  logo={market.awayLogo}
-                  code={market.awayCode}
-                  side="away"
-                />
-                <strong>{market.away}</strong>
-              </div>
-            </div>
-            <div className="detail-stats">
-              <div>
-                <span>Legacy pool</span>
-                <strong>{formatCkb(market.totalPoolCkb)} tCKB</strong>
-              </div>
-              <div>
-                <span>Predictions</span>
-                <strong>{market.totalBets}</strong>
-              </div>
-            </div>
-            <p className="detail-local-time">Kickoff shown in your local time.</p>
+        <div className="match-identity">
+          <TeamBadge logo={market.homeLogo} code={market.homeCode} side="home" />
+          <div>
+            <p className="eyebrow">{market.competition} · FULL TIME RESULT</p>
+            <h1 ref={heading} tabIndex={-1}>
+              {market.home} <span>vs</span> {market.away}
+            </h1>
+            <p>90 minutes. Three outcomes. Your call.</p>
           </div>
-          <section className="glass detail-pool">
-            <p className="eyebrow">THE CROWD'S CALL</p>
-            <h2>How the pool is leaning.</h2>
-            <p>These percentages describe the legacy ledger pool, not the direct contract pool.</p>
-            <div className="detail-pool-rows">
-              {outcomes.map((outcome) => (
-                <div className={`detail-pool-row ${outcome}`} key={outcome}>
-                  <div>
-                    <span>{labels[outcome]}</span>
-                    <strong>{Math.round(market.prices[outcome] * 100)}%</strong>
-                  </div>
-                  <div className="detail-pool-track" aria-hidden="true">
-                    <span style={{ width: `${market.prices[outcome] * 100}%` }} />
-                  </div>
-                </div>
-              ))}
+          <TeamBadge logo={market.awayLogo} code={market.awayCode} side="away" />
+        </div>
+        <div className="match-facts">
+          <span>
+            <Icon name="shield" /> CKB testnet
+          </span>
+          <span>Independent settlement</span>
+          <span>Regulation time only</span>
+        </div>
+      </header>
+      {detail.isError && (
+        <Notice
+          title="Match refresh paused"
+          tone="attention"
+          actions={<button onClick={() => void detail.refetch()}>Retry market</button>}
+        >
+          Refresh this match before adding another prediction. Your existing slip is saved.
+        </Notice>
+      )}
+      <div className="match-room-grid">
+        <div className="match-analysis">
+          <PoolChart
+            key={market.id}
+            market={market}
+            pool={pool.isError ? undefined : currentPool(pool.data, now)}
+            loading={pool.isPending}
+          />
+          <MatchIntelligence
+            market={market}
+            pool={pool.isError ? undefined : currentPool(pool.data, now)}
+          />
+          <section className="glass match-explainer">
+            <h2>From your call to the final whistle</h2>
+            <div>
+              <p>
+                <span>01</span>
+                <strong>Choose your side</strong>Home, draw or away. Add other matches to the same
+                slip.
+              </p>
+              <p>
+                <span>02</span>
+                <strong>Review one payment</strong>Check the stake, refundable storage and network
+                fee before signing.
+              </p>
+              <p>
+                <span>03</span>
+                <strong>Collect your return</strong>Each prediction settles on its own. Follow it in
+                My activity.
+              </p>
             </div>
-            <small>Pool percentages are not fixed odds or guaranteed returns.</small>
           </section>
         </div>
-        <aside className="glass detail-rules">
-          <p className="eyebrow">WHAT'S YOUR CALL?</p>
-          <h2>Pick your side.</h2>
-          <p>Choose one outcome. Build your slip with independent predictions.</p>
-          <p className="notice" role="status">
-            {catalogue.isError
-              ? 'Payment availability could not be checked. Your draft remains saved.'
-              : catalogue.isPending
-                ? 'Checking payment availability...'
-                : payable
-                  ? contract?.funding === 'sponsored'
-                    ? 'Your first prediction opens this market in the same transaction. Streak covers the 3,050 tCKB setup reserve. You pay your stake, 321 tCKB recoverable storage and the network fee.'
-                    : 'Funded contract. Choose a side, then continue to payment in your slip. Wallet review checks remaining space and time. Minimum 100 tCKB plus 321 tCKB recoverable storage and a network fee.'
-                  : 'This fixture is available for saved picks only. It has no open funded contract for payment.'}
-          </p>
-          <div className="detail-outcomes">
-            {outcomes.map((outcome) => (
-              <button
-                key={outcome}
-                aria-pressed={selected === outcome}
-                disabled={!accepting}
-                onClick={() => onPick(market, outcome)}
-              >
-                <span>{outcome === 'home' ? 'Home' : outcome === 'draw' ? 'Draw' : 'Away'}</span>
-                <strong>{Math.round(market.prices[outcome] * 100)}%</strong>
-                {selected === outcome && (
-                  <svg
-                    className="detail-selected"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    aria-hidden="true"
-                  >
-                    <path d="m4 8 3 3 5-6" />
-                  </svg>
-                )}
-              </button>
-            ))}
-          </div>
-          {!accepting && (
-            <p className="notice">
-              This market is not accepting new predictions. You can still inspect its pool and
-              rules.
-            </p>
-          )}
-          <dl className="detail-terms">
-            <div>
-              <dt>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  aria-hidden="true"
+        <div className="match-side-column">
+          <aside className="glass match-order" aria-label="Choose your prediction">
+            <p className="eyebrow">MAKE YOUR CALL</p>
+            <h2>Who takes it?</h2>
+            <p>Choose an outcome to open your slip.</p>
+            <div className="detail-outcomes">
+              {outcomes.map((side) => (
+                <button
+                  key={side}
+                  className="outcome-glass"
+                  data-outcome={side}
+                  aria-pressed={selected === side}
+                  disabled={!accepting}
+                  onClick={() => onPick(market, side)}
                 >
-                  <circle cx="12" cy="12" r="8" />
-                  <path d="M12 7v5l3 2" />
-                </svg>
-                Predictions close
-              </dt>
-              <dd>
-                <time dateTime={closesAt.toISOString()}>
-                  {closesAt.toLocaleString('en-GB', {
+                  <span>{names[side]}</span>
+                  <strong>
+                    {poolLabel(
+                      pool.isError ? undefined : pool.data,
+                      side,
+                      side === 'home' ? '1' : side === 'draw' ? 'X' : '2',
+                    )}
+                  </strong>
+                  {selected === side && (
+                    <i className="outcome-selected" aria-hidden="true">
+                      ✓
+                    </i>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="match-outcome-key">
+              <span>1 · {market.home}</span>
+              <span>X · Draw</span>
+              <span>2 · {market.away}</span>
+            </div>
+            {pool.data?.state === 'ready' && (
+              <p className="pool-share-caption">
+                Pool share: each side's stake divided by the total pool. Returns change as
+                predictions arrive.
+              </p>
+            )}
+            {!accepting ? (
+              <Notice title="Predictions are closed">
+                You can still view this market and follow existing predictions in My activity.
+              </Notice>
+            ) : payment.isError ? (
+              <Notice
+                title="Payment check needs a retry"
+                tone="attention"
+                actions={<button onClick={() => void payment.refetch()}>Check again</button>}
+              >
+                Your slip is safe. We could not check availability for this match.
+              </Notice>
+            ) : payment.isPending ? (
+              <p className="match-availability" role="status">
+                Checking payment availability...
+              </p>
+            ) : payment.data?.available ? (
+              <Notice
+                title={
+                  payment.data.state === 'available'
+                    ? 'Market setup is on us'
+                    : 'Ready for your prediction'
+                }
+              >
+                {payment.data.state === 'available'
+                  ? 'Your first bet opens the market in the same payment. Streak covers setup.'
+                  : 'Add your pick and review the payment in your slip.'}
+              </Notice>
+            ) : (
+              <Notice
+                title={
+                  payment.data?.state === 'confirming' || payment.data?.state === 'reserved'
+                    ? 'A payment is being confirmed'
+                    : 'Payment is temporarily unavailable'
+                }
+                tone="attention"
+                actions={<button onClick={() => void payment.refetch()}>Check again</button>}
+              >
+                You can save your pick while availability refreshes.
+              </Notice>
+            )}
+            <dl className="match-payment-facts">
+              <div>
+                <dt>Minimum stake</dt>
+                <dd>
+                  {payment.data?.minimum
+                    ? `${displayShannons(payment.data.minimum)} tCKB`
+                    : 'Shown at review'}
+                </dd>
+              </div>
+              <div>
+                <dt>Recoverable storage</dt>
+                <dd>
+                  {payment.data?.storage
+                    ? `${displayShannons(payment.data.storage)} tCKB / pick`
+                    : 'Shown at review'}
+                </dd>
+              </div>
+              <div>
+                <dt>Network fee</dt>
+                <dd>Exact amount at review</dd>
+              </div>
+              <div>
+                <dt>Predictions close</dt>
+                <dd>
+                  {new Date(
+                    Math.min(Date.parse(terms.closesAt), Date.parse(terms.kickoff)),
+                  ).toLocaleString('en-GB', {
                     day: 'numeric',
                     month: 'short',
                     hour: '2-digit',
                     minute: '2-digit',
                   })}
-                </time>{' '}
-                · Local time
-              </dd>
-            </div>
-            <div>
-              <dt>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  aria-hidden="true"
-                >
-                  <path d="M4 6h14a2 2 0 0 1 2 2v11H4V6Zm0 0 12-3v3M16 11h4v4h-4z" />
-                </svg>
-                Legacy stake limits
-              </dt>
-              <dd>
-                {displayShannons(terms.minimumShannons)} to {displayShannons(terms.maximumShannons)}{' '}
-                tCKB per prediction.
-              </dd>
-            </div>
-            <div>
-              <dt>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  aria-hidden="true"
-                >
-                  <path d="m12 3 8 3v5c0 5-8 10-8 10S4 16 4 11V6l8-3Z" />
-                  <path d="m8 11 3 3 5-5" />
-                </svg>
-                Legacy pool fees
-              </dt>
-              <dd>
-                {terms.protocolFeeBps / 100}% protocol + {terms.creatorFeeBps / 100}% creator,
-                deducted from the losing pool.
-              </dd>
-            </div>
-          </dl>
-          <details className="detail-settlement">
-            <summary>
-              Settlement and fee rules <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              Winning positions share the losing pool after fees. These fees are not added to your
-              draft total. Void markets refund stakes under the existing ledger rules.
-            </p>
-            <p>
-              These markets currently use Streak's custodial treasury and account ledger. The
-              configured football reporter supplies results. Funded testnet contracts have separate
-              pools and rules, shown in full during wallet payment.
-            </p>
-          </details>
-          <p className="detail-draft-note">
-            Saving a pick does not place a bet. On funded matches, continue from the slip to review
-            and sign a wallet payment. Follow confirmation in Activity.
-          </p>
-          <a className="market-link" href={`/index.html#market/${encodeURIComponent(market.id)}`}>
-            Open legacy market activity <span aria-hidden="true">↗</span>
-          </a>
-        </aside>
+                </dd>
+              </div>
+            </dl>
+            <details className="detail-settlement">
+              <summary>
+                How settlement works <span aria-hidden="true">+</span>
+              </summary>
+              <p>
+                The configured football reporter supplies the full-time result. Winning positions
+                share the losing pool after the contract's fees. Your payment review shows the exact
+                terms before you sign.
+              </p>
+              <p>
+                If no valid result is submitted within six hours after scheduled kickoff, the market
+                can be cancelled. Once cancellation is confirmed, you can claim your stake and
+                storage back without pool fees.
+              </p>
+              <p>Testnet CKB has no monetary value.</p>
+            </details>
+            <a className="market-link" href={`/index.html#market/${encodeURIComponent(market.id)}`}>
+              View legacy ledger activity <Icon name="arrow" />
+            </a>
+          </aside>
+          <PoolComposition
+            market={market}
+            pool={pool.isError ? undefined : currentPool(pool.data, now)}
+          />
+        </div>
       </div>
     </section>
   );

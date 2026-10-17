@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Account } from '../account/api';
-import { amountShannons, displayShannons } from '../predictions/draft';
+import { amountShannons, displayShannons, totalShannons } from '../predictions/draft';
 import type { DraftStore, Pick } from '../predictions/draft';
 import {
   assertActiveWallet,
@@ -15,6 +16,9 @@ import { useNow } from '../../lib/use-now';
 import { getBatchConfig, batchTransport } from './batch-api';
 import type { BatchClient, BatchReview, BatchRecovery } from './batch-client';
 import type { BatchRecord } from './batch-journal';
+import { Notice } from '../../components/notice';
+import { PaymentSummary } from './payment-invoice';
+import { PaymentProgress, PaymentButtonState, type PaymentStage } from './payment-progress';
 
 const money = (value: string | bigint) => `${displayShannons(value)} tCKB`;
 const explorer = (hash: string) => `https://pudge.explorer.nervos.org/transaction/${hash}`;
@@ -74,7 +78,9 @@ export function BatchTransaction({
     if (status && ['submitted', 'committed', 'confirmed'].includes(status) && record.sourcePicks)
       draftStore?.retireSubmitted(record.sourcePicks);
   }, [status, record.sourcePicks, draftStore]);
-  const error = recovery.error ?? resume.error ?? resolve.error ?? discard.error;
+  const acknowledged = !!status && ['submitted', 'committed', 'confirmed'].includes(status);
+  const error =
+    recovery.error ?? (acknowledged ? null : (resume.error ?? resolve.error ?? discard.error));
   const busy = resume.isPending || resolve.isPending || discard.isPending;
   return (
     <article className="batch-transaction" aria-label="Combined prediction payment">
@@ -92,7 +98,9 @@ export function BatchTransaction({
                 ? 'Submitted'
                 : status === 'resolved' || status === 'discarded'
                   ? 'Not paid'
-                  : 'Check payment'}
+                  : status === 'awaiting-sponsor' && current.submissionAttemptedAt
+                    ? 'Checking'
+                    : 'Check payment'}
         </span>
       </div>
       <ul>
@@ -163,6 +171,64 @@ export function BatchTransaction({
   );
 }
 
+function SlipReceipt({
+  record,
+  client,
+  active,
+  refresh,
+  draftStore,
+}: {
+  record: BatchRecord;
+  client: BatchClient;
+  active: boolean;
+  refresh: () => void;
+  draftStore: DraftStore;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <details
+      className="slip-receipt"
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary>
+        <span>
+          <strong>
+            {record.offer.lines.length}{' '}
+            {record.offer.lines.length === 1 ? 'prediction' : 'predictions'}
+          </strong>
+          <time dateTime={new Date(record.createdAt).toISOString()}>
+            {new Date(record.createdAt).toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'short',
+            })}
+          </time>
+        </span>
+        <p>{record.offer.lines.map((line) => line.fixture.label).join(' · ')}</p>
+        <span>
+          {money(record.offer.principalShannons)} in stakes <small>Receipt &amp; status ↗</small>
+        </span>
+      </summary>
+      {expanded && (
+        <>
+          <BatchTransaction
+            record={record}
+            client={client}
+            active={active}
+            refresh={refresh}
+            draftStore={draftStore}
+          />
+          <div className="receipt-costs">
+            <p>Refundable storage: {money(record.offer.storageShannons)}</p>
+            <p>Network fee: {money(record.offer.feeShannons)}</p>
+            <p>Returned storage is claimed after settlement; a claim network fee applies.</p>
+          </div>
+        </>
+      )}
+    </details>
+  );
+}
+
 export function BatchCheckout({
   store,
   account,
@@ -172,6 +238,11 @@ export function BatchCheckout({
   active,
   onBusy,
   onDismiss,
+  onOpen,
+  activityTarget,
+  feedbackTarget,
+  view = 'picks',
+  onActivity,
 }: {
   store: DraftStore;
   account: Account | null;
@@ -181,6 +252,11 @@ export function BatchCheckout({
   active: boolean;
   onBusy: (busy: boolean) => void;
   onDismiss?: () => void;
+  onOpen?: () => void;
+  activityTarget?: HTMLElement | null;
+  feedbackTarget?: HTMLElement | null;
+  view?: 'picks' | 'activity';
+  onActivity?: () => void;
 }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const wallet = useSyncExternalStore(subscribeWallet, getWalletState);
@@ -192,6 +268,16 @@ export function BatchCheckout({
     null,
   );
   const signing = useRef(false);
+  const identityRef = useRef(identityKey);
+  identityRef.current = identityKey;
+  const [saved, setSaved] = useState<{ record: BatchRecord; identityKey: string } | null>(null);
+  const [dismissedHash, setDismissedHash] = useState('');
+  const [walletStep, setWalletStep] = useState<'preparing' | 'wallet' | 'saving'>('preparing');
+  useEffect(() => {
+    setSaved(null);
+    setReceipt(null);
+    setDismissedHash('');
+  }, [identityKey]);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   const now = useNow(active);
   const config = useQuery({
@@ -205,7 +291,7 @@ export function BatchCheckout({
   });
   const linked = useQuery({
     queryKey: ['direct-private', identityKey, 'batch-client'],
-    enabled: !!connection && accountReady && active,
+    enabled: !!connection && accountReady,
     queryFn: async () => {
       if (!connection) throw Error('Connect your wallet to continue.');
       await assertActiveWallet(connection);
@@ -219,7 +305,47 @@ export function BatchCheckout({
     staleTime: Infinity,
     retry: false,
   });
-  const reconnect = useMutation({ mutationFn: chooseWallet, retry: false });
+  const reconnect = useMutation({
+    mutationFn: async () => {
+      await chooseWallet();
+      const selected = getWalletState().connection;
+      if (selected && account) await assertWalletAccount(selected, account.walletAddress);
+    },
+    retry: false,
+  });
+  const history = useQuery({
+    queryKey: ['direct-private', identityKey, 'batch-background-history'],
+    enabled: !!linked.data && !!account && !saved && !signing.current,
+    queryFn: async () => {
+      const rows = await linked.data!.history();
+      const ordered = rows
+        .filter((row) => !['discarded', 'resolved'].includes(row.status))
+        .sort((a, b) => b.createdAt - a.createdAt);
+      // Pending signatures take precedence. Activity retains the full archive.
+      const candidates = ordered.filter((row) => row.status !== 'committed').slice(0, 1);
+      if (!candidates.length && ordered[0]) candidates.push(ordered[0]);
+      for (const row of candidates) {
+        const recovery = await linked.data!.recover(row);
+        if (!['confirmed', 'resolved', 'discarded'].includes(recovery.status)) return recovery;
+      }
+      return null;
+    },
+    staleTime: Infinity,
+    retry: false,
+  });
+  const archive = useQuery({
+    queryKey: ['direct-private', identityKey, 'batch-slip-activity'],
+    queryFn: () => linked.data!.history(),
+    enabled: active && view === 'activity' && !!linked.data && !!account,
+    staleTime: 10_000,
+    retry: false,
+  });
+  useEffect(() => {
+    if (history.data && !saved && !signing.current) {
+      setSaved({ record: history.data.record, identityKey });
+      setReceipt({ result: history.data, identityKey });
+    }
+  }, [history.data, saved, identityKey]);
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['direct-private'] });
     void queryClient.invalidateQueries({ queryKey: ['private', 'wallet-balance'] });
@@ -239,6 +365,13 @@ export function BatchCheckout({
       throw Error('Your wallet or account changed. Review the slip again.');
   };
   const prepare = useMutation({
+    onMutate: () => {
+      submit.reset();
+      setSaved(null);
+      setReceipt(null);
+      setDismissedHash('');
+      queryClient.setQueryData(['direct-private', identityKey, 'batch-background-history'], null);
+    },
     mutationFn: async (input: { stamp: string; identityKey: string }) => {
       if (!connection || !linked.data || !account)
         throw Error('Sign in with your wallet to continue.');
@@ -294,6 +427,7 @@ export function BatchCheckout({
       if (signing.current || !connection || !linked.data || !account)
         throw Error('Connect your wallet and review your slip.');
       signing.current = true;
+      setWalletStep('preparing');
       try {
         assertDraft(input.stamp);
         assertAccount();
@@ -308,10 +442,20 @@ export function BatchCheckout({
           if (!fixture) throw Error('A match is no longer available. Review your slip again.');
           return fixture;
         });
-        const record = await linked.data.signAndPersist(input.review, current, input.picks);
+        const record = await linked.data.signAndPersist(
+          input.review,
+          current,
+          input.picks,
+          (step) => {
+            if (identityRef.current === input.identityKey) setWalletStep(step);
+          },
+        );
+        if (identityRef.current === input.identityKey)
+          setSaved({ record, identityKey: input.identityKey });
         refresh();
         await assertActiveWallet(connection);
         assertAccount();
+        onDismiss?.();
         const result = await linked.data.submit(record);
         if (
           getWalletState().connection === connection &&
@@ -336,28 +480,188 @@ export function BatchCheckout({
     },
   });
   const working = prepare.isPending || submit.isPending;
+  const editingLocked =
+    prepare.isPending || (submit.isPending && saved?.identityKey !== identityKey);
   useEffect(() => {
-    onBusy(working);
+    onBusy(editingLocked);
     return () => onBusy(false);
-  }, [working, onBusy]);
+  }, [editingLocked, onBusy]);
+  const result = receipt?.identityKey === identityKey ? receipt.result : null;
+  const currentRecord = saved?.identityKey === identityKey ? saved.record : result?.record;
+  const background = useQuery({
+    queryKey: ['direct-private', currentRecord?.ownerHash, 'batch-recovery', currentRecord?.hash],
+    queryFn: () => linked.data!.recover(currentRecord!),
+    enabled: !!currentRecord && !!linked.data && !submit.isPending,
+    retry: false,
+    refetchInterval: currentRecord && !submit.isPending ? 10_000 : false,
+    refetchIntervalInBackground: false,
+  });
+  const recovered =
+    background.data?.record.hash === currentRecord?.hash
+      ? background.data
+      : result?.record.hash === currentRecord?.hash
+        ? result
+        : null;
+  const terminal = !!recovered && ['confirmed', 'resolved', 'discarded'].includes(recovered.status);
+  const acknowledged =
+    !!recovered && ['submitted', 'committed', 'confirmed'].includes(recovered.status);
   const error =
-    (submit.variables?.identityKey === identityKey ? submit.error : null) ??
+    (!acknowledged && submit.variables?.identityKey === identityKey ? submit.error : null) ??
     (prepare.variables?.identityKey === identityKey ? prepare.error : null) ??
     linked.error ??
     reconnect.error;
-  const result = receipt?.identityKey === identityKey ? receipt.result : null;
-  const disabled = snapshot.blocked || snapshot.conflict || !snapshot.draft.picks.length;
+  useEffect(() => {
+    if (
+      recovered &&
+      ['submitted', 'committed', 'confirmed'].includes(recovered.status) &&
+      recovered.record.sourcePicks &&
+      connection &&
+      getWalletState().connection === connection &&
+      queryClient.getQueryData<Account>(['account'])?.id === account?.id
+    ) {
+      store.retireSubmitted(recovered.record.sourcePicks);
+    }
+  }, [recovered, store, connection, account?.id, queryClient]);
+  const pendingSaved = !!currentRecord && !terminal;
+  const disabled =
+    snapshot.blocked ||
+    snapshot.conflict ||
+    !snapshot.draft.picks.length ||
+    pendingSaved ||
+    history.isFetching ||
+    history.isError;
+  const principal = totalShannons(snapshot.draft.picks);
+  const receiptRows = [
+    ...new Map(
+      [...(archive.data ?? []), ...(currentRecord ? [currentRecord] : [])].map((row) => [
+        row.hash,
+        row,
+      ]),
+    ).values(),
+  ]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 20);
+  const stage: PaymentStage | null =
+    submit.isPending && submit.variables?.identityKey === identityKey
+      ? currentRecord
+        ? 'sending'
+        : 'authorizing'
+      : currentRecord
+        ? recovered?.status === 'confirmed'
+          ? 'confirmed'
+          : recovered?.status === 'submitted' || recovered?.status === 'committed'
+            ? 'confirming'
+            : recovered?.status === 'unknown' ||
+                recovered?.status === 'reorg' ||
+                (recovered?.status === 'awaiting-sponsor' &&
+                  !!recovered.record.submissionAttemptedAt) ||
+                !recovered
+              ? 'checking'
+              : 'attention'
+        : prepare.isPending && prepare.variables?.identityKey === identityKey
+          ? 'preparing'
+          : review
+            ? 'ready'
+            : error
+              ? 'not-sent'
+              : null;
   return (
     <section className="batch-checkout" aria-label="Slip payment">
-      {result && linked.data && (
-        <BatchTransaction
-          record={result.record}
-          client={linked.data}
-          active={active}
-          refresh={refresh}
-          draftStore={store}
-        />
+      {activityTarget &&
+        createPortal(
+          <>
+            <div className="slip-list-caption">
+              <span>Recent payments on this device</span>
+              <span>{receiptRows.length}</span>
+            </div>
+            {!connection || !account ? (
+              <p className="batch-hint">
+                Connect the wallet that made your predictions to view its saved payments. Your full
+                activity is also available in My activity.
+              </p>
+            ) : archive.isError ? (
+              <Notice title="Payment history needs a retry">
+                <button onClick={() => void archive.refetch()}>Retry payment history</button>
+              </Notice>
+            ) : receiptRows.length === 0 ? (
+              <p className="batch-hint">
+                {archive.isPending
+                  ? 'Loading saved payments…'
+                  : 'Your payment receipts will appear here. Your current picks stay in Picks.'}
+              </p>
+            ) : (
+              receiptRows.map(
+                (row) =>
+                  linked.data && (
+                    <SlipReceipt
+                      key={`${identityKey}:${row.hash}`}
+                      record={row}
+                      client={linked.data}
+                      active={active && view === 'activity' && !submit.isPending}
+                      refresh={refresh}
+                      draftStore={store}
+                    />
+                  ),
+              )
+            )}
+            <a
+              className="quiet"
+              href={activityHref}
+              onClick={(event) => {
+                followActivity(event);
+                if (event.defaultPrevented) onDismiss?.();
+              }}
+            >
+              All predictions and claims ↗
+            </a>
+          </>,
+          activityTarget,
+        )}
+      {stage && onOpen && (
+        <PaymentProgress
+          operationKey={currentRecord?.hash ?? identityKey}
+          stage={stage}
+          count={currentRecord?.offer.lines.length ?? snapshot.draft.picks.length}
+          hidden={active || (!!currentRecord && terminal && dismissedHash === currentRecord.hash)}
+          onOpen={onOpen}
+          onDismiss={terminal ? () => setDismissedHash(currentRecord!.hash) : undefined}
+        >
+          {currentRecord && linked.data ? (
+            <BatchTransaction
+              record={currentRecord}
+              client={linked.data}
+              active={!submit.isPending}
+              refresh={refresh}
+              draftStore={store}
+            />
+          ) : error ? (
+            <Notice title="Payment not sent" tone="attention">
+              {error.message}
+            </Notice>
+          ) : (
+            <p>Your draft stays saved. No payment is sent until you approve it in your wallet.</p>
+          )}
+          {background.error && (
+            <Notice title="Waiting for a network update" tone="attention">
+              Your signed payment is saved. Check its status before trying another payment.
+            </Notice>
+          )}
+        </PaymentProgress>
       )}
+      <PaymentSummary
+        key={identityKey}
+        principal={principal}
+        storage={
+          review
+            ? BigInt(review.storageShannons)
+            : config.data
+              ? BigInt(config.data.manifest.limits.claimStorageShannons) *
+                BigInt(snapshot.draft.picks.length)
+              : null
+        }
+        review={review}
+        active={active && view === 'picks'}
+      />
       {snapshot.draft.picks.length > 0 && (
         <>
           {!account ? (
@@ -366,7 +670,11 @@ export function BatchCheckout({
               disabled={!accountReady || signInPending || disabled}
               onClick={onSignIn}
             >
-              {signInPending ? 'Connecting...' : 'Connect wallet to pay'}
+              {signInPending ? (
+                <PaymentButtonState label="Connecting wallet" />
+              ) : (
+                'Connect wallet to pay'
+              )}
             </button>
           ) : !connection ? (
             <button
@@ -374,7 +682,11 @@ export function BatchCheckout({
               disabled={reconnect.isPending || disabled}
               onClick={() => reconnect.mutate()}
             >
-              {reconnect.isPending ? 'Connecting...' : 'Reconnect wallet to pay'}
+              {reconnect.isPending ? (
+                <PaymentButtonState label="Connecting wallet" />
+              ) : (
+                'Reconnect wallet to pay'
+              )}
             </button>
           ) : review && reviewed ? (
             <div className="batch-review" aria-label="Review all predictions">
@@ -382,39 +694,30 @@ export function BatchCheckout({
                 One payment. {review.offer.lines.length}{' '}
                 {review.offer.lines.length === 1 ? 'prediction' : 'predictions'}.
               </h3>
-              <dl>
-                <div>
-                  <dt>Stakes</dt>
-                  <dd>{money(review.principalShannons)}</dd>
-                </div>
-                <div>
-                  <dt>Recoverable storage</dt>
-                  <dd>{money(review.storageShannons)}</dd>
-                </div>
-                <div>
-                  <dt>Network fee</dt>
-                  <dd>{money(review.feeShannons)}</dd>
-                </div>
-                <div className="batch-total">
-                  <dt>You pay</dt>
-                  <dd>{money(review.totalShannons)}</dd>
-                </div>
-              </dl>
-              <p>
-                Each prediction settles independently. Storage returns when you claim. Streak covers{' '}
-                {money(review.sponsorReserveShannons)} of market setup.
-              </p>
               {now >= review.expiresAt && (
                 <p className="pick-error">This quote expired. Review again for current amounts.</p>
               )}
               <button
                 className="review-button"
+                aria-busy={submit.isPending}
                 disabled={working || disabled || now >= review.expiresAt}
                 onClick={() => submit.mutate(reviewed)}
               >
-                {submit.isPending
-                  ? 'Complete the wallet request...'
-                  : `Pay ${money(review.totalShannons)}`}
+                {submit.isPending ? (
+                  <PaymentButtonState
+                    label={
+                      currentRecord
+                        ? 'Sending your payment'
+                        : walletStep === 'wallet'
+                          ? 'Approve in your wallet'
+                          : walletStep === 'saving'
+                            ? 'Saving your signed payment'
+                            : 'Preparing wallet approval'
+                    }
+                  />
+                ) : (
+                  `Pay ${money(review.totalShannons)}`
+                )}
               </button>
               <button className="quiet" disabled={working} onClick={() => prepare.reset()}>
                 Back to picks
@@ -423,48 +726,87 @@ export function BatchCheckout({
           ) : (
             <button
               className="review-button"
+              aria-busy={prepare.isPending || (history.isFetching && !pendingSaved)}
               disabled={working || disabled || !linked.data || !config.data?.enabled}
               onClick={() => prepare.mutate({ stamp, identityKey })}
             >
-              {prepare.isPending
-                ? 'Reviewing every prediction...'
-                : `Review ${snapshot.draft.picks.length === 1 ? 'payment' : 'all predictions'}`}
+              {prepare.isPending ? (
+                <PaymentButtonState label="Preparing your payment" />
+              ) : pendingSaved ? (
+                <PaymentButtonState label="Checking your saved payment" />
+              ) : history.isFetching ? (
+                <PaymentButtonState label="Checking saved payments" />
+              ) : (
+                `Review ${snapshot.draft.picks.length === 1 ? 'payment' : 'all predictions'}`
+              )}
             </button>
           )}
           {!review && (
-            <p className="batch-hint">
-              One payment. Each prediction settles independently. Review includes recoverable
-              storage and the network fee.
-            </p>
+            <p className="batch-hint">One payment. Each prediction settles independently.</p>
           )}
-          {config.isError && (
-            <p className="pick-error">
-              Payment availability could not be checked.{' '}
-              <button className="quiet" onClick={() => void config.refetch()}>
-                Retry availability
-              </button>
-            </p>
+          {pendingSaved && !working && (
+            <button className="quiet pending-activity-link" onClick={onActivity}>
+              View payment progress in Activity ↗
+            </button>
           )}
-          {config.data && !config.data.enabled && (
-            <p className="pick-error">
-              {config.data.unavailableReason ??
-                'Payments are temporarily unavailable. Your picks are saved.'}
-            </p>
-          )}
-          {error && (
-            <p className="pick-error" role="alert">
-              {error.message}{' '}
-              <a
-                href={activityHref}
-                onClick={(event) => {
-                  followActivity(event);
-                  if (event.defaultPrevented) onDismiss?.();
-                }}
-              >
-                View activity
-              </a>
-            </p>
-          )}
+          {(() => {
+            const notices = (
+              <>
+                {history.isError && (
+                  <Notice title="Check saved payments first" tone="attention">
+                    Your previous payment status could not be checked.{' '}
+                    <button onClick={() => void history.refetch()}>Retry saved payments</button>
+                  </Notice>
+                )}
+                {connection && linked.isPending && (
+                  <p className="batch-hint" role="status">
+                    Checking your connected wallet...
+                  </p>
+                )}
+                {config.isError && (
+                  <Notice title="Payment availability needs a retry" tone="attention">
+                    Your picks are saved.{' '}
+                    <button className="quiet" onClick={() => void config.refetch()}>
+                      Retry availability
+                    </button>
+                  </Notice>
+                )}
+                {config.data && !config.data.enabled && (
+                  <Notice title="Payments are temporarily unavailable" tone="attention">
+                    {config.data.unavailableReason ??
+                      'Payments are temporarily unavailable. Your picks are saved.'}
+                  </Notice>
+                )}
+                {error && (
+                  <Notice
+                    title={
+                      submit.error ? 'Check your payment status' : 'Payment review needs attention'
+                    }
+                    tone="attention"
+                  >
+                    {error.message}{' '}
+                    {linked.isError && (
+                      <button className="quiet" onClick={() => void linked.refetch()}>
+                        Retry wallet check
+                      </button>
+                    )}
+                    {submit.error && (
+                      <a
+                        href={activityHref}
+                        onClick={(event) => {
+                          followActivity(event);
+                          if (event.defaultPrevented) onDismiss?.();
+                        }}
+                      >
+                        View activity
+                      </a>
+                    )}
+                  </Notice>
+                )}
+              </>
+            );
+            return feedbackTarget ? createPortal(notices, feedbackTarget) : notices;
+          })()}
         </>
       )}
     </section>

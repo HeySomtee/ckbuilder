@@ -289,14 +289,14 @@ async function main() {
           true,
         );
         assert.equal(signCalls, 0);
-        async function connect() {
+        async function connect(expectReady = true) {
           await page.getByRole('button', { name: 'Reconnect wallet to pay', exact: true }).click();
           await page.locator('ccc-connector').waitFor();
           await page.evaluate(async () =>
             (await import('/batch.js')).connectSynthetic(document.querySelector('ccc-connector')),
           );
-          await page.getByRole('button', { name: 'Review all predictions', exact: true }).waitFor();
-          await page.waitForFunction(() =>
+          await page.getByRole('button', { name: expectReady ? 'Review all predictions' : 'Checking your saved payment', exact: true }).waitFor();
+          if(expectReady) await page.waitForFunction(() =>
             [...document.querySelectorAll('button')].some(
               (button) => button.textContent === 'Review all predictions' && !button.disabled,
             ),
@@ -339,8 +339,10 @@ async function main() {
           ),
         );
         const review = page.getByRole('region', { name: 'Slip payment' });
-        await review.getByText('201 tCKB', { exact: true }).waitFor();
-        await review.getByText('642 tCKB', { exact: true }).waitFor();
+        await review.locator('.slip-total').getByText('201 tCKB', { exact: true }).waitFor();
+        await page.getByRole('button', {name:'Costs & refundable storage'}).click();
+        await page.getByRole('dialog',{name:'Cost breakdown'}).getByText('642 tCKB', { exact: true }).waitFor();
+        await page.getByRole('button',{name:'Close cost breakdown'}).click();
         async function visibleControl(control) {
           await control.scrollIntoViewIfNeeded();
           assert.equal(
@@ -382,18 +384,21 @@ async function main() {
         const offersBefore = offers;
         await page.getByRole('button', { name: 'Review all predictions', exact: true }).click();
         await waitingRead;
+        // Observe pending before releasing the held request. A negative text check
+        // can otherwise pass before React renders, restoring the old account too early.
+        await page
+          .getByRole('button', { name: 'Preparing your payment', exact: true })
+          .waitFor();
         await page.evaluate(
           async (account) =>
             (await import('/batch.js')).replaceAccount({ ...account, id: 'changed-account' }),
           account,
         );
         releaseRead();
-        await page.waitForFunction(
-          () =>
-            !document
-              .querySelector('.batch-checkout')
-              ?.textContent.includes('Reviewing every prediction'),
-        );
+        await page.waitForFunction(() => {
+          const button = document.querySelector('.batch-checkout > button.review-button');
+          return button?.textContent === 'Review all predictions' && !button.disabled;
+        });
         assert.equal(offers, offersBefore);
         assert.equal(signCalls, 1);
         await page.evaluate(
@@ -410,8 +415,15 @@ async function main() {
         await page.getByRole('button', { name: 'Review all predictions', exact: true }).click();
         await page.getByRole('heading', { name: 'One payment. 2 predictions.' }).waitFor();
         chain.loseResponse = true;
+        const lostSubmission=page.waitForResponse(response=>response.url().endsWith('/api/direct/batch/submit')&&response.request().method()==='POST');
         await page.getByRole('button', { name: /^Pay / }).click();
-        await page.getByRole('article', { name: 'Combined prediction payment' }).waitFor();
+        await page.locator('dialog.prediction-slip').waitFor({state:'hidden'});
+        const tracker=page.getByRole('complementary',{name:'Payment progress'});
+        await tracker.waitFor();
+        await tracker.locator('.payment-progress-toggle').click();
+        await tracker.getByRole('article', { name: 'Combined prediction payment' }).waitFor();
+        await lostSubmission;
+        await tracker.getByText('Checking your payment',{exact:true}).waitFor();
         assert.equal(posts, 1);
         assert.equal(signCalls, 2);
         const saved = await page.evaluate(
@@ -436,19 +448,17 @@ async function main() {
           2,
         );
         phase = `${name} ${width} recovery`;
-        await page.getByRole('button', { name: 'Close prediction slip', exact: true }).click();
         await page.reload();
         await page.getByRole('button', { name: 'Open prediction slip', exact: true }).click();
-        await connect();
+        await connect(false);
         assert.equal(signCalls, 2);
         await page.getByRole('button', { name: 'Close prediction slip', exact: true }).click();
-        await page
-          .getByRole('button', { name: 'Show saved payment recovery', exact: true })
-          .click();
-        await page.getByRole('button', { name: 'Resume payment', exact: true }).waitFor();
+        await tracker.waitFor();
+        await tracker.locator('.payment-progress-toggle').click();
+        await tracker.getByRole('button', { name: 'Resume payment', exact: true }).waitFor();
         await page.evaluate(async () => (await import('/batch.js')).changeStake(1, '175'));
-        await page.getByRole('button', { name: 'Resume payment', exact: true }).click();
-        await page.getByText('Confirmed', { exact: true }).waitFor();
+        await tracker.getByRole('button', { name: 'Resume payment', exact: true }).click();
+        await tracker.getByText('Confirmed', { exact: true }).waitFor();
         assert.equal(signCalls, 2);
         assert.equal(posts, 2);
         assert.equal(chain.submissions[0].userSignedBytes, chain.submissions[1].userSignedBytes);

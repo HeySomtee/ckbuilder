@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Streak | Wallet & slip review</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="review-bar">
+      <span
+        ><i></i> Design preview <span class="desktop-only">/ Wallet & prediction slip</span></span
+      ><span>Sample account · No payments</span>
+    </div>
+    <aside class="rail">
+      <a class="brand" href="#wallet" aria-label="Streak">s<span>.</span></a>
+      <nav>
+        <button data-view="markets" aria-label="Markets" title="Markets" data-icon="grid"></button
+        ><button
+          class="active"
+          data-view="wallet"
+          aria-label="Wallet"
+          title="Wallet"
+          data-icon="wallet"
+        ></button>
+      </nav>
+      <span class="rail-end">TESTNET</span>
+    </aside>
+    <header class="app-header">
+      <span class="wordmark">streak<span>.</span></span>
+      <nav>
+        <button data-view="markets">Markets</button
+        ><button data-view="wallet" class="active">Wallet</button>
+      </nav>
+      <span class="nav-balance"><i></i> 100,000 <small>tCKB</small></span>
+    </header>
+    <main>
+      <section id="wallet-view">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">YOUR ACCOUNT</p>
+            <h1>Wallet</h1>
+            <p>Your funds. Your next move.</p>
+          </div>
+          <span class="network"><i></i> CKB testnet</span>
+        </div>
+        <section class="account-panel rim" aria-label="Wallet overview">
+          <div class="account-top">
+            <span class="account-label"
+              ><span class="icon-box" data-icon="wallet"></span>Connected wallet</span
+            ><span class="account-status"
+              ><span class="connection"><i></i> Connected</span
+              ><button id="disconnect" class="text-button disconnect">Disconnect</button></span
+            >
+          </div>
+          <div class="balance-row">
+            <div>
+              <p class="label">Available to play</p>
+              <p class="balance">100,000<span>tCKB</span></p>
+              <p class="muted">Test tokens. No monetary value.</p>
+            </div>
+            <div class="wallet-identity">
+              <span class="identity-label">YOUR ADDRESS</span
+              ><button id="copy-address" class="address" aria-label="Copy sample wallet address">
+                <span>ckt1q…m536gu</span><span data-icon="copy"></span></button
+              ><span id="copy-status" class="muted">Sample wallet for this preview</span>
+            </div>
+          </div>
+          <div class="balance-actions">
+            <button id="faucet" class="primary">
+              <span data-icon="plus"></span> Get testnet CKB <span data-icon="arrow"></span></button
+            ><button id="refresh" class="secondary">
+              <span data-icon="refresh"></span> Refresh
+            </button>
+          </div>
+          <div class="telegram-row">
+            <span class="telegram-icon" data-icon="send"></span>
+            <div class="telegram-copy">
+              <h2>Telegram</h2>
+              <p id="telegram-description">Keep your Streak account connected.</p>
+              <span id="telegram-state" class="muted">Not connected</span>
+            </div>
+            <button id="telegram-connect" class="secondary">
+              Connect <span data-icon="arrow"></span>
+            </button>
+          </div>
+          <div class="account-shortcuts">
+            <button class="account-row" id="activity">
+              <span class="icon-box" data-icon="activity"></span
+              ><span
+                ><strong>Your predictions</strong><small>Results, payouts and refunds</small></span
+              ><span data-icon="chevron"></span>
+            </button>
+            <button class="account-row" id="recovery">
+              <span class="icon-box" data-icon="shield"></span
+              ><span
+                ><strong>Transaction recovery</strong
+                ><small>Continue an interrupted payment</small></span
+              ><span data-icon="chevron"></span>
+            </button>
+          </div>
+        </section>
+        <div class="wallet-footnote">
+          <span data-icon="shield"></span>
+          <p>Your wallet approves each payment. Streak never asks for your seed phrase.</p>
+        </div>
+        <section class="review-note">
+          <span class="note-number">01</span>
+          <div>
+            <strong>One place for your account.</strong>
+            <p>
+              A compact balance, address and actions above a Telegram connection row. Predictions
+              and recovery become simple rows instead of disconnected cards.
+            </p>
+          </div>
+        </section>
+      </section>
+      <section id="markets-view" hidden>
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">THE WEEKEND IS YOURS</p>
+            <h1>Make your calls.</h1>
+            <p>Pick your sides. Keep building your slip.</p>
+          </div>
+          <span class="network">API fixture snapshot</span>
+        </div>
+        <div class="market-tools">
+          <span>Featured matches <small id="snapshot-date"></small></span
+          ><button id="fill-slip" class="secondary">
+            Try 8 picks <span data-icon="plus"></span>
+          </button>
+        </div>
+        <div id="market-grid" class="market-grid"></div>
+        <section class="review-note">
+          <span class="note-number">02</span>
+          <div>
+            <strong>Build without losing your place.</strong>
+            <p>
+              Add matches stays in the slip header, above the scrolling picks. The collapsed slip
+              keeps a solid backing on hover and focus.
+            </p>
+          </div>
+        </section>
+      </section>
+    </main>
+    <button id="slip-dock" class="slip-dock" aria-haspopup="dialog">
+      <span class="dock-icon" data-icon="slip"></span
+      ><span class="dock-copy"
+        ><strong><span id="dock-count">3</span> predictions</strong
+        ><small><span id="dock-total">300</span> tCKB <span>· Saved draft</span></small></span
+      ><span class="dock-open">Open <span data-icon="up"></span></span>
+    </button>
+    <dialog id="slip" aria-labelledby="slip-title">
+      <div class="slip-layout">
+        <header class="slip-header">
+          <div class="slip-title-row">
+            <div>
+              <p class="eyebrow">YOUR PREDICTIONS</p>
+              <h2 id="slip-title">Your slip<span id="slip-count">3</span></h2>
+            </div>
+            <button
+              id="close-slip"
+              class="icon-button"
+              aria-label="Close slip"
+              data-icon="close"
+            ></button>
+          </div>
+          <div class="slip-toolbar">
+            <span id="pick-limit">3 of 8 picks</span
+            ><button id="add-matches" class="add-matches">
+              <span data-icon="plus"></span><span>Add matches</span>
+            </button>
+          </div>
+        </header>
+        <div id="slip-body" class="slip-body"></div>
+        <footer class="slip-footer">
+          <div class="subtotal">
+            <span>Stake subtotal</span><strong id="slip-total">300 <small>tCKB</small></strong>
+          </div>
+          <button id="review-payment" class="primary review-payment">
+            Review predictions <span data-icon="arrow"></span>
+          </button>
+          <p class="payment-caption">One payment. Each pick settles independently.</p>
+          <div class="slip-meta">
+            <span><span data-icon="shield"></span> Draft kept when you close</span
+            ><button id="clear-slip" class="text-button">Clear slip</button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+    <dialog id="info-dialog" aria-labelledby="info-title">
+      <button
+        id="close-info"
+        class="icon-button"
+        aria-label="Close explanation"
+        data-icon="close"
+      ></button>
+      <p class="eyebrow">INTERACTIVE PREVIEW</p>
+      <h2 id="info-title"></h2>
+      <div id="info-content"></div>
+      <button id="info-done" class="primary">Got it</button>
+    </dialog>
+    <div id="toast" role="status" class="toast"></div>
+    <script type="module" src="app.mjs"></script>
+  </body>
+</html>

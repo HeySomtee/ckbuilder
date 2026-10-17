@@ -54,13 +54,13 @@ function Fixture({ market, featured = false }: { market: Market; featured?: bool
       </div>
       {featured && (
         <div className="welcome-outcomes" aria-label="Three possible outcomes">
-          <span>
+          <span className="outcome-glass" data-outcome="home">
             <b>1</b> Home
           </span>
-          <span>
+          <span className="outcome-glass" data-outcome="draw">
             <b>X</b> Draw
           </span>
-          <span>
+          <span className="outcome-glass" data-outcome="away">
             <b>2</b> Away
           </span>
         </div>
@@ -148,9 +148,11 @@ export function Landing() {
             </div>
             <p className="welcome-caption">Browse first. Connect when you’re ready.</p>
             <div className="welcome-network">
-              <span className="welcome-network-mark">N</span>
+              <span className="welcome-network-mark">
+                <img src="/ckb-mark.png" width="17" height="17" alt="" />
+              </span>
               <div>
-                Built on Nervos CKB<small>Pudge testnet · No real-money stakes</small>
+                Built on Nervos CKB <small>Pudge testnet · No real-money stakes</small>
               </div>
             </div>
           </div>

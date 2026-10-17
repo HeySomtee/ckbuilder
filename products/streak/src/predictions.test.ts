@@ -9,6 +9,8 @@ async function main() {
   const temp = mkdtempSync(join(tmpdir(), 'streak-predictions-'));
   process.env.STREAK_SKIP_ENV_FILE = '1';
   process.env.STREAK_DB_FILE = join(temp, 'db.json');
+  // Exercise persisted reads so fixtures cannot depend on the store cache TTL.
+  process.env.STORE_READ_TTL_MS = '0';
   process.env.MATCH_PROVIDER = 'worldcup';
   for (const key of [
     'DATABASE_URL',
@@ -28,6 +30,7 @@ async function main() {
     return realFetch(input, init);
   };
   try {
+    const { DB_SCHEMA } = await import('./config');
     const { findPublicPredictionMarket, InvalidSlip, parseAmount, parseSlip, reviewPredictions } =
       await import('./modules/predictions/review');
 
@@ -57,7 +60,7 @@ async function main() {
       feeBps: { protocol: 200, creator: 100 },
     };
     const base: StreakDB = {
-      schema: 1,
+      schema: DB_SCHEMA,
       users: [],
       matches: [match],
       markets: [market],
@@ -206,7 +209,8 @@ async function main() {
           body: JSON.stringify(draft),
         });
         assert.equal(response.status, 200);
-        assert.equal(((await response.json()) as { valid: boolean }).valid, true);
+        const reviewed = (await response.json()) as { valid: boolean };
+        assert.equal(reviewed.valid, true, JSON.stringify(reviewed));
         assert.equal(response.headers.get('cache-control'), 'no-store');
         assert.equal(
           (

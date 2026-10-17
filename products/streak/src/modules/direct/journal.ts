@@ -14,6 +14,7 @@ import {
 } from 'node:fs';
 import { hostname } from 'node:os';
 import { join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   exactTimestamp,
   hash32,
@@ -62,13 +63,23 @@ export type Reconciliation = {
   confirmations?: number;
 };
 
-/** One durable directory, one operator process. No API service key or database dependency. */
+export class OperatorBusyError extends Error {
+  constructor() {
+    super('Another operator process owns this journal');
+    this.name = 'OperatorBusyError';
+  }
+}
+
+/** One durable directory, one mutation at a time across operator processes. */
 export class OperatorJournal {
   readonly directory: string;
   constructor(
     directory: string,
     readonly config?: DirectProtocolConfig,
+    readonly lockWaitMs = 0,
   ) {
+    if (!Number.isSafeInteger(lockWaitMs) || lockWaitMs < 0 || lockWaitMs > 10_000)
+      throw Error('Operator lock wait must be between zero and 10000 milliseconds');
     this.directory = resolve(directory);
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
   }
@@ -241,11 +252,28 @@ export class OperatorJournal {
         closeSync(fd);
       }
     };
-    try {
-      acquire();
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      const prior = object(JSON.parse(readFileSync(lockFile, 'utf8')), 'operator lock');
+    const deadline = performance.now() + this.lockWaitMs;
+    let attempted = false;
+    for (;;) {
+      if (attempted && performance.now() >= deadline) throw new OperatorBusyError();
+      attempted = true;
+      try {
+        acquire();
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+      let prior: Record<string, unknown>;
+      try {
+        prior = object(JSON.parse(readFileSync(lockFile, 'utf8')), 'operator lock');
+      } catch (error) {
+        // The owner may release between open and read. Retry acquisition, never
+        // remove or adopt another process's lock (including malformed locks).
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        if (performance.now() >= deadline) throw new OperatorBusyError();
+        await delay(50);
+        continue;
+      }
       if (
         prior.hostname !== hostname() ||
         typeof prior.pid !== 'number' ||
@@ -257,15 +285,16 @@ export class OperatorJournal {
         );
       try {
         process.kill(prior.pid, 0);
-        throw Error('Another operator process owns this journal');
       } catch (check) {
         if ((check as NodeJS.ErrnoException).code !== 'ESRCH') throw check;
+        // A stale lock requires explicit reconciliation, never automatic theft.
+        throw Error(
+          'Previous operator process has stopped. Run reconcile, then remove the stale operator.lock only after confirming no other operator is running.',
+        );
       }
-      // Do not race another recovery process by deleting and reacquiring its lock.
-      // Read-only reconciliation remains available without this mutation lease.
-      throw Error(
-        'Previous operator process has stopped. Run reconcile, then remove the stale operator.lock only after confirming no other operator is running.',
-      );
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) throw new OperatorBusyError();
+      await delay(Math.min(100, remaining));
     }
     try {
       return await task();

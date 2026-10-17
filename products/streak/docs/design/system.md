@@ -1,8 +1,20 @@
 # Streak design and interaction system
 
+## Compact slip, 17 October 2026
+
+Use separate Picks and Activity tabs with one persistent payment controller. Keep receipts out of the Picks footer. The footer shows stakes and full wallet debit; detailed storage and network charges open in a dismissible cost dialog. Preparation and approval stages animate inside the primary button. Use a single coral amount-field focus ring. Respect reduced motion and forced colours. See [implementation](../delivery/compact-slip-implementation.md).
+
+17 October terminal and invoice direction: use the legacy system sans stack for interface text and a system monospace stack for numeric match data, form, timestamps and payment amounts. Match intelligence includes real model/bookmaker comparison, standings and recent meetings with explicit unavailable states. Show estimated storage before review. The invoice places stakes first, storage/network in a quieter inset section, then the full wallet debit. Label storage Refundable and explain claim timing without treating it as a fee. Signed payments close the slip and continue in an expandable lower-left tracker. Use indeterminate moving dots, reduced-motion support and truthful confirmation/recovery states. The X still closes immediately and retains drafts.
+
+17 October payment correction: market cards expose a visible View market link. Match details use a compact scoreboard, chart and prediction panel, with choices first on narrow screens. New entries open the shared slip. Wallet reconnect happens in place. Informational alerts use blue and attention states use amber, with a short title and a relevant retry or recovery action. Clear-slip confirmation distinguishes saved picks from submitted payments. Charts use recorded data, identify its source and show an honest empty state.
+
+The subsequent chart direction follows [Polymarket's market presentation](https://polymarket.com/sports): prominent outcome percentages, clean time-series lines, a right-side percentage axis and direct crosshair inspection. Retain Streak's dark glass and blue/Home, green/Draw, muted red/Away palette. Pointer, touch and arrow keys inspect observations; outcome labels emphasize a line, and time-range buttons filter recorded points. Current card and selection values remain current while the chart inspects an older point. Show pool-relative principal as Pool share, with changing returns explained. Never substitute older-generation pools, old application-ledger values or fabricated historical points for direct-contract data.
+
 Approved on 15 October 2026. The source of visual evidence is the [Season preview](../../design/season-preview/README.md) and its [design proposal](../../design/season-preview/DESIGN-PROPOSAL.md). The preview is a reference, not a production controller to copy wholesale.
 
 ## Identity and tokens
+
+17 October density correction: the current Season app and public landing use compact proportions at normal browser zoom. The desktop rail is 180px with seven 44px navigation targets, no promotional footer and no independent scrolling. Below 461px viewport height or at phone widths, the bottom navigation and More menu keep every destination reachable. Shared body type is 12px, page titles are 24 to 28px, and card radii are 18px. Heroes, fixture rows, account panels and activity cards use tighter spacing. Preserve browser zoom, 44px primary controls and readable transaction amounts; do not simulate density with CSS zoom or page scaling.
 
 Keep vivid football character on a dark graphite foundation. Coral marks prediction actions; mint/green marks positive state and the pitch; lilac supports community and fantasy results. Colour supplements text, icons and structure. Do not reintroduce the beige editorial theme.
 
@@ -18,12 +30,14 @@ Keep vivid football character on a dark graphite foundation. Coral marks predict
 | Inset financial face / payment footer | `#14211be6` / `#14211bf5`                            |
 | Elevated glass blur                   | 8px, with 2px dialog backdrop blur                   |
 | Type                                  | System sans-serif; tabular digits for amounts        |
-| Default radius                        | 22px, with smaller control radii                     |
+| Default radius                        | 18px, with smaller control radii                     |
 | Press / surface timing                | 120ms / 220ms, `cubic-bezier(0.2, 0.8, 0.2, 1)`      |
 
 Move these roles into shared semantic tokens when the production frontend is created. Define spacing, typography, focus, elevation and responsive scales there too. Feature components consume roles, not arbitrary repeated hex values. The preview values are an approved baseline; verify contrast in actual compositions, including disabled and focus states.
 
 ## Glass and scrolling
+
+17 October Overview correction: Home uses muted blue, Draw green and Away red. Keep the rims and reflections soft enough to sit comfortably beside the surrounding UI. Keep outcome faces almost clear; tint belongs in reflected edges and small highlights rather than an evenly coloured or frosted fill. The same `outcome-glass` treatment spans Overview, market cards, details, direct entry and the landing illustration. Selected state has a check mark or existing selection indicator as well as a brighter rim. Overview side panels use restrained blue edge reflections over transparent faces. The pitch-grid banner includes a small authentic CKB chest mark, with the same local asset in existing chain attribution. See the [delivery record](../delivery/overview-glass-correction.md) for source and verification.
 
 Ordinary page cards use tint and a directional one-pixel rim without individual backdrop filters. Elevated surfaces can use local blur. The rim highlights opposing edges and fades around rounded ends; it is inert and never intercepts input. No looping glisten or shimmer. Dense financial content has a readable backing without relying on blur support.
 
@@ -32,6 +46,8 @@ The prediction slip stays more opaque than its surroundings. Its picks, storage,
 Use native scrolling throughout. Fine-pointer browsers with custom scrollbar support use a 12px rail, 6px sage thumb, 8px hover thumb and coral pressed state. Other browsers use standard thin scrollbars; touch devices keep native overlay scrolling. Preserve wheel, keyboard, touch and thumb dragging. Stable gutters prevent avoidable desktop layout movement. Do not install a JavaScript scroll replacement or hide the only scroll affordance.
 
 ## Composition and controls
+
+17 October approved correction: use the compact integrated account panel in `design/account-slip-review`. The destination is **My Account**, covering wallet and Telegram settings. Restore Overview, Streak Five, Markets, Matchday, My activity and Clubhouse in desktop navigation; mobile retains Overview, Markets, Activity and My Account with the remaining destinations under More. Add matches belongs to the non-scrolling slip header, with an eight-pick capacity state. The collapsed slip uses an opaque background in normal, hover and focus states. Focus starts on the X close control rather than outlining the title. Keep the original preview's general identity while retaining live financial and identity adapters.
 
 The public landing page carries the same graphite, coral, mint and glass tokens into a simpler reading flow: football-first hero, API-backed matchweek board, three onboarding steps, a clearly labelled Five introduction, native FAQ disclosures and market entry links. Visitors can browse before signing in. Use provider names/logos and explicit schedule states instead of fabricated odds, activity counters or winnings. Five stays marked as in development until its entry and scoring journey exists.
 

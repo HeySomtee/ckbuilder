@@ -125,7 +125,7 @@ async function main() {
         const connect = page.getByRole('button', { name: 'Connect testnet wallet', exact: true });
         const disconnect = page.getByRole('button', { name: 'Disconnect wallet', exact: true });
         const walletNav = () =>
-          page.getByRole('link', { name: 'Wallet', exact: true }).filter({ visible: true }).first();
+          page.getByRole('link', { name: 'My Account', exact: true }).filter({ visible: true }).first();
         async function choose(options = {}) {
           await page.locator('ccc-connector').waitFor();
           await page.evaluate(
@@ -161,10 +161,13 @@ async function main() {
             2,
             'Only the retained signer owns account/disconnect listeners.',
           );
+          await page.evaluate(() => window.syntheticEvm.repeatAccount());
+          await page.waitForFunction(() => window.syntheticEvm.listenerCount() === 2);
+          assert.equal(await page.getByRole('button', { name: 'Reconnect wallet', exact: true }).count(), 0, 'An unchanged provider account notification retains the signer.');
           await walletNav().click();
           await disconnect.waitFor();
-          const overview = page.getByRole('region', { name: 'Wallet overview', exact: true });
-          await overview.getByRole('heading', { name: 'Wallet', exact: true }).waitFor();
+          const overview = page.getByRole('region', { name: 'My Account overview', exact: true });
+          await overview.getByRole('heading', { name: 'My Account', exact: true }).waitFor();
           await overview.getByText('1,234 tCKB', { exact: true }).waitFor();
           const summary = page.locator('.wallet-nav-summary');
           await summary.getByText('1,234 tCKB', { exact: true }).waitFor();
@@ -238,7 +241,10 @@ async function main() {
           await connect.click();
           await choose();
           await disconnect.waitFor();
-          await page.evaluate(() => window.syntheticEvm.replace());
+          await page.evaluate(() => {
+            window.syntheticEvm.repeatAccount();
+            window.syntheticEvm.replace();
+          });
           await connect.waitFor();
           assert.equal(
             await page.getByRole('button', { name: 'Copy wallet address', exact: true }).count(),
@@ -310,9 +316,7 @@ async function main() {
           });
           await signIn.waitFor();
           await page
-            .locator('.notice.error').getByText('The connected wallet changed. Connect again and review your action.', {
-              exact: true,
-            })
+            .locator('.notice.error').getByText(/^(The connected wallet changed|Your wallet account or network changed)\. Connect again and review your action\.$/)
             .waitFor();
           assert.equal(
             requests.filter((url) => url === '/api/auth/verify').length,

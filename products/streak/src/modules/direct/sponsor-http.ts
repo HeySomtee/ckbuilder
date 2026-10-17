@@ -14,10 +14,10 @@ import {
   object,
   hash32,
 } from './registry';
-import { OperatorJournal } from './journal';
+import { OperatorBusyError, OperatorJournal } from './journal';
 import { boundedJson } from './cli';
-import { validateScheduledFixture } from './oracle';
-import { parseProvisionCatalogue, provisioningCatalogueUrl } from './provision';
+import { provisioningCatalogueUrl } from './provision';
+import { createFixtureReader } from './fixture-reader';
 
 function secret(value: string | undefined): string {
   if (!value || !/^[0-9a-f]{64}$/.test(value))
@@ -75,6 +75,8 @@ export function createSponsorServer(
         error: 'Sponsor queue is busy. Retry with the same request identity.',
       });
     active++;
+    const startedAt = performance.now();
+    let operation = 'unknown';
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
       const atomic = url.pathname.startsWith('/batch/');
@@ -84,6 +86,18 @@ export function createSponsorServer(
           error: 'Atomic payment is awaiting its verified deployment and operator activation.',
         });
       if (atomic) url.pathname = url.pathname.slice(6);
+      if (
+        [
+          '/configuration',
+          '/fixture',
+          '/status',
+          '/offer',
+          '/submit',
+          '/resolve',
+          '/resume',
+        ].includes(url.pathname)
+      )
+        operation = url.pathname.slice(1);
       if (req.method === 'GET' && url.pathname === '/configuration')
         return reply(res, 200, await service.configuration());
       if (req.method === 'GET' && url.pathname === '/fixture') {
@@ -156,16 +170,39 @@ export function createSponsorServer(
     } catch (error) {
       // Do not return provider payloads, RPC errors, file paths or signing context.
       const message = error instanceof Error ? error.message : '';
+      const busy = error instanceof OperatorBusyError;
       const safe =
         /^(Sponsor is completing|Streak needs additional|Streak is at|Unsigned sponsor offer expired|Invalid owner transaction signature|Fixture terms changed|This fixture already has|Sponsored contract deployment|Sponsor funding is awaiting|Owner needs principal|Owner input must be live|This fixture has reached|This fixture has positions|This fixture has no available|This fixture is closed)/.test(
           message,
         );
-      reply(res, 409, {
-        error: safe
-          ? message
-          : 'Sponsor request could not complete. Preserve any signed transaction and check its status before retrying.',
+      // Fixed categories only. Never log exception text, request bodies, addresses
+      // or transaction witnesses from the isolated signing service.
+      console.warn(
+        JSON.stringify({
+          service: 'streak-sponsor',
+          operation,
+          category: busy ? 'operator-busy' : safe ? 'review-rule' : 'operation-unavailable',
+        }),
+      );
+      reply(res, busy ? 429 : 409, {
+        error: busy
+          ? 'Sponsor queue is busy. Your picks and any saved payment are safe. Try again shortly.'
+          : safe
+            ? message
+            : operation === 'offer'
+              ? 'Payment review is temporarily unavailable. No payment was sent by this review. Your picks are saved; try again shortly.'
+              : 'Sponsor request could not complete. Your signed payment may still confirm. Check its saved status before retrying.',
       });
     } finally {
+      if (['offer', 'submit', 'resume'].includes(operation))
+        console.info(
+          JSON.stringify({
+            service: 'streak-sponsor-timing',
+            operation,
+            durationMs: Math.round(performance.now() - startedAt),
+            status: res.statusCode,
+          }),
+        );
       active--;
     }
   });
@@ -202,37 +239,24 @@ export async function runSponsorService(): Promise<void> {
     timeout: 15_000,
     maxConcurrent: 2,
   });
+  const fixtures = createFixtureReader({
+    catalogue: () =>
+      boundedJson(provisioningCatalogueUrl(process.env.STREAK_DIRECT_CATALOGUE_URL ?? ''), {
+        headers: { accept: 'application/json' },
+      }),
+    fixture: (id) =>
+      boundedJson(`${PROVIDER_ORIGIN}/fixtures?id=${id}`, {
+        headers: { 'x-apisports-key': providerKey },
+      }),
+  });
   const service = new SponsorService({
     client,
     signer: new ccc.SignerCkbPrivateKey(client, key),
-    journal: new OperatorJournal(directory),
+    journal: new OperatorJournal(directory, undefined, 10_000),
     registry: new DirectRegistry(registryDirectory, V3_DIRECT_CONFIG),
     config: V3_DIRECT_CONFIG,
-    fixture: async (id) => {
-      if (!/^api-football-[1-9][0-9]{0,14}$/.test(id)) throw Error('Invalid football fixture');
-      const catalogue = parseProvisionCatalogue(
-        await boundedJson(provisioningCatalogueUrl(process.env.STREAK_DIRECT_CATALOGUE_URL ?? ''), {
-          headers: { accept: 'application/json' },
-        }),
-        Date.now(),
-      );
-      const owned = catalogue.fixtures.find((fixture) => fixture.fixtureId === id);
-      if (!owned) throw Error('Fixture is outside the active real API catalogue');
-      const match = validateScheduledFixture(
-        await boundedJson(`${PROVIDER_ORIGIN}/fixtures?id=${id.slice(13)}`, {
-          headers: { 'x-apisports-key': providerKey },
-        }),
-        id.slice(13),
-        Date.now(),
-      );
-      if (
-        Date.parse(match.kickoff) !== owned.kickoffMs ||
-        match.home.id !== owned.homeId ||
-        match.away.id !== owned.awayId
-      )
-        throw Error('Football catalogue changed');
-      return match;
-    },
+    fixture: async (id) => (await fixtures([id]))[0],
+    fixtures,
   });
   const batchDirectory = process.env.STREAK_DIRECT_BATCH_REGISTRY_DIR;
   if (

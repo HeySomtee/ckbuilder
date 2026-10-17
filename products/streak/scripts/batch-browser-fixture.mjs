@@ -23,9 +23,11 @@ const script = (value) => ({
 });
 const json = (value) => JSON.parse(ccc.stringify(value));
 
-export async function batchChain(cutoffMs, deps = BATCH_MANIFEST.codeDeps) {
+export async function batchChain(cutoffMs, deps = BATCH_MANIFEST.codeDeps, ownerEvmAddress) {
   const rpc = new ccc.ClientPublicTestnet({ url: 'https://testnet.ckb.dev/', fallbacks: [] });
-  const ownerSigner = new ccc.SignerCkbPrivateKey(rpc, batchOwnerKey),
+  // No code-dependency upgrades exist in this synthetic chain.
+  rpc.findSingletonCellByType = async () => undefined;
+  const ownerSigner = ownerEvmAddress ? new ccc.SignerEvmAddressReadonly(rpc, ownerEvmAddress) : new ccc.SignerCkbPrivateKey(rpc, batchOwnerKey),
     sponsorSigner = new ccc.SignerCkbPrivateKey(rpc, sponsorKey);
   const ownerAddress = await ownerSigner.getRecommendedAddressObj(),
     owner = ownerAddress.script,
@@ -359,6 +361,10 @@ export async function batchChain(cutoffMs, deps = BATCH_MANIFEST.codeDeps) {
 }
 
 export function attachBatchRpc(client, call) {
+  client.findSingletonCellByType = async () => undefined;
+  client.getBalanceSingle = async (lock) => (await call('cells', ['lock'])).map(ccc.Cell.from)
+    .filter(cell => cell.cellOutput.lock.eq(lock) && !cell.cellOutput.type)
+    .reduce((total, cell) => total + cell.cellOutput.capacity, 0n);
   client.getCellLiveNoCache = async (point) => {
     const value = await call('cell', [json(point)]);
     return value ? ccc.Cell.from(value) : undefined;

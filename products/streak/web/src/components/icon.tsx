@@ -1,7 +1,19 @@
 export function Icon({
   name,
 }: {
-  name: 'markets' | 'wallet' | 'activity' | 'arrow' | 'search' | 'shield';
+  name:
+    | 'markets'
+    | 'wallet'
+    | 'activity'
+    | 'arrow'
+    | 'search'
+    | 'shield'
+    | 'home'
+    | 'five'
+    | 'matchday'
+    | 'community'
+    | 'account'
+    | 'more';
 }) {
   const paths = {
     markets: 'M4 20V10m8 10V4m8 16V8M2 20h20',
@@ -10,6 +22,13 @@ export function Icon({
     arrow: 'M6 18 18 6M6 6h12v12',
     search: 'M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
     shield: 'm12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6zM8 12l3 3 5-6',
+    home: 'm3 10 9-8 9 8v11h-6v-8H9v8H3z',
+    five: 'm8 3-6 4 3 5 3-2v11h8V10l3 2 3-5-6-4c0 4-8 4-8 0z',
+    matchday: 'M3 5h18v14H3z m7 4 6 3-6 3V9z',
+    community:
+      'M3 21v-4a5 5 0 0 1 10 0v4 M17 12a5 5 0 0 1 4 5v4 M8 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6 M17 3a3 3 0 0 1 0 6',
+    account: 'M4 21a8 8 0 0 1 16 0 M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8',
+    more: 'M5 11v2 M12 11v2 M19 11v2',
   };
   return (
     <svg
