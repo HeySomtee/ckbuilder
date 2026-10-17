@@ -1,5 +1,6 @@
 .welcome {
   --welcome-width: 1260px;
+  --welcome-header-height: 80px;
   overflow: clip;
 }
 .welcome-header,
@@ -10,7 +11,7 @@
   padding-inline: clamp(22px, 4vw, 56px);
 }
 .welcome-header {
-  min-height: 80px;
+  min-height: var(--welcome-header-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -111,6 +112,7 @@
   padding-block: 0;
 }
 .welcome-hero {
+  --welcome-hero-space: 54px;
   display: grid;
   grid-template-columns: 1.1fr 1fr;
   align-items: center;
@@ -820,6 +822,7 @@
 }
 @media (max-width: 1000px) {
   .welcome-hero {
+    --welcome-hero-space: 60px;
     gap: 30px;
     padding-top: 60px;
   }
@@ -846,8 +849,8 @@
   }
 }
 @media (max-width: 760px) {
-  .welcome-header {
-    min-height: 86px;
+  .welcome {
+    --welcome-header-height: 86px;
   }
   .welcome-header nav {
     display: none;
@@ -995,12 +998,13 @@
 }
 /* A tall fixture board must not push the hero's actions below a laptop fold. */
 @media (max-height: 800px) {
-  .welcome-header {
-    min-height: 76px;
+  .welcome {
+    --welcome-header-height: 76px;
   }
   .welcome-hero {
+    --welcome-hero-space: clamp(20px, 4svh, 32px);
     align-items: start;
-    padding-block: clamp(20px, 4svh, 32px) 56px;
+    padding-block: var(--welcome-hero-space) 56px;
   }
   .welcome-copy h1 {
     font-size: clamp(42px, min(5.6vw, 9svh), 64px);
@@ -1028,6 +1032,18 @@
     max-width: 480px;
     width: 100%;
     justify-self: center;
+  }
+}
+/* Center against the visible page, independently of the fixture board's height. */
+@media (min-width: 1001px), (min-width: 761px) and (min-height: 801px) {
+  .welcome-hero {
+    align-items: start;
+    padding-block: var(--welcome-hero-space);
+  }
+  .welcome-copy {
+    display: grid;
+    align-content: center;
+    min-block-size: calc(100svh - var(--welcome-header-height) - 2 * var(--welcome-hero-space));
   }
 }
 @media (prefers-reduced-motion: reduce) {

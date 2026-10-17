@@ -1,6 +1,16 @@
 # Streak status
 
+## Current follow-up, 17 October 2026
+
+The owner has now authorized committing and pushing the hero correction to main for Render. The release requires the complete local commit and push gates; their exact results and the separate Render deployment result are recorded in `.quality-artifacts/hero-release-*`. Earlier local-only language below describes the state before this authorization.
+
+The landing hero copy now centers in the viewport space below the navigation without depending on the fixture board's height. The local web build, all 26 existing Season browser groups and 22 additional Chromium/WebKit viewport profiles passed, with visible, clickable CTAs and no horizontal overflow or page errors. Evidence is in `.quality-artifacts/hero-centering-*`. This CSS correction is local and uncommitted.
+
+MetaMask's public-site "Malicious site" and "High-risk request" warnings remain unresolved. The inspected login uses a single-use, origin-bound, five-minute `personal_sign` challenge, with no payment or allowance request. Published wallet bundles matched the expected build at 16:25 UTC. These findings do not prove a false classification. See the [work tracker](docs/work-tracker.md) for evidence and the provider-review next step. No wallet approval, security bypass or support submission was performed.
+
 ## Week 21 release, 17 October 2026
+
+Published through [PR 4](https://github.com/HeySomtee/ckbuilder/pull/4): release `45297c1c`, main merge `8621e4d`, tested and merged tree `984ffa2f`. Both exact-candidate local gates passed all 51 checks. PR consolidation and remote branch cleanup are complete. After an initial failure, Render retry `dep-db9ptfrbc2fs73cqb0hg` succeeded at 16:14:46 UTC and the expected public JavaScript was verified. See the [release record](docs/delivery/week-21-release.md). This establishes the new hosted web app, not complete hosted payment operations.
 
 The owner explicitly authorized publication of the accumulated approved implementation, the [Week 21 report](../../reports/week-21.md), screenshots and integration of the outstanding PR stack into main. Earlier dated commit pauses below are historical and superseded for this release. The report includes the confirmed three-prediction public payment and separates it from local settlement tests. Exact-candidate commit and push gates remain required; hosted Actions remain paused by the account billing lock. Render's API deployment does not itself configure the durable sponsor, registry and lifecycle worker needed for hosted payments. Five, an original logo, direct v4 notifications and operational readiness remain open. No optional campaign commitment was approved.
 
@@ -58,7 +68,7 @@ Runtime correction after PR 4, 16 October: the owner confirmed that local testin
 | Oracle and operator       | Immutable real-fixture catalogue, strict regulation-time observations, durable signed jobs and a bounded separate worker; no hosted worker activation claimed                              |
 | Independent owner exits   | Browser recovery export and standalone claim, exact-byte resubmission and canonical conflict-proof recovery implemented without API or admin permission                                    |
 | Slip interaction          | Compact native dialog, one X close control, retained draft and focus restoration; Genie removed by owner                                                                                   |
-| Atomic payment and Five   | Atomic entry implemented and focused checks pass; final gate/release pending. Five remains planned                                                                                         |
+| Atomic payment and Five   | Atomic entry published in Week 21 after both 51-check release gates; durable hosted operation remains open. Five remains planned                                                           |
 | Quality foundation        | Published in [PR 1](https://github.com/HeySomtee/ckbuilder/pull/1); local hooks and workflow configuration retained                                                                        |
 | Hosted checks             | No successful run claimed; temporary required branch protection removed following the owner's override                                                                                     |
 

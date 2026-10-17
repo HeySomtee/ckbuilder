@@ -2,6 +2,18 @@
 
 Prepared 17 October 2026 on `feat/streak-direct-testnet`, based on `07b427c`. The owner explicitly authorized the report, screenshots, commit, push and consolidation of the outstanding PRs into main. Hosted Actions remain paused under the previously confirmed billing lock. No new campaign, prize budget or Five launch date was approved.
 
+## Publication result
+
+- Release commit: `45297c1cb77524ca0ffd160dca6dd24c1dac8865`.
+- Main merge: `8621e4d762081b83eddf9c1b86aff28366cb3556`, through [PR 4](https://github.com/HeySomtee/ckbuilder/pull/4).
+- Exact tested and merged tree: `984ffa2fe4cab24ecca5df52e91bbd325727afbe`.
+- All 51 pre-commit checks passed at 15:40:33 UTC; all 51 pre-push checks passed at 15:57:57 UTC on 17 October.
+- PR 1 is merged. PRs 2 and 3 are closed as consolidated. All four verified merged remote feature branches were removed.
+- The unrelated ignore-file contents were restored byte-for-byte, the nested benchmark was untouched and disposable PostgreSQL was stopped.
+- Render's initial deployment failed at 16:01:23 UTC. Retry `dep-db9ptfrbc2fs73cqb0hg` for the main merge succeeded at 16:14:46 UTC. [Deployment log](https://dashboard.render.com/web/srv-d9nn05u417fc73do0hig/deploys/dep-db9ptfrbc2fs73cqb0hg). Public `/` and `/season/` assets were verified separately at 16:25 UTC.
+
+The instructions below record the release preparation and deployment handoff. Hosted payment durability remains unverified. A later local hero-centering change is outside this release. The owner's MetaMask classification warning remains under investigation; successful deployment is not security clearance. Local result evidence: `.quality-artifacts/week21-release-result.json` and `.quality-artifacts/metamask-published-js-audit.json`.
+
 ## Candidate and evidence
 
 The candidate includes the approved account/navigation, compact layout, clear glass, terminal intelligence, inline checkout, sponsor recovery and compact Picks/Activity work. The [Week 21 report](../../../../reports/week-21.md) distinguishes those product improvements from upcoming Five and the original logo.
