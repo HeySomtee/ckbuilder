@@ -3,16 +3,38 @@ services:
     name: streak-terminal
     env: node
     region: oregon
-    plan: free
+    plan: starter
+    disk:
+      name: streak-operator-state
+      mountPath: /var/data/streak
+      sizeGB: 1
     # Root `npm install` also installs the streak product's deps (via postinstall).
     buildCommand: npm ci --include=dev && npm --prefix products/streak run build
-    startCommand: node products/streak/dist/server.js
+    startCommand: node products/streak/scripts/direct-host.cjs
     envVars:
       # Render sets PORT at runtime; Streak reads process.env.PORT.
       - key: PORT
         value: 10000
       - key: NODE_ENV
         value: production
+      - key: STREAK_SKIP_ENV_FILE
+        value: 1
+      - key: STREAK_DIRECT_REGISTRY_DIR
+        value: /var/data/streak/registry-current
+      - key: STREAK_DIRECT_BATCH_REGISTRY_DIR
+        value: /var/data/streak/registry-v4
+      - key: STREAK_DIRECT_OPERATOR_DIR
+        value: /var/data/streak/operator-private
+      # Set only after verifying the disk and the operator handover.
+      - key: STREAK_DIRECT_DURABLE_STATE_ACK
+        sync: false
+      - key: STREAK_SPONSOR_URL
+        value: http://127.0.0.1:4101
+      - key: STREAK_SPONSOR_IPC_SECRET
+        sync: false
+      # The supervisor passes this only to sponsor/worker children.
+      - key: STREAK_DIRECT_PRIVATE_KEY
+        sync: false
       # Exact public HTTPS origin, without a trailing slash. Required for auth.
       - key: STREAK_PUBLIC_ORIGIN
         sync: false
@@ -34,7 +56,7 @@ services:
       - key: STORE_READ_TTL_MS
         value: 5000
       # Secrets — set these values in the Render dashboard, never commit them.
-      # Free tier has no persistent disk, so Postgres is the durable store:
+      # Neon is the application database; the disk stores operator recovery state.
       # DATABASE_URL is required for data to survive a restart. Use the POOLED
       # connection string (its host contains "-pooler"), and keep the database
       # in the same region as this service — `region: oregon` here pairs with

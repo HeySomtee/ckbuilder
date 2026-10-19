@@ -471,6 +471,22 @@ async function main(): Promise<void> {
     );
     assert.equal(bounded.results.length, 4);
     assert.equal(bounded.cursor, 4);
+    const stoppedActions: string[] = [];
+    let stopping = false;
+    const interrupted = await workerCycle([record, record], 0, {
+      ...ports,
+      stopping: () => stopping,
+      execute: async (action) => {
+        stoppedActions.push(action);
+        stopping = true;
+      },
+      inspect: async () => {
+        throw Error('Shutdown must not begin another inspection');
+      },
+    });
+    assert.deepEqual(stoppedActions, ['reconcile']);
+    assert.equal(interrupted.cursor, 0, 'resume the unfinished market on the next pass');
+    assert.equal(interrupted.results.length, 0);
     assert.equal(
       (
         await workerCycle(

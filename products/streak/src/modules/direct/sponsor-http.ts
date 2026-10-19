@@ -18,6 +18,7 @@ import { OperatorBusyError, OperatorJournal } from './journal';
 import { boundedJson } from './cli';
 import { provisioningCatalogueUrl } from './provision';
 import { createFixtureReader } from './fixture-reader';
+import { startHostedRecovery } from './hosted-drain';
 
 function secret(value: string | undefined): string {
   if (!value || !/^[0-9a-f]{64}$/.test(value))
@@ -285,11 +286,9 @@ export async function runSponsorService(): Promise<void> {
     server.once('error', reject);
     server.listen(Number(endpoint.port), '127.0.0.1', () => resolve());
   });
-  let recovering = false;
-  const recovery = setInterval(async () => {
-    if (recovering) return;
-    recovering = true;
-    try {
+  const recovery = startHostedRecovery(
+    server,
+    async () => {
       const results = [
         ...(await service.recoverPending()),
         ...(batch ? await batch.recoverPending() : []),
@@ -298,15 +297,27 @@ export async function runSponsorService(): Promise<void> {
         console.error(
           'A sponsored transaction needs bounded-history reconciliation. Its durable bytes remain reserved.',
         );
-    } catch {
+    },
+    () => {
       console.error(
         'Sponsor recovery is unavailable. Keep durable state and reconcile before new funding.',
       );
-    } finally {
-      recovering = false;
-    }
-  }, 15_000);
-  server.once('close', () => clearInterval(recovery));
+    },
+  );
+  const stop = () => {
+    void recovery
+      .stop()
+      .catch(() => {
+        console.error('Sponsor shutdown could not complete. Preserve journals for reconciliation.');
+        process.exitCode = 1;
+      })
+      .finally(() => {
+        process.off('SIGTERM', stop);
+        process.off('SIGINT', stop);
+      });
+  };
+  process.once('SIGTERM', stop);
+  process.once('SIGINT', stop);
   console.log(
     JSON.stringify({
       service: 'streak-sponsor',

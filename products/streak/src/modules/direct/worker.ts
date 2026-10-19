@@ -28,6 +28,7 @@ export interface WorkerState {
 }
 export interface WorkerPorts {
   now(): number;
+  stopping?(): boolean;
   inspect(record: DirectMarketRecord): Promise<WorkerState>;
   execute(
     action: 'report' | 'settle' | 'void' | 'reconcile',
@@ -62,11 +63,14 @@ export async function workerCycle(
     };
   const results: WorkerResult[] = [];
   for (let offset = 0; offset < Math.min(4, due.length); offset++) {
+    if (ports.stopping?.()) break;
     const record = due[(cursor + offset) % due.length];
     let action: WorkerResult['action'] = 'wait';
     try {
       await ports.execute('reconcile', record);
+      if (ports.stopping?.()) break;
       const state = await ports.inspect(record);
+      if (ports.stopping?.()) break;
       if (state.closed) {
         results.push({ fixtureId: record.fixtureId, action: 'closed', status: 'complete' });
         continue;
@@ -109,12 +113,12 @@ export async function workerCycle(
     }
   }
   return {
-    cursor: due.length ? (cursor + Math.min(4, due.length)) % due.length : 0,
+    cursor: due.length ? (cursor + results.length) % due.length : 0,
     results,
   };
 }
 
-export async function runWorkerOnce(): Promise<void> {
+export async function runWorkerOnce(stopping: () => boolean = () => false): Promise<void> {
   if (process.env.NODE_ENV === 'test')
     throw Error('Live worker CLI is forbidden in routine tests; inject local worker ports');
   const directory = process.env.STREAK_DIRECT_OPERATOR_DIR,
@@ -153,6 +157,7 @@ export async function runWorkerOnce(): Promise<void> {
     maxConcurrent: 2,
   });
   await lease.exclusive(async () => {
+    if (stopping()) return;
     const catalogueUrl = process.env.STREAK_DIRECT_CATALOGUE_URL;
     const progressDirectory = process.env.STREAK_DIRECT_PROGRESS_DIR;
     if (!!catalogueUrl !== !!progressDirectory)
@@ -191,6 +196,7 @@ export async function runWorkerOnce(): Promise<void> {
       ),
     );
     const conflictState = await canonicalSponsorConflicts(client, journal.directory);
+    if (stopping()) return;
     for (const [id, record] of records)
       if (conflictState.resolved.has(record.creationTxHash)) records.delete(id);
     const files = readdirSync(directory).filter(
@@ -243,7 +249,9 @@ export async function runWorkerOnce(): Promise<void> {
       throw Error('Invalid durable worker cursor');
     const result = await workerCycle(ordered, cursor, {
       now: Date.now,
+      stopping,
       async execute(action, record) {
+        if (stopping()) return;
         await runOperator(
           [action, record.fixtureId, ...(action === 'reconcile' ? [] : ['--broadcast'])],
           { record, quiet: true },
@@ -251,6 +259,13 @@ export async function runWorkerOnce(): Promise<void> {
       },
       async inspect(record) {
         for (const action of ['close', 'report'] as const) {
+          if (stopping())
+            return {
+              exists: true,
+              closed: false,
+              eligibleReport: false,
+              blocked: 'Worker is stopping.',
+            };
           const operation = journal.load(
             operationKey(action, record.fixtureId, record.type.codeHash, record.creationTxHash),
           );
@@ -276,6 +291,13 @@ export async function runWorkerOnce(): Promise<void> {
                 'An unconfirmed signed report crossed the deadline. Reconcile it before choosing the timeout path.',
             };
         }
+        if (stopping())
+          return {
+            exists: true,
+            closed: false,
+            eligibleReport: false,
+            blocked: 'Worker is stopping.',
+          };
         const state = await loadOperatorMarket(client, record);
         const data = state.market?.cell.outputData;
         const timestamp = state.market ? Number(state.market.header.timestamp) : 0;
@@ -294,7 +316,7 @@ export async function runWorkerOnce(): Promise<void> {
     const checkpointTemporary = `${checkpointFile}.${randomUUID()}.next`;
     writeExclusiveJson(checkpointTemporary, checkpoints);
     renameSync(checkpointTemporary, checkpointFile);
-    if (queue && catalogueReady) {
+    if (queue && catalogueReady && !stopping()) {
       try {
         await provisionCycle(queue, {
           now: Date.now,

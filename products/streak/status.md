@@ -1,5 +1,9 @@
 # Streak status
 
+## Hosted launcher, 19 October 2026
+
+The hosted API/sponsor/worker implementation is ready for the owner-authorized release. All 52 local major-gate checks passed at 08:54:42 UTC, alongside ten Linux process tests and independent recovery review. [Implementation and activation boundaries](docs/delivery/hosted-launcher.md). Render startup configuration, operator handover and public payment verification remain separate acceptance steps. No hosted readiness or new public transaction is claimed.
+
 ## Current follow-up, 17 October 2026
 
 The hero correction is published as `8e32db6`. Render deployed it successfully at 19:00:07 UTC, and the live root stylesheet matches the tested build. All 51 checks passed for commit and both push attempts; the first upload disconnected after checks and the HTTP/1.1 retry succeeded. Evidence: `.quality-artifacts/hero-release-*`. Earlier local-only language below is historical.

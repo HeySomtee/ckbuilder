@@ -28,6 +28,71 @@ A report remains provisional until its actual creation header is checked. Only c
 
 ## Operator configuration
 
+### Hosted Render configuration checklist, 19 October 2026
+
+Status: instructions and required configuration, **not a completed hosted release**. The public API returned both v4 dependency references but disabled atomic demand because its batch registry directory was unset. The [hosted supervisor](../delivery/hosted-launcher.md) now implements separate API/sponsor/worker environments locally. Publication, local-operator handover and public payment verification remain separate steps.
+
+The current adapter requires same-host loopback IPC and shared durable files. Use one disk-backed Render web-service instance containing separate API, sponsor and worker processes. Do not create independent Render services and point them at the same directory string: disks cannot be shared between services and `127.0.0.1` would reference different containers. Neon remains the application database. Render requires a paid service for a persistent disk; its disk is available only at runtime, not during build or pre-deploy. See [Render disk setup and limitations](https://render.com/docs/disks).
+
+1. Keep the existing `streak-terminal` service and its public URL. Select a disk-compatible paid instance only after the owner approves the expense. Attach a disk at `/var/data/streak`. Choose capacity based on the existing operator-state backup plus headroom, then monitor it. Keep one service instance.
+2. Keep the repository root as the working directory and the existing build command: `npm ci --include=dev && npm --prefix products/streak run build`. Use the repository's pinned Node/npm versions. Render supplies the public listening port; the proposed configuration below fixes it to `10000` so the internal catalogue URL matches.
+3. Preserve the existing Neon `DATABASE_URL` and legacy `TREASURY_PRIVATE_KEY`. Do not create an empty database, rerun a data migration blindly or substitute the direct operator key for the legacy treasury. Verify database capacity and schema readiness separately. A disk does not repair a full Neon database.
+4. Prepare the common process configuration below. Secrets are entered through hosting secret settings, never committed. Do not activate signing until the durable-state migration and process environment isolation are implemented.
+
+```dotenv
+NODE_ENV=production
+PORT=10000
+STREAK_SKIP_ENV_FILE=1
+STREAK_PUBLIC_ORIGIN=https://streak-terminal.onrender.com
+APP_PUBLIC_URL=https://streak-terminal.onrender.com
+MATCH_PROVIDER=football
+FOOTBALL_LEAGUE_IDS=39,140,78,135,61,2
+FOOTBALL_INSIGHT_PREFETCH_MINUTES=90
+FOOTBALL_INSIGHT_PREFETCH_BATCH=4
+STORE_READ_TTL_MS=5000
+STREAK_DIRECT_REGISTRY_DIR=/var/data/streak/registry-current
+STREAK_DIRECT_BATCH_REGISTRY_DIR=/var/data/streak/registry-v4
+STREAK_SPONSOR_URL=http://127.0.0.1:4101
+NOTIFY_PROVIDER=telegram
+```
+
+| Setting                             | Processes                                        | Value or handling                                                                                                   |
+| ----------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                      | API                                              | Existing Neon pooled connection string with its existing TLS parameters                                             |
+| `TREASURY_PRIVATE_KEY`              | API                                              | Preserve the existing legacy treasury identity; this is not the direct operator key                                 |
+| `API_SPORTS_KEY`                    | API, sponsor, worker                             | Existing real football provider credential                                                                          |
+| `STREAK_SPONSOR_IPC_SECRET`         | API, sponsor                                     | Same random 32-byte secret encoded as 64 lowercase hexadecimal characters                                           |
+| `STREAK_DIRECT_PRIVATE_KEY`         | Sponsor, worker only                             | Existing funded testnet operator key; exclude from API child environment                                            |
+| `STREAK_DIRECT_OPERATOR_DIR`        | Sponsor, worker                                  | `/var/data/streak/operator-private`                                                                                 |
+| `STREAK_DIRECT_DURABLE_STATE_ACK`   | Sponsor, worker                                  | `1` only after actual disk, imported state and backup verification                                                  |
+| `STREAK_DIRECT_CATALOGUE_URL`       | Sponsor only                                     | `http://127.0.0.1:10000/api/direct/fixtures`                                                                        |
+| `STREAK_DIRECT_LEGACY_REGISTRY_DIR` | API, sponsor, worker if historical records exist | A separate restored directory, such as `/var/data/streak/registry-legacy`; preserve all prior supported generations |
+| `TELEGRAM_BOT_TOKEN`                | API                                              | Existing bot token                                                                                                  |
+| `TELEGRAM_BOT_USERNAME`             | API                                              | Existing bot username, without `@`                                                                                  |
+| `TELEGRAM_WEBHOOK_SECRET`           | API                                              | Existing URL-safe webhook secret, separate from sponsor IPC secret                                                  |
+
+The API, sponsor and worker all use the same current and v4 registry paths. The worker must omit both `STREAK_DIRECT_CATALOGUE_URL` and `STREAK_DIRECT_PROGRESS_DIR` in demand-creation mode; the sponsor still needs its catalogue URL. Leave `STREAK_DIRECT_PROVISION_MODE` unset. This preserves first-bettor creation rather than activating historical bulk provisioning. The launcher must pass explicit child-specific environment allowlists; setting all keys at the Render service level and inheriting everything into every child does not satisfy this isolation.
+
+Generate the IPC secret once on a trusted machine with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`, and store it privately. Do not paste it into reports or chat. This command generates the IPC credential, not a new operator wallet.
+
+5. **Handover before switching the signer.** The owner accepts a fresh pilot without importing old test activity. Pause local sponsor/worker writes, inspect outstanding signed jobs and make a consistent archive of the private journal, deployment sentinels, provider observations, sponsored-v3/atomic-v4 offer histories and every public registry. Reconcile ambiguous transactions by their existing hashes before starting fresh hosted records. Retain descriptors for old claims. If any pending recovery obligations remain, transfer those exact records instead of discarding them. Never run local and hosted signers against separate journals for the same wallet.
+6. **Publish the tested launcher, then change the Start Command to `node products/streak/scripts/direct-host.cjs`.** It starts the API without the direct signing key, starts the sponsor on loopback after API readiness, schedules non-overlapping worker passes, propagates shutdown and preserves signed recovery state. It validates the disk mount, directory containment and prior lease state. The child commands are:
+
+```text
+API:     node products/streak/dist/server.js
+Sponsor: node products/streak/scripts/direct-sponsor.cjs --serve
+Worker:  node products/streak/scripts/direct-worker.cjs --once
+```
+
+The worker command performs one pass and exits. The launcher schedules another pass 60 seconds after completion. Do not replace the Render start command with only the sponsor or worker command, or background all three with an unsupervised shell expression. Keep the current web start command until the launcher revision is published. The updated `render.yaml` records the disk-backed topology. Runtime mount verification defaults to `/var/data/streak`; an intentional different mount requires `STREAK_HOST_STATE_DIR`. All three local ports must differ; the supervisor reserves loopback port 4102 by default (`STREAK_HOST_CONTROL_PORT` overrides it).
+
+7. Keep the existing testnet operator funded for new 3,050 tCKB market reserves, transaction fees and valid change. A known balance alone does not prove suitable live funding cells. The public address is recorded in Week 21; derive and verify it from the configured operator identity before any transfer. Existing v4 code references are already present; this setup does not require redeploying contract code.
+8. Verify Telegram startup registration succeeds. The API registers the webhook using its existing token, public URL and webhook secret. Do not run a local polling receiver for the same bot alongside the hosted webhook. Verify linking from My Account. Direct v4 payment notifications are still an unfinished feature; bot configuration does not implement them.
+9. Verify `GET /api/direct/batch/config` returns the pinned dependencies, `GET /api/direct/fixtures` contains real eligible future fixtures and `GET /api/direct/batch/demand` returns `enabled: true` with usable fixtures. An empty/failed real-provider catalogue is a separate blocker. Never substitute synthetic fixtures in production to make this check pass.
+10. Perform a separately authorized hosted testnet journey: new-market first entry, repeat entry, combined slip, recovery after reload/restart and independent claims after settlement or void. Record hashes and failures honestly. Confirm worker output and durable files survive a redeploy. This is the activation evidence; an enabled demand flag alone does not prove working payments. Monitor disk usage, provider failures, operator reserve and pending signed jobs, and verify backups before community onboarding.
+
+This checklist does not resolve the outstanding MetaMask classification, implement Survivor/Five, promise prizes or certify mainnet readiness. No hosting purchase, settings change, state transfer, payment or deployment was performed while writing it.
+
 Build first:
 
 ```powershell
