@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My activity | Streak design preview</title>
+    <link rel="icon" href="mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.mjs"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to activity</a>
+    <aside class="sidebar" aria-label="Application navigation preview">
+      <a class="brand" href="#main"><img src="mark.svg" alt="" />streak<span>.</span></a>
+      <div class="nav-section">YOUR TOUCHLINE</div>
+      <span class="nav-item"><i data-icon="home"></i>Overview</span>
+      <div class="nav-section">PREDICTIONS</div>
+      <span class="nav-item"><i data-icon="chart"></i>Markets</span>
+      <span class="nav-item"><i data-icon="play"></i>Matchday</span>
+      <a class="nav-item active" href="#main" aria-current="page"
+        ><i data-icon="activity"></i>My activity</a
+      >
+      <div class="nav-section">STREAK GAMES</div>
+      <span class="nav-item"><i data-icon="shirt"></i>Streak Five<small>Soon</small></span>
+      <span class="nav-item"><i data-icon="shield"></i>Survivor<small>Soon</small></span>
+      <div class="nav-section">COMMUNITY</div>
+      <span class="nav-item"><i data-icon="people"></i>Clubhouse</span>
+      <span class="nav-item"><i data-icon="person"></i>My Account</span>
+      <div class="sidebar-foot">
+        <span class="avatar">S</span>
+        <div>Somtee<small>Sample account</small></div>
+        <i data-icon="chevron"></i>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <span>Your touchline <span class="slash">/</span><strong>My activity</strong></span>
+        <div class="identity">
+          <span class="network-dot"></span>CKB testnet<span class="avatar">S</span>
+        </div>
+      </header>
+      <div class="preview-bar">
+        <span
+          >DESIGN PREVIEW
+          <span class="preview-note">· Sample activity, no real payments</span></span
+        >
+        <div>
+          <label class="sr-only" for="scenario">Preview scenario</label
+          ><select id="scenario">
+            <option value="populated">Populated account</option>
+            <option value="empty">No predictions yet</option>
+            <option value="disconnected">Wallet disconnected</option>
+            <option value="unavailable">Connection interrupted</option>
+            <option value="uncertain">Payment needs checking</option>
+            <option value="claim-error">Claim interrupted</option></select
+          ><button id="reset" aria-label="Reset preview" title="Reset preview">
+            <i data-icon="refresh"></i>
+          </button>
+        </div>
+      </div>
+      <main id="main">
+        <header class="page-heading">
+          <div>
+            <div class="eyebrow">YOUR PREDICTIONS</div>
+            <h1>My activity<span>.</span></h1>
+            <p>Your calls, from kickoff to the final return.</p>
+          </div>
+          <button class="quiet" id="guide"><i data-icon="info"></i>How statuses work</button>
+        </header>
+        <div id="content"></div>
+        <footer class="page-foot">
+          <span><i data-icon="shield"></i>Every prediction settles independently.</span
+          ><span>Testnet CKB has no monetary value.</span>
+        </footer>
+      </main>
+    </div>
+    <nav class="mobile-nav" aria-label="Navigation preview">
+      <span><i data-icon="home"></i>Overview</span><span><i data-icon="chart"></i>Markets</span
+      ><a href="#main" aria-current="page"><i data-icon="activity"></i>Activity</a
+      ><span><i data-icon="person"></i>Account</span>
+    </nav>
+    <dialog id="detail" aria-labelledby="detail-title"><div id="detail-content"></div></dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

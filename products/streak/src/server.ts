@@ -16,6 +16,7 @@ import { telegramAvailable } from './modules/identity/integration-config';
 import { readProvisioningProgress, PROVISION_QUEUE_LIMIT } from './modules/direct/provision';
 import { sponsorProxy, SponsorProxyError } from './modules/direct/sponsor-proxy';
 import { activePoolRecord, PublicPoolCache } from './modules/direct/pools';
+import { catalogueStatusMatches } from './modules/predictions/catalogue';
 
 import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
@@ -596,6 +597,7 @@ async function handleDashboard(req: IncomingMessage, res: ServerResponse): Promi
 // ── Markets ─────────────────────────────────────────────────────────────────
 
 async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  const seasonCatalogue = url.searchParams.get('catalogue') === '1' && url.searchParams.has('limit');
   const sort = url.searchParams.get('sort') ?? 'kickoff';
   if (!['featured', 'kickoff'].includes(sort) || (url.searchParams.has('sort') && !url.searchParams.has('limit')))
     return sendJson(res, 400, { error: 'Invalid fixture sort.' });
@@ -603,7 +605,7 @@ async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL
   const matchId = url.searchParams.get("matchId") ?? undefined;
   const competitionId = url.searchParams.get("competition") ?? undefined;
   const markets = await listMarkets({
-    status: status === "open" || status === "closed" || status === "resolved" || status === "void" ? status : undefined,
+    status: !seasonCatalogue && (status === "open" || status === "closed" || status === "resolved" || status === "void") ? status : undefined,
     matchId,
     competitionId,
     matchFilter: isActiveProviderMatch,
@@ -623,14 +625,14 @@ async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL
     // Schedule-only rows never create pools or enter settlement. Keep completed
     // and postponed fixtures visible even if the app never opened their market.
     const known = new Set(markets.map(m => m.match.id));
-    const schedule = url.searchParams.get('catalogue') === '1' && !status
+    const schedule = seasonCatalogue
       ? (provider.scheduleFixtures?.() ?? []).filter(match => !known.has(match.id) &&
           (!matchId || match.id === matchId) && (!competitionId || match.competition?.id === competitionId)).map(match => ({
           id: `fixture:${match.id}`, available: false, status: 'closed', fixtureStatus: match.status,
           match: { ...match, label: `${match.home.name} vs ${match.away.name}` },
           prices: null, totalPoolCkb: null, totalBets: null,
         })) : [];
-    const catalogue = [...markets, ...schedule].sort((a,b)=>a.match.kickoff.localeCompare(b.match.kickoff) || a.id.localeCompare(b.id));
+    const catalogue = [...markets, ...schedule].filter(row => !seasonCatalogue || catalogueStatusMatches(row.match, status, Date.now())).sort((a,b)=>a.match.kickoff.localeCompare(b.match.kickoff) || a.id.localeCompare(b.id));
     const inWindow = start !== null && end !== null ? catalogue.filter(m => Date.parse(m.match.kickoff) >= start && Date.parse(m.match.kickoff) < end) : catalogue;
     const filtered = query ? inWindow.filter(m => `${m.match.home.name} ${m.match.away.name} ${m.match.competition?.name ?? ""}`.toLowerCase().includes(query)) : inWindow;
     const ordered = sort === 'featured' ? rankFeaturedFixtures(filtered) : filtered;

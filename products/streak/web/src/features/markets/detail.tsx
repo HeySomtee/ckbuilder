@@ -14,6 +14,7 @@ import { PoolChart } from './pool-chart';
 import { currentPool, getPublicPools, poolLabel } from './pools';
 import './match-room.css';
 import { MatchIntelligence, PoolComposition } from './intelligence';
+import { fixtureLabel, settlementLabel } from './status';
 
 export function MarketDetail({
   id,
@@ -82,13 +83,7 @@ export function MarketDetail({
     now < Date.parse(terms.closesAt) &&
     now < Date.parse(terms.kickoff) &&
     !detail.isError;
-  const state = accepting
-    ? 'Open for predictions'
-    : market.status === 'resolved'
-      ? 'Resolved'
-      : market.status === 'void'
-        ? 'Voided'
-        : 'Predictions closed';
+  const state = accepting ? 'Open for predictions' : fixtureLabel(market, now);
   const dateLabel = new Date(market.kickoff).toLocaleString('en-GB', {
     weekday: 'short',
     day: 'numeric',
@@ -121,7 +116,11 @@ export function MarketDetail({
             <h1 ref={heading} tabIndex={-1}>
               {market.home} <span>vs</span> {market.away}
             </h1>
-            <p>90 minutes. Three outcomes. Your call.</p>
+            <p>
+              {market.score
+                ? `${market.home} ${market.score.home} : ${market.score.away} ${market.away}`
+                : '90 minutes. Three outcomes. Your call.'}
+            </p>
           </div>
           <TeamBadge logo={market.awayLogo} code={market.awayCode} side="away" />
         </div>
@@ -129,7 +128,7 @@ export function MarketDetail({
           <span>
             <Icon name="shield" /> CKB testnet
           </span>
-          <span>Independent settlement</span>
+          <span>{settlementLabel(pool.isError ? undefined : pool.data, now)}</span>
           <span>Regulation time only</span>
         </div>
       </header>

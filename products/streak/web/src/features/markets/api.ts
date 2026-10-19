@@ -11,6 +11,7 @@ export interface Market {
   status: MarketStatus;
   available: boolean;
   fixtureStatus: string;
+  score?: { home: number; away: number };
   home: string;
   away: string;
   homeCode: string;
@@ -105,6 +106,13 @@ export function parseMarket(value: unknown): Market {
     status,
     available,
     fixtureStatus: text(value.match.status),
+    ...(isRecord(value.match.score) &&
+    Number.isSafeInteger(value.match.score.home) &&
+    Number.isSafeInteger(value.match.score.away) &&
+    Number(value.match.score.home) >= 0 &&
+    Number(value.match.score.away) >= 0
+      ? { score: { home: Number(value.match.score.home), away: Number(value.match.score.away) } }
+      : {}),
     kickoff,
     totalPoolCkb,
     totalBets,

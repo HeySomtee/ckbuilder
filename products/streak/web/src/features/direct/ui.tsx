@@ -3,6 +3,7 @@ import type { MouseEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ccc } from '@ckb-ccc/core';
 import { getDirectMarkets } from './api';
+import { Activity } from './activity';
 import { DirectClient } from './client';
 import type { Review } from './client';
 import { SponsoredClient } from './sponsored-client';
@@ -311,6 +312,7 @@ export default function DirectPage({
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   const mounted = useRef(true);
   const busy = useRef(false);
+  const reviewEpoch = useRef(0);
   const wallet = useSyncExternalStore(subscribeWallet, getWalletState);
   const activeWallet = wallet.connection;
   const linkedWallet = useQuery({
@@ -346,6 +348,11 @@ export default function DirectPage({
   const [sponsoredBusy, setSponsoredBusy] = useState(false);
   const [visibleMarkets, setVisibleMarkets] = useState(4);
   const [visibleTransactions, setVisibleTransactions] = useState(8);
+  useEffect(() => {
+    reviewEpoch.current++;
+    setReview(null);
+    setNotice('');
+  }, [activeWallet?.revision]);
   const now = useNow(true);
   useEffect(() => {
     if (review) reviewHeading.current?.focus();
@@ -430,8 +437,13 @@ export default function DirectPage({
   const prepare = useMutation({
     mutationFn: async (claim?: { descriptor: Descriptor; point: Point }) => {
       if (!connection || !activeWallet) throw Error('Connect your wallet first.');
+      const epoch = reviewEpoch.current;
       await assertActiveWallet(activeWallet);
-      if (claim) return connection.client.prepareClaim(claim.descriptor, claim.point);
+      if (claim) {
+        const result = await connection.client.prepareClaim(claim.descriptor, claim.point);
+        await assertActiveWallet(activeWallet);
+        return { result, epoch, revision: activeWallet.revision };
+      }
       const principal = amountShannons(amount);
       if (
         !descriptor ||
@@ -445,11 +457,17 @@ export default function DirectPage({
         Date.parse(detail.data.market.kickoff) !== descriptor.cutoffMs
       )
         throw Error('Football fixture details changed. New entries are paused.');
-      return connection.client.prepareDeposit(descriptor, outcome, principal);
+      const result = await connection.client.prepareDeposit(descriptor, outcome, principal);
+      await assertActiveWallet(activeWallet);
+      return { result, epoch, revision: activeWallet.revision };
     },
     retry: false,
-    onSuccess: (result) => {
-      if (mounted.current) {
+    onSuccess: ({ result, epoch, revision }) => {
+      if (
+        mounted.current &&
+        epoch === reviewEpoch.current &&
+        getWalletState().connection?.revision === revision
+      ) {
         setReview(result);
         setNotice('Review the exact wallet transaction below.');
       }
@@ -472,17 +490,17 @@ export default function DirectPage({
         }
         const signed = await connection.client.signAndPersist(review, current);
         await assertActiveWallet(activeWallet);
-        if (mounted.current)
+        if (mounted.current && getWalletState().connection?.revision === activeWallet.revision)
           setNotice('Signed transaction saved. Sending the same transaction to CKB.');
         const result = await connection.client.broadcast(signed);
-        return { signed, result };
+        return { signed, result, revision: activeWallet.revision };
       } finally {
         busy.current = false;
       }
     },
     retry: false,
-    onSuccess: () => {
-      if (mounted.current) {
+    onSuccess: ({ revision }) => {
+      if (mounted.current && getWalletState().connection?.revision === revision) {
         setReview(null);
         setNotice('Transaction saved. Follow confirmation and admission in your activity below.');
         refresh();
@@ -535,6 +553,132 @@ export default function DirectPage({
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+
+  const paymentTools = connection ? (
+    <section className="glass direct-history" aria-label="Saved testnet transactions">
+      <div className="direct-row">
+        <div>
+          <p className="eyebrow">PAYMENTS</p>
+          <h2>Recent transactions</h2>
+        </div>
+        <button className="quiet" disabled={history.isFetching || working} onClick={refresh}>
+          Refresh status
+        </button>
+      </div>
+      {history.isError && (
+        <p className="notice error" role="alert">
+          {history.error.message} New signing is paused.
+        </p>
+      )}
+      {sponsoredHistory.isError && (
+        <p className="notice error" role="alert">
+          {sponsoredHistory.error.message} New signing is paused.
+        </p>
+      )}
+      {batchHistory.isError && (
+        <p className="notice error" role="alert">
+          {batchHistory.error.message} New signing is paused.
+        </p>
+      )}
+      {history.data?.length === 0 &&
+        sponsoredHistory.data?.length === 0 &&
+        batchHistory.data?.length === 0 && (
+          <p>No saved transactions for this wallet on this device.</p>
+        )}
+      {batchHistory.data
+        ?.slice()
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, visibleTransactions)
+        .map((record) => (
+          <BatchTransaction
+            key={record.hash}
+            record={record}
+            client={connection.batch}
+            refresh={refresh}
+            draftStore={draftStore}
+          />
+        ))}
+      {history.data
+        ?.slice()
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, visibleTransactions)
+        .map((record) => (
+          <PendingTransaction
+            key={record.hash}
+            record={record}
+            connection={connection}
+            refresh={refresh}
+          />
+        ))}
+      {sponsoredHistory.data
+        ?.slice()
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, visibleTransactions)
+        .map((record) => (
+          <SponsoredTransaction
+            key={record.hash}
+            record={record}
+            client={connection.sponsored}
+            refresh={refresh}
+            working={working}
+          />
+        ))}
+      {Math.max(
+        history.data?.length ?? 0,
+        sponsoredHistory.data?.length ?? 0,
+        batchHistory.data?.length ?? 0,
+      ) > visibleTransactions && (
+        <button className="quiet" onClick={() => setVisibleTransactions((count) => count + 8)}>
+          Show eight more transactions
+        </button>
+      )}
+      <button className="quiet" disabled={!history.data || working} onClick={exportRecovery}>
+        Download recovery backup
+      </button>
+      <small>
+        Contains public transaction data, market definitions and saved signatures. Confirmed
+        positions can be claimed with the standalone tool. First predictions still awaiting Streak's
+        signature resume from this browser's saved activity.
+      </small>
+    </section>
+  ) : null;
+  if (activityOnly)
+    return (
+      <Activity
+        key={activeWallet?.revision ?? 'disconnected'}
+        client={connection?.client}
+        ownerHash={connection?.ownerHash}
+        descriptors={Array.from(savedDescriptors.values())}
+        records={history.data ?? []}
+        sourceIssue={
+          history.isError || sponsoredHistory.isError || batchHistory.isError || catalogue.isError
+        }
+        sourcesLoading={
+          history.isLoading ||
+          sponsoredHistory.isLoading ||
+          batchHistory.isLoading ||
+          catalogue.isLoading
+        }
+        onConnect={() => (activeWallet ? void linkedWallet.refetch() : connect.mutate())}
+        connecting={connect.isPending || !accountReady || linkedWallet.isFetching}
+        connectionPending={!!activeWallet}
+        recovery={paymentTools}
+        onClaim={(selected, point) => {
+          if (!working) prepare.mutate({ descriptor: selected, point });
+        }}
+        review={review?.ownerHash === connection?.ownerHash ? review : null}
+        onSign={() => submit.mutate()}
+        onDismissReview={() => {
+          reviewEpoch.current++;
+          setReview(null);
+        }}
+        working={working}
+        signing={submit.isPending}
+        notice={notice}
+        error={error ? message(error) : undefined}
+        onRefresh={refresh}
+      />
+    );
 
   return (
     <section
@@ -878,95 +1022,7 @@ export default function DirectPage({
       )}
       {connection && (
         <>
-          <section className="glass direct-history" aria-label="Saved testnet transactions">
-            <div className="direct-row">
-              <div>
-                <p className="eyebrow">PAYMENTS</p>
-                <h2>Recent transactions</h2>
-              </div>
-              <button className="quiet" disabled={history.isFetching || working} onClick={refresh}>
-                Refresh status
-              </button>
-            </div>
-            {history.isError && (
-              <p className="notice error" role="alert">
-                {history.error.message} New signing is paused.
-              </p>
-            )}
-            {sponsoredHistory.isError && (
-              <p className="notice error" role="alert">
-                {sponsoredHistory.error.message} New signing is paused.
-              </p>
-            )}
-            {batchHistory.isError && (
-              <p className="notice error" role="alert">
-                {batchHistory.error.message} New signing is paused.
-              </p>
-            )}
-            {history.data?.length === 0 &&
-              sponsoredHistory.data?.length === 0 &&
-              batchHistory.data?.length === 0 && (
-                <p>No saved transactions for this wallet on this device.</p>
-              )}
-            {batchHistory.data
-              ?.slice()
-              .sort((a, b) => b.createdAt - a.createdAt)
-              .slice(0, visibleTransactions)
-              .map((record) => (
-                <BatchTransaction
-                  key={record.hash}
-                  record={record}
-                  client={connection.batch}
-                  refresh={refresh}
-                  draftStore={draftStore}
-                />
-              ))}
-            {history.data
-              ?.slice()
-              .sort((a, b) => b.createdAt - a.createdAt)
-              .slice(0, visibleTransactions)
-              .map((record) => (
-                <PendingTransaction
-                  key={record.hash}
-                  record={record}
-                  connection={connection}
-                  refresh={refresh}
-                />
-              ))}
-            {sponsoredHistory.data
-              ?.slice()
-              .sort((a, b) => b.createdAt - a.createdAt)
-              .slice(0, visibleTransactions)
-              .map((record) => (
-                <SponsoredTransaction
-                  key={record.hash}
-                  record={record}
-                  client={connection.sponsored}
-                  refresh={refresh}
-                  working={working}
-                />
-              ))}
-            {Math.max(
-              history.data?.length ?? 0,
-              sponsoredHistory.data?.length ?? 0,
-              batchHistory.data?.length ?? 0,
-            ) > visibleTransactions && (
-              <button
-                className="quiet"
-                onClick={() => setVisibleTransactions((count) => count + 8)}
-              >
-                Show eight more transactions
-              </button>
-            )}
-            <button className="quiet" disabled={!history.data || working} onClick={exportRecovery}>
-              Download recovery backup
-            </button>
-            <small>
-              Contains public transaction data, market definitions and saved signatures. Confirmed
-              positions can be claimed with the standalone tool. First predictions still awaiting
-              Streak's signature resume from this browser's saved activity.
-            </small>
-          </section>
+          {paymentTools}
           <section className="glass direct-positions" aria-label="Contract positions and claims">
             <p className="eyebrow">PREDICTIONS</p>
             <h2>Results and returns</h2>

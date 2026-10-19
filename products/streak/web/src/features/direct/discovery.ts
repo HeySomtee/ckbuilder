@@ -26,6 +26,7 @@ export type Position = Readonly<{
 }>;
 export type MarketSnapshot = Readonly<{
   phase: 'open' | 'reported' | 'settled' | 'voided' | 'unknown';
+  settlement?: Readonly<{ outcome: Outcome | null; emptyWinner: boolean }>;
   positions: readonly Position[];
   report?: Readonly<{
     outcome: Outcome;
@@ -172,7 +173,15 @@ export async function discoverMarket(
   const live = await loadMarket(client, descriptor),
     positions: Position[] = [];
   let phase: MarketSnapshot['phase'] = 'unknown',
-    report: MarketSnapshot['report'];
+    report: MarketSnapshot['report'],
+    settlement: MarketSnapshot['settlement'];
+  const settled = (state: Extract<CellState, { kind: 'reserve' }>) => {
+    phase = state.outcome === 255 ? 'voided' : 'settled';
+    settlement = {
+      outcome: state.outcome === 255 ? null : state.outcome,
+      emptyWinner: state.outcome !== 255 && state.totals[state.outcome] === 0n,
+    };
+  };
   for (const { cell, state } of live) {
     if (state.kind === 'market') {
       phase = state.phase === 0 ? 'open' : 'reported';
@@ -206,7 +215,7 @@ export async function discoverMarket(
           ),
         );
       }
-    } else if (state.kind === 'reserve') phase = state.outcome === 255 ? 'voided' : 'settled';
+    } else if (state.kind === 'reserve') settled(state);
     else if (state.ticket.owner === ownerHash)
       positions.push(
         position(
@@ -252,7 +261,7 @@ export async function discoverMarket(
       const state = decode(first.outputData);
       if (state.kind === 'reserve') reserve = state;
     }
-    if (reserve) phase = reserve.outcome === 255 ? 'voided' : 'settled';
+    if (reserve) settled(reserve);
     for (let index = 0; index < tx.outputs.length; index++) {
       const output = tx.getOutput(index);
       if (!output?.cellOutput.type?.eq(descriptor.type)) continue;
@@ -381,6 +390,7 @@ export async function discoverMarket(
     phase,
     positions: Object.freeze(positions),
     ...(report ? { report } : {}),
+    ...(settlement ? { settlement } : {}),
     checkedAt: Date.now(),
     ...(truncated || phase === 'unknown'
       ? {

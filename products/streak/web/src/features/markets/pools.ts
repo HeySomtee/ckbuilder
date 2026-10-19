@@ -9,6 +9,7 @@ export interface PoolPoint {
 export interface DirectPool {
   fixtureId: string;
   state: 'uninitialized' | 'loading' | 'unavailable' | 'ready' | 'stale';
+  phase?: 'open' | 'reported' | 'settled' | 'voided';
   observedAtMs?: number;
   totals?: PoolTotals;
   history: PoolPoint[];
@@ -69,6 +70,9 @@ export async function getPublicPools(ids: string[], signal?: AbortSignal): Promi
       fixtureId: row.fixtureId,
       state: row.state as DirectPool['state'],
       history,
+      ...(['open', 'reported', 'settled', 'voided'].includes(String(row.phase))
+        ? { phase: row.phase as DirectPool['phase'] }
+        : {}),
       ...(present ? { totals: totals(row.totals), observedAtMs: row.observedAtMs as number } : {}),
     };
   });

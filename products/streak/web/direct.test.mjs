@@ -375,6 +375,26 @@ test('External operator settlement discovery bypasses stale CCC cells and uses a
   assert.equal(discovered.phase, 'unknown');
   assert.match(discovered.uncertainty, /history/);
   assert.equal(pages, 4);
+  for (const outcome of [0, 1, 2, 255]) {
+    const reserve = new Uint8Array(34);
+    reserve.set([2, outcome]);
+    new DataView(reserve.buffer).setBigUint64(2, 100n * CKB, true);
+    live = [
+      claim,
+      ccc.Cell.from({
+        outPoint: { txHash: hash('b'), index: 0 },
+        cellOutput: { capacity: 3050n * CKB, lock, type },
+        outputData: ccc.hexFrom(reserve),
+      }),
+    ];
+    const snapshot = await discoverMarket(rpc, fixture, owner.hash());
+    assert.equal(snapshot.phase, outcome === 255 ? 'voided' : 'settled');
+    assert.deepEqual(snapshot.settlement, {
+      outcome: outcome === 255 ? null : outcome,
+      emptyWinner: outcome !== 255 && outcome !== 0,
+    });
+  }
+  live = [claim];
   let inspected = 0;
   rpc.findTransactionsByType = async function* () {
     for (let i = 0; i < 1000; i++) {

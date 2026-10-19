@@ -1,5 +1,9 @@
 # Streak status
 
+19 October My Activity implementation: owner approved Open bets/History and publication. Production activity now uses verified chain positions, separate payment recovery, exact storage/return breakdowns and claim review in a responsive drawer. Finished fixture cards no longer inherit the empty legacy ledger void status. Focused checks and four Chromium/WebKit claim journeys passed with independent recovery review; exact-candidate release gates and publication are next. [Delivery record](docs/delivery/activity-history.md).
+
+19 October hosted readiness update: public atomic demand is enabled with 195 fixtures, and the pinned batch configuration responds successfully. The owner accepts losing historical test stakes and defers dev/production switching work. No historical state was deleted or new wallet payment made during this check. Hosted payment completion, settlement and persistence across restart still require verification.
+
 ## Hosted launcher, 19 October 2026
 
 The hosted API/sponsor/worker implementation is ready for the owner-authorized release. All 52 local major-gate checks passed at 08:54:42 UTC, alongside ten Linux process tests and independent recovery review. [Implementation and activation boundaries](docs/delivery/hosted-launcher.md). Render startup configuration, operator handover and public payment verification remain separate acceptance steps. No hosted readiness or new public transaction is claimed.

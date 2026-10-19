@@ -100,6 +100,7 @@ async function main() {
           writes = [],
           errors = [];
         let brokenAvailability = false;
+        let failedDiscovery = false;
         let preparationState = null;
         const context = await browser.newContext({
           viewport: { width, height: 900 },
@@ -152,6 +153,8 @@ async function main() {
         await page.exposeFunction('syntheticRpc', async (method, args) => {
           calls.push(method);
           if (calls.length > 25) calls.shift();
+          if (failedDiscovery && method === 'cells' && args[0] === 'type')
+            throw Error('Synthetic index unavailable');
           return chain.rpc(method, args);
         });
         async function connect(rejectFirst) {
@@ -263,7 +266,9 @@ async function main() {
         assert.equal(saved[0].signedBytes, chain.submissions[0].bytes);
         phase = `${name} ${width}: reload and retry`;
         await reads.reload();
-        await page.getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true }).waitFor();
+        await page
+          .getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true, level: 1 })
+          .waitFor();
         await accountReadFinished(page);
         await connect(false);
         assert.equal(
@@ -286,15 +291,64 @@ async function main() {
           'Reload retries the original bytes, without another signature.',
         );
         phase = `${name} ${width}: settlement and claim`;
+        failedDiscovery = true;
+        await page.evaluate(() => {
+          history.pushState(null, '', '/season/?view=activity');
+          dispatchEvent(new PopStateEvent('popstate'));
+        });
+        await page.getByRole('heading', { name: 'My activity.', exact: true }).waitFor();
+        await page
+          .getByText(
+            'Some information could not be refreshed. Claims are paused until checks recover.',
+            { exact: true },
+          )
+          .waitFor();
+        assert.equal(
+          await page.locator('.activity-summary strong').first().innerText(),
+          'Checking',
+        );
+        failedDiscovery = false;
+        await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+        await page.locator('.activity-bet').waitFor();
+        assert.match(await page.locator('.activity-bet').innerText(), /Verifying entry/);
+        failedDiscovery = true;
+        await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+        await page
+          .getByText(
+            'Some information could not be refreshed. Claims are paused until checks recover.',
+            { exact: true },
+          )
+          .waitFor();
+        assert.equal(
+          await page.locator('.activity-bet').count(),
+          1,
+          'Failed refresh retains the last verified row.',
+        );
+        failedDiscovery = false;
+        await page.screenshot({
+          path: path.join(evidence, `activity-open-${name}-${width}.png`),
+          fullPage: true,
+        });
         chain.settle();
-        await page.getByRole('button', { name: 'Check result', exact: true }).click();
-        await page.getByRole('button', { name: 'Review claim', exact: true }).waitFor();
-        await page.getByRole('button', { name: 'Review claim', exact: true }).click();
-        await review.waitFor();
-        assert.match(await review.innerText(), /421 tCKB/);
-        assert.match(await review.innerText(), /separate wallet input/i);
-        await review.screenshot({ path: path.join(evidence, `direct-claim-${name}-${width}.png`) });
+        await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+        await page.getByRole('tab', { name: /History/ }).click();
+        const collect = page.locator('.activity-bet').getByRole('button', { name: /Collect/ });
+        await collect.waitFor();
+        await collect.click();
+        const activityDialog = page.getByRole('dialog', { name: /Arsenal vs Chelsea/ });
+        await activityDialog.getByRole('button', { name: /Collect/ }).click();
+        const claimReview = activityDialog.getByRole('region', { name: 'Review claim' });
+        await claimReview.waitFor();
+        assert.match(await claimReview.innerText(), /421 tCKB/);
+        assert.match(await claimReview.innerText(), /separate wallet input/i);
+        assert.equal(
+          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          true,
+        );
+        await page.screenshot({ path: path.join(evidence, `activity-claim-${name}-${width}.png`) });
         await page.getByRole('button', { name: 'Sign claim in wallet', exact: true }).click();
+        await activityDialog.getByRole('button', { name: 'Close prediction details' }).click();
+        await page.getByRole('button', { name: /Payments & recovery/ }).click();
         await page
           .locator('.direct-transaction .direct-state')
           .filter({ hasText: /^conflict$/ })
@@ -312,16 +366,32 @@ async function main() {
           .locator('.direct-transaction .direct-state')
           .filter({ hasText: /^resolved$/ })
           .waitFor();
-        await page.getByRole('button', { name: 'Review claim', exact: true }).click();
-        await review.waitFor();
+        await collect.click();
+        await activityDialog.getByRole('button', { name: /Collect/ }).click();
+        await claimReview.waitFor();
         await page.getByRole('button', { name: 'Sign claim in wallet', exact: true }).click();
+        await activityDialog.getByRole('button', { name: 'Close prediction details' }).click();
         await page.waitForFunction(
           () =>
             [...document.querySelectorAll('.direct-transaction .direct-state')].filter(
               (node) => node.textContent === 'confirmed',
             ).length === 2,
         );
-        await page.getByText('claimed', { exact: true }).waitFor();
+        await page.locator('.activity-bet').getByText('Collected', { exact: true }).waitFor();
+        await page.getByRole('button', { name: /Payments & recovery/ }).click();
+        await page.getByRole('searchbox', { name: 'Search predictions' }).fill('no matching team');
+        await page.getByRole('heading', { name: 'No matching predictions' }).waitFor();
+        await page.getByRole('searchbox', { name: 'Search predictions' }).fill('');
+        await page
+          .locator('.activity-bet')
+          .getByRole('button', { name: /Details/ })
+          .click();
+        await page.keyboard.press('Escape');
+        assert.equal(await activityDialog.isVisible(), false);
+        await page.screenshot({
+          path: path.join(evidence, `activity-history-${name}-${width}.png`),
+          fullPage: true,
+        });
         const persisted = await page.evaluate(async (ownerHash) => {
           const { IndexedJournal } = await import('/qa-direct-fixture.js');
           return new IndexedJournal().list(`testnet-v1:${ownerHash}:wallet`);
@@ -336,6 +406,13 @@ async function main() {
         }, persisted[0]);
         assert.equal(reservations.filter((result) => result === 'saved').length, 1);
         assert.ok(reservations.some((result) => /reserves an input/.test(result)));
+        await page.evaluate(() => {
+          history.pushState(null, '', '/season/?direct=m-api-football-900001');
+          dispatchEvent(new PopStateEvent('popstate'));
+        });
+        await page
+          .getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true, level: 1 })
+          .waitFor();
         await page.evaluate(
           (ownerHash) =>
             new Promise((resolve, reject) => {
@@ -370,7 +447,9 @@ async function main() {
           true,
         );
         await page.getByRole('link', { name: 'Back to match', exact: true }).click();
-        await page.getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true }).waitFor();
+        await page
+          .getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true, level: 1 })
+          .waitFor();
         const returned = new URL(page.url());
         assert.equal(returned.searchParams.get('market'), 'm-api-football-900001');
         assert.equal(returned.searchParams.has('direct'), false);

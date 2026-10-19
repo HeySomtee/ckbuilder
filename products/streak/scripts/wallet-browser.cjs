@@ -190,6 +190,9 @@ async function main() {
             .click();
           await page.waitForURL('**/?view=activity');
           assert.equal(await overview.count(), 0, 'Activity is a distinct page from Wallet.');
+          await page.getByRole('heading', { name: 'My activity.', exact: true }).waitFor();
+          await page.getByRole('tab', { name: /Open bets/ }).waitFor();
+          await page.getByRole('button', { name: /Payments & recovery/ }).click();
           await page
             .getByRole('heading', { name: 'Recent transactions', exact: true })
             .waitFor();

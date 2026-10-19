@@ -18,6 +18,7 @@ export interface PoolPoint {
 export interface PublicPool {
   fixtureId: string;
   state: 'uninitialized' | 'loading' | 'unavailable' | 'ready' | 'stale';
+  phase?: 'open' | 'reported' | 'settled' | 'voided';
   observedAtMs?: number;
   totals?: Totals;
   history?: PoolPoint[];
@@ -50,6 +51,7 @@ export function poolPrincipal(market: OperatorMarket, cutoffMs: number): Totals 
 }
 
 interface Entry {
+  phase?: PublicPool['phase'];
   at: number;
   retryAt: number;
   points: PoolPoint[];
@@ -110,6 +112,13 @@ export class PublicPoolCache {
         this.inspect(record)
           .then((market) => {
             const totals = poolPrincipal(market, record.cutoffMs);
+            current.phase = market.closed
+              ? Buffer.from(market.closedReserve!.cell.outputData.slice(2), 'hex')[1] === 255
+                ? 'voided'
+                : 'settled'
+              : Buffer.from(market.market!.cell.outputData.slice(2), 'hex')[1] === 1
+                ? 'reported'
+                : 'open';
             const t = this.now();
             current.points.push({ t, totals });
             current.points = current.points.slice(-180);
@@ -136,7 +145,14 @@ export class PublicPoolCache {
         : current.failed
           ? 'unavailable'
           : 'loading',
-      ...(last ? { observedAtMs: current.at, totals: last.totals, history: current.points } : {}),
+      ...(last
+        ? {
+            observedAtMs: current.at,
+            totals: last.totals,
+            history: current.points,
+            phase: current.phase,
+          }
+        : {}),
     };
   }
 }

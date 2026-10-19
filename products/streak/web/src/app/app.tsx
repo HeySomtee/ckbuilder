@@ -20,6 +20,7 @@ import { getAtomicEntryEnabled } from '../features/direct/availability-api';
 import { Notice } from '../components/notice';
 import { poolLabel } from '../features/markets/pools';
 import { usePools } from '../features/markets/use-pools';
+import { fixtureLabel, settlementLabel } from '../features/markets/status';
 import '../design-system/predictions.css';
 import {
   assertWalletAccount,
@@ -57,14 +58,10 @@ function MarketCard({
           )}
           {market.competition}
         </span>
-        <span className={`status ${market.status}`}>
-          {!market.available
-            ? market.fixtureStatus
-            : market.status === 'closed'
-              ? 'Locked'
-              : market.status === 'void'
-                ? 'Voided'
-                : market.status}
+        <span
+          className={`status ${market.fixtureStatus === 'final' ? 'resolved' : market.fixtureStatus}`}
+        >
+          {fixtureLabel(market)}
         </span>
       </div>
       <time dateTime={market.kickoff}>
@@ -95,7 +92,9 @@ function MarketCard({
           />
           <h2>{market.home}</h2>
         </div>
-        <span className="versus">vs</span>
+        <span className="versus">
+          {market.score ? `${market.score.home} : ${market.score.away}` : 'vs'}
+        </span>
         <div>
           <TeamBadge
             key={market.awayLogo}
@@ -137,11 +136,15 @@ function MarketCard({
           </div>
           <div className="card-meta">
             <span>
-              {market.directPool?.state === 'ready'
-                ? 'On-chain pool share'
-                : market.directPool?.state === 'uninitialized'
-                  ? 'Be the first to predict'
-                  : 'Pool shares updating'}
+              {market.fixtureStatus === 'final' || market.fixtureStatus === 'cancelled'
+                ? settlementLabel(market.directPool)
+                : market.directPool?.state === 'ready'
+                  ? 'On-chain pool share'
+                  : market.directPool?.state === 'uninitialized' &&
+                      market.fixtureStatus === 'scheduled' &&
+                      Date.parse(market.kickoff) > Date.now()
+                    ? 'Be the first to predict'
+                    : 'Predictions closed or pool updating'}
             </span>
             <a
               className="card-details-link"

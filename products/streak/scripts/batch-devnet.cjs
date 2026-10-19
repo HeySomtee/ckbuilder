@@ -141,6 +141,17 @@ async function main() {
   assert.equal(process.argv[2], 'http://127.0.0.1:8218');
   readOmniLock();
   save();
+  // WSL can answer its own health probe before Windows localhost forwarding is ready.
+  // Probe from the actual runner, before any deployment or signed transaction.
+  await eventually('Runner loopback RPC', async () => {
+    const response = await fetch(process.argv[2], {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'get_tip_header', params: [] }),
+      signal: AbortSignal.timeout(1000),
+    });
+    const body = await response.json();
+    return response.ok && typeof body.result?.hash === 'string';
+  });
   const h = await boot();
   const baseClient = new ccc.ClientPublicTestnet({
     url: 'http://127.0.0.1:8218',

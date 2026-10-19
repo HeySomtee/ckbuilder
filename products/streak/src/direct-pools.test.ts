@@ -121,6 +121,7 @@ async function main() {
   cache.read('api-football-1', record());
   await tick();
   assert.equal(reads, 1, 'Coalesces repeated reads.');
+  assert.equal(cache.read('api-football-1', record()).phase, 'open');
   assert.deepEqual(cache.read('api-football-1', record()).totals, [
     '10000000000',
     '20000000000',
@@ -142,6 +143,18 @@ async function main() {
   await tick();
   assert.equal(cache.read('api-football-1', record()).state, 'ready');
   assert.equal(cache.read('api-football-1', record()).history?.length, 2);
+  const terminal = new PublicPoolCache(
+    async () => ({ closed: true, shards: [], closedReserve: cell(settled) }),
+    () => now,
+  );
+  terminal.read('api-football-1', record());
+  await tick();
+  assert.equal(terminal.read('api-football-1', record()).phase, 'settled');
+  settled[1] = 255;
+  now += 20_001;
+  terminal.read('api-football-1', record());
+  await tick();
+  assert.equal(terminal.read('api-football-1', record()).phase, 'voided');
   let running = 0,
     peak = 0,
     completed = 0;

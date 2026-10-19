@@ -1,5 +1,7 @@
 # Streak documentation
 
+19 October My Activity: [interactive open-bets/history proposal](../design/activity-review/README.md) with return breakdowns, payment tracking and production state mapping. Approved and implemented: [Activity delivery and source boundaries](delivery/activity-history.md).
+
 19 October hosted payments: [supervised API, sponsor and settlement worker](delivery/hosted-launcher.md) implements the missing Render startup process. [Configuration and handover steps](operations/direct-testnet.md#hosted-render-configuration-checklist-19-october-2026) distinguish local implementation, publication and live activation.
 
 17 October Week 21 release: the owner authorized the report, screenshots, commit, push and PR integration into main. The [report](../../../reports/week-21.md) distinguishes confirmed public payments, local regression evidence and the hosted sponsor/worker configuration still required. This supersedes earlier publication pauses below. Five and an original logo remain upcoming; no new campaign or prize commitment is included.

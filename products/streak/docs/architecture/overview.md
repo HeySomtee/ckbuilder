@@ -1,5 +1,7 @@
 # Architecture and migration
 
+19 October Activity read model: [verified history and source precedence](../delivery/activity-history.md) joins bounded direct-chain discovery with fixture metadata. Wallet-scoped queries keep saved payments separate from accepted positions, historical claims and automatic refunds. Football completion and direct settlement are separate card fields. Existing signing, journal and conflict recovery controllers retain financial authority.
+
 19 October hosted process implementation: [launcher and recovery lifecycle](../delivery/hosted-launcher.md) supervises the API, sponsor and serialized settlement worker inside one disk-backed service. Child environments are allowlisted; the API receives no direct signing key. Mounted-state and lease checks precede startup. Operator handover and hosted payment activation remain separate from publishing this implementation.
 
 17 October sponsor contention correction: sponsor journal acquisition waits for up to ten seconds behind another owner, while lifecycle commands retain fail-fast locking. A queue timeout is an explicit retryable 429, without stealing stale or foreign ownership. Unsigned reviews and signed-delivery uncertainty have separate public errors; diagnostics contain only fixed operation/category values. The browser continues checking a shared signature when its submission response is unavailable, and verified chain acknowledgement supersedes obsolete submission errors. See the [recovery delivery record](../delivery/sponsor-review-recovery.md).

@@ -384,10 +384,12 @@ async function main() {
           .getByRole('link', { name: width === 390 ? 'Activity' : 'My activity', exact: true })
           .click();
         assert.equal(new URL(page.url()).searchParams.get('view'), 'activity');
+        await page.getByRole('button', { name: /Payments & recovery/ }).click();
         await page.getByRole('article', { name: 'Sponsored prediction transaction' }).waitFor();
         await reads.reload();
         await accountReadFinished(page, 'Sign out');
         await connect(false);
+        await page.getByRole('button', { name: /Payments & recovery/ }).click();
         await page.getByRole('article', { name: 'Sponsored prediction transaction' }).waitFor();
         statusUnavailable = false;
         await page
@@ -430,12 +432,17 @@ async function main() {
         assert.ok(reservations.some((result) => /reserves an input/.test(result)));
         phase = `${engineName} ${width}: independent refund claim`;
         chain.settle();
-        await page.getByRole('button', { name: 'Check result', exact: true }).click();
-        await page.getByRole('button', { name: 'Review claim', exact: true }).click();
-        await review.waitFor();
-        assert.match(await review.innerText(), /446\.00000001 tCKB/);
+        await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+        await page.getByRole('tab', { name: /History/ }).click();
+        await page.locator('.activity-bet').getByRole('button', { name: 'Collect refund', exact: false }).click();
+        const claimDialog = page.getByRole('dialog', { name: /Arsenal vs Chelsea/ });
+        await claimDialog.getByRole('button', { name: 'Collect refund', exact: true }).click();
+        const claimReview = claimDialog.getByRole('region', { name: 'Review claim' });
+        await claimReview.waitFor();
+        assert.match(await claimReview.innerText(), /446\.00000001 tCKB/);
         await page.getByRole('button', { name: 'Sign claim in wallet', exact: true }).click();
-        await page.getByText('claimed', { exact: true }).waitFor();
+        await claimDialog.getByRole('button', { name: 'Close prediction details' }).click();
+        await page.locator('.activity-bet').getByText('Collected', { exact: true }).waitFor();
         assert.equal(signatureCount, 3);
         await page.screenshot({
           path: path.join(artifacts, `sponsored-recovery-${engineName}-${width}.png`),
