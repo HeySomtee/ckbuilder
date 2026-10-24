@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import type { DirectClient, Review } from './client';
 import type { Descriptor, Point } from './protocol';
 import type { MarketSnapshot, Position } from './discovery';
@@ -9,6 +9,8 @@ import type { Market } from '../markets/api';
 import { getPublicMarket } from '../predictions/api';
 import { displayShannons } from '../predictions/draft';
 import { TeamBadge } from '../../components/team-badge';
+import { Notice } from '../../components/notice';
+import { BusyState } from '../../components/busy-state';
 import { useNow } from '../../lib/use-now';
 import {
   activityState,
@@ -49,6 +51,7 @@ export function Activity({
   onDismissReview,
   working,
   signing,
+  claimStage,
   notice,
   error,
   onRefresh,
@@ -69,6 +72,7 @@ export function Activity({
   onDismissReview: () => void;
   working: boolean;
   signing: boolean;
+  claimStage?: string;
   notice: string;
   error?: string;
   onRefresh: () => void;
@@ -84,53 +88,77 @@ export function Activity({
   const now = useNow(true);
   const queryClient = useQueryClient();
   const chosen = descriptors.slice(0, limit);
-  const queryKey = ['direct-private', ownerHash, 'activity', chosen.map(descriptorKey)];
-  const observed = useQuery({
-    queryKey,
-    enabled: !!client,
-    queryFn: async ({ signal }): Promise<Observation[]> => {
-      const output: Observation[] = [];
-      const previous = queryClient.getQueryData<Observation[]>(queryKey);
-      // Three bounded readers; a failed market never erases other verified positions.
-      for (let offset = 0; offset < chosen.length; offset += 3) {
+  const observations = useQueries({
+    queries: chosen.map((descriptor) => ({
+      queryKey: ['direct-private', ownerHash, 'activity', descriptorKey(descriptor)],
+      enabled: !!client,
+      queryFn: async ({ signal }: { signal: AbortSignal }) => {
         signal.throwIfAborted();
-        const batch = await Promise.all(
-          chosen.slice(offset, offset + 3).map(async (descriptor) => {
-            const [chain, fixture] = await Promise.allSettled([
-              client!.discover(descriptor),
-              getPublicMarket(`m-${descriptor.fixtureId}`, signal),
-            ]);
-            const market =
-              fixture.status === 'fulfilled' &&
-              fixture.value.market.matchId === descriptor.fixtureId &&
-              Date.parse(fixture.value.market.kickoff) === descriptor.cutoffMs
-                ? fixture.value.market
-                : undefined;
-            return chain.status === 'fulfilled'
-              ? { descriptor, snapshot: chain.value, market }
-              : {
-                  ...previous?.find(
-                    (o) => descriptorKey(o.descriptor) === descriptorKey(descriptor),
+        const snapshot = await client!.discover(
+          descriptor,
+          (partial) => {
+            if (signal.aborted) return;
+            queryClient.setQueryData<MarketSnapshot>(
+              ['direct-private', ownerHash, 'activity', descriptorKey(descriptor)],
+              (previous) => ({
+                ...partial,
+                positions: [
+                  ...partial.positions,
+                  ...(previous?.positions ?? []).filter(
+                    (p) =>
+                      ['claimed', 'refunded'].includes(p.status) &&
+                      !partial.positions.some((n) => n.id === p.id),
                   ),
-                  descriptor,
-                  market,
-                  error:
-                    chain.reason instanceof Error
-                      ? chain.reason.message
-                      : 'Chain read unavailable.',
-                };
-          }),
+                ],
+              }),
+            );
+          },
+          signal,
         );
         signal.throwIfAborted();
-        output.push(...batch);
-      }
-      return output;
-    },
-    staleTime: 30_000,
-    retry: false,
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
+        return snapshot;
+      },
+      staleTime: 60_000,
+      retry: false,
+      refetchInterval: 60_000,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: false,
+    })),
   });
+  const fixtures = useQueries({
+    queries: chosen.map((descriptor) => ({
+      queryKey: ['public-market', `m-${descriptor.fixtureId}`],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        getPublicMarket(`m-${descriptor.fixtureId}`, signal),
+      staleTime: 60_000,
+      retry: false,
+    })),
+  });
+  const data: Observation[] = chosen.map((descriptor, index) => {
+    const read = observations[index],
+      fixture = fixtures[index].data?.market;
+    return {
+      descriptor,
+      snapshot: read.data,
+      market:
+        fixture?.matchId === descriptor.fixtureId &&
+        Date.parse(fixture.kickoff) === descriptor.cutoffMs
+          ? fixture
+          : undefined,
+      error:
+        read.isError || (read.dataUpdatedAt > 0 && now - read.dataUpdatedAt > 120_000)
+          ? 'This market needs a fresh chain check.'
+          : undefined,
+    };
+  });
+  const observed = {
+    data,
+    isFetching: observations.some((q) => q.isFetching),
+    isPending:
+      (sourcesLoading || observations.some((q) => q.isPending)) &&
+      !observations.some((q) => q.data),
+    isError: observations.some((q) => q.isError),
+  };
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
   }, []);
@@ -148,26 +176,27 @@ export function Activity({
         }))
       : [],
   );
-  const stale =
-    observed.isError ||
-    sourceIssue ||
-    !!observed.data?.some((o) => o.error) ||
-    (observed.dataUpdatedAt > 0 && now - observed.dataUpdatedAt > 120_000);
+  const stale = observed.isError || sourceIssue || !!observed.data?.some((o) => o.error);
   const incomplete =
     stale ||
     descriptors.length > limit ||
     sourcesLoading ||
-    !!observed.data?.some((o) => o.error || o.snapshot?.uncertainty);
+    !!observed.data?.some(
+      (o) => o.error || o.snapshot?.uncertainty || o.snapshot?.historyComplete === false,
+    );
   const ready = rows.filter(
     (r) =>
       r.position.status === 'claimable' &&
       !pendingClaim(r.position, r.descriptor, records) &&
       !r.snapshot.uncertainty &&
-      !stale &&
+      !r.error &&
       returnParts(r.position),
   );
   const readyTotal = ready.reduce((sum, r) => sum + returnParts(r.position)!.total, 0n);
-  const current = rows.find((r) => r.key === selected);
+  const [retained, setRetained] = useState<Row | null>(null);
+  const freshCurrent = rows.find((r) => r.key === selected);
+  const current = freshCurrent ?? (retained?.key === selected ? retained : undefined);
+  const currentStale = !freshCurrent || !!current?.error;
   const rowState = (r: Row) =>
     activityState(r.position, r.snapshot, r.market?.fixtureStatus, r.descriptor.cutoffMs, now);
   const pickName = (r: Row) =>
@@ -200,6 +229,7 @@ export function Activity({
   }
   function open(r: Row) {
     onDismissReview();
+    setRetained(r);
     setSelected(r.key);
   }
   function switchTab(next: 'open' | 'history') {
@@ -208,7 +238,7 @@ export function Activity({
   }
   const refresh = () => {
     onRefresh();
-    void observed.refetch();
+    void queryClient.invalidateQueries({ queryKey: ['direct-private', ownerHash, 'activity'] });
   };
   const filters =
     tab === 'open'
@@ -235,16 +265,34 @@ export function Activity({
           </h1>
           <p>Your calls. Their results. Every return accounted for.</p>
         </div>
-        <button className="quiet" onClick={refresh} disabled={!client || observed.isFetching}>
-          {observed.isFetching ? 'Checking chain...' : 'Refresh activity'}
+        <button
+          className="quiet activity-collect"
+          aria-busy={observed.isFetching}
+          onClick={refresh}
+          disabled={!client || observed.isFetching}
+        >
+          {observed.isFetching ? 'Updating activity' : 'Refresh activity'}
         </button>
       </header>
+      {working && !selected && (
+        <BusyState
+          label={signing ? (claimStage ?? 'Checking your return') : 'Preparing your return'}
+          detail="You can keep browsing this page. Your transfer progress stays here."
+        />
+      )}
       {!client ? (
         <section className="glass activity-empty">
-          <h2>
-            {connectionPending ? 'Loading your predictions' : 'Your matchday history starts here'}
-          </h2>
-          <p>Connect your wallet to follow open bets and collect returns.</p>
+          {connectionPending ? (
+            <BusyState
+              label="Opening your predictions"
+              detail="Connecting your selected wallet to your activity."
+            />
+          ) : (
+            <>
+              <h2>Your matchday history starts here</h2>
+              <p>Connect your wallet to follow open bets and collect returns.</p>
+            </>
+          )}
           <button className="connect" disabled={connecting} onClick={onConnect}>
             {connecting
               ? 'Connecting...'
@@ -258,16 +306,30 @@ export function Activity({
           <div className="activity-summary" aria-label="Verified activity summary">
             <div>
               <span>Open predictions</span>
-              <strong>
-                {observed.isPending || stale
-                  ? 'Checking'
-                  : rows.filter((r) => !isHistory(r.position)).length}
+              <strong
+                className={observed.isPending ? 'activity-skeleton' : ''}
+                aria-label={observed.isPending ? 'Loading open predictions' : undefined}
+              >
+                {observed.isPending
+                  ? '\u00a0'
+                  : stale && !data.some((o) => o.snapshot)
+                    ? 'Unavailable'
+                    : rows.filter((r) => !isHistory(r.position)).length}
               </strong>
               <small>{incomplete ? 'In checked markets' : 'Following your next result'}</small>
             </div>
             <div>
               <span>Ready to collect</span>
-              <strong>{observed.isPending || stale ? 'Checking' : money(readyTotal)}</strong>
+              <strong
+                className={observed.isPending ? 'activity-skeleton' : ''}
+                aria-label={observed.isPending ? 'Loading returns' : undefined}
+              >
+                {observed.isPending
+                  ? '\u00a0'
+                  : stale && !data.some((o) => o.snapshot)
+                    ? 'Unavailable'
+                    : money(readyTotal)}
+              </strong>
               <button
                 onClick={() => {
                   switchTab('history');
@@ -280,10 +342,15 @@ export function Activity({
             </div>
             <div>
               <span>Completed predictions</span>
-              <strong>
-                {observed.isPending || stale
-                  ? 'Checking'
-                  : rows.filter((r) => isCollected(r.position)).length}
+              <strong
+                className={observed.isPending ? 'activity-skeleton' : ''}
+                aria-label={observed.isPending ? 'Loading completed predictions' : undefined}
+              >
+                {observed.isPending
+                  ? '\u00a0'
+                  : stale && !data.some((o) => o.snapshot)
+                    ? 'Unavailable'
+                    : rows.filter((r) => isCollected(r.position)).length}
               </strong>
               <small>Return collected</small>
             </div>
@@ -302,18 +369,28 @@ export function Activity({
             </span>
             <span>{showPayments ? 'Hide' : 'View'} →</span>
           </button>
-          <div hidden={!showPayments}>{recovery}</div>
-          {notice && (
-            <p className="activity-message" role="status">
-              {notice}
-            </p>
+          {showPayments && <div>{recovery}</div>}
+          {notice && <Notice title={notice} dismissible />}
+          {stale && (
+            <Notice
+              title="Some markets are still catching up"
+              dismissible
+              actions={<button onClick={refresh}>Retry checks</button>}
+            >
+              Your previous activity stays visible. Each return is checked separately before
+              collection.
+            </Notice>
           )}
-          {incomplete && (
-            <p className="activity-message">
-              {stale
-                ? 'Some information could not be refreshed. Claims are paused until checks recover.'
-                : 'Showing verified positions from checked markets. More history may still be available.'}
-            </p>
+          {(observed.isFetching || sourcesLoading) && (
+            <div className="activity-progress" role="status">
+              <span className="activity-progress-track" />
+              <span>
+                Finding your predictions{' '}
+                <small>
+                  {observations.filter((q) => q.data).length} of {chosen.length} markets checked
+                </small>
+              </span>
+            </div>
           )}
           <div className="activity-toolbar">
             <div className="activity-tabs" role="tablist" aria-label="Prediction history">
@@ -450,22 +527,31 @@ export function Activity({
             })}
             {listed.length === 0 && (
               <div className="activity-empty">
-                <h2>
-                  {observed.isPending
-                    ? 'Checking your positions'
-                    : search || filter !== 'all'
-                      ? 'No matching predictions'
-                      : incomplete
-                        ? 'No positions found in the markets checked'
-                        : tab === 'open'
-                          ? 'Your next call starts here'
-                          : 'Your settled predictions will appear here'}
-                </h2>
-                <p>
-                  {observed.isPending
-                    ? 'Reading confirmed market state from CKB.'
-                    : 'Payments, accepted entries and settled results are tracked separately.'}
-                </p>
+                {observed.isPending ? (
+                  <BusyState
+                    label="Finding your predictions"
+                    detail="Your positions will appear as each market is checked."
+                  />
+                ) : (
+                  <>
+                    <h2>
+                      {observed.isPending
+                        ? 'Checking your positions'
+                        : search || filter !== 'all'
+                          ? 'No matching predictions'
+                          : incomplete
+                            ? 'No positions found in the markets checked'
+                            : tab === 'open'
+                              ? 'Your next call starts here'
+                              : 'Your settled predictions will appear here'}
+                    </h2>
+                    <p>
+                      {observed.isPending
+                        ? 'Reading confirmed market state from CKB.'
+                        : 'Payments, accepted entries and settled results are tracked separately.'}
+                    </p>
+                  </>
+                )}
                 {tab === 'open' && (
                   <a className="quiet" href="/season/">
                     Explore markets ↗
@@ -499,10 +585,10 @@ export function Activity({
             ))}
         </>
       )}
-      {error && (
-        <p className="activity-message" role="alert">
+      {error && !selected && (
+        <Notice title="Let's get this sorted" tone="attention" dismissible>
           {error}
-        </p>
+        </Notice>
       )}
       <dialog
         className="activity-drawer"
@@ -535,19 +621,43 @@ export function Activity({
           </header>
           {current ? (
             <>
-              {stale && (
+              {currentStale && (
                 <p className="activity-message">
                   Last verified snapshot. Current chain status is unavailable, so collection is
                   paused.
                 </p>
               )}
-              <div className="activity-detail-score">
-                <strong>
-                  {current.market?.score
-                    ? `${current.market.score.home} : ${current.market.score.away}`
-                    : 'vs'}
-                </strong>
-                <small>{current.market?.fixtureStatus ?? 'Fixture status unavailable'}</small>
+              <div className="activity-detail-fixture">
+                <div>
+                  <TeamBadge
+                    logo={current.market?.homeLogo ?? null}
+                    code={current.market?.homeCode ?? 'H'}
+                    side="home"
+                  />
+                  <strong>
+                    {current.market?.home ?? current.descriptor.label.split(/\s+v(?:s)?\s+/i)[0]}
+                  </strong>
+                </div>
+                <div className="activity-detail-score">
+                  <strong>
+                    {current.market?.score
+                      ? `${current.market.score.home} : ${current.market.score.away}`
+                      : 'vs'}
+                  </strong>
+                  <small>{current.market?.fixtureStatus ?? 'Prediction'}</small>
+                </div>
+                <div>
+                  <TeamBadge
+                    logo={current.market?.awayLogo ?? null}
+                    code={current.market?.awayCode ?? 'A'}
+                    side="away"
+                  />
+                  <strong>
+                    {current.market?.away ??
+                      current.descriptor.label.split(/\s+v(?:s)?\s+/i)[1] ??
+                      'Away'}
+                  </strong>
+                </div>
               </div>
               <div className="activity-detail-pick">
                 <span>{pickName(current)}</span>
@@ -631,8 +741,7 @@ export function Activity({
                     aria-busy={signing}
                     disabled={
                       working ||
-                      stale ||
-                      observed.isFetching ||
+                      currentStale ||
                       !!current.snapshot.uncertainty ||
                       !!selectedPending ||
                       now >= currentReview.expiresAt
@@ -640,13 +749,21 @@ export function Activity({
                     onClick={onSign}
                   >
                     {signing
-                      ? 'Waiting for wallet approval...'
+                      ? (claimStage ?? 'Checking your return...')
                       : now >= currentReview.expiresAt
                         ? 'Review expired'
                         : 'Sign claim in wallet'}
                   </button>
-                  <button className="quiet" disabled={working} onClick={onDismissReview}>
-                    Back to details
+                  <button
+                    className="quiet"
+                    disabled={working}
+                    onClick={() => {
+                      onDismissReview();
+                      if (now >= currentReview.expiresAt)
+                        onClaim(current.descriptor, current.position.outPoint);
+                    }}
+                  >
+                    {now >= currentReview.expiresAt ? 'Refresh review' : 'Back to details'}
                   </button>
                 </section>
               )}
@@ -654,7 +771,7 @@ export function Activity({
                 <button
                   className="activity-collect"
                   aria-busy={working}
-                  disabled={working || observed.isFetching}
+                  disabled={working}
                   onClick={() => onClaim(current.descriptor, current.position.outPoint)}
                 >
                   {working ? 'Preparing wallet approval...' : collectionLabel(rowState(current))}
@@ -666,15 +783,11 @@ export function Activity({
                   it without creating a second claim.
                 </p>
               )}
-              {notice && (
-                <p role="status" className="activity-message">
-                  {notice}
-                </p>
-              )}
+              {notice && <Notice title={notice} dismissible />}
               {error && (
-                <p role="alert" className="activity-message">
+                <Notice title="Let's get this sorted" tone="attention" dismissible>
                   {error}
-                </p>
+                </Notice>
               )}
               <details className="activity-chain-details">
                 <summary>Transaction details</summary>

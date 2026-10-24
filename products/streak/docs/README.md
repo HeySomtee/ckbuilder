@@ -1,5 +1,29 @@
 # Streak documentation
 
+24 October release: [official deadline enforcement, short local-chain rehearsal and Render configuration](delivery/five-release-rehearsal.md).
+
+24 October Five: [sponsor auctions, cumulative bids and automatic losing-bid refunds](delivery/five-sponsor-auction.md). Applies to newly created rounds; existing community-funded gameweeks keep their terms.
+
+23 October Five: [local dedicated rewards wallet activation and remaining live acceptance](delivery/five-local-rewards-activation.md). Faucet reserve confirmed, isolated worker running and sponsorship enabled locally. No live sponsor contribution or prize paid yet.
+
+21 October Five: [automatic EPL gameweeks, interactive player profiles and game workspace](delivery/five-automatic-gameweeks.md). Local Gameweek 8 opens without manual imports. Official deadlines, provisional/final scoring and live scouting are integrated; all 66 required checks have passing coverage across completed runs. Local only.
+
+20 October Five runtime: [gameweeks, private squads, scoring, optional sponsorship design and funding boundary](delivery/five-implementation.md). Development and dedicated testnet rewards custody are approved. Funding and claims have isolated signed-chain coverage; hosted activation and physical-wallet checks remain separate.
+
+20 October Streak Five: [private EPL squad builder, proposed scoring and FPL/UEFA source investigation](../design/five-review/README.md). Owner's latest start-Five direction supersedes the earlier feature sequence for this increment; Community Markets remains planned. Public player-data reuse and production entries are separate acceptance steps.
+
+20 October navigation refinement: [compact desktop controls, centered fading mobile dates and full-catalogue league filtering](delivery/fixture-date-navigation.md). All 26 integrated browser groups passed with the local API; screenshots reviewed. Local only.
+
+20 October daily navigation: [Today-first fixtures, day arrows, month calendar, mobile scrolling and Live filtering](delivery/fixture-date-navigation.md). Build/lint, calendar/filter tests and all 26 integrated Season browser groups passed locally.
+
+20 October quality pass: [wallet restoration, progressive Activity, refund recovery, animated states and Survivor deletion](delivery/wallet-activity-quality.md). All 60 local major checks passed; physical MetaMask verification and hosted rollout remain separate.
+
+19 October Survivor: approved design is now integrated locally with admin drafts, free admission, private picks, persistent rounds and standings. Read the [implementation, configuration and verification record](delivery/survivor-implementation.md). Paid publication and funded prizes remain separate work.
+
+19 October Survivor preview: [admin creation, free or fee-gated entry, prize controls and the player journey](../design/survivor-review/README.md). The [proposed rules and implementation boundary](product/survivor-rules.md) distinguish this local design simulation from live game state and prize funding.
+
+19 October durable product decisions: [Survivor → Community Markets → Five, grouped navigation and the next planning step](product/scope-and-roadmap.md#current-product-decisions-19-october-2026). This is the current feature sequence and supersedes older Five-first priority notes. These features remain planned; begin with Survivor rules and an interactive preview.
+
 19 October My Activity: [interactive open-bets/history proposal](../design/activity-review/README.md) with return breakdowns, payment tracking and production state mapping. Approved and implemented: [Activity delivery and source boundaries](delivery/activity-history.md).
 
 19 October hosted payments: [supervised API, sponsor and settlement worker](delivery/hosted-launcher.md) implements the missing Render startup process. [Configuration and handover steps](operations/direct-testnet.md#hosted-render-configuration-checklist-19-october-2026) distinguish local implementation, publication and live activation.

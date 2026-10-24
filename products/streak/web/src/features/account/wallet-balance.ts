@@ -37,7 +37,7 @@ export function useWalletBalance(account: Account | null, accountReady: boolean)
     },
     retry: false,
     staleTime: 15_000,
-    gcTime: 0,
+    gcTime: 300_000,
     refetchInterval: connection ? 30_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,

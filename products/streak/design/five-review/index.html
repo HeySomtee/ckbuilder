@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Streak Five · Squad builder preview</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to squad builder</a>
+    <aside class="rail">
+      <a class="brand" href="http://127.0.0.1:4100/season/"
+        ><img src="/mark.svg" alt="" />streak<span>.</span></a
+      >
+      <span class="rail-label">STREAK GAMES</span>
+      <a class="active" href="/">▱ <strong>Streak Five</strong><small>PREVIEW</small></a>
+      <a href="http://127.0.0.1:4100/season/?view=survivor">◇ Streak Survivor</a>
+      <a href="http://127.0.0.1:4100/season/">↗ Prediction markets</a>
+      <div class="rail-foot">
+        <span class="spark">✦</span><strong>Small squad.<br />Big opinions.</strong>
+        <p>Five picks that make<br />the whole weekend yours.</p>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <span>Streak games <i>/</i> <strong>Five</strong></span
+        ><span class="preview-label">LOCAL DESIGN PREVIEW</span
+        ><a href="http://127.0.0.1:4100/season/">Back to Streak ↗</a>
+      </header>
+      <main id="main" tabindex="-1">
+        <div class="intro">
+          <div>
+            <p class="eyebrow">YOUR FOOTBALL INSTINCT. FIVE NAMES.</p>
+            <h1>Build your starting five<span>.</span></h1>
+            <p>Find your edge. Back your captain. Make every match matter.</p>
+          </div>
+          <button class="quiet" data-action="rules">How points work <span>↗</span></button>
+        </div>
+        <div class="preview-note">
+          <span class="dot"></span>Private preview: FPL player/price snapshot. Saving stays on this
+          device. No live entry or prizes.
+        </div>
+        <div id="error" role="alert"></div>
+        <div class="builder">
+          <section class="squad-column" aria-label="Your squad">
+            <div class="pitch-card">
+              <div class="pitch-heading">
+                <div>
+                  <span class="eyebrow">THE TEAM SHEET</span>
+                  <h2>Your five. Your call.</h2>
+                </div>
+                <span class="pill">Premier League</span>
+              </div>
+              <div class="pitch" id="pitch" aria-label="Squad positions"></div>
+              <div class="pitch-bottom">
+                <span>1 GK · 1 DEF · 2 MID · 1 FWD</span
+                ><button data-action="clear" class="text-button">Clear squad</button>
+              </div>
+            </div>
+            <div class="entry-panel" id="entry-panel"></div>
+            <div class="insight-card">
+              <span>✦</span>
+              <div>
+                <strong>Your captain changes everything.</strong>
+                <p>Double the points. Same five players. A different way to win.</p>
+              </div>
+            </div>
+          </section>
+          <section class="scout-card" aria-labelledby="scout-title">
+            <div class="scout-heading">
+              <div>
+                <span class="eyebrow">THE SCOUTING ROOM</span>
+                <h2 id="scout-title">Find your difference-maker.</h2>
+              </div>
+              <span id="player-count" class="muted"></span>
+            </div>
+            <label class="search"
+              ><span aria-hidden="true">⌕</span
+              ><input
+                id="search"
+                type="search"
+                placeholder="Search a player or club"
+                aria-label="Search players or clubs"
+            /></label>
+            <div class="filters">
+              <div class="positions" role="group" aria-label="Player position">
+                <button data-position="ALL" aria-pressed="true">All</button
+                ><button data-position="GK">GK</button><button data-position="DEF">DEF</button
+                ><button data-position="MID">MID</button><button data-position="FWD">FWD</button>
+              </div>
+              <label class="sort"
+                ><span class="sr-only">Sort players</span
+                ><select id="sort" aria-label="Sort players">
+                  <option value="form">Best form</option>
+                  <option value="price">Lowest price</option>
+                  <option value="points">Season points</option>
+                </select></label
+              >
+            </div>
+            <div class="player-head">
+              <span>PLAYER / CLUB</span><span>FORM</span><span>CREDITS</span><span></span>
+            </div>
+            <div id="players" class="player-list" aria-label="Available players"></div>
+            <div class="scout-footer">
+              <span id="source-date">Loading player snapshot…</span
+              ><button id="more" class="text-button" data-action="more">Show more players ↓</button>
+            </div>
+          </section>
+        </div>
+        <section class="round-tracker" id="round-tracker" hidden></section>
+        <footer class="design-tools">
+          <div>
+            <strong>Explore the preview</strong
+            ><span>State changes below are simulations, not live match results.</span>
+          </div>
+          <label
+            >Round state
+            <select id="state">
+              <option value="building">Picking</option>
+              <option value="locked">Locked</option>
+              <option value="live">Live points</option>
+              <option value="complete">Final points</option>
+              <option value="delayed">Data delayed</option>
+            </select></label
+          ><button class="quiet" data-action="reset">Reset preview</button>
+        </footer>
+        <p class="footnote">
+          Credits are a game budget, not CKB. Form and player prices come from the timestamped FPL
+          snapshot; round points here are simulated. Public data reuse and final scoring rules are
+          not yet approved for launch.
+        </p>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <dialog id="modal"><div id="modal-body"></div></dialog>
+    <script type="module" src="/app.mjs"></script>
+  </body>
+</html>

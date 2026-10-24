@@ -24,6 +24,8 @@ Cards and match pages now use fixture lifecycle and available scores. Fresh dire
 
 ## Validation and release boundary
 
+Published to main as `df147f17261dc8cf08d1131dc5f2d2bed1a0c6e9` on 19 October 2026 after all 53 local major checks passed at 12:23:29 UTC. Push reused the exact-content receipt. Render reported successful deployment at 12:25:25 UTC; a read-only public check at 13:00:13 UTC returned HTTP 200 and matched the tested `index-DYJUC3ER.js` entry bundle. Evidence: `.quality-artifacts/activity-release-major.json` and `.quality-artifacts/activity-release-hosted.json`. This verifies publication of the UI and status correction, not a new hosted payment or settlement.
+
 Focused TypeScript build and frontend lint passed. Sixteen direct-client/activity tests passed, including settlement outcome classification, unknown state, storage accounting, saved-claim duplicate guards and existing reorg recovery. Pool projection and fixture-filter tests passed. Four built-app Chromium/WebKit journeys at 390 and 1440 pixels exercised the new Activity route, pending admission, claim review, close during processing, conflicting-spend recovery, collection, search and drawer dismissal. Screenshots in `.quality-artifacts/browser/activity-*` were visually inspected; a crest margin inherited from market cards was corrected afterward.
 
 Independent recovery review identified and resolved delayed-review row confusion, initial read failures appearing empty, automatic refunds implying settlement, and stale wallet review/notice state. Exact-candidate full gates are required before publication. These are isolated synthetic chain/browser tests, not proof of a new hosted payment or a production settlement. Hosted Actions remain paused by owner instruction.

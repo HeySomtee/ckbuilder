@@ -65,6 +65,33 @@ test('hosted child environments isolate signer, database, Telegram and inherited
     env.STREAK_DIRECT_PRIVATE_KEY,
   );
 });
+test('Five rewards has a separate opt-in signer and shares no keys with API or prediction workers', () => {
+  const env = {
+    ...sample(path.resolve(os.tmpdir(), 'synthetic-streak-mount')),
+    STREAK_FIVE_REWARDS_ENABLED: '1',
+    STREAK_FIVE_NETWORK: 'testnet',
+    STREAK_FIVE_REWARDS_ADDRESS: 'ckt1' + 'a'.repeat(60),
+    STREAK_FIVE_REWARDS_PRIVATE_KEY: '0x' + '44'.repeat(32),
+  };
+  const { environments } = buildConfig(env);
+  assert.equal(
+    environments.rewards.STREAK_FIVE_REWARDS_PRIVATE_KEY,
+    env.STREAK_FIVE_REWARDS_PRIVATE_KEY,
+  );
+  assert.equal(environments.rewards.TREASURY_PRIVATE_KEY, undefined);
+  assert.equal(environments.rewards.STREAK_DIRECT_PRIVATE_KEY, undefined);
+  for (const key of ['api', 'sponsor', 'worker'])
+    assert.equal(environments[key].STREAK_FIVE_REWARDS_PRIVATE_KEY, undefined);
+  assert.throws(
+    () => buildConfig({ ...env, STREAK_FIVE_REWARDS_PRIVATE_KEY: env.TREASURY_PRIVATE_KEY }),
+    /dedicated/,
+  );
+  assert.throws(() => buildConfig({ ...env, STREAK_FIVE_NETWORK: 'mainnet' }), /testnet/);
+  assert.equal(
+    buildConfig({ ...env, STREAK_FIVE_REWARDS_ENABLED: '0' }).environments.rewards,
+    undefined,
+  );
+});
 test('invalid, overlapping, off-mount or bulk configuration fails before spawning', () => {
   const env = sample(path.resolve(os.tmpdir(), 'synthetic-streak-mount'));
   for (const change of [

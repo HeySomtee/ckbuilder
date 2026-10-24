@@ -1,11 +1,13 @@
 import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getMarkets, outcomes } from '../features/markets/api';
+import { getCompetitions, getMarkets, outcomes } from '../features/markets/api';
 import type { Market, MarketSort } from '../features/markets/api';
 import { getAccount, signIn, signOut } from '../features/account/api';
 import { WalletOverview, WalletSummary } from '../features/account/wallet-ui';
 import { Icon } from '../components/icon';
-import { useMatchweek } from '../features/markets/use-matchweek';
+import { DayNavigation, useCalendarToday } from '../features/markets/day-navigation';
+import { moveDay, parseDay } from '../features/markets/calendar';
+import { weekend } from '../features/markets/weekend';
 import { TeamBadge } from '../components/team-badge';
 import { MarketDetail } from '../features/markets/detail';
 import { createDraftStore } from '../features/predictions/draft';
@@ -18,6 +20,7 @@ import { AppNavigation } from './navigation';
 import { SectionPage } from './sections';
 import { getAtomicEntryEnabled } from '../features/direct/availability-api';
 import { Notice } from '../components/notice';
+import { BusyState } from '../components/busy-state';
 import { poolLabel } from '../features/markets/pools';
 import { usePools } from '../features/markets/use-pools';
 import { fixtureLabel, settlementLabel } from '../features/markets/status';
@@ -27,9 +30,12 @@ import {
   disconnectWallet,
   getWalletState,
   subscribeWallet,
+  restoreWallet,
 } from '../lib/wallet';
 
 const DirectPage = lazy(() => import('../features/direct/ui'));
+const SurvivorPage = lazy(() => import('../features/survivor/ui'));
+const FivePage = lazy(() => import('../features/five/ui'));
 
 function MarketCard({
   market,
@@ -223,12 +229,29 @@ export function App() {
   }
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState<MarketSort>('featured');
-  const [week, setWeek] = useState(0);
-  const [day, setDay] = useState<number | null>(null);
-  const dates = useMatchweek(week);
-  const from = day === null ? dates.start : dates.days[day];
+  const [competition, setCompetition] = useState('');
+  const [date, setDate] = useState(() => {
+    const value = new URLSearchParams(location.search).get('date') ?? 'today';
+    return value === 'weekend' || parseDay(value) ? value : 'today';
+  });
+  const today = useCalendarToday();
+  const dates = weekend(0, today);
+  const from =
+    status === 'live'
+      ? moveDay(today, -1)
+      : date === 'weekend'
+        ? dates.start
+        : (parseDay(date) ?? today);
   const to =
-    day === null ? dates.end : new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
+    status === 'live' ? moveDay(today, 1) : date === 'weekend' ? dates.end : moveDay(from, 1);
+  const selectDate = (value: string) => {
+    setDate(value);
+    if (status === 'live') setStatus('all');
+    const url = new URL(location.href);
+    if (value === 'today') url.searchParams.delete('date');
+    else url.searchParams.set('date', value);
+    history.replaceState(null, '', url);
+  };
   const fromIso = from.toISOString();
   const toIso = to.toISOString();
   const [search, setSearch] = useState('');
@@ -243,6 +266,9 @@ export function App() {
     retry: false,
     staleTime: 30_000,
   });
+  useEffect(() => {
+    if (account.isSuccess) void restoreWallet(account.data?.walletAddress);
+  }, [account.isSuccess, account.data?.walletAddress]);
   useEffect(() => {
     const connection = wallet.connection;
     if (!connection || !account.data) return;
@@ -276,10 +302,10 @@ export function App() {
   });
   const feed = useInfiniteQuery({
     enabled: !marketId && !directRoute && !section,
-    queryKey: ['markets', status, query, fromIso, toIso, sort],
+    queryKey: ['markets', status, query, fromIso, toIso, sort, competition],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
-      getMarkets(status, query, pageParam, fromIso, toIso, signal, sort),
+      getMarkets(status, query, pageParam, fromIso, toIso, signal, sort, competition),
     getNextPageParam: (last) => last.nextOffset ?? undefined,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -292,6 +318,21 @@ export function App() {
     ).values(),
   ];
   const count = feed.data?.pages[0]?.total;
+  const leagueFeed = useQuery({
+    queryKey: ['fixture-competitions'],
+    queryFn: ({ signal }) => getCompetitions(signal),
+    enabled: !marketId && !directRoute && !section,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+  const competitions = [
+    ...new Map(
+      [...(leagueFeed.data ?? []), ...(feed.data?.pages[0]?.competitions ?? [])].map((item) => [
+        item.id,
+        item,
+      ]),
+    ).values(),
+  ].sort((a, b) => a.name.localeCompare(b.name));
   const pools = usePools(markets.map((m) => m.matchId));
   const accountAction = account.data ? (
     <button className="quiet" onClick={() => logout.mutate()} disabled={logout.isPending}>
@@ -321,7 +362,6 @@ export function App() {
           <img src="/mark.svg" alt="" width="34" height="34" />
           streak<span className="dot">.</span>
         </a>
-        <p className="eyebrow">YOUR TOUCHLINE</p>
         <AppNavigation active={activePage} />
       </aside>
       <div className="workspace">
@@ -339,11 +379,13 @@ export function App() {
                       ? 'Overview'
                       : section === 'five'
                         ? 'Streak Five'
-                        : section === 'matchday'
-                          ? 'Matchday'
-                          : section === 'clubhouse'
-                            ? 'Clubhouse'
-                            : 'Markets'}
+                        : section === 'survivor'
+                          ? 'Streak Survivor'
+                          : section === 'matchday'
+                            ? 'Matchday'
+                            : section === 'clubhouse'
+                              ? 'Clubhouse'
+                              : 'Markets'}
             </strong>
           </span>
           <div className="account-actions">
@@ -378,8 +420,30 @@ export function App() {
               {selectionNotice}
             </p>
           )}
-          {section && !directRoute && !marketId && (
+          {section && section !== 'survivor' && section !== 'five' && !directRoute && !marketId && (
             <SectionPage section={section} onPick={pick} picks={draftState.draft.picks} />
+          )}
+          {section === 'survivor' && !directRoute && !marketId && (
+            <Suspense fallback={<BusyState label="Opening Survivor" />}>
+              <SurvivorPage
+                key={`survivor:${account.data?.id ?? 'public'}:${wallet.revision}`}
+                account={account.data ?? null}
+                accountReady={!account.isPending}
+                onSignIn={() => login.mutate()}
+                signInPending={login.isPending}
+              />
+            </Suspense>
+          )}
+          {section === 'five' && !directRoute && !marketId && (
+            <Suspense fallback={<BusyState label="Opening Streak Five" />}>
+              <FivePage
+                key={`five:${account.data?.id ?? 'public'}`}
+                account={account.data ?? null}
+                accountReady={!account.isPending}
+                onSignIn={() => login.mutate()}
+                signInPending={login.isPending}
+              />
+            </Suspense>
           )}
           {directRoute === 'wallet' && (
             <WalletOverview
@@ -412,14 +476,12 @@ export function App() {
               (directEntry && entryMode.data === false && !entryMode.isError)) && (
               <Suspense
                 fallback={
-                  <section className="glass detail-state">
-                    <h1>
-                      {directRoute === 'activity'
-                        ? 'Loading your activity...'
-                        : 'Opening prediction...'}
-                    </h1>
-                    <p>Your saved predictions are safe.</p>
-                  </section>
+                  <BusyState
+                    label={
+                      directRoute === 'activity' ? 'Opening your activity' : 'Opening prediction'
+                    }
+                    detail="Your saved predictions stay with you."
+                  />
                 }
               >
                 <DirectPage
@@ -455,54 +517,18 @@ export function App() {
               </div>
               <span className="pilot-badge">Early access</span>
             </div>
-            <section className="weekend-picker" aria-label="Matchweek">
-              <div className="week-navigation">
-                <button
-                  disabled={week <= -1}
-                  aria-label="Previous weekend"
-                  onClick={() => {
-                    setWeek(week - 1);
-                    setDay(null);
-                  }}
-                >
-                  ‹
-                </button>
-                <div>
-                  <strong>
-                    {week === 0 ? 'This matchweek' : week === 1 ? 'Next matchweek' : 'Matchweek'}
-                  </strong>
-                  <span>
-                    {dates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} –{' '}
-                    {dates.days[3].toLocaleDateString('en-GB', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
-                  </span>
-                </div>
-                <button
-                  disabled={week >= 2}
-                  aria-label="Next weekend"
-                  onClick={() => {
-                    setWeek(week + 1);
-                    setDay(null);
-                  }}
-                >
-                  ›
-                </button>
-              </div>
-              <div className="day-filters" role="group" aria-label="Matchweek day">
-                <button aria-pressed={day === null} onClick={() => setDay(null)}>
-                  All days
-                </button>
-                {dates.days.map((date, index) => (
-                  <button key={index} aria-pressed={day === index} onClick={() => setDay(index)}>
-                    {date.toLocaleDateString('en-GB', { weekday: 'short' })}{' '}
-                    <span>{date.getDate()}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
+            {!marketId && !directRoute && !section && (
+              <DayNavigation
+                value={date}
+                today={today}
+                live={status === 'live'}
+                onChange={selectDate}
+                onLive={() => {
+                  selectDate('today');
+                  setStatus(status === 'live' ? 'all' : 'live');
+                }}
+              />
+            )}
             <div className="market-tools">
               <div className="filters" role="group" aria-label="Market status">
                 {[
@@ -532,6 +558,35 @@ export function App() {
               </label>
             </div>
             <div className="feed-meta" aria-live="polite">
+              <label className="fixture-sort fixture-league">
+                League
+                <select
+                  aria-label="Filter by league"
+                  value={competition}
+                  onChange={(event) => setCompetition(event.target.value)}
+                >
+                  <option value="">
+                    {!competitions.length && leagueFeed.isPending
+                      ? 'Loading leagues…'
+                      : !competitions.length && leagueFeed.isError
+                        ? 'Leagues unavailable'
+                        : 'All leagues'}
+                  </option>
+                  {competition && !competitions.some((item) => item.id === competition) && (
+                    <option value={competition}>Selected league</option>
+                  )}
+                  {competitions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+                {leagueFeed.isError && competitions.length === 0 && (
+                  <button className="quiet" onClick={() => void leagueFeed.refetch()}>
+                    Retry leagues
+                  </button>
+                )}
+              </label>
               <label className="fixture-sort">
                 Sort by
                 <select
@@ -612,6 +667,7 @@ export function App() {
                   onClick={() => {
                     setSearch('');
                     setStatus('all');
+                    setCompetition('');
                   }}
                 >
                   Browse all fixtures
@@ -640,8 +696,8 @@ export function App() {
               </div>
             )}
             <footer>
-              Friday through Monday, in your local time. Fixtures from connected competitions.
-              Testnet CKB has no monetary value.
+              Fixtures in your local time, from connected competitions. Testnet CKB has no monetary
+              value.
             </footer>
           </div>
         </main>

@@ -38,6 +38,23 @@ services:
       # Exact public HTTPS origin, without a trailing slash. Required for auth.
       - key: STREAK_PUBLIC_ORIGIN
         sync: false
+      # Automatic EPL rounds. Admin values are full connected CKB testnet addresses.
+      - key: STREAK_FIVE_FPL_ENABLED
+        value: 1
+      - key: STREAK_FIVE_NETWORK
+        value: testnet
+      - key: STREAK_FIVE_ADMIN_WALLETS
+        sync: false
+      - key: STREAK_SURVIVOR_ADMIN_WALLETS
+        sync: false
+      # Enable after the separate hosted rewards wallet and reserve are ready.
+      # The launcher passes its private key only to the dedicated rewards child.
+      - key: STREAK_FIVE_REWARDS_ENABLED
+        sync: false
+      - key: STREAK_FIVE_REWARDS_ADDRESS
+        sync: false
+      - key: STREAK_FIVE_REWARDS_PRIVATE_KEY
+        sync: false
       # Real multi-league API-SPORTS football feed.
       - key: MATCH_PROVIDER
         value: football

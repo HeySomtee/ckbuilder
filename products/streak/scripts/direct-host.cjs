@@ -14,6 +14,13 @@ const API = [
   'TREASURY_PRIVATE_KEY',
   'API_SPORTS_KEY',
   'STREAK_PUBLIC_ORIGIN',
+  'STREAK_SURVIVOR_ADMIN_WALLETS',
+  'STREAK_SURVIVOR_DATABASE_URL',
+  'STREAK_FIVE_DATABASE_URL',
+  'STREAK_FIVE_ADMIN_WALLETS',
+  'STREAK_FIVE_FPL_ENABLED',
+  'STREAK_FIVE_NETWORK',
+  'STREAK_FIVE_REWARDS_ADDRESS',
   'APP_PUBLIC_URL',
   'TELEGRAM_BOT_TOKEN',
   'TELEGRAM_BOT_USERNAME',
@@ -134,6 +141,36 @@ function buildConfig(env) {
     STREAK_DIRECT_DURABLE_STATE_ACK: '1',
     API_SPORTS_KEY: env.API_SPORTS_KEY,
   };
+  let rewards;
+  if (env.STREAK_FIVE_REWARDS_ENABLED === '1') {
+    requireValue(env, 'STREAK_FIVE_REWARDS_ADDRESS', /^ckt1[a-z0-9]{20,250}$/);
+    const rewardKey = requireValue(
+      env,
+      'STREAK_FIVE_REWARDS_PRIVATE_KEY',
+      /^(?:0x)?[0-9a-fA-F]{64}$/,
+    );
+    if (env.STREAK_FIVE_NETWORK !== 'testnet')
+      throw Error('Five rewards require STREAK_FIVE_NETWORK=testnet.');
+    if (
+      [env.TREASURY_PRIVATE_KEY, env.STREAK_DIRECT_PRIVATE_KEY].some(
+        (k) => k.replace(/^0x/, '').toLowerCase() === rewardKey.replace(/^0x/, '').toLowerCase(),
+      )
+    )
+      throw Error('Use a dedicated Five rewards key, separate from prediction and treasury keys.');
+    rewards = {
+      ...pick(env, COMMON),
+      NODE_ENV: 'production',
+      STREAK_SKIP_ENV_FILE: '1',
+      ...pick(env, [
+        'DATABASE_URL',
+        'STREAK_SURVIVOR_DATABASE_URL',
+        'STREAK_FIVE_DATABASE_URL',
+        'STREAK_FIVE_NETWORK',
+        'STREAK_FIVE_REWARDS_ADDRESS',
+        'STREAK_FIVE_REWARDS_PRIVATE_KEY',
+      ]),
+    };
+  }
   return {
     stateRoot: path.resolve(stateRoot),
     directories: directories.map((dir) => path.resolve(dir)),
@@ -150,6 +187,7 @@ function buildConfig(env) {
       },
       sponsor: { ...operator, ...ipc, STREAK_DIRECT_CATALOGUE_URL: catalogue },
       worker: operator,
+      ...(rewards ? { rewards } : {}),
     },
   };
 }
@@ -237,6 +275,7 @@ async function runHost(config, options = {}) {
     api: ['products/streak/dist/server.js'],
     sponsor: ['products/streak/scripts/direct-sponsor.cjs', '--serve'],
     worker: ['products/streak/scripts/direct-worker.cjs', '--once'],
+    rewards: ['products/streak/dist/modules/five/worker.js'],
   };
   const log = options.log || ((message) => console.log(`[streak-host] ${message}`));
   const children = new Set();
@@ -375,6 +414,7 @@ async function runHost(config, options = {}) {
         ));
     if (!(await waitReady(sponsorCheck, 'Sponsor'))) return await done;
     log('API and atomic sponsor are ready. Starting serialized settlement passes.');
+    if (config.environments.rewards) start('rewards');
     runWorker();
   } catch {
     void stop(1, 'Hosted startup failed. Check configuration and local port ownership.');

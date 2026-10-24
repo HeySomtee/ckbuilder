@@ -1,0 +1,832 @@
+.survivor-page {
+  --survivor-blue: #9fc7e6;
+  max-width: 1320px;
+  margin: auto;
+}
+.survivor-page h1 {
+  font-size: 28px;
+  margin: 7px 0;
+}
+.survivor-page h1 span,
+.survivor-page p,
+.survivor-page small {
+  color: var(--muted);
+}
+.survivor-page .eyebrow {
+  color: var(--mint);
+  font: 9px var(--mono);
+  letter-spacing: 1.6px;
+}
+.survivor-intro,
+.survivor-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.survivor-intro p {
+  margin: 0;
+}
+.survivor-create {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 8px 15px 8px 8px;
+  border: 1px solid #ff986f55;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ff986f1c, #ff986f08);
+  box-shadow: inset 0 1px #ffdac126;
+  color: #ffd0b9;
+  font: 650 12px/1.2 var(--font);
+}
+.survivor-create-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--coral);
+  color: #261b15;
+  font: 400 21px/1 var(--font);
+}
+.survivor-create:hover {
+  background: linear-gradient(135deg, #ff986f2c, #ff986f12);
+  border-color: #ff986f99;
+  color: #ffe2d2;
+}
+.survivor-tag {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #b9ed8a30;
+  color: var(--mint);
+  border-radius: 24px;
+  padding: 7px 10px;
+  font: 10px var(--mono);
+  white-space: nowrap;
+}
+.survivor-hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 90% 15%, #72a7c112, transparent 65%),
+    linear-gradient(110deg, #b9ed8a07, transparent);
+}
+.survivor-hero-copy {
+  padding: 30px;
+  position: relative;
+  z-index: 1;
+}
+.survivor-hero h2 {
+  font-size: clamp(30px, 3.3vw, 46px);
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+  margin: 17px 0;
+}
+.survivor-hero h2 em {
+  color: var(--mint);
+  font-style: normal;
+}
+.survivor-hero p {
+  line-height: 1.7;
+}
+.survivor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+.survivor-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--mint);
+  color: #162011;
+  border: 1px solid #e5ffc077;
+  border-radius: 10px;
+  min-height: 44px;
+  padding: 10px 17px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.survivor-primary:hover:not(:disabled) {
+  background: #cef5a6;
+}
+.survivor-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.survivor-page button {
+  touch-action: manipulation;
+}
+.survivor-page button:focus-visible,
+.survivor-page input:focus-visible,
+.survivor-page select:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 3px;
+}
+.survivor-art {
+  min-height: 265px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+  overflow: hidden;
+}
+.survivor-art > i {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  border: 1px solid #b9ed8a18;
+  border-radius: 50%;
+  transform: rotate(-25deg) scaleY(0.68);
+}
+.survivor-art > i:nth-child(2) {
+  width: 320px;
+  height: 320px;
+}
+.survivor-art > i:nth-child(3) {
+  width: 420px;
+  height: 420px;
+  border-color: #9fc7e612;
+}
+.survivor-diamond {
+  height: 100px;
+  width: 100px;
+  display: grid;
+  place-items: center;
+  transform: rotate(45deg);
+  border: 1px solid #b9ed8a55;
+  border-radius: 25px;
+  background: linear-gradient(140deg, #b9ed8a10, transparent, #9fc7e610);
+  box-shadow:
+    inset 1px 1px #d7efc62b,
+    0 20px 70px #5e923917;
+}
+.survivor-diamond svg {
+  width: 58px;
+  height: 58px;
+  transform: rotate(-45deg);
+  color: var(--mint);
+  stroke-width: 1;
+}
+.survivor-orbit {
+  position: absolute;
+  height: 55px;
+  width: 55px;
+  display: grid;
+  place-items: center;
+  background: #16201ce6;
+  border: 1px solid #c9d9cc36;
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px #e6f5ed18,
+    0 9px 22px #0003;
+}
+.survivor-orbit.team-0 {
+  left: 14%;
+  top: 25%;
+  transform: rotate(-9deg);
+}
+.survivor-orbit.team-1 {
+  right: 17%;
+  top: 18%;
+  transform: rotate(12deg);
+}
+.survivor-orbit.team-2 {
+  right: 22%;
+  bottom: 16%;
+  transform: rotate(-7deg);
+}
+.survivor-art-caption {
+  position: absolute;
+  bottom: 30px;
+  left: 15%;
+  font: 8px var(--mono);
+  letter-spacing: 2px;
+  color: var(--muted);
+}
+.survivor-crest {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  display: inline-grid;
+  place-items: center;
+  font: 10px var(--mono);
+  margin: 0;
+}
+.survivor-stats {
+  grid-column: 1/-1;
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: #12201824;
+}
+.survivor-stats > div {
+  padding: 17px 22px;
+  display: grid;
+  gap: 5px;
+  border-right: 1px solid var(--line);
+}
+.survivor-stats small {
+  font: 8px var(--mono);
+  letter-spacing: 1px;
+}
+.survivor-stats b {
+  font: 600 16px var(--mono);
+}
+.survivor-stats > div:first-child b {
+  color: var(--mint);
+}
+.survivor-stats span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.survivor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 22px;
+  margin-top: 26px;
+}
+.survivor-game {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.survivor-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.survivor-tabs button {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  min-height: 44px;
+  font-size: 12px;
+  padding: 10px 0;
+}
+.survivor-tabs button[aria-pressed='true'] {
+  color: var(--text);
+  border-bottom-color: var(--coral);
+}
+.survivor-section-head h3 {
+  font-size: 20px;
+  margin: 8px 0;
+}
+.survivor-section-head p {
+  font-size: 11px;
+  margin: 0;
+}
+.survivor-team-grid {
+  order: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.survivor-team {
+  padding: 17px;
+  text-align: left;
+  display: grid;
+  gap: 5px;
+  color: var(--text);
+  min-width: 0;
+  transition:
+    border-color 120ms,
+    background 120ms;
+}
+.survivor-team:not(:disabled):hover {
+  border-color: #b9ed8a66;
+  background: #b9ed8a04;
+}
+.survivor-team[aria-pressed='true'] {
+  border-color: #b9ed8a88;
+  box-shadow: inset 0 0 0 1px #b9ed8a20;
+}
+.survivor-team:disabled {
+  cursor: default;
+}
+.survivor-team:has(.survivor-team-status):disabled {
+  opacity: 0.75;
+}
+.survivor-team strong {
+  font-size: 13px;
+  margin-top: 7px;
+}
+.survivor-team > span:not(.survivor-team-top) {
+  font-size: 11px;
+  color: var(--muted);
+}
+.survivor-team small {
+  font: 9px var(--mono);
+}
+.survivor-team-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.survivor-team-status {
+  font: 8px var(--mono);
+  color: var(--muted);
+  letter-spacing: 0.8px;
+}
+.survivor-team[aria-pressed='true'] .survivor-team-status {
+  color: var(--mint);
+}
+.survivor-next {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 9px;
+  font: 8px var(--mono) !important;
+  color: var(--survivor-blue) !important;
+}
+.survivor-pickbar {
+  position: sticky;
+  top: 12px;
+  bottom: auto;
+  order: 1;
+  z-index: 2;
+  padding: 14px 17px;
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #c6dacf40;
+  border-radius: 14px;
+  background: #15221afa;
+  box-shadow: 0 8px 30px #0005;
+}
+.survivor-pickbar > div {
+  display: grid;
+  gap: 4px;
+}
+.survivor-pickbar small {
+  font: 8px var(--mono);
+  letter-spacing: 1px;
+}
+.survivor-pickbar span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.survivor-aside {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+.survivor-aside > section {
+  padding: 22px;
+  background: linear-gradient(135deg, #9fc7e60b, transparent 55%);
+  border-top-color: #a8cce459;
+}
+.survivor-aside h3 {
+  font-size: 21px;
+  margin: 16px 0;
+}
+.survivor-aside p {
+  line-height: 1.7;
+  font-size: 11px;
+}
+.survivor-aside ol {
+  counter-reset: survivor;
+  list-style: none;
+  padding: 0;
+  margin: 23px 0 0;
+}
+.survivor-aside li {
+  position: relative;
+  padding-left: 28px;
+  display: grid;
+  gap: 5px;
+  margin: 20px 0;
+}
+.survivor-aside li:before {
+  counter-increment: survivor;
+  content: '0' counter(survivor);
+  position: absolute;
+  left: 0;
+  color: var(--mint);
+  font: 9px var(--mono);
+  top: 2px;
+}
+.survivor-aside li span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.survivor-reserve {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.survivor-reserve [data-used='true'] {
+  opacity: 0.25;
+  filter: grayscale(1);
+}
+.survivor-standings,
+.survivor-history {
+  padding: 20px;
+}
+.survivor-standing {
+  display: grid;
+  grid-template-columns: 30px minmax(80px, 1fr) minmax(60px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 65px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+.survivor-standing > div {
+  display: grid;
+  gap: 5px;
+}
+.survivor-standing > span:nth-last-child(2) {
+  color: var(--muted);
+}
+.survivor-standing b {
+  color: var(--mint);
+  font-size: 10px;
+}
+.survivor-avatar,
+.survivor-round-number {
+  border: 1px solid #9fc7e630;
+  background: #9fc7e609;
+  height: 29px;
+  width: 29px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--survivor-blue);
+  font: 10px var(--mono);
+}
+.survivor-history-row {
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  gap: 13px;
+  align-items: center;
+  padding: 19px 0;
+  border-bottom: 1px solid var(--line);
+}
+.survivor-history-row > div {
+  display: grid;
+  gap: 6px;
+}
+.survivor-history-row span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.survivor-history-row b {
+  color: var(--mint);
+  font-size: 10px;
+}
+.survivor-notice {
+  padding: 13px 16px;
+  border: 1px solid #a8c7e333;
+  background: #7aafcb08;
+  border-radius: 12px;
+  margin: 14px 0;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.survivor-notice p {
+  margin: 4px 0;
+}
+.survivor-notice button {
+  background: transparent;
+  color: var(--survivor-blue);
+  min-height: 44px;
+  border: 0;
+}
+.survivor-empty {
+  padding: 40px;
+  text-align: center;
+}
+.survivor-empty > svg {
+  width: 48px;
+  height: 48px;
+  color: var(--mint);
+}
+.survivor-empty p {
+  max-width: 420px;
+  margin: 15px auto;
+  line-height: 1.7;
+}
+.survivor-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+}
+.survivor-switch select {
+  max-width: 100%;
+  background: #17221d;
+  color: var(--text);
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+}
+.survivor-dialog {
+  width: min(620px, calc(100vw - 24px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid #bdcebf55;
+  border-radius: 20px;
+  color: var(--text);
+  background: #15201d;
+  overflow-y: auto;
+  box-shadow: 0 25px 100px #0009;
+}
+.survivor-dialog::backdrop {
+  background: #020806bb;
+  backdrop-filter: blur(2px);
+}
+.survivor-dialog > header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #15201dfc;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.survivor-dialog h2 {
+  font-size: 24px;
+  margin: 5px 0 0;
+}
+.survivor-dialog > header button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  background: #fff04;
+  font-size: 22px;
+}
+.survivor-dialog-body {
+  padding: 24px;
+}
+.survivor-rulebook {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+.survivor-rulebook ol {
+  padding-left: 18px;
+}
+.survivor-rulebook li {
+  padding-left: 5px;
+  margin: 10px 0;
+}
+.survivor-rulebook details {
+  margin: 17px 0;
+}
+.survivor-rulebook summary {
+  cursor: pointer;
+  color: var(--text);
+  min-height: 44px;
+  padding-top: 10px;
+}
+.survivor-schedule {
+  padding: 12px 0;
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+}
+.survivor-entry-summary {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+.survivor-entry-summary b {
+  color: var(--mint);
+}
+.survivor-entry-summary span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.survivor-dialog form > label,
+.survivor-form-grid > label {
+  display: grid;
+  gap: 7px;
+  font-size: 11px;
+  margin-bottom: 15px;
+}
+.survivor-dialog input:not([type='checkbox']),
+.survivor-dialog select {
+  background: #0e1a15;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  min-height: 44px;
+  padding: 9px 12px;
+  width: 100%;
+}
+.survivor-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 15px;
+}
+.survivor-dialog fieldset {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: 18px 0;
+}
+.survivor-dialog fieldset p {
+  font-size: 11px;
+  line-height: 1.7;
+}
+.survivor-round-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+  cursor: pointer;
+}
+.survivor-round-choice input {
+  accent-color: var(--mint);
+  height: 20px;
+  width: 20px;
+  flex-shrink: 0;
+}
+.survivor-round-choice span {
+  display: grid;
+  gap: 5px;
+}
+@media (max-width: 1050px) {
+  .survivor-layout {
+    grid-template-columns: minmax(0, 1fr) 215px;
+    gap: 15px;
+  }
+  .survivor-hero-copy {
+    padding: 24px;
+  }
+  .survivor-stats > div {
+    padding: 16px;
+  }
+}
+@media (max-width: 850px) {
+  .survivor-layout {
+    grid-template-columns: 1fr;
+  }
+  .survivor-aside {
+    grid-template-columns: 1fr 1fr;
+  }
+  .survivor-hero {
+    grid-template-columns: 1fr 0.7fr;
+  }
+  .survivor-orbit.team-0 {
+    left: 2%;
+  }
+}
+@media (max-width: 600px) {
+  .survivor-intro {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .survivor-hero {
+    grid-template-columns: 1fr;
+  }
+  .survivor-art {
+    min-height: 185px;
+    grid-row: 2;
+  }
+  .survivor-hero-copy {
+    padding: 23px;
+  }
+  .survivor-hero h2 {
+    font-size: 35px;
+  }
+  .survivor-art-caption {
+    bottom: 10px;
+  }
+  .survivor-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+  .survivor-stats > div {
+    border-top: 1px solid var(--line);
+    padding: 14px;
+  }
+  .survivor-stats b {
+    font-size: 14px;
+  }
+  .survivor-team {
+    padding: 13px;
+  }
+  .survivor-team strong {
+    font-size: 12px;
+  }
+  .survivor-team-status {
+    font-size: 7px;
+  }
+  .survivor-section-head {
+    display: block;
+  }
+  .survivor-section-head > span {
+    margin-top: 12px;
+  }
+  .survivor-aside {
+    grid-template-columns: 1fr;
+  }
+  .survivor-tabs {
+    gap: 15px;
+  }
+  .survivor-tabs button {
+    font-size: 11px;
+  }
+  .survivor-pickbar {
+    bottom: auto;
+    padding: 12px;
+  }
+  .survivor-pickbar strong {
+    font-size: 12px;
+  }
+  .survivor-pickbar span {
+    font-size: 9px;
+  }
+  .survivor-pickbar button {
+    padding: 9px 12px;
+  }
+  .survivor-standing {
+    grid-template-columns: 26px 1fr auto;
+    gap: 8px;
+  }
+  .survivor-standing > span:nth-last-child(2) {
+    grid-column: 2;
+    grid-row: auto;
+    font-size: 10px;
+    padding-bottom: 9px;
+  }
+  .survivor-standing b {
+    grid-column: 3;
+    grid-row: auto;
+  }
+  .survivor-history-row {
+    grid-template-columns: 28px 1fr;
+  }
+  .survivor-history-row b {
+    grid-column: 2;
+  }
+  .survivor-dialog-body {
+    padding: 18px;
+  }
+  .survivor-dialog > header {
+    padding: 16px 18px;
+  }
+  .survivor-dialog h2 {
+    font-size: 21px;
+  }
+}
+@media (max-width: 350px) {
+  .survivor-team-grid {
+    grid-template-columns: 1fr;
+  }
+  .survivor-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .survivor-stats b {
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .survivor-page * {
+    transition: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .survivor-page .glass {
+    background: #17221d;
+  }
+  .survivor-dialog::backdrop {
+    backdrop-filter: none;
+    background: #000d;
+  }
+}
+@media (forced-colors: active) {
+  .survivor-team[aria-pressed='true'] {
+    border: 2px solid Highlight;
+  }
+  .survivor-primary,
+  .survivor-create {
+    border: 1px solid ButtonText;
+  }
+  .survivor-create-icon {
+    background: ButtonFace;
+    color: ButtonText;
+  }
+  .survivor-art {
+    display: none;
+  }
+}

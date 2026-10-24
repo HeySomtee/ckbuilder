@@ -99,6 +99,26 @@ function buildProduct() {
 
 async function browserChecks() {
   buildProduct();
+  run(
+    'Five automatic gameweek and player scouting browser regression',
+    [join(product, 'scripts/five-auto-browser.cjs')],
+    {
+      cwd: product,
+      isolated: true,
+    },
+  );
+  run('Five gameweek and squad browser regression', [join(product, 'scripts/five-browser.cjs')], {
+    cwd: product,
+    isolated: true,
+  });
+  run(
+    'Survivor admin and free-entry browser regression',
+    [join(product, 'scripts/survivor-browser.cjs')],
+    {
+      cwd: product,
+      isolated: true,
+    },
+  );
   run('Current Streak browser regression', [join(product, 'scripts/browser-smoke.cjs')], {
     cwd: product,
     isolated: true,
@@ -237,6 +257,23 @@ try {
         cwd: product,
         isolated: true,
       });
+      buildProduct();
+      run(
+        'Isolated Five PostgreSQL admission regression',
+        [join(product, 'scripts/five-postgres.cjs')],
+        {
+          cwd: product,
+          isolated: true,
+        },
+      );
+      run(
+        'Isolated Survivor PostgreSQL admission regression',
+        [join(product, 'scripts/survivor-postgres.cjs')],
+        {
+          cwd: product,
+          isolated: true,
+        },
+      );
     } else if (selected === 'browser') {
       await browserChecks();
     } else if (selected === 'contracts') {
@@ -285,6 +322,16 @@ try {
       run(
         'Atomic prediction signed devnet lifecycle',
         [join(product, 'scripts/batch-devnet-run.cjs')],
+        { timeout: 600_000 },
+      );
+      run(
+        'Five sponsorship and reward signed devnet lifecycle',
+        [join(product, 'scripts/five-devnet-run.cjs')],
+        { timeout: 600_000 },
+      );
+      run(
+        'Five interactive local-chain rehearsal',
+        [join(product, 'scripts/five-devnet-run.cjs'), '--rehearsal-check'],
         { timeout: 600_000 },
       );
     }

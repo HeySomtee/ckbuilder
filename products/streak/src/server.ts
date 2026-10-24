@@ -17,6 +17,10 @@ import { readProvisioningProgress, PROVISION_QUEUE_LIMIT } from './modules/direc
 import { sponsorProxy, SponsorProxyError } from './modules/direct/sponsor-proxy';
 import { activePoolRecord, PublicPoolCache } from './modules/direct/pools';
 import { catalogueStatusMatches } from './modules/predictions/catalogue';
+import { survivorService, tickSurvivor } from './modules/survivor/runtime';
+import { SurvivorError } from './modules/survivor/domain';
+import { fiveService, startFiveProgression } from './modules/five/runtime';
+import { FiveError } from './modules/five/domain';
 
 import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
@@ -183,6 +187,46 @@ async function readJson(req: IncomingMessage): Promise<any> {
 
 async function currentUserId(req: IncomingMessage): Promise<string | null> {
   return getSessionUserId(parseCookies(req)[SESSION_COOKIE]);
+}
+
+async function handleSurvivor(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  try {
+    const id = await currentUserId(req);
+    const user = id ? await read(db => db.users.find(user => user.id === id)) : undefined;
+    const actor = user?.wallet?.address ? { id: user.id, name: user.username || 'Player', wallet: user.wallet.address } : null;
+    const service = survivorService();
+    const data = req.method === 'POST'
+      ? await service.action(actor, await readJson(req))
+      : await service.read(actor, url.searchParams.get('competition') ?? undefined);
+    sendJson(res, 200, data);
+  } catch (error) {
+    if (error instanceof SurvivorError) return sendJson(res, error.status, { error: error.message });
+    console.warn('[survivor] request unavailable');
+    sendJson(res, 503, { error: 'Survivor could not refresh right now. Your saved entry stays safe. Please retry.' });
+  }
+}
+
+async function handleFive(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  try {
+    const id = await currentUserId(req);
+    const user = id ? await read(db => db.users.find(user => user.id === id)) : undefined;
+    const actor = user?.wallet?.address ? { id: user.id, name: user.username || 'Player', wallet: user.wallet.address } : null;
+    const service = fiveService();
+    if(req.method === 'GET' && (url.searchParams.has('scout') || url.searchParams.has('player'))) {
+      if(!sponsorRate(`five-scout:${req.socket.remoteAddress}`,60))return sendJson(res,429,{error:'Please wait before refreshing player scouting.'});
+      const player=url.searchParams.get('player');
+      if(player!==null && !/^[1-9][0-9]{0,5}$/.test(player))return sendJson(res,400,{error:'Choose a valid player.'});
+      return sendJson(res,200,player===null?await service.scouting():await service.player(Number(player)));
+    }
+    const data = req.method === 'POST'
+      ? await service.action(actor, await readJson(req))
+      : await service.read(actor, url.searchParams.get('round') ?? undefined);
+    sendJson(res, 200, data);
+  } catch (error) {
+    if (error instanceof FiveError) return sendJson(res, error.status, { error: error.message });
+    console.warn('[five] request unavailable');
+    sendJson(res, 503, { error: 'Streak Five could not refresh. Your saved squad is safe. Please retry.' });
+  }
 }
 
 // ── Static files ────────────────────────────────────────────────────────────
@@ -607,7 +651,7 @@ async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL
   const markets = await listMarkets({
     status: !seasonCatalogue && (status === "open" || status === "closed" || status === "resolved" || status === "void") ? status : undefined,
     matchId,
-    competitionId,
+    competitionId: seasonCatalogue ? undefined : competitionId,
     matchFilter: isActiveProviderMatch,
   });
   if (url.searchParams.has("limit")) {
@@ -627,18 +671,20 @@ async function handleMarkets(req: IncomingMessage, res: ServerResponse, url: URL
     const known = new Set(markets.map(m => m.match.id));
     const schedule = seasonCatalogue
       ? (provider.scheduleFixtures?.() ?? []).filter(match => !known.has(match.id) &&
-          (!matchId || match.id === matchId) && (!competitionId || match.competition?.id === competitionId)).map(match => ({
+          (!matchId || match.id === matchId)).map(match => ({
           id: `fixture:${match.id}`, available: false, status: 'closed', fixtureStatus: match.status,
           match: { ...match, label: `${match.home.name} vs ${match.away.name}` },
           prices: null, totalPoolCkb: null, totalBets: null,
         })) : [];
-    const catalogue = [...markets, ...schedule].filter(row => !seasonCatalogue || catalogueStatusMatches(row.match, status, Date.now())).sort((a,b)=>a.match.kickoff.localeCompare(b.match.kickoff) || a.id.localeCompare(b.id));
+    const allRows = [...markets, ...schedule];
+    const competitions = [...new Map(allRows.flatMap(row => row.match.competition ? [[row.match.competition.id, { id: row.match.competition.id, name: row.match.competition.name }] as const] : [])).values()].sort((a, b) => a.name.localeCompare(b.name));
+    const catalogue = allRows.filter(row => (!competitionId || row.match.competition?.id === competitionId) && (!seasonCatalogue || catalogueStatusMatches(row.match, status, Date.now()))).sort((a,b)=>a.match.kickoff.localeCompare(b.match.kickoff) || a.id.localeCompare(b.id));
     const inWindow = start !== null && end !== null ? catalogue.filter(m => Date.parse(m.match.kickoff) >= start && Date.parse(m.match.kickoff) < end) : catalogue;
     const filtered = query ? inWindow.filter(m => `${m.match.home.name} ${m.match.away.name} ${m.match.competition?.name ?? ""}`.toLowerCase().includes(query)) : inWindow;
     const ordered = sort === 'featured' ? rankFeaturedFixtures(filtered) : filtered;
     const page = ordered.slice(offset, offset+limit);
     return sendJson(res, 200, { markets: page, total: filtered.length, nextOffset: offset+limit < filtered.length ? offset+limit : null,
-      coverage: provider.scheduleCoverage?.() ?? null });
+      ...(seasonCatalogue ? { competitions } : {}), coverage: provider.scheduleCoverage?.() ?? null });
   }
   sendJson(res, 200, { markets });
 }
@@ -1270,6 +1316,10 @@ const staticRoutes: Record<string, Handler> = {
   "POST /api/auth/verify": (req, res) => handleAuthVerify(req, res),
   "POST /api/logout": (req, res) => handleLogout(req, res),
   "GET /api/me": (req, res) => handleMe(req, res),
+  "GET /api/survivor": (req, res, url) => handleSurvivor(req, res, url),
+  "POST /api/survivor": (req, res, url) => handleSurvivor(req, res, url),
+  "GET /api/five": (req, res, url) => handleFive(req, res, url),
+  "POST /api/five": (req, res, url) => handleFive(req, res, url),
   "POST /api/me/username": (req, res) => handleSetUsername(req, res),
   "POST /api/me/notify": (req, res) => handleSetNotify(req, res),
   "POST /api/integrations/telegram/connect": (req, res) => handleTelegramConnect(req, res),
@@ -1374,6 +1424,8 @@ async function boot(): Promise<void> {
     console.log(`     network: CKB Pudge testnet · provider: ${provider.id}`);
     console.log(`     treasury: ${treasury.address}\n`);
   });
+  const stopFive = startFiveProgression();
+  server.once('close',stopFive);
 
   // A slow oracle or notification service must not hold the listener offline.
   let initialized = false;
@@ -1392,6 +1444,7 @@ async function boot(): Promise<void> {
     } catch (error) {
       console.error("[streak] settle loop:", (error as Error).message);
     } finally {
+      await tickSurvivor().catch(() => console.warn('[survivor] progression delayed; will retry'));
       ticking = false;
     }
   };

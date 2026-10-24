@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Streak Five · Local rehearsal</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font: 16px system-ui;
+        background: #0d1712;
+        color: #edf2eb;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(ellipse at top right, #20372e, transparent 65%);
+        min-height: 100vh;
+      }
+      main {
+        max-width: 860px;
+        margin: auto;
+        padding: 36px 20px;
+      }
+      small {
+        color: #b7e688;
+        letter-spacing: 0.12em;
+      }
+      h1 {
+        font-size: clamp(32px, 6vw, 52px);
+        letter-spacing: -0.05em;
+        margin: 16px 0;
+      }
+      p {
+        color: #aebdb5;
+        line-height: 1.6;
+      }
+      section {
+        padding: 22px;
+        border: 1px solid #41554b;
+        border-radius: 22px;
+        background: #c9e8df06;
+        margin: 18px 0;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .grid section {
+        margin: 0;
+      }
+      strong {
+        font-size: 28px;
+        display: block;
+        margin-top: 12px;
+      }
+      button {
+        border: 0;
+        border-radius: 14px;
+        min-height: 48px;
+        padding: 16px 24px;
+        background: #b7e688;
+        color: #122016;
+        font: 700 16px system-ui;
+        cursor: pointer;
+        max-width: 100%;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+      button:focus-visible {
+        outline: 2px solid #ff996a;
+        outline-offset: 4px;
+      }
+      progress {
+        width: 100%;
+        accent-color: #b7e688;
+        height: 6px;
+      }
+      code {
+        display: block;
+        overflow-wrap: anywhere;
+        color: #b5c6d7;
+        font-size: 12px;
+      }
+      li {
+        margin: 16px 0;
+      }
+      #message {
+        min-height: 52px;
+      }
+      #error {
+        color: #ffcd92;
+      }
+      #spinner {
+        display: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #12201655;
+        border-top-color: #122016;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        vertical-align: middle;
+        margin-right: 10px;
+      }
+      body[data-busy='true'] #spinner {
+        display: inline-block;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #spinner {
+          animation: none;
+        }
+      }
+      @media (max-width: 440px) {
+        main {
+          padding: 24px 16px;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        section {
+          padding: 18px;
+        }
+        button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body data-phase="0">
+    <main>
+      <small>STREAK FIVE / LOCAL REHEARSAL</small>
+      <h1>A whole gameweek.<br />In a few clicks.</h1>
+      <p>
+        Demo players, disposable wallets and a private local CKB chain. These are actual signed
+        local transactions, not public testnet payments. No MetaMask connection or real funds are
+        used.
+      </p>
+      <section>
+        <small id="step">STEP 1 OF 6</small
+        ><progress id="progress" max="6" value="0" aria-label="Rehearsal progress"></progress>
+        <p id="message" role="status" aria-live="polite">Loading the rehearsal…</p>
+        <button id="next" disabled>
+          <span id="spinner" aria-hidden="true"></span><span id="label">Loading…</span>
+        </button>
+        <p id="error" role="alert"></p>
+      </section>
+      <div class="grid">
+        <section>
+          <small>LEADING / WINNING BID</small><strong id="bid">0 demo CKB</strong>
+          <p>Two payments from Alice combine into one bid. Only the winning bid funds the prize.</p>
+        </section>
+        <section>
+          <small>CONFIRMED RETURNS</small>
+          <p id="returns">No refunds or prizes paid yet.</p>
+        </section>
+      </div>
+      <section>
+        <small>LOCAL TRANSACTION RECORD</small>
+        <ul id="transactions"></ul>
+      </section>
+      <p>
+        Closing the round advances only this rehearsal’s clock. Applying results uses clearly
+        synthetic player statistics and the actual scoring service. Real EPL deadlines, gameweeks
+        and sponsorship records stay untouched.
+      </p>
+    </main>
+    <script>
+      const button = document.querySelector('#next');
+      let sending = false;
+      async function refresh() {
+        try {
+          const r = await fetch('/state');
+          if (!r.ok) throw Error();
+          const s = await r.json();
+          document.body.dataset.phase = s.phase;
+          document.body.dataset.busy = s.busy;
+          document.querySelector('#step').textContent =
+            s.phase === 6 ? 'REHEARSAL COMPLETE' : `STEP ${s.phase + 1} OF 6`;
+          document.querySelector('#progress').value = s.phase;
+          document.querySelector('#message').textContent = s.busy
+            ? 'Signing, confirming and checking the local-chain records…'
+            : s.message;
+          document.querySelector('#label').textContent = s.busy
+            ? 'Processing…'
+            : s.next || 'All checks complete';
+          button.disabled = s.busy || sending || !s.next || !!s.error;
+          document.querySelector('#error').textContent = s.error;
+          document.querySelector('#bid').textContent =
+            `${BigInt(s.auction.leadingShannons) / 100000000n} demo CKB`;
+          document.querySelector('#returns').textContent =
+            `Bob refunded: ${BigInt(s.bob.paidShannons) / 100000000n} · Alice collected: ${BigInt(s.alice.paidShannons) / 100000000n} demo CKB`;
+          document.querySelector('#transactions').replaceChildren(
+            ...s.hashes.map((t) => {
+              const li = document.createElement('li'),
+                code = document.createElement('code');
+              li.textContent = t.label;
+              code.textContent = t.hash;
+              li.append(code);
+              return li;
+            }),
+          );
+        } catch {
+          document.querySelector('#error').textContent =
+            'Rehearsal connection unavailable. Keep its launcher running.';
+          button.disabled = true;
+        }
+      }
+      button.onclick = async () => {
+        sending = true;
+        button.disabled = true;
+        try {
+          const r = await fetch('/next', { method: 'POST', headers: { 'X-Rehearsal': '1' } });
+          if (!r.ok) throw Error();
+        } catch {
+          document.querySelector('#error').textContent =
+            'The action could not start. Refresh to check its status.';
+        } finally {
+          sending = false;
+          await refresh();
+        }
+      };
+      refresh();
+      setInterval(refresh, 1000);
+    </script>
+  </body>
+</html>

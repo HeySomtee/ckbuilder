@@ -24,6 +24,7 @@ import type { MarketSnapshot } from './discovery.ts';
 import { IndexedJournal, MAX_TX_BYTES, parseRecord } from './journal.ts';
 import type { Journal, JournalRecord } from './journal.ts';
 import { reservationReleased } from './reservations.ts';
+import { mapConcurrent, ReadQueue } from './read-session.ts';
 
 export type Identity = Readonly<{ address: string; ownerHash: string; scope: string }>;
 export type Review = Readonly<{
@@ -68,6 +69,18 @@ type Options = {
   now?: () => number;
   exclusive?: <T>(name: string, action: () => Promise<T>) => Promise<T>;
 };
+type Reservation = Pick<JournalRecord, 'inputs'> & { released: () => Promise<boolean> };
+function reservation(inputs: JournalRecord['inputs'], check: () => Promise<boolean>): Reservation {
+  let result: Promise<boolean> | undefined;
+  return { inputs, released: () => (result ??= check()) };
+}
+async function reservedBy(pending: readonly Reservation[], outPoint: Point): Promise<boolean> {
+  for (const item of pending) {
+    if (item.inputs.some((p) => pointKey(p) === pointKey(outPoint)) && !(await item.released()))
+      return true;
+  }
+  return false;
+}
 const intents = new WeakMap<Review, Intent>();
 const MAX_FEE = CKB / 10n,
   REVIEW_MS = 60_000;
@@ -124,6 +137,7 @@ export class DirectClient {
   private readonly exclusive: Options['exclusive'];
   private expectedOwner: string | null = null;
   private nextShard = 0;
+  private readonly discoveryQueue = new ReadQueue(3);
   constructor(
     signer: ccc.Signer,
     manifest: Manifest,
@@ -176,43 +190,57 @@ export class DirectClient {
   async history(): Promise<JournalRecord[]> {
     return this.journal.list((await this.identity()).scope);
   }
-  async discover(descriptor: Descriptor): Promise<MarketSnapshot> {
-    const identity = await this.identity();
-    return discoverMarket(
-      this.signer.client,
-      await parseDescriptor(descriptor),
-      identity.ownerHash,
-    );
+  async discover(
+    descriptor: Descriptor,
+    onProgress?: (snapshot: MarketSnapshot) => void,
+    signal?: AbortSignal,
+  ): Promise<MarketSnapshot> {
+    return this.discoveryQueue.run(async () => {
+      const identity = await this.identity();
+      return discoverMarket(
+        this.signer.client,
+        await parseDescriptor(descriptor),
+        identity.ownerHash,
+        onProgress,
+      );
+    }, signal);
   }
   private async outstanding(
     identity: Identity,
     kind: Review['kind'],
     descriptor: Descriptor,
     claim?: Point,
-  ): Promise<Pick<JournalRecord, 'inputs'>[]> {
-    const pending: Pick<JournalRecord, 'inputs'>[] = [];
+  ): Promise<Reservation[]> {
+    const pending: Reservation[] = [];
     for (const record of (await this.journal.otherReservations?.(identity.scope)) ?? []) {
-      if (await reservationReleased(this.signer.client, record)) continue;
-      pending.push(record);
+      const held = reservation(record.inputs, () =>
+        reservationReleased(this.signer.client, record),
+      );
+      pending.push(held);
       if (
         kind === 'deposit' &&
-        (record.fixtureIds ?? [record.fixtureId]).includes(descriptor.fixtureId)
+        (record.fixtureIds ?? [record.fixtureId]).includes(descriptor.fixtureId) &&
+        !(await held.released())
       )
         throw Error(
           'This fixture already has a signed sponsored prediction. Resume its original transaction.',
         );
     }
     for (const record of await this.journal.list(identity.scope)) {
-      const recovery = await this.recover(record);
+      const held = reservation(record.inputs, async () =>
+        ['confirmed', 'resolved'].includes((await this.recover(record)).status),
+      );
       // A rejected/absent node response is not proof that no other node has the
       // signed transaction. Resolve its exact hash instead of authorizing a replacement.
-      if (recovery.status === 'confirmed' || recovery.status === 'resolved') continue;
-      pending.push(recovery.record);
+      pending.push(held);
       if (
-        (kind === 'deposit' &&
+        ((kind === 'deposit' &&
           record.kind === 'deposit' &&
           record.descriptor.type.args === descriptor.type.args) ||
-        (kind === 'claim' && claim && record.inputs.some((p) => pointKey(p) === pointKey(claim)))
+          (kind === 'claim' &&
+            claim &&
+            record.inputs.some((p) => pointKey(p) === pointKey(claim)))) &&
+        !(await held.released())
       )
         throw Error(
           'This position already has a signed transaction awaiting reconciliation. Use its original transaction recovery.',
@@ -224,9 +252,8 @@ export class DirectClient {
     tx: ccc.Transaction,
     owner: ccc.Script,
     protocolCapacity: bigint,
-    pending: readonly Pick<JournalRecord, 'inputs'>[],
+    pending: readonly Reservation[],
   ): Promise<void> {
-    const reserved = new Set(pending.flatMap((r) => r.inputs.map(pointKey)));
     // Reserve enough excess for an ordinary change cell plus the maximum fee.
     // It stays in the wallet and is not added to the reviewed payment total.
     const changeCapacity =
@@ -246,7 +273,7 @@ export class DirectClient {
           'Wallet funding exceeded the bounded cell scan. Consolidate ordinary testnet CKB cells first.',
         );
       if (
-        reserved.has(pointKey(candidate.outPoint)) ||
+        (await reservedBy(pending, point(candidate.outPoint))) ||
         !candidate.cellOutput.lock.eq(owner) ||
         candidate.cellOutput.type ||
         candidate.outputData !== '0x' ||
@@ -271,8 +298,7 @@ export class DirectClient {
     descriptor: Descriptor,
   ): Promise<ccc.Cell[]> {
     bounded(tx);
-    const cells: ccc.Cell[] = [];
-    for (let i = 0; i < tx.inputs.length; i++) {
+    const cells = await mapConcurrent(tx.inputs, 4, async (_, i) => {
       if (tx.inputs[i].since !== 0n) throw Error('Unexpected transaction time constraint.');
       const cell = await this.signer.client.getCellLiveNoCache(
         tx.inputs[i].previousOutput,
@@ -283,8 +309,8 @@ export class DirectClient {
       if (i === 0) checkCell(cell, descriptor);
       else if (!cell.cellOutput.lock.eq(owner) || cell.cellOutput.type || cell.outputData !== '0x')
         throw Error('Wallet funding must use plain capacity owned by the reviewed wallet.');
-      cells.push(cell);
-    }
+      return cell;
+    });
     for (let i = 1; i < tx.outputs.length; i++) {
       if (!tx.outputs[i].lock.eq(owner) || tx.outputs[i].type || tx.outputsData[i] !== '0x')
         throw Error('Change must return to the reviewed wallet.');
@@ -461,7 +487,7 @@ export class DirectClient {
       payoutShannons: payout.toString(),
       shard,
       outcome,
-      expiresAt: preparedAt + REVIEW_MS,
+      expiresAt: preparedAt + (kind === 'claim' ? 5 * REVIEW_MS : REVIEW_MS),
       hash: tx.hash(),
     });
     intents.set(review, {
@@ -475,17 +501,23 @@ export class DirectClient {
     });
     return review;
   }
-  async revalidate(review: Review, current: Descriptor): Promise<void> {
+  async revalidate(review: Review, current: Descriptor, approvalStartedAt?: number): Promise<void> {
     const intent = intents.get(review);
     if (!intent) throw Error('This review is no longer available. Prepare it again.');
     const identity = await this.identity();
+    if (identity.scope !== intent.identity.scope || identity.ownerHash !== review.ownerHash)
+      throw Error(
+        'Your wallet account changed. Connect the original wallet to collect this return.',
+      );
+    const reviewedAt = approvalStartedAt ?? this.now();
     if (
-      identity.scope !== intent.identity.scope ||
-      identity.ownerHash !== review.ownerHash ||
       this.now() < intent.preparedAt ||
-      this.now() >= review.expiresAt
+      reviewedAt < intent.preparedAt ||
+      reviewedAt >= review.expiresAt
     )
-      throw Error('The wallet or review lifetime changed. Review again before signing.');
+      throw Error(
+        'This review expired before wallet approval started. Refresh the review to continue.',
+      );
     assertSameTerms(review.descriptor, await parseDescriptor(current));
     if (review.kind === 'deposit') await this.entryTime(current);
     const inputs = await this.inputs(intent.tx, intent.owner, review.descriptor);
@@ -505,7 +537,12 @@ export class DirectClient {
         throw Error('The market is no longer open.');
     }
   }
-  async signAndPersist(review: Review, current: Descriptor): Promise<JournalRecord> {
+  async signAndPersist(
+    review: Review,
+    current: Descriptor,
+    onProgress?: (stage: 'checking' | 'approval' | 'saving' | 'verifying') => void,
+  ): Promise<JournalRecord> {
+    onProgress?.('checking');
     const identity = await this.identity();
     return this.exclusive!(`streak-direct:${identity.ownerHash}`, async () => {
       const pending = await this.outstanding(
@@ -521,23 +558,24 @@ export class DirectClient {
       await this.revalidate(review, current);
       const intent = intents.get(review);
       if (!intent) throw Error('Review expired.');
-      const reserved = new Set(pending.flatMap((record) => record.inputs.map(pointKey)));
-      if (intent.tx.inputs.some((input) => reserved.has(pointKey(input.previousOutput))))
+      if (
+        (
+          await Promise.all(
+            intent.tx.inputs.map((input) => reservedBy(pending, point(input.previousOutput))),
+          )
+        ).some(Boolean)
+      )
         throw Error(
           'Another saved transaction reserved an input. Review using separate funding cells.',
         );
+      const approvalStartedAt = this.now();
+      if (approvalStartedAt >= review.expiresAt)
+        throw Error('This review expired. Refresh the review before signing.');
+      onProgress?.('approval');
       const signed = await this.signer.signTransaction(intent.tx.clone());
       assertSignedIntent(intent.tx, signed);
       if (signed.estimateFee(1000n) > BigInt(review.feeShannons))
         throw Error('The signed witness needs a larger fee. Nothing was broadcast; review again.');
-      await this.revalidate(review, current);
-      // A conflict proof can reorganize while the wallet prompt is open.
-      await this.outstanding(
-        identity,
-        review.kind,
-        review.descriptor,
-        review.kind === 'claim' ? point(intent.tx.inputs[0].previousOutput) : undefined,
-      );
       const record: JournalRecord = Object.freeze({
         version: VERSION,
         scope: identity.scope,
@@ -556,7 +594,13 @@ export class DirectClient {
         shard: review.shard,
         outcome: review.outcome,
       });
+      onProgress?.('saving');
       await this.journal.put(record);
+      // Save exact signed bytes before any post-approval RPC can fail. Approval
+      // started in time; waiting in the wallet must not expire that same intent.
+      // Broadcast independently reconciles conflicts and canonical input state.
+      onProgress?.('verifying');
+      await this.revalidate(review, current, approvalStartedAt);
       intents.delete(review);
       if (review.shard !== null) this.nextShard = (review.shard + 1) % 4;
       return record;
@@ -575,15 +619,29 @@ export class DirectClient {
       return before;
     if (before.inputsLive !== true) return before;
     for (const previous of await this.journal.list(identity.scope)) {
-      if (previous.hash === saved.hash || !previous.conflictProof) continue;
+      if (previous.hash === saved.hash) continue;
       const related =
-        previous.kind === saved.kind &&
-        (saved.kind === 'deposit'
-          ? previous.descriptor.type.args === saved.descriptor.type.args
-          : pointKey(previous.inputs[0]) === pointKey(saved.inputs[0]));
-      if (related && (await this.recover(previous)).status !== 'resolved')
+        previous.inputs.some((input) =>
+          saved.inputs.some((current) => pointKey(input) === pointKey(current)),
+        ) ||
+        (previous.kind === saved.kind &&
+          (saved.kind === 'deposit'
+            ? previous.descriptor.type.args === saved.descriptor.type.args
+            : pointKey(previous.inputs[0]) === pointKey(saved.inputs[0])));
+      if (related && !['confirmed', 'resolved'].includes((await this.recover(previous)).status))
         throw Error(
           'The earlier conflict proof changed. Keep both saved transactions and reconcile before broadcasting again.',
+        );
+    }
+    for (const previous of (await this.journal.otherReservations?.(identity.scope)) ?? []) {
+      if (
+        previous.inputs.some((input) =>
+          saved.inputs.some((current) => pointKey(input) === pointKey(current)),
+        ) &&
+        !(await reservationReleased(this.signer.client, previous))
+      )
+        throw Error(
+          'Another saved payment still reserves these inputs. Keep your signed transaction and reconcile before broadcasting.',
         );
     }
     // This can only resend the original bytes. It never rebuilds or asks for

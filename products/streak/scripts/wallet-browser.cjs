@@ -125,7 +125,10 @@ async function main() {
         const connect = page.getByRole('button', { name: 'Connect testnet wallet', exact: true });
         const disconnect = page.getByRole('button', { name: 'Disconnect wallet', exact: true });
         const walletNav = () =>
-          page.getByRole('link', { name: 'My Account', exact: true }).filter({ visible: true }).first();
+          page
+            .getByRole('link', { name: 'My Account', exact: true })
+            .filter({ visible: true })
+            .first();
         async function choose(options = {}) {
           await page.locator('ccc-connector').waitFor();
           await page.evaluate(
@@ -163,7 +166,11 @@ async function main() {
           );
           await page.evaluate(() => window.syntheticEvm.repeatAccount());
           await page.waitForFunction(() => window.syntheticEvm.listenerCount() === 2);
-          assert.equal(await page.getByRole('button', { name: 'Reconnect wallet', exact: true }).count(), 0, 'An unchanged provider account notification retains the signer.');
+          assert.equal(
+            await page.getByRole('button', { name: 'Reconnect wallet', exact: true }).count(),
+            0,
+            'An unchanged provider account notification retains the signer.',
+          );
           await walletNav().click();
           await disconnect.waitFor();
           const overview = page.getByRole('region', { name: 'My Account overview', exact: true });
@@ -193,9 +200,7 @@ async function main() {
           await page.getByRole('heading', { name: 'My activity.', exact: true }).waitFor();
           await page.getByRole('tab', { name: /Open bets/ }).waitFor();
           await page.getByRole('button', { name: /Payments & recovery/ }).click();
-          await page
-            .getByRole('heading', { name: 'Recent transactions', exact: true })
-            .waitFor();
+          await page.getByRole('heading', { name: 'Recent transactions', exact: true }).waitFor();
           await walletNav().click();
           await disconnect.waitFor();
           await page
@@ -277,14 +282,79 @@ async function main() {
             'Rejected sign-in preserves the selected wallet for an explicit retry.',
           );
           assert.equal(requests.filter((url) => url === '/api/auth/verify').length, verifies + 1);
+          const restoreAddress = await page.evaluate(() => window.syntheticEvm.evmAddress);
+          await context.addInitScript((address) => {
+            const listeners = new Map();
+            window.restoreCalls = [];
+            const provider = {
+              request: async ({ method }) => {
+                window.restoreCalls.push(method);
+                if (method !== 'eth_accounts')
+                  throw Error('Silent restoration must not prompt or sign');
+                return [address];
+              },
+              on: (name, callback) => {
+                if (!listeners.has(name)) listeners.set(name, new Set());
+                listeners.get(name).add(callback);
+              },
+              removeListener: (name, callback) => listeners.get(name)?.delete(callback),
+            };
+            addEventListener('eip6963:requestProvider', () =>
+              dispatchEvent(
+                new CustomEvent('eip6963:announceProvider', {
+                  detail: {
+                    info: {
+                      uuid: 'synthetic-restore',
+                      name: 'Synthetic EIP-1193 wallet',
+                      rdns: 'test.synthetic',
+                      icon: '',
+                    },
+                    provider,
+                  },
+                }),
+              ),
+            );
+          }, restoreAddress);
+          await context.route('https://testnet.ckb.dev/**', (route) => {
+            const body = route.request().postDataJSON();
+            assert.equal(
+              body.method,
+              'get_cells_capacity',
+              'Restored wallet performs only the expected balance read',
+            );
+            return route.fulfill({
+              contentType: 'application/json',
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: body.id,
+                result: {
+                  capacity: '0x1cbb369200',
+                  block_hash: '0x' + '00'.repeat(32),
+                  block_number: '0x1',
+                },
+              }),
+            });
+          });
           await reads.reload();
           await signOut.waitFor();
-          await connect.waitFor();
+          await disconnect.waitFor();
           assert.equal(
             await page.locator('ccc-connector').count(),
             0,
-            'Reload retains the server session but requires explicit wallet connection.',
+            'Reload restores the already-authorized wallet without opening the chooser.',
           );
+          assert.ok(
+            (await page.evaluate(() => window.restoreCalls)).every(
+              (method) => method === 'eth_accounts',
+            ),
+          );
+          assert.equal(
+            requests.filter((url) => url === '/api/auth/verify').length,
+            verifies + 1,
+            'Reload does not sign in again',
+          );
+          await disconnect.click();
+          await connect.waitFor();
           await connect.click();
           await choose({ other: true });
           await page
@@ -319,7 +389,10 @@ async function main() {
           });
           await signIn.waitFor();
           await page
-            .locator('.notice.error').getByText(/^(The connected wallet changed|Your wallet account or network changed)\. Connect again and review your action\.$/)
+            .locator('.notice.error')
+            .getByText(
+              /^(The connected wallet changed|Your wallet account or network changed)\. Connect again and review your action\.$/,
+            )
             .waitFor();
           assert.equal(
             requests.filter((url) => url === '/api/auth/verify').length,
@@ -346,7 +419,7 @@ async function main() {
       browser = undefined;
     }
     console.log(
-      `Wallet browser passed: ${groups} real EIP-6963 journeys, shared connection, account/disconnect invalidation, rejected signatures, logout failure and explicit reload reconnect.`,
+      `Wallet browser passed: ${groups} real EIP-6963 journeys, shared connection, account/disconnect invalidation, rejected signatures, logout failure and silent authorized reload restoration without prompting or signing.`,
     );
   } finally {
     await browser?.close();

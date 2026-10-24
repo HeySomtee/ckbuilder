@@ -33,7 +33,7 @@ async function main() {
         const chain = await batchChain(Date.now() + 7200000, BATCH_MANIFEST.codeDeps, new Wallet(batchOwnerKey).address);
         const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
         const errors = [], external = [], writes = [];
-        let signatures = 0, offers = 0, failMode = false, stalePools = false, releasePools, releaseSubmission, reorg = false, rejectNext = false, rejections = 0, busyReview = true, delayedOffer, holdApproval=false, releaseApproval;
+        let signatures = 0, offers = 0, failMode = false, stalePools = false, releasePools, releaseSubmission, reorg = false, rejectNext = false, rejections = 0, busyReview = true, delayedOffer, holdApproval=false, releaseApproval, sponsorOffline=false;
         const poolReady = new Promise(resolve => { releasePools = resolve; });
         await context.exposeBinding('checkoutRpc', async (_source, method, args) => {
           const value=await chain.rpc(method,args);
@@ -70,7 +70,10 @@ async function main() {
           if (url.pathname === '/api/markets') return json({ markets: chain.fixtures().map(market), total: 8, nextOffset: null, coverage: { complete: true, from: '2020-01-01', to: '2040-01-01' } });
           if (url.pathname === '/api/direct/entry-mode') return failMode ? json({ error: 'Synthetic availability outage' }, 503) : json({ mode: 'atomic' });
           if (url.pathname === '/api/direct/batch/config') { if(holdApproval){holdApproval=false;await new Promise(resolve=>{releaseApproval=resolve;});} return json(BATCH_MANIFEST); }
-          if (url.pathname === '/api/direct/batch/demand') return json({ enabled: true, serverTime: Date.now(), fixtures: chain.fixtures().filter(row => !url.searchParams.has('matchId') || row.fixtureId === url.searchParams.get('matchId')) });
+          if (url.pathname === '/api/direct/batch/demand') {
+            if(sponsorOffline){await new Promise(resolve=>setTimeout(resolve,600));return json({enabled:false,serverTime:Date.now(),fixtures:[],unavailableReason:'Atomic sponsorship is temporarily unavailable. Existing signed payments remain recoverable.'});}
+            return json({ enabled: true, serverTime: Date.now(), fixtures: chain.fixtures().filter(row => !url.searchParams.has('matchId') || row.fixtureId === url.searchParams.get('matchId')) });
+          }
           if (url.pathname === '/api/direct/markets') return json({ markets: chain.fixtures().flatMap(row => row.descriptor ? [row.descriptor] : []) });
           if (url.pathname.endsWith('/insights')) {
             const id=url.pathname.split('/')[3], fixture=chain.fixtures().find(row=>'m-'+row.fixtureId===id);
@@ -209,7 +212,17 @@ async function main() {
         assert.equal(await page.locator('.meeting-row').count(),5);
         assert.equal(await page.locator('.form-result').count(),10);
         await page.screenshot({ path: path.join(evidence, `market-${name}-${width}.png`), fullPage: true });
+        sponsorOffline=true;
         await page.locator('.detail-outcomes [data-outcome="home"]').click();
+        await page.getByText('Payments are temporarily unavailable',{exact:true}).waitFor();
+        const retryAvailability=page.getByRole('button',{name:'Check again',exact:true});
+        await retryAvailability.click();
+        await page.getByRole('button',{name:'Checking payment service',exact:true}).waitFor();
+        assert.equal(signatures,0,'Availability retry never asks for a signature.');
+        await retryAvailability.waitFor();
+        sponsorOffline=false;
+        await page.getByText('Payments are temporarily unavailable',{exact:true}).waitFor({state:'hidden',timeout:12000});
+        assert.equal(await page.locator('.slip-title-count').innerText(),'1','Automatic recovery preserves the selected pick.');
         await connect(page.getByRole('button', { name: 'Reconnect wallet to pay', exact: true }));
         assert.equal(signatures, 0, 'Reconnect never signs a payment.');
         await page.getByRole('button',{name:'Review payment',exact:true}).click();

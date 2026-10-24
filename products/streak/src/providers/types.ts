@@ -36,6 +36,17 @@ export interface LiveResult {
   confirmedAt?: string;
 }
 
+/** Stable fresh-feed observation, including explicit withdrawal of an earlier result. */
+export interface FixtureObservation {
+  observedAt: string;
+  kickoff: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  result: LiveResult | null;
+  unavailable?: boolean;
+  historyGap?: boolean;
+}
+
 /** Snapshot of a provider for health checks and the status bar. */
 export interface ProviderStatus {
   /** Provider id, e.g. "worldcup" | "dummy". */
@@ -101,6 +112,8 @@ export interface MatchDataProvider {
   scheduleCoverage?(): { from: string; to: string; complete: boolean } | null;
   /** Current results keyed by match id. `{}` when nothing to report. */
   fetchResults(): Promise<Record<string, LiveResult>>;
+  fixtureObservations?(): Record<string, FixtureObservation>;
+  fixtureObservationHistory?(): Record<string, FixtureObservation[]>;
   /** Provider health snapshot for the UI. */
   status(): Promise<ProviderStatus>;
 }

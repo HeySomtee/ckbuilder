@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { Fragment, useRef } from 'react';
 import type { MouseEvent } from 'react';
 import { Icon } from '../components/icon';
 import { activityHref, followActivity, directHref, followDirect } from '../lib/direct-route';
@@ -19,6 +19,13 @@ const entries = [
     icon: 'five',
     href: sectionHref('five'),
     follow: (e: MouseEvent<HTMLAnchorElement>) => followSection(e, 'five'),
+  },
+  {
+    id: 'survivor',
+    label: 'Streak Survivor',
+    icon: 'shield',
+    href: sectionHref('survivor'),
+    follow: (e: MouseEvent<HTMLAnchorElement>) => followSection(e, 'survivor'),
   },
   {
     id: 'markets',
@@ -65,8 +72,26 @@ export function AppNavigation({ active, mobile = false }: { active: string; mobi
   const menu = useRef<HTMLDialogElement>(null);
   const main = mobile
     ? entries.filter((e) => ['overview', 'markets', 'activity', 'wallet'].includes(e.id))
-    : entries;
-  const additional = entries.filter((e) => ['five', 'matchday', 'clubhouse'].includes(e.id));
+    : [
+        'overview',
+        'markets',
+        'matchday',
+        'five',
+        'survivor',
+        'clubhouse',
+        'activity',
+        'wallet',
+      ].flatMap((id) => entries.filter((e) => e.id === id));
+  const additional = entries.filter((e) =>
+    ['five', 'survivor', 'matchday', 'clubhouse'].includes(e.id),
+  );
+  const groups: Record<string, string> = {
+    overview: 'YOUR TOUCHLINE',
+    markets: 'PREDICTIONS',
+    five: 'STREAK GAMES',
+    clubhouse: 'COMMUNITY',
+    activity: 'YOUR SPACE',
+  };
   return (
     <>
       <nav
@@ -74,16 +99,19 @@ export function AppNavigation({ active, mobile = false }: { active: string; mobi
         aria-label={mobile ? 'Mobile navigation' : 'Main navigation'}
       >
         {main.map((entry) => (
-          <a
-            key={entry.id}
-            href={entry.href}
-            onClick={entry.follow}
-            aria-current={active === entry.id ? 'page' : undefined}
-          >
-            <Icon name={entry.icon} />
-            {mobile && entry.id === 'activity' ? 'Activity' : entry.label}
-            {!mobile && entry.id === 'five' && <small className="nav-coming">Soon</small>}
-          </a>
+          <Fragment key={entry.id}>
+            {!mobile && groups[entry.id] && <span className="nav-group">{groups[entry.id]}</span>}
+            <a
+              key={entry.id}
+              href={entry.href}
+              onClick={entry.follow}
+              aria-current={active === entry.id ? 'page' : undefined}
+            >
+              <Icon name={entry.icon} />
+              {mobile && entry.id === 'activity' ? 'Activity' : entry.label}
+              {!mobile && entry.id === 'five' && <small className="nav-coming">Beta</small>}
+            </a>
+          </Fragment>
         ))}
         {mobile && (
           <button
@@ -119,7 +147,7 @@ export function AppNavigation({ active, mobile = false }: { active: string; mobi
               >
                 <Icon name={entry.icon} />
                 {entry.label}
-                {entry.id === 'five' && <small className="nav-coming">Soon</small>}
+                {entry.id === 'five' && <small className="nav-coming">Beta</small>}
               </a>
             ))}
           </nav>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Streak Survivor | Interactive design preview</title>
+    <link rel="icon" href="mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.mjs"></script>
+  </head>
+  <body>
+    <aside class="sidebar" aria-label="Proposed navigation">
+      <a class="brand" href="#"><img src="mark.svg" alt="" />streak<span>.</span></a>
+      <div class="nav-group">
+        <span>YOUR TOUCHLINE</span><span class="nav-item">⌂ <b>Overview</b></span>
+      </div>
+      <div class="nav-group">
+        <span>PREDICTIONS</span><span class="nav-item">▥ <b>Markets</b></span
+        ><span class="nav-item">▣ <b>Matchday</b></span>
+      </div>
+      <div class="nav-group">
+        <span>STREAK GAMES</span
+        ><span class="nav-item">♧ <b>Streak Five</b><small>Soon</small></span
+        ><a class="nav-item active" href="#" aria-current="page">◇ <b>Streak Survivor</b></a>
+      </div>
+      <div class="nav-group">
+        <span>COMMUNITY</span><span class="nav-item">♧ <b>Clubhouse</b></span>
+      </div>
+      <div class="nav-bottom">
+        <span class="nav-item">▤ <b>My Activity</b></span
+        ><span class="nav-item">○ <b>My Account</b></span
+        ><small>Other destinations shown for layout review.</small>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <span>Streak Games <span class="slash">/</span> <strong>Survivor</strong></span>
+        <div class="role-control">
+          <label for="role">Preview as</label
+          ><select id="role">
+            <option value="player">Player</option>
+            <option value="admin">Admin</option></select
+          ><span class="avatar">S</span>
+        </div>
+      </header>
+      <div class="preview-bar">
+        <span><i></i> INTERACTIVE DESIGN · SAMPLE DATA · NO PAYMENTS</span
+        ><button id="reset">Reset preview ↻</button>
+      </div>
+      <main id="main"></main>
+      <footer class="page-footer">
+        A design to play with. Fixtures, entries, results and prizes are illustrative. Reload resets
+        the demo.
+      </footer>
+    </div>
+    <nav class="mobile-nav" aria-label="Proposed mobile navigation">
+      <span>Overview</span><span>Markets</span><a href="#" aria-current="page">◇ Games</a
+      ><span>Activity</span><span>More</span>
+    </nav>
+    <dialog id="modal" aria-labelledby="modal-title"><div id="modal-content"></div></dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

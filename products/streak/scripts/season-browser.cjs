@@ -32,6 +32,10 @@ async function main() {
     simulated: true,
     source: 'test',
     provider: 'worldcup',
+    competitions: [
+      { id: 'test', name: 'Test Premier League' },
+      { id: 'ucl', name: 'UEFA Champions League' },
+    ],
   });
   const friday = new Date();
   const weekday = friday.getDay();
@@ -70,7 +74,10 @@ async function main() {
       date: '2030-01-01',
       status: 'scheduled',
       stage: 'Matchweek 8',
-      competition: { id: 'test', name: 'Test Premier League' },
+      competition:
+        i === 25
+          ? { id: 'ucl', name: 'UEFA Champions League' }
+          : { id: 'test', name: 'Test Premier League' },
       home: {
         logo: '/qa-team.svg',
         name: i === 0 ? 'Arsenal' : `Home ${i}`,
@@ -125,6 +132,15 @@ async function main() {
               contentType: 'image/svg+xml',
               body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 50"><path fill="#f46e67" d="M1 1h38v30L20 49 1 31Z"/></svg>',
             });
+          // A running older API can serve rebuilt frontend assets without the
+          // new catalogue metadata. Provider status must still populate leagues.
+          if (width === 390 && new URL(route.request().url()).pathname === '/api/markets') {
+            return guardedFetch(route.request().url()).then(async (response) => {
+              const data = await response.json();
+              delete data.competitions;
+              return route.fulfill({ status: response.status, json: data });
+            });
+          }
           return route.continue();
         });
         await context.routeWebSocket('**/*', (socket) => socket.close());
@@ -257,6 +273,129 @@ async function main() {
         reads.phase('landing market link');
         await page.getByRole('link', { name: 'Explore the markets', exact: true }).click();
         await page.waitForURL('**/season/');
+        await page.locator('.fixture-calendar').waitFor();
+        await page.waitForFunction(() =>
+          document.querySelector('[aria-label="Filter by league"] option[value="ucl"]'),
+        );
+        const chooseWeekend = async () => {
+          await page.getByRole('button', { name: 'Choose fixture date' }).click();
+          await page.getByRole('button', { name: 'Weekend', exact: true }).click();
+        };
+        assert.equal(await page.locator('.fixture-current-day').isVisible(), width > 640);
+        assert.equal(await page.locator('.fixture-day-strip').isVisible(), width <= 640);
+        if (width > 640) {
+          assert.ok((await page.locator('.fixture-calendar').boundingBox()).width <= 460);
+          await page
+            .locator('.fixture-current-day strong')
+            .getByText('Today', { exact: true })
+            .waitFor();
+          await page.getByRole('button', { name: 'Next day', exact: true }).click();
+          await page
+            .locator('.fixture-current-day strong')
+            .getByText('Tomorrow', { exact: true })
+            .waitFor();
+          await page.getByRole('button', { name: 'Previous day', exact: true }).click();
+        } else {
+          await page.waitForFunction(() => {
+            const strip = document.querySelector('.fixture-day-strip');
+            const selected = strip.querySelector('[aria-pressed="true"]');
+            if (!selected) return false;
+            const box = strip.getBoundingClientRect(),
+              day = selected.getBoundingClientRect();
+            return Math.abs(day.x + day.width / 2 - box.x - box.width / 2) < 2;
+          });
+          assert.equal(
+            await page
+              .locator('.fixture-day-strip')
+              .evaluate((node) => getComputedStyle(node).scrollbarWidth),
+            'none',
+          );
+          assert.notEqual(
+            await page
+              .locator('.fixture-day-strip')
+              .evaluate((node) => getComputedStyle(node).maskImage),
+            'none',
+          );
+        }
+        await page.locator('.fixture-calendar').screenshot({
+          path: path.join(evidence, `date-navigation-${name}-${width}.png`),
+        });
+        await page.getByRole('button', { name: 'Live', exact: true }).click();
+        assert.equal(
+          await page
+            .getByRole('button', { name: 'Live', exact: true })
+            .getAttribute('aria-pressed'),
+          'true',
+        );
+        await page.getByRole('heading', { name: 'No fixtures in this view' }).waitFor();
+        assert.equal(
+          await page.locator('.market-card').count(),
+          0,
+          'Scheduled fixtures do not appear in Live',
+        );
+        await chooseWeekend();
+        const localKey = (date) =>
+          `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        if (width === 320) await page.setViewportSize({ width, height: 568 });
+        await page.getByRole('button', { name: 'Choose fixture date' }).click();
+        const calendar = page.getByRole('dialog', { name: 'Choose a date' });
+        await calendar.waitFor();
+        const calendarBox = await calendar.boundingBox();
+        assert.ok(calendarBox.x >= 0 && calendarBox.x + calendarBox.width <= width);
+        assert.ok(
+          calendarBox.y >= 0 && calendarBox.y + calendarBox.height <= (width === 320 ? 568 : 900),
+        );
+        assert.equal(await calendar.locator('.fixture-month-grid button').count(), 42);
+        const originalMonth = await calendar.locator('.fixture-month strong').innerText();
+        await calendar.getByRole('button', { name: 'Next month' }).click();
+        assert.notEqual(await calendar.locator('.fixture-month strong').innerText(), originalMonth);
+        await calendar.getByRole('button', { name: 'Previous month' }).click();
+        assert.equal(await calendar.locator('.fixture-month strong').innerText(), originalMonth);
+        await calendar.locator(`[data-date="${localKey(friday)}"]`).focus();
+        await page.keyboard.press('ArrowRight');
+        const saturday = new Date(friday.getFullYear(), friday.getMonth(), friday.getDate() + 1);
+        assert.equal(
+          await page.evaluate(() => document.activeElement.dataset.date),
+          localKey(saturday),
+        );
+        await page.screenshot({ path: path.join(evidence, `calendar-${name}-${width}.png`) });
+        await page.keyboard.press('Enter');
+        assert.equal(await calendar.isVisible(), false);
+        // Today is the canonical default route and intentionally omits ?date.
+        assert.equal(
+          new URL(page.url()).searchParams.get('date'),
+          localKey(saturday) === localKey(new Date()) ? null : localKey(saturday),
+        );
+        await page.getByRole('button', { name: 'Choose fixture date' }).click();
+        await page.keyboard.press('Escape');
+        assert.equal(
+          await page
+            .getByRole('button', { name: 'Choose fixture date' })
+            .evaluate((node) => node === document.activeElement),
+          true,
+        );
+        if (width === 320) await page.setViewportSize({ width, height: 900 });
+        if (width <= 390) {
+          const strip = page.locator('.fixture-day-strip');
+          assert.ok(await strip.evaluate((node) => node.scrollWidth > node.clientWidth));
+          const before = await strip.evaluate((node) => node.scrollLeft);
+          await strip.evaluate((node) => {
+            node.scrollLeft += 50;
+          });
+          assert.notEqual(await strip.evaluate((node) => node.scrollLeft), before);
+        }
+        if (width === 1440) {
+          await page.setViewportSize({ width: 390, height: 844 });
+          await page.waitForFunction(() => {
+            const strip = document.querySelector('.fixture-day-strip');
+            const selected = strip.querySelector('[aria-pressed="true"]');
+            const box = strip.getBoundingClientRect(),
+              day = selected.getBoundingClientRect();
+            return day.left >= box.left && day.right <= box.right;
+          });
+          await page.setViewportSize({ width, height: 900 });
+        }
+        await chooseWeekend();
         // Continue in the document reached by the CTA. Navigating to the same
         // URL again here would abort its just-started market and account reads.
         await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
@@ -287,11 +426,33 @@ async function main() {
         await page
           .getByText('No prediction market is available for this match.', { exact: true })
           .waitFor();
-        await page.getByRole('button', { name: /^Mon / }).click();
+        const monday = new Date(friday.getFullYear(), friday.getMonth(), friday.getDate() + 3);
+        await page.getByRole('button', { name: 'Choose fixture date' }).click();
+        await page.locator(`.fixture-month-grid [data-date="${localKey(monday)}"]`).click();
         await page.getByRole('heading', { name: 'Home 25', exact: true }).waitFor();
         assert.equal(await page.locator('.market-card').count(), 1);
-        await page.getByRole('button', { name: 'All days', exact: true }).click();
+        await chooseWeekend();
         await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
+        await page.getByRole('combobox', { name: 'Filter by league' }).selectOption('ucl');
+        await page.getByRole('heading', { name: 'Home 25', exact: true }).waitFor();
+        assert.equal(
+          await page.locator('.market-card').count(),
+          1,
+          'League filtering reaches fixtures beyond page one',
+        );
+        assert.equal(
+          await page.getByRole('combobox', { name: 'Filter by league' }).locator('option').count(),
+          3,
+          'Other leagues stay available',
+        );
+        await page.getByRole('textbox', { name: 'Search teams or competitions' }).fill('Arsenal');
+        await page.getByRole('heading', { name: 'No matching fixtures' }).waitFor();
+        await page.getByRole('button', { name: 'Browse all fixtures' }).click();
+        await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
+        assert.equal(
+          await page.getByRole('combobox', { name: 'Filter by league' }).inputValue(),
+          '',
+        );
         await page.getByRole('textbox', { name: 'Search teams or competitions' }).fill('Arsenal');
         await page.waitForFunction(() => document.querySelectorAll('.market-card').length === 1);
         await page.evaluate(() => {
@@ -367,7 +528,7 @@ async function main() {
           await livePage.locator('.welcome-fixture').first().textContent(),
           /Manchester United/,
         );
-        await liveReads.goto(base + '/season/');
+        await liveReads.goto(base + '/season/?date=weekend');
         await livePage
           .locator('.market-card')
           .first()
@@ -548,7 +709,7 @@ async function main() {
             })
           : route.continue(),
       );
-      await recoveryReads.goto(base + '/season/');
+      await recoveryReads.goto(base + '/season/?date=weekend');
       await page.getByRole('heading', { name: 'You know the game.' }).waitFor();
       await page.getByText('We could not load the markets', { exact: true }).waitFor();
       assert.equal(await page.locator('.market-card').count(), 0);
@@ -731,7 +892,7 @@ async function main() {
     const invalid = await guardedFetch(base + '/api/markets?limit=999');
     assert.equal(invalid.status, 400);
     console.log(
-      `Season browser passed: ${groups} groups across Chromium/WebKit, 320/390/768/1440px, hero CTA visibility on seven short viewports, landing/market API states, Monday fixtures, keyboard FAQ, reduced motion, forced colors, missing bundle/build recovery, shared links, paging/search, account/logout recovery, stale navigation, X close controls, immediate dismissal, eight-pick restoration and retained drafts without Genie rendering.`,
+      `Season browser passed: ${groups} groups across Chromium/WebKit, 320/390/768/1440px, daily arrows, Live filtering, calendar month/keyboard selection, mobile scrolling and resize centering, date-preserving recovery, hero CTA visibility on seven short viewports, landing/market API states, Monday fixtures, keyboard FAQ, reduced motion, forced colors, missing bundle/build recovery, shared links, paging/search, account/logout recovery, stale navigation, X close controls, immediate dismissal, eight-pick restoration and retained drafts without Genie rendering.`,
     );
   } finally {
     await browser?.close();

@@ -41,6 +41,7 @@ export async function connectEvm(element, options = {}) {
   window.syntheticEvm = {
     calls,
     address,
+    evmAddress: wallet.address,
     listenerCount: () => [...events.values()].reduce((sum, listeners) => sum + listeners.size, 0),
     accept: () => {
       mode = 'accept';

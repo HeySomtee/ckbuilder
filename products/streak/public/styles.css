@@ -1,5 +1,7 @@
 /* Streak — football predictions. Graphite surfaces and vivid matchday colours.
    System typefaces keep the first render independent of font services. */
+@import './select-controls.css';
+
 :root {
   color-scheme: dark;
   --bg-0: #171718;

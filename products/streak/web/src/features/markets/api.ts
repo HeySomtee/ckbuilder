@@ -27,12 +27,23 @@ export interface Market {
   history?: { t: number; p: { home: number; draw: number; away: number } }[];
 }
 export interface MarketPage {
+  competitions: { id: string; name: string }[];
   markets: Market[];
   total: number;
   nextOffset: number | null;
   covered: boolean;
 }
 export const outcomes = ['home', 'draw', 'away'] as const;
+export async function getCompetitions(signal: AbortSignal): Promise<MarketPage['competitions']> {
+  const data = await request('/status', signal);
+  if (!isRecord(data) || !isRecord(data.live) || !Array.isArray(data.live.competitions))
+    throw new Error('League details are not available yet.');
+  return data.live.competitions.flatMap((item) =>
+    isRecord(item) && typeof item.id === 'string' && typeof item.name === 'string'
+      ? [{ id: item.id, name: item.name }]
+      : [],
+  );
+}
 function price(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1)
     throw new Error('Invalid market percentages.');
@@ -138,6 +149,7 @@ export async function getMarkets(
   to: string,
   signal: AbortSignal,
   sort: MarketSort = 'featured',
+  competition = '',
 ): Promise<MarketPage> {
   const query = new URLSearchParams({
     limit: '24',
@@ -149,6 +161,7 @@ export async function getMarkets(
     sort,
   });
   if (status !== 'all') query.set('status', status);
+  if (competition) query.set('competition', competition);
   const data = await request(`/markets?${query}`, signal);
   if (
     !isRecord(data) ||
@@ -171,6 +184,13 @@ export async function getMarkets(
     Date.parse(data.coverage.from) <= Date.parse(from) &&
     Date.parse(data.coverage.to) >= Date.parse(to);
   return {
+    competitions: Array.isArray(data.competitions)
+      ? data.competitions.flatMap((item) =>
+          isRecord(item) && typeof item.id === 'string' && typeof item.name === 'string'
+            ? [{ id: item.id, name: item.name }]
+            : [],
+        )
+      : [],
     markets: data.markets.map(parseMarket),
     total: data.total,
     nextOffset: data.nextOffset,

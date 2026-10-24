@@ -11,6 +11,7 @@ import {
   STORAGE,
 } from './protocol.ts';
 import type { CellState, Descriptor, Outcome, Point, Ticket } from './protocol.ts';
+import { mapConcurrent, readSession } from './read-session.ts';
 
 export type Position = Readonly<{
   id: string;
@@ -36,6 +37,7 @@ export type MarketSnapshot = Readonly<{
   }>;
   checkedAt: number;
   uncertainty?: string;
+  historyComplete?: boolean;
 }>;
 export type LoadedCell = { cell: ccc.Cell; state: CellState };
 
@@ -111,9 +113,11 @@ export async function loadMarket(
     40,
   );
   if (page.cells.length >= 40) throw Error('Market index exceeded the protocol cell bound.');
-  for (const candidate of page.cells) {
+  const liveCells = await mapConcurrent(page.cells, 4, (candidate) =>
+    client.getCellLiveNoCache(candidate.outPoint, true, true),
+  );
+  for (const cell of liveCells) {
     if (cells.length >= 37) throw Error('Market discovery exceeded the protocol cell bound.');
-    const cell = await client.getCellLiveNoCache(candidate.outPoint, true, true);
     if (!cell) throw Error('Market changed during discovery. Refresh before continuing.');
     const key = pointKey(cell.outPoint);
     if (seen.has(key)) throw Error('Duplicate market cell returned by the indexer.');
@@ -159,7 +163,9 @@ export async function discoverMarket(
   client: ccc.Client,
   descriptor: Descriptor,
   ownerHash: string,
+  onProgress?: (snapshot: MarketSnapshot) => void,
 ): Promise<MarketSnapshot> {
+  client = readSession(client);
   // One bounded discovery pass can encounter many inputs from the same batch.
   const transactions = new Map<string, ReturnType<ccc.Client['getTransactionNoCache']>>();
   const getTransaction = (hash: string) => {
@@ -229,6 +235,16 @@ export async function discoverMarket(
   }
   // Ancestry also recovers claims after reserve cleanup and late ticket refunds
   // paid by an intervening shard replacement while the control is still open.
+  onProgress?.(
+    Object.freeze({
+      phase,
+      positions: Object.freeze([...positions]),
+      ...(report ? { report } : {}),
+      ...(settlement ? { settlement } : {}),
+      checkedAt: Date.now(),
+      historyComplete: false,
+    }),
+  );
   const history: ccc.Transaction[] = [],
     spenders = new Map<string, string>();
   let truncated = false,
@@ -241,16 +257,22 @@ export async function discoverMarket(
     }
     if (seenTransactions.has(record.txHash)) continue;
     seenTransactions.add(record.txHash);
-    const response = await getTransaction(record.txHash);
+  }
+  const confirmed = await mapConcurrent([...seenTransactions], 4, async (hash) => {
+    const response = await getTransaction(hash);
     if (
       !response ||
       response.status !== 'committed' ||
-      !(await confirmedHeader(client, record.txHash, response))
+      !(await confirmedHeader(client, hash, response))
     )
-      continue;
+      return undefined;
+    return response;
+  });
+  for (const response of confirmed) {
+    if (!response) continue;
     history.push(response.transaction);
     response.transaction.inputs.forEach((input) =>
-      spenders.set(pointKey(input.previousOutput), record.txHash),
+      spenders.set(pointKey(input.previousOutput), response.transaction.hash()),
     );
   }
   const known = new Set(positions.map((p) => pointKey(p.outPoint)));
@@ -392,6 +414,7 @@ export async function discoverMarket(
     ...(report ? { report } : {}),
     ...(settlement ? { settlement } : {}),
     checkedAt: Date.now(),
+    historyComplete: !truncated,
     ...(truncated || phase === 'unknown'
       ? {
           uncertainty:

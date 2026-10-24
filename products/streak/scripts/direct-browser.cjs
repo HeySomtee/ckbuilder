@@ -5,6 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const { chromium, webkit } = require('playwright');
+const { ccc } = require('@ckb-ccc/core');
 const { observeReads, accountReadFinished } = require('./browser-readiness.cjs');
 
 async function main() {
@@ -101,6 +102,10 @@ async function main() {
           errors = [];
         let brokenAvailability = false;
         let failedDiscovery = false;
+        let monitoredClaim = null;
+        const monitoredReads = [];
+        let holdHistory = false,
+          releaseHistory;
         let preparationState = null;
         const context = await browser.newContext({
           viewport: { width, height: 900 },
@@ -151,10 +156,27 @@ async function main() {
         phase = `${name} ${width}: load`;
         page.on('pageerror', (error) => errors.push(error.message));
         await page.exposeFunction('syntheticRpc', async (method, args) => {
+          if (monitoredClaim && method === 'transaction') {
+            monitoredReads.push(args[0]);
+            if (args[0] === monitoredClaim.hash)
+              return {
+                transaction: JSON.parse(
+                  JSON.stringify(
+                    ccc.Transaction.fromBytes(monitoredClaim.signedBytes),
+                    (_, value) => (typeof value === 'bigint' ? `0x${value.toString(16)}` : value),
+                  ),
+                ),
+                status: 'pending',
+              };
+          }
           calls.push(method);
           if (calls.length > 25) calls.shift();
           if (failedDiscovery && method === 'cells' && args[0] === 'type')
             throw Error('Synthetic index unavailable');
+          if (holdHistory && method === 'history')
+            await new Promise((resolve) => {
+              releaseHistory = resolve;
+            });
           return chain.rpc(method, args);
         });
         async function connect(rejectFirst) {
@@ -297,28 +319,27 @@ async function main() {
           dispatchEvent(new PopStateEvent('popstate'));
         });
         await page.getByRole('heading', { name: 'My activity.', exact: true }).waitFor();
-        await page
-          .getByText(
-            'Some information could not be refreshed. Claims are paused until checks recover.',
-            { exact: true },
-          )
-          .waitFor();
+        await page.getByText('Some markets are still catching up', { exact: true }).waitFor();
         assert.equal(
           await page.locator('.activity-summary strong').first().innerText(),
-          'Checking',
+          'Unavailable',
         );
         failedDiscovery = false;
+        holdHistory = true;
         await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
         await page.locator('.activity-bet').waitFor();
         assert.match(await page.locator('.activity-bet').innerText(), /Verifying entry/);
+        await page.getByRole('button', { name: 'Updating activity', exact: true }).waitFor();
+        assert.ok(
+          holdHistory,
+          'A current position is visible while historical reads are still pending',
+        );
+        holdHistory = false;
+        releaseHistory?.();
+        await page.getByRole('button', { name: 'Refresh activity', exact: true }).waitFor();
         failedDiscovery = true;
         await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
-        await page
-          .getByText(
-            'Some information could not be refreshed. Claims are paused until checks recover.',
-            { exact: true },
-          )
-          .waitFor();
+        await page.getByText('Some markets are still catching up', { exact: true }).waitFor();
         assert.equal(
           await page.locator('.activity-bet').count(),
           1,
@@ -336,6 +357,15 @@ async function main() {
         await collect.waitFor();
         await collect.click();
         const activityDialog = page.getByRole('dialog', { name: /Arsenal vs Chelsea/ });
+        assert.match(
+          await activityDialog.locator('.activity-detail-fixture').innerText(),
+          /Arsenal[\s\S]*Chelsea/,
+        );
+        const closeBox = await activityDialog
+          .getByRole('button', { name: 'Close prediction details' })
+          .boundingBox();
+        assert.equal(Math.round(closeBox.width), 44);
+        assert.equal(Math.round(closeBox.height), 44);
         await activityDialog.getByRole('button', { name: /Collect/ }).click();
         const claimReview = activityDialog.getByRole('region', { name: 'Review claim' });
         await claimReview.waitFor();
@@ -400,6 +430,59 @@ async function main() {
         assert.equal(persisted.filter((record) => record.kind === 'claim').length, 2);
         assert.equal(persisted.filter((record) => record.status === 'resolved').length, 1);
         assert.equal(chain.submissions.length, 4);
+        if (name === 'chromium' && width === 1440) {
+          phase = 'two saved claims: newest confirmed must not starve older pending';
+          monitoredClaim = persisted.find((record) => record.status === 'resolved');
+          const newest = persisted.find(
+            (record) => record.kind === 'claim' && record.status === 'committed',
+          );
+          assert.ok(monitoredClaim && newest);
+          await page.evaluate(
+            ({ ownerHash, hash }) =>
+              new Promise((resolve, reject) => {
+                const open = indexedDB.open('streak-direct-transactions-v1', 3);
+                open.onerror = () => reject(open.error);
+                open.onsuccess = () => {
+                  const db = open.result,
+                    tx = db.transaction('transactions', 'readwrite');
+                  const store = tx.objectStore('transactions');
+                  const get = store.get(`testnet-v1:${ownerHash}:wallet:${hash}`);
+                  get.onsuccess = () => {
+                    const row = get.result;
+                    delete row.conflictProof;
+                    row.status = 'submitted';
+                    store.put(row);
+                  };
+                  tx.oncomplete = () => {
+                    db.close();
+                    resolve();
+                  };
+                  tx.onerror = () => reject(tx.error);
+                };
+              }),
+            { ownerHash: chain.ownerHash, hash: monitoredClaim.hash },
+          );
+          await page.goto(base + '/season/?direct=m-api-football-900001');
+          await connect(false);
+          await page.evaluate(() => {
+            history.pushState(null, '', '/season/?view=activity');
+            dispatchEvent(new PopStateEvent('popstate'));
+          });
+          await page.getByRole('button', { name: /Payments & recovery/ }).waitFor();
+          assert.equal(
+            await page
+              .getByRole('button', { name: /Payments & recovery/ })
+              .getAttribute('aria-expanded'),
+            'false',
+          );
+          await new Promise((resolve) => setTimeout(resolve, 12000));
+          assert.ok(monitoredReads.includes(newest.hash), 'Newest committed claim is verified');
+          assert.ok(
+            monitoredReads.filter((hash) => hash === monitoredClaim.hash).length >= 2,
+            'Older pending claim continues polling with recovery collapsed',
+          );
+          monitoredClaim = null;
+        }
         const reservations = await page.evaluate(async (record) => {
           const fixture = await import('/qa-direct-fixture.js');
           return fixture.verifyAtomicReservations(record);

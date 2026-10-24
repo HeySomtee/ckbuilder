@@ -46,7 +46,7 @@ function FiveHero({ full = false }: { full?: boolean }) {
     <section className="glass five-hero">
       <div className="five-hero-copy">
         <p className="eyebrow">
-          INTRODUCING STREAK FIVE <span>Coming soon</span>
+          INTRODUCING STREAK FIVE <span>Beta</span>
         </p>
         <h2>
           Your weekend.

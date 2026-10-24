@@ -1,5 +1,13 @@
 # Streak design and interaction system
 
+20 October Survivor admin action: Create competition uses a compact coral-tinted clear-glass button with a plus tile, 12px semibold label, 44px minimum height and visible hover/focus. Creation actions should not use the external-link arrow. Preserve native button semantics and forced-colors contrast.
+
+20 October select indicators: Season and retained legacy pages share `public/select-controls.css`. Single-choice selects use a 14px chevron positioned 12px from the inline end, with 38px end padding so labels cannot overlap it. Keep native select behavior, exclude multiple/list selects, mirror the indicator in RTL and restore the platform indicator in forced-colors mode. Feature background/padding rules must not override this shared spacing.
+
+20 October responsive correction: desktop shows only the compact date/arrow bar, capped at 460px; phones show only the scrollable date strip between Live and the calendar. Hide its scrollbar, center Today initially and the selected date afterward, and fade progressively toward the edges. Disable the fade in forced-colors mode. Put Weekend in the calendar footer. League filtering uses provider competitions across the full catalogue before paging, alongside status, dates, search and sort.
+
+20 October fixture navigation: use Today-first daily browsing, one-day arrows, a Monday-first month calendar and a horizontally scrollable mobile day strip. Keep Live and the calendar outside the strip; center the selected date after selection and viewport changes. Retain a Weekend shortcut for Friday–Monday browsing. Use the existing compact clear-glass palette, 44px primary controls, keyboard calendar movement, Escape and focus restoration. [Implementation and verification](../delivery/fixture-date-navigation.md).
+
 ## Compact slip, 17 October 2026
 
 Use separate Picks and Activity tabs with one persistent payment controller. Keep receipts out of the Picks footer. The footer shows stakes and full wallet debit; detailed storage and network charges open in a dismissible cost dialog. Preparation and approval stages animate inside the primary button. Use a single coral amount-field focus ring. Respect reduced motion and forced colours. See [implementation](../delivery/compact-slip-implementation.md).

@@ -334,6 +334,11 @@
   margin: 6px 0 0;
 }
 .activity-drawer header button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  padding: 0;
+  line-height: 1;
   min-width: 44px;
   height: 44px;
   font-size: 24px;
@@ -343,7 +348,82 @@
   flex-direction: column;
   text-align: center;
   gap: 6px;
-  padding: 28px;
+  padding: 12px 0;
+}
+.activity-detail-fixture {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}
+.activity-detail-fixture > div {
+  min-width: 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.activity-detail-fixture .team-logo,
+.activity-detail-fixture .crest {
+  width: 46px;
+  height: 48px;
+  margin: 0;
+  object-fit: contain;
+}
+.activity-detail-fixture > div > strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.activity-detail-fixture .activity-detail-score > strong {
+  font-size: 24px;
+}
+.activity-detail-score small {
+  font-size: 10px;
+}
+.activity-skeleton {
+  display: inline-block;
+  width: 110px;
+  border-radius: 6px;
+  background: linear-gradient(100deg, #a6c9f008 25%, #a6c9f020 50%, #a6c9f008 75%);
+  background-size: 200% 100%;
+  animation: activity-shimmer 1.8s ease-in-out infinite;
+}
+.activity-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.activity-progress small {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+}
+.activity-progress-track {
+  width: 64px;
+  height: 3px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #a6c9f012, #a6c9f0aa, #a6c9f012);
+  background-size: 200% 100%;
+  animation: activity-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes activity-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-skeleton,
+  .activity-progress-track {
+    animation: none;
+  }
 }
 .activity-detail-score strong {
   font:

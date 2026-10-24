@@ -102,8 +102,13 @@ module.exports = async function predictionJourney({
       errors.push(error.message);
     });
     try {
-      await reads.goto(base + '/season/');
-      await page.getByRole('button', { name: 'Next weekend', exact: true }).click();
+      const fixtureDate = new Date(friday.getTime() + 168 * 3600000);
+      const dateKey = [
+        fixtureDate.getFullYear(),
+        String(fixtureDate.getMonth() + 1).padStart(2, '0'),
+        String(fixtureDate.getDate()).padStart(2, '0'),
+      ].join('-');
+      await reads.goto(base + '/season/?date=' + dateKey);
       await page
         .getByRole('button', { name: 'Add Home for Arsenal vs Chelsea', exact: true })
         .click();
@@ -248,11 +253,16 @@ module.exports = async function predictionJourney({
       await dialog.getByRole('button', { name: 'Clear all predictions', exact: true }).click();
       await dialog.getByRole('button', { name: 'Close prediction slip', exact: true }).click();
       phase = 'missing market recovery';
-      await reads.goto(base + '/season/?market=does-not-exist');
+      await reads.goto(base + '/season/?market=does-not-exist&date=' + dateKey);
       await page.getByRole('heading', { name: 'This market could not be loaded' }).waitFor();
       await accountReadFinished(page);
       await page.getByRole('button', { name: 'Back to markets', exact: true }).click();
       await page.getByRole('heading', { name: 'You know the game.' }).waitFor();
+      assert.equal(
+        new URL(page.url()).searchParams.get('date'),
+        dateKey,
+        'Market recovery preserves the selected fixture date',
+      );
       await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
       await reads.settled();
       assert.deepEqual(errors, []);

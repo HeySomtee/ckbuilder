@@ -1,0 +1,292 @@
+.fixture-calendar {
+  margin: 24px 0 20px;
+  min-width: 0;
+  max-width: 460px;
+}
+.fixture-date-bar {
+  display: grid;
+  grid-template-columns: 54px 44px 1fr 44px 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+}
+.fixture-date-bar button {
+  min-height: 44px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text, #f1f3ed);
+  cursor: pointer;
+}
+.fixture-date-bar .fixture-live {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 50px;
+  background: #a4aea70c;
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+.fixture-live i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #a4aea7;
+}
+.fixture-date-bar .fixture-live[aria-pressed='true'] {
+  color: #b9ed87;
+  border-color: #b9ed8755;
+  background: #b9ed8710;
+}
+.fixture-live[aria-pressed='true'] i {
+  background: #b9ed87;
+  box-shadow: 0 0 10px #b9ed8760;
+}
+.fixture-current-day {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+}
+.fixture-current-day strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+.fixture-current-day span {
+  color: #a4aea7;
+  font-size: 10px;
+}
+.fixture-day-arrow,
+.fixture-calendar-open {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+}
+.fixture-date-bar .fixture-calendar-open {
+  background: #a4aea70c;
+  border-color: #a4aea71f;
+}
+.fixture-date-bar button:hover {
+  background: #ffffff09;
+}
+.fixture-day-strip {
+  display: none;
+  gap: 5px;
+  overflow-x: auto;
+  min-width: 0;
+  flex: 1;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding: 3px 2px;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #0005 15%,
+    #000 40%,
+    #000 60%,
+    #0005 85%,
+    transparent
+  );
+}
+.fixture-day-strip::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.fixture-day-strip button {
+  flex: 0 0 76px;
+  min-height: 60px;
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: #a4aea7;
+  scroll-snap-align: center;
+  cursor: pointer;
+}
+.fixture-day-strip strong {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.fixture-day-strip span {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.fixture-day-strip button:hover {
+  color: #f1f3ed;
+  background: #ffffff04;
+}
+.fixture-day-strip button[aria-pressed='true'] {
+  color: #f1f3ed;
+  background: linear-gradient(135deg, #dbeaf213, #dbeaf204);
+  border-color: #dbeaf22c;
+  box-shadow: inset 0 1px #f1f3ed25;
+}
+.fixture-date-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(370px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid #dbeaf239;
+  border-radius: 20px;
+  color: #f1f3ed;
+  background: #17231efc;
+  box-shadow:
+    0 24px 100px #0008,
+    inset 0 1px #ffffff15;
+}
+.fixture-date-dialog::backdrop {
+  background: #07110e8c;
+  backdrop-filter: blur(4px);
+}
+.fixture-date-sheet {
+  padding: 14px;
+}
+.fixture-date-sheet header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #ffffff10;
+  padding-bottom: 8px;
+}
+.fixture-date-sheet h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+.fixture-date-dialog button {
+  min-height: 44px;
+  border: 1px solid transparent;
+  color: inherit;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.fixture-date-sheet header button {
+  width: 44px;
+  padding: 0;
+  font-size: 24px;
+  display: grid;
+  place-items: center;
+}
+.fixture-month {
+  display: grid;
+  grid-template-columns: 1fr 44px 44px;
+  align-items: center;
+  padding: 10px 0;
+}
+.fixture-month strong {
+  font-size: 14px;
+}
+.fixture-month button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.fixture-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+.fixture-weekday {
+  color: #a4aea7;
+  text-align: center;
+  font-size: 9px;
+  text-transform: uppercase;
+  padding: 6px 0 10px;
+}
+.fixture-month-grid button {
+  padding: 0;
+  aspect-ratio: 1;
+  min-height: 44px;
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.fixture-month-grid button[data-outside='true'] {
+  color: #809188;
+}
+.fixture-month-grid button[aria-current='date'] {
+  border-color: #b9ed8766;
+  color: #b9ed87;
+}
+.fixture-month-grid button[aria-pressed='true'] {
+  background: #eef2ec;
+  color: #112119;
+  border-color: #fff;
+  box-shadow: 0 2px 14px #e8fff212;
+}
+.fixture-date-dialog button:hover {
+  background: #ffffff12;
+}
+.fixture-month-grid button[aria-pressed='true']:hover {
+  background: #fff;
+}
+.fixture-date-dialog button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.fixture-date-sheet footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #ffffff10;
+  margin-top: 12px;
+  padding-top: 8px;
+}
+.fixture-date-sheet footer button {
+  border-radius: 10px;
+  color: #b9ed87;
+  padding-inline: 12px;
+  font-size: 11px;
+}
+.fixture-date-sheet footer span {
+  color: #a4aea7;
+  font-size: 10px;
+}
+@media (max-width: 640px) {
+  .fixture-calendar {
+    margin: 16px 0;
+    max-width: none;
+  }
+  .fixture-date-bar {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    gap: 8px;
+  }
+  .fixture-date-bar .fixture-day-arrow,
+  .fixture-date-bar .fixture-current-day {
+    display: none;
+  }
+  .fixture-day-strip {
+    display: flex;
+  }
+  .fixture-day-strip button {
+    flex-basis: 66px;
+  }
+}
+@media (forced-colors: active) {
+  .fixture-day-strip {
+    mask-image: none;
+  }
+  .fixture-day-strip button[aria-pressed='true'],
+  .fixture-month-grid button[aria-pressed='true'],
+  .fixture-live[aria-pressed='true'] {
+    outline: 2px solid Highlight;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .fixture-date-dialog {
+    background: #17231e;
+  }
+  .fixture-date-dialog::backdrop {
+    backdrop-filter: none;
+  }
+}

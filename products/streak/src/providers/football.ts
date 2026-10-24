@@ -28,7 +28,8 @@ import type {
   Team,
   TeamTableInsight,
 } from "../types";
-import type { LiveResult, MatchDataProvider, ProviderStatus } from "./types";
+import type { FixtureObservation, LiveResult, MatchDataProvider, ProviderStatus } from "./types";
+import { appendFixtureObservation, nextFixtureObservation } from './fixture-observation';
 import { MatchdayFeed, emptyMatchday } from "../matchday";
 
 export const API_FOOTBALL_BASE = "https://v3.football.api-sports.io";
@@ -536,6 +537,8 @@ export class ApiFootballProvider implements MatchDataProvider {
   private fixtures = new Map<string, ApiFixture>();
   private trackedFixtureIds = new Set<string>();
   private observations = new Map<string, TerminalObservation>();
+  private stableObservations = new Map<string, FixtureObservation>();
+  private observationHistory = new Map<string, FixtureObservation[]>();
   private competitionMeta = new Map<string, CompetitionConfig>();
   private lastSyncIso?: string;
   private lastError?: string;
@@ -833,6 +836,13 @@ export class ApiFootballProvider implements MatchDataProvider {
     return results;
   }
 
+  fixtureObservations(): Record<string, FixtureObservation> {
+    return Object.fromEntries(this.stableObservations);
+  }
+  fixtureObservationHistory(): Record<string, FixtureObservation[]> {
+    return Object.fromEntries(this.observationHistory);
+  }
+
   private async refreshSchedule(force: boolean): Promise<void> {
     if (!this.apiKey) return;
     if (!force && Date.now() < this.nextScheduleRefreshAt) return;
@@ -918,6 +928,14 @@ export class ApiFootballProvider implements MatchDataProvider {
     } else {
       this.observations.delete(id);
     }
+    const mapped = mapApiFixture(fixture);
+    const terminal = TERMINAL_STATUSES.has(status) || VOID_STATUSES.has(status);
+    const confirmed = !terminal || (this.observations.get(id)?.count ?? 0) >= this.finalConfirmations;
+    this.stableObservations.set(mapped.id, nextFixtureObservation(this.stableObservations.get(mapped.id), {
+      kickoff: mapped.kickoff, homeTeamId: mapped.home.id ?? '', awayTeamId: mapped.away.id ?? '',
+      unavailable: ['cancelled', 'postponed', 'suspended'].includes(mapped.status),
+    }, mapApiLiveResult(fixture, confirmed), Date.now()));
+    this.observationHistory.set(mapped.id, appendFixtureObservation(this.observationHistory.get(mapped.id) ?? [], this.stableObservations.get(mapped.id)!));
   }
 
   private async request(path: string, params: Record<string, string>): Promise<ApiFixture[]> {

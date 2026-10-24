@@ -44,7 +44,10 @@ export function BatchTransaction({
     queryFn: () => client.recover(record),
     enabled: active,
     retry: false,
-    refetchInterval: active ? 15_000 : false,
+    refetchInterval: (query) =>
+      active && !['confirmed', 'resolved', 'discarded'].includes(query.state.data?.status ?? '')
+        ? 15_000
+        : false,
     refetchIntervalInBackground: false,
   });
   const resume = useMutation({
@@ -286,7 +289,12 @@ export function BatchCheckout({
     enabled: active && snapshot.draft.picks.length > 0,
     staleTime: 15_000,
     retry: false,
-    refetchInterval: active ? 30_000 : false,
+    refetchInterval: (query) =>
+      active
+        ? query.state.data?.enabled === false || query.state.status === 'error'
+          ? 5_000
+          : 30_000
+        : false,
     refetchIntervalInBackground: false,
   });
   const linked = useQuery({
@@ -773,8 +781,21 @@ export function BatchCheckout({
                 )}
                 {config.data && !config.data.enabled && (
                   <Notice title="Payments are temporarily unavailable" tone="attention">
-                    {config.data.unavailableReason ??
-                      'Payments are temporarily unavailable. Your picks are saved.'}
+                    {config.data.unavailableReason && <p>{config.data.unavailableReason}</p>}
+                    <p>
+                      Your picks are saved. We’ll check again automatically while this slip is open.
+                    </p>
+                    <button
+                      className="quiet"
+                      disabled={config.isFetching}
+                      onClick={() => void config.refetch()}
+                    >
+                      {config.isFetching ? (
+                        <PaymentButtonState label="Checking payment service" />
+                      ) : (
+                        'Check again'
+                      )}
+                    </button>
                   </Notice>
                 )}
                 {error && (

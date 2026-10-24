@@ -18,10 +18,18 @@ assert.equal(
 );
 for (const status of ['live', 'suspended', 'postponed', 'scheduled']) {
   assert.equal(
+    catalogueStatusMatches({ status, kickoff: new Date(now).toISOString() }, 'live', now),
+    status === 'live',
+  );
+  assert.equal(
     catalogueStatusMatches({ status, kickoff: new Date(now).toISOString() }, 'closed', now),
     true,
   );
 }
+assert.equal(
+  catalogueStatusMatches({ status: 'final', kickoff: new Date(now).toISOString() }, 'live', now),
+  false,
+);
 console.log(
   'PASS Season fixture lifecycle filters remain independent of legacy ledger settlement.',
 );

@@ -1,3 +1,5 @@
+@import '../../../public/select-controls.css';
+
 /* Streak glass: translucent faces, directional rims and native scrolling. */
 :root {
   color-scheme: dark;
@@ -444,6 +446,14 @@ h1 {
   font: inherit;
   cursor: pointer;
 }
+.fixture-league {
+  min-width: 0;
+  max-width: 100%;
+}
+.fixture-league select {
+  min-width: 0;
+  max-width: 230px;
+}
 .glass {
   position: relative;
   border-radius: var(--radius);
@@ -547,77 +557,6 @@ h1 {
   width: 18px;
   height: 18px;
   object-fit: contain;
-}
-.weekend-picker {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: center;
-  padding: 0 0 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--line);
-}
-.week-navigation {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-}
-.week-navigation > div {
-  display: grid;
-  gap: 3px;
-  min-width: 145px;
-}
-.week-navigation strong {
-  font-size: 13px;
-}
-.week-navigation span {
-  color: var(--muted);
-  font-size: 11px;
-}
-.week-navigation button {
-  width: 44px;
-  padding: 4px;
-  font-size: 24px;
-}
-.day-filters {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.day-filters button {
-  padding: 8px 12px;
-  font-size: 12px;
-  border-color: transparent;
-  color: var(--muted);
-}
-.day-filters button[aria-pressed='true'] {
-  color: var(--mint);
-  border-color: #b9ed8a30;
-  background: #b9ed8a08;
-}
-.day-filters span {
-  font-size: 10px;
-  margin-left: 3px;
-}
-@media (max-width: 1150px) {
-  .weekend-picker {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .day-filters {
-    width: 100%;
-  }
-  .day-filters button {
-    flex: 1;
-    padding: 8px 5px;
-  }
-  .week-navigation {
-    width: 100%;
-  }
-  .week-navigation > div {
-    flex: 1;
-    text-align: center;
-  }
 }
 .crest {
   display: grid;

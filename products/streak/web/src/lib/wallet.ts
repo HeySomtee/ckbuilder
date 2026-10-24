@@ -11,8 +11,17 @@ interface WalletState {
   readonly notice: string | null;
 }
 
-// Importing the shared state must not load CCC, discover extensions or restore
-// a wallet on ordinary market browsing. Connections live only in this document.
+// Only a prior explicit selection permits silent restoration. Public metadata
+// is a hint, never proof of account access or permission to sign.
+const REMEMBERED_WALLET = 'streak-wallet-selection-v1';
+let restoration: Promise<void> | undefined;
+function forgetWallet() {
+  try {
+    localStorage.removeItem(REMEMBERED_WALLET);
+  } catch {
+    /* Storage can be disabled. */
+  }
+}
 let state: WalletState = { connection: null, revision: 0, notice: null };
 const listeners = new Set<() => void>();
 let stopReplacement: (() => void) | undefined;
@@ -34,10 +43,99 @@ export function disconnectWallet(
   expected?: ActiveWallet,
 ): void {
   if (expected && state.connection !== expected) return;
+  forgetWallet();
   cancelSelection?.();
   stopReplacement?.();
   stopReplacement = undefined;
   publish(null, notice);
+}
+
+/** Restore only an already-authorized EVM wallet. Never request access or sign. */
+export async function restoreWallet(expectedAddress?: string): Promise<void> {
+  if (state.connection || selection) return;
+  if (restoration) return restoration;
+  let hint: { address: string; name: string; until: number };
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(REMEMBERED_WALLET) ?? 'null');
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !('address' in value) ||
+      !('name' in value) ||
+      !('until' in value) ||
+      typeof value.address !== 'string' ||
+      !value.address.startsWith('ckt1') ||
+      value.address.length > 300 ||
+      typeof value.name !== 'string' ||
+      value.name.length > 100 ||
+      typeof value.until !== 'number' ||
+      value.until <= Date.now() ||
+      (expectedAddress && value.address !== expectedAddress)
+    )
+      return;
+    hint = { address: value.address, name: value.name, until: value.until };
+  } catch {
+    return;
+  }
+  const revision = state.revision;
+  const pending = (async () => {
+    const { ccc } = await import('@ckb-ccc/connector');
+    if (state.revision !== revision || selection) return;
+    const candidates: InstanceType<typeof ccc.Eip6963.Signer>[] = [];
+    const stop = new ccc.Eip6963.SignerFactory(
+      new ccc.ClientPublicTestnet({
+        url: 'https://testnet.ckb.dev/',
+        fallbacks: [],
+        timeout: 15_000,
+        maxConcurrent: 4,
+      }),
+    ).subscribeSigners((signer, detail) => {
+      if (
+        (detail?.info.name ?? 'EVM') === hint.name &&
+        !candidates.some((s) => s.provider === signer.provider)
+      )
+        candidates.push(signer);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    stop();
+    if (candidates.length !== 1 || state.revision !== revision || selection) return;
+    const signer = candidates[0];
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          if (
+            !(await signer.isConnected()) ||
+            (await signer.getRecommendedAddress()) !== hint.address
+          )
+            return;
+          if (timedOut || state.revision !== revision || selection) return;
+          await retainWallet(
+            signer,
+            revision,
+            (address) => !timedOut && !selection && address === hint.address,
+          );
+        })(),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(() => {
+            timedOut = true;
+            resolve();
+          }, 4_000);
+        }),
+      ]);
+    } catch {
+      /* Locked/revoked wallets remain disconnected; explicit Connect is available. */
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  })();
+  restoration = pending;
+  try {
+    await pending;
+  } finally {
+    if (restoration === pending) restoration = undefined;
+  }
 }
 export async function assertActiveWallet(connection: ActiveWallet): Promise<void> {
   const changed = () => state.connection !== connection;
@@ -72,11 +170,15 @@ export async function assertWalletAccount(
   await assertActiveWallet(connection);
 }
 
-async function retainWallet(signer: ccc.Signer, revision: number): Promise<ccc.Signer> {
+async function retainWallet(
+  signer: ccc.Signer,
+  revision: number,
+  allowed: (address: string) => boolean = () => true,
+): Promise<ccc.Signer> {
   if (!(await signer.isConnected())) throw Error('The selected wallet is not connected.');
   const address = await signer.getRecommendedAddress();
   if (signer.client.addressPrefix !== 'ckt') throw Error('Connect a CKB testnet wallet.');
-  if (state.revision !== revision) throw Error('Wallet connection cancelled.');
+  if (state.revision !== revision || !allowed(address)) throw Error('Wallet connection cancelled.');
   const guarded = new Proxy(signer, {
     get(target, property) {
       const value: unknown = Reflect.get(target, property, target);
@@ -89,7 +191,9 @@ async function retainWallet(signer: ccc.Signer, revision: number): Promise<ccc.S
         return async (...args: unknown[]) => {
           await assertActiveWallet(connection);
           const result: unknown = await Reflect.apply(value, target, args);
-          await assertActiveWallet(connection);
+          // Direct transaction callers must retain exact signed bytes before a
+          // post-sign account/RPC failure. They revalidate before broadcasting.
+          if (property !== 'signTransaction') await assertActiveWallet(connection);
           return result;
         };
       return value.bind(target);
@@ -164,7 +268,7 @@ export async function chooseWallet(): Promise<ccc.Signer> {
         url: 'https://testnet.ckb.dev/',
         fallbacks: [],
         timeout: 15_000,
-        maxConcurrent: 2,
+        maxConcurrent: 4,
       }),
     );
     element.style.zIndex = '1000';
@@ -183,6 +287,7 @@ export async function chooseWallet(): Promise<ccc.Signer> {
         cancelSelection?.();
       });
     }
+    let walletName = '';
     const signer = await new Promise<ccc.Signer>((resolve, reject) => {
       let connecting = false;
       let settled = false;
@@ -202,6 +307,7 @@ export async function chooseWallet(): Promise<ccc.Signer> {
         clearTimeout(timeout);
         cancelSelection = undefined;
         const selected = element.signer?.signer;
+        walletName = element.wallet?.name ?? 'EVM';
         chooserClosed = true;
         element.refreshSigner = () => {};
         controller.disconnect();
@@ -233,7 +339,22 @@ export async function chooseWallet(): Promise<ccc.Signer> {
       } else document.body.append(element);
       updated();
     });
-    return retainWallet(signer, revision);
+    const retained = await retainWallet(signer, revision);
+    if (signer.type === ccc.SignerType.EVM && 'provider' in signer && state.connection) {
+      try {
+        localStorage.setItem(
+          REMEMBERED_WALLET,
+          JSON.stringify({
+            address: state.connection.address,
+            name: walletName,
+            until: Date.now() + 7 * 86400_000,
+          }),
+        );
+      } catch {
+        /* Remembering is optional. */
+      }
+    }
+    return retained;
   })();
   selection = pending;
   try {

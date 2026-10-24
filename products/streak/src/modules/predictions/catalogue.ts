@@ -6,6 +6,7 @@ export function catalogueStatusMatches(
 ) {
   const terminal = match.status === 'final' || match.status === 'cancelled';
   const upcoming = match.status === 'scheduled' && Date.parse(match.kickoff) > now;
+  if (status === 'live') return match.status === 'live';
   if (status === 'open') return upcoming;
   if (status === 'closed') return !terminal && !upcoming;
   if (status === 'resolved') return terminal;

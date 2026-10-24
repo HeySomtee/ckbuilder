@@ -325,13 +325,9 @@ export default function DirectPage({
       const { signer, address } = activeWallet;
       const lock = (await ccc.Address.fromString(address, signer.client)).script;
       const client = new DirectClient(signer, MANIFEST, 'wallet');
-      await client.balance();
-      await client.history();
       await assertActiveWallet(activeWallet);
       const sponsored = new SponsoredClient(signer, sponsorTransport);
-      await sponsored.history();
       const batch = new BatchClient(signer, batchTransport);
-      await batch.history();
       return { client, sponsored, batch, address, ownerHash: lock.hash() };
     },
     retry: false,
@@ -345,6 +341,7 @@ export default function DirectPage({
   const [amount, setAmount] = useState(draftPick?.amountCkb ?? '100');
   const [review, setReview] = useState<Review | null>(null);
   const [notice, setNotice] = useState('');
+  const [claimStage, setClaimStage] = useState('Checking your return...');
   const [sponsoredBusy, setSponsoredBusy] = useState(false);
   const [visibleMarkets, setVisibleMarkets] = useState(4);
   const [visibleTransactions, setVisibleTransactions] = useState(8);
@@ -398,13 +395,65 @@ export default function DirectPage({
     retry: false,
     staleTime: 5_000,
   });
+  const [checkedClaims, setCheckedClaims] = useState<{ owner: string; hashes: string[] }>({
+    owner: '',
+    hashes: [],
+  });
+  const recentClaim = history.data
+    ?.filter(
+      (record) =>
+        record.kind === 'claim' &&
+        record.status !== 'resolved' &&
+        !(
+          checkedClaims.owner === connection?.ownerHash &&
+          checkedClaims.hashes.includes(record.hash)
+        ),
+    )
+    .sort((a, b) => b.createdAt - a.createdAt)[0];
+  const claimRecovery = useQuery({
+    queryKey: ['direct-private', connection?.ownerHash, 'transaction', recentClaim?.hash],
+    enabled: activityOnly && !!connection && !!recentClaim,
+    queryFn: () => connection!.client.recover(recentClaim!),
+    retry: false,
+    staleTime: 8_000,
+    refetchInterval: (query) =>
+      recentClaim &&
+      !['confirmed', 'resolved', 'conflict', 'rejected'].includes(query.state.data?.status ?? '')
+        ? 10_000
+        : false,
+    refetchIntervalInBackground: false,
+  });
+  useEffect(() => {
+    if (
+      !connection ||
+      !recentClaim ||
+      !claimRecovery.data ||
+      !['confirmed', 'resolved', 'conflict', 'rejected'].includes(claimRecovery.data.status)
+    )
+      return;
+    setCheckedClaims((previous) => ({
+      owner: connection.ownerHash,
+      hashes: [
+        ...(previous.owner === connection.ownerHash ? previous.hashes : []),
+        recentClaim.hash,
+      ],
+    }));
+    if (!['confirmed', 'resolved'].includes(claimRecovery.data.status)) return;
+    void queryClient.invalidateQueries({
+      queryKey: ['direct-private', connection.ownerHash, 'history'],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ['direct-private', connection.ownerHash, 'activity'],
+    });
+    void queryClient.invalidateQueries({ queryKey: ['private', 'wallet-balance'] });
+  }, [claimRecovery.data, connection, queryClient, recentClaim]);
   const balance = useQuery({
     queryKey: ['direct-private', connection?.ownerHash, 'balance'],
-    enabled: !!connection,
+    enabled: !!connection && !activityOnly,
     queryFn: () => connection!.client.balance(),
     retry: false,
     staleTime: 15_000,
-    refetchInterval: 30_000,
+    refetchInterval: activityOnly ? false : 30_000,
     refetchIntervalInBackground: false,
   });
   const sponsoredHistory = useQuery({
@@ -469,7 +518,7 @@ export default function DirectPage({
         getWalletState().connection?.revision === revision
       ) {
         setReview(result);
-        setNotice('Review the exact wallet transaction below.');
+        setNotice('');
       }
     },
   });
@@ -488,7 +537,17 @@ export default function DirectPage({
             throw Error('New entries are unavailable. Your draft is retained.');
           current = found;
         }
-        const signed = await connection.client.signAndPersist(review, current);
+        const signed = await connection.client.signAndPersist(review, current, (stage) => {
+          if (mounted.current && getWalletState().connection?.revision === activeWallet.revision)
+            setClaimStage(
+              {
+                checking: 'Checking your return...',
+                approval: 'Approve in your wallet',
+                saving: 'Saving your signed transfer...',
+                verifying: 'Verifying the signed transfer...',
+              }[stage],
+            );
+        });
         await assertActiveWallet(activeWallet);
         if (mounted.current && getWalletState().connection?.revision === activeWallet.revision)
           setNotice('Signed transaction saved. Sending the same transaction to CKB.');
@@ -499,10 +558,19 @@ export default function DirectPage({
       }
     },
     retry: false,
-    onSuccess: ({ revision }) => {
+    onSuccess: ({ revision, result, signed }) => {
       if (mounted.current && getWalletState().connection?.revision === revision) {
         setReview(null);
-        setNotice('Transaction saved. Follow confirmation and admission in your activity below.');
+        setNotice(
+          signed.kind === 'claim'
+            ? result.status === 'confirmed'
+              ? 'Return collected. Your wallet balance is updating.'
+              : result.status === 'committed'
+                ? 'Transfer reached CKB. Waiting for confirmation.'
+                : 'Your signed transfer is saved. Follow it in Payments & recovery.'
+            : 'Transaction saved. Follow confirmation and admission in your activity below.',
+        );
+        void queryClient.invalidateQueries({ queryKey: ['private', 'wallet-balance'] });
         refresh();
       }
     },
@@ -664,16 +732,25 @@ export default function DirectPage({
         connectionPending={!!activeWallet}
         recovery={paymentTools}
         onClaim={(selected, point) => {
-          if (!working) prepare.mutate({ descriptor: selected, point });
+          if (!working) {
+            submit.reset();
+            setNotice('');
+            prepare.mutate({ descriptor: selected, point });
+          }
         }}
         review={review?.ownerHash === connection?.ownerHash ? review : null}
         onSign={() => submit.mutate()}
         onDismissReview={() => {
           reviewEpoch.current++;
           setReview(null);
+          if (!working) {
+            prepare.reset();
+            submit.reset();
+          }
         }}
         working={working}
         signing={submit.isPending}
+        claimStage={claimStage}
         notice={notice}
         error={error ? message(error) : undefined}
         onRefresh={refresh}

@@ -19,6 +19,8 @@ Full tests are retained. Run `npm run quality:major` for major runtime changes a
 
 ## Reproducible setup
 
+Survivor adds the discovered `src/survivor.test.ts` domain suite, `scripts/survivor-postgres.cjs` in the required PostgreSQL lane and `scripts/survivor-browser.cjs` in the browser lane. Database tests create and remove only their own random schema in a loopback `_test` database. Browser tests use synthetic fixtures and the production rule service, without any wallet, provider or chain network calls.
+
 Use the repository-pinned **Node 24.14.0 and npm 11.9.0**, the committed lockfiles and `npm ci`. Root and Streak installs are distinct dependency contexts; follow the root scripts rather than hand-editing installed packages. [npm ci](https://docs.npmjs.com/cli/v11/commands/npm-ci/) is the clean-install contract.
 
 Install the Playwright browser versions matching Streak's lockfile. Browser CI needs Chromium and WebKit. The contract lane uses Rust 1.97.1 and the Week 20 lab's documented native toolchain. See the [lab prerequisites](../../../../src/week20/contract-lab/README.md#run); Windows invokes WSL for the Rust VM suite.

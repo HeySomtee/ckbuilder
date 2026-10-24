@@ -12,6 +12,70 @@
   line-height: 1.6;
   text-align: left;
 }
+.ui-busy {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 4px;
+  color: var(--text);
+}
+.ui-busy > div {
+  flex: 1;
+  min-width: 0;
+}
+.ui-busy strong {
+  font-size: 14px;
+}
+.ui-busy p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 6px 0 12px;
+}
+.ui-busy-orbit {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+}
+.ui-busy-orbit i {
+  position: absolute;
+  inset: 0;
+  border: 1px solid #a6c9f027;
+  border-top-color: #a6c9f0;
+  border-radius: 50%;
+  animation: ui-busy-turn 1.3s linear infinite;
+}
+.ui-busy-orbit i + i {
+  inset: 7px;
+  border-top-color: #bbe995;
+  animation-direction: reverse;
+}
+.ui-busy-line {
+  display: block;
+  height: 3px;
+  width: min(210px, 80%);
+  border-radius: 3px;
+  background: linear-gradient(90deg, #a6c9f010, #a6c9f070, #a6c9f010);
+  background-size: 200% 100%;
+  animation: ui-busy-glint 1.8s ease-in-out infinite;
+}
+@keyframes ui-busy-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ui-busy-glint {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-busy-orbit i,
+  .ui-busy-line {
+    animation: none;
+  }
+}
 .feedback-card.attention {
   border-color: #d1bb8733;
   background: linear-gradient(125deg, #d1bb870b, transparent);
@@ -34,6 +98,24 @@
 .feedback-content {
   min-width: 0;
   flex: 1;
+}
+.feedback-dismiss {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  border-radius: 9px;
+}
+.feedback-dismiss:hover {
+  background: #ffffff08;
+  color: var(--text);
 }
 .feedback-content > strong {
   display: block;

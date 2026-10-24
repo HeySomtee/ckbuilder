@@ -46,6 +46,24 @@ async function main() {
   const { server } = require('../dist/server');
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   const base = `http://127.0.0.1:${server.address().port}`;
+  function localRoute(route) {
+    if (new URL(route.request().url()).pathname === '/api/five')
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          now: new Date(clock).toISOString(),
+          admin: false,
+          viewerId: null,
+          feedAvailable: false,
+          fundingAvailable: false,
+          rewardsAccount: null,
+          rounds: [],
+          detail: null,
+        }),
+      });
+    return route.continue();
+  }
   const out = path.resolve(__dirname, '../../../.quality-artifacts/account-navigation');
   fs.mkdirSync(out, { recursive: true });
   const results = [];
@@ -73,7 +91,7 @@ async function main() {
           const page = await context.newPage();
           await page.clock.install({ time: clock });
           await context.route('**/*', (route) =>
-            new URL(route.request().url()).origin === base ? route.continue() : route.abort(),
+            new URL(route.request().url()).origin === base ? localRoute(route) : route.abort(),
           );
           await page.goto(base + '/season/?view=overview');
           await page.locator('.overview-fixture').first().waitFor();
@@ -92,7 +110,7 @@ async function main() {
               }),
             }));
             assert.equal(rail.scroll, rail.client, 'Sidebar must have no internal overflow');
-            assert.equal(rail.links.length, 7);
+            assert.equal(rail.links.length, 8);
             assert.ok(rail.links.every((r) => r.top >= 0 && r.bottom <= height && r.height >= 44));
             await page.evaluate(() => window.scrollTo(0, 500));
             const account = await page
@@ -159,7 +177,7 @@ async function main() {
               external.push(route.request().url());
               return route.abort();
             }
-            return route.continue();
+            return localRoute(route);
           });
           await page.goto(base + '/season/?view=overview');
           await page.getByRole('heading', { name: 'Good to have you here.' }).waitFor();
@@ -196,7 +214,7 @@ async function main() {
                 .click();
             } else
               await nav
-                .getByRole('link', { name: new RegExp('^' + label + '(?: Soon)?$') })
+                .getByRole('link', { name: new RegExp('^' + label + '(?: Beta)?$') })
                 .click();
           }
           await page.screenshot({
@@ -204,11 +222,20 @@ async function main() {
             fullPage: true,
           });
           await section('Streak Five');
-          await page.getByRole('heading', { name: 'Streak Five', exact: true }).waitFor();
-          assert.equal(await page.locator('.shirt-ckb-mark').count(), 3);
-          await page.getByText('Squad entry is not open yet.', { exact: false }).waitFor();
+          await page
+            .getByRole('heading', { name: 'Streak Five.', exact: true })
+            .waitFor();
+          await page
+            .getByRole('heading', { name: 'The next five starts here.', exact: true })
+            .waitFor();
+          assert.equal(
+            await page.getByRole('button', { name: 'How it works', exact: true }).count(),
+            1,
+          );
           await page.reload();
-          await page.getByRole('heading', { name: 'Streak Five', exact: true }).waitFor();
+          await page
+            .getByRole('heading', { name: 'Streak Five.', exact: true })
+            .waitFor();
           await section('Matchday');
           assert.equal(
             await page.getByRole('link', { name: 'Open match centre' }).getAttribute('href'),
@@ -283,15 +310,25 @@ async function main() {
           await page.locator('.prediction-dock').click();
           await slip.getByRole('button', { name: 'Slip full', exact: true }).waitFor();
           assert.equal(await page.locator('.slip-pick').count(), 8);
-          const density=await slip.evaluate(el=>({list:el.querySelector('#slip-picks-panel').getBoundingClientRect().height,footer:el.querySelector('.slip-footer').getBoundingClientRect().height}));
-          assert.ok(density.list>=200 && density.footer<220,JSON.stringify(density));
-          const stake=slip.getByRole('textbox',{name:/Stake for/}).first();
+          const density = await slip.evaluate((el) => ({
+            list: el.querySelector('#slip-picks-panel').getBoundingClientRect().height,
+            footer: el.querySelector('.slip-footer').getBoundingClientRect().height,
+          }));
+          assert.ok(density.list >= 200 && density.footer < 220, JSON.stringify(density));
+          const stake = slip.getByRole('textbox', { name: /Stake for/ }).first();
           await stake.focus();
-          assert.equal(await stake.evaluate(el=>getComputedStyle(el).outlineStyle),'none','One focus ring belongs to the amount container.');
-          assert.equal(await stake.evaluate(el=>getComputedStyle(el.parentElement).borderColor),'rgb(255, 152, 111)');
-          await slip.getByRole('tab',{name:'Activity',exact:true}).click();
-          assert.equal(await slip.locator('.slip-footer').isVisible(),false);
-          await slip.getByRole('tab',{name:/Picks/}).click();
+          assert.equal(
+            await stake.evaluate((el) => getComputedStyle(el).outlineStyle),
+            'none',
+            'One focus ring belongs to the amount container.',
+          );
+          assert.equal(
+            await stake.evaluate((el) => getComputedStyle(el.parentElement).borderColor),
+            'rgb(255, 152, 111)',
+          );
+          await slip.getByRole('tab', { name: 'Activity', exact: true }).click();
+          assert.equal(await slip.locator('.slip-footer').isVisible(), false);
+          await slip.getByRole('tab', { name: /Picks/ }).click();
           assert.equal(await slip.getByRole('button', { name: 'Slip full' }).isDisabled(), true);
           await slip
             .getByRole('button', { name: /Remove/ })
@@ -300,7 +337,9 @@ async function main() {
           const add = slip.getByRole('button', { name: 'Add matches', exact: true });
           await add.waitFor();
           const before = await add.boundingBox();
-          await page.locator('#slip-picks-panel').evaluate((el) => (el.scrollTop = el.scrollHeight));
+          await page
+            .locator('#slip-picks-panel')
+            .evaluate((el) => (el.scrollTop = el.scrollHeight));
           const after = await add.boundingBox();
           assert.equal(before.y, after.y);
           assert.equal(
@@ -343,7 +382,7 @@ async function main() {
           );
           assert.match(await dock.innerText(), /8 predictions/);
           await section('Streak Five');
-          await page.getByRole('link', { name: 'Explore prediction markets', exact: true }).click();
+          await section('Markets');
           assert.equal(
             await page.evaluate(() => window.accountNavigationSentinel),
             'still-mounted',
