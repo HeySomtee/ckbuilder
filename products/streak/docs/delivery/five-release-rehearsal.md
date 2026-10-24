@@ -54,8 +54,11 @@ read-only readiness probe. Independent source review accepted the deadline and
 rehearsal changes with no remaining scoped blocker. Evidence is in
 `.quality-artifacts/five-rehearsal-check.log` and
 `.quality-artifacts/five-rehearsal/completed-mobile.png`. The exact-candidate
-commit gate still runs the complete suite before publication; its result is not
-implied by these focused checks.
+commit gate subsequently passed all 68 checks at **21:04:44 UTC on 24 October**
+(22:04:44 Africa/Lagos). Runtime commit `74ee5e3` was pushed to main, reusing the
+successful exact-tree hook receipt. Evidence: `.quality-artifacts/all.json`,
+`.quality-artifacts/five-release-commit.log` and the matching receipt under
+`.quality-artifacts/hook-receipts/`. No required suite was skipped.
 
 ## Render setup
 
@@ -82,9 +85,24 @@ different database while reusing the active local rewards wallet. Prefer a fresh
 hosted rewards wallet with its own funded operating reserve; faucet funds do not
 count as a sponsored pool. Never paste its key in chat or commit it.
 
-The Render integration was discovered but was not connected when preparation
-began. Source changes, successful local gates, Git publication and actual Render
-activation are distinct milestones. Check the current work tracker and final
-release report for the observed result, rather than treating this setup guide as
-proof of deployment. A real completed auction and physical-wallet prize/refund
-acceptance remain separate from the disposable-chain rehearsal.
+The owner chose to enter Render settings manually. Source changes and successful
+local gates are published; hosted configuration and deployment verification remain
+separate. The new dedicated hosted rewards address is:
+
+```text
+ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsq2ranlf7f3ly428h0jwhe4ajfycjfc8pggcd7san
+```
+
+Its 10,000 tCKB faucet operating reserve was independently verified after 28
+canonical confirmations, transaction
+`0x6179fe69a865dfa26daf54934945bcb9c862a5076fa5f798e9ab4b58379a0f14`.
+This was an authorized public-testnet operational action, not a synthetic test
+or a sponsored prize. The key is in the owner's protected ignored
+`.quality-artifacts/five-hosted-private/rewards.key`, paired with that address.
+It was not printed, committed or loaded into tests. The dashboard-ready settings
+guide is `.quality-artifacts/five-render-settings.txt`.
+
+A fresh rehearsal was started at its first step after release verification;
+the ordinary local API was reloaded with its original records. A real completed
+auction and physical-wallet prize/refund acceptance remain separate from the
+disposable-chain rehearsal. No hosted rewards activation is claimed.
