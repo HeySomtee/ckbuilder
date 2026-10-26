@@ -1,3 +1,4 @@
+import { lockTime, finalizationTime } from './timing';
 import { isDeepStrictEqual } from 'node:util';
 import { closeAuction, isAuction } from './auction';
 import {
@@ -20,7 +21,7 @@ import {
   type Stats,
   type Terms,
 } from './domain';
-import type { FplSeason, ScoutData, PlayerProfile } from './scouting';
+import type { FplSeason, ScoutData, PlayerProfile, FixtureSchedule } from './scouting';
 import type { FiveStorage } from './storage';
 import type { FiveFunding } from './funding';
 import type { FiveRewards } from './rewards';
@@ -30,6 +31,7 @@ export interface FiveFeed {
   catalogue(event: number): Promise<Terms>;
   season?(): Promise<FplSeason>;
   scouting?(): Promise<ScoutData>;
+  schedule?(): Promise<FixtureSchedule>;
   profile?(id: number): Promise<PlayerProfile>;
   results(
     event: number,
@@ -71,7 +73,7 @@ export class FiveService {
       scores[playerId] = scorePlayer(player.position, normalized[playerId]);
     }
     await this.store.change(id, (r, now) => {
-      if (r.state !== 'open' || now < Date.parse(r.terms.lockAt))
+      if (r.state !== 'open' || now < lockTime(r))
         throw new FiveError('Scores can only update after the gameweek locks.', 409);
       if (r.revision !== current.revision)
         throw new FiveError('The gameweek changed. Refresh scores again.', 409);
@@ -104,17 +106,13 @@ export class FiveService {
         );
       if (BigInt(fundedPool(r)) > 0n && !this.funding)
         throw new FiveError('Prize backing must be verified before finalizing.', 503);
-      if (r.state !== 'open' || now < Date.parse(r.terms.finalizeAfter))
+      if (r.state !== 'open' || now < finalizationTime(r))
         throw new FiveError('The correction window has not closed.', 409);
       if (revision !== r.revision)
         throw new FiveError('Scores changed. Review the latest standings.', 409);
       if (!isAuction(r) && r.sponsors.some((s) => s.funding === 'submitted'))
         throw new FiveError('Wait for submitted contributions to confirm before finalizing.', 409);
-      if (
-        !r.scoresComplete ||
-        !r.scoresAt ||
-        Date.parse(r.scoresAt) < Date.parse(r.terms.finalizeAfter)
-      )
+      if (!r.scoresComplete || !r.scoresAt || Date.parse(r.scoresAt) < finalizationTime(r))
         throw new FiveError(
           'Refresh the final scores after the correction window before finalizing.',
           409,
@@ -134,6 +132,11 @@ export class FiveService {
     if (!this.feed?.profile)
       throw new FiveError('Player history is unavailable. Please retry.', 503);
     return this.feed.profile(id);
+  }
+  async schedule() {
+    if (!this.feed?.schedule)
+      throw new FiveError('Fixture outlook is temporarily unavailable.', 503);
+    return this.feed.schedule();
   }
   async progress() {
     if (!this.automatic || !this.feed?.available || !this.feed.season || this.syncing) return;
@@ -198,9 +201,8 @@ export class FiveService {
             !isDeepStrictEqual(normalized, current.rawStats) ||
             data.complete !== current.scoresComplete ||
             (data.complete &&
-              now >= Date.parse(current.terms.finalizeAfter) &&
-              (!current.scoresAt ||
-                Date.parse(current.scoresAt) < Date.parse(current.terms.finalizeAfter)))
+              now >= finalizationTime(current) &&
+              (!current.scoresAt || Date.parse(current.scoresAt) < finalizationTime(current)))
           ) {
             await this.updateScores(current.id, current, data);
           }
@@ -212,7 +214,7 @@ export class FiveService {
             Number.isSafeInteger(data.finalizeNotBefore) &&
             now >= data.finalizeNotBefore! &&
             latest.scoresComplete &&
-            now >= Date.parse(latest.terms.finalizeAfter)
+            now >= finalizationTime(latest)
           )
             await this.finalize(latest.id, latest.revision);
         } catch {
@@ -305,7 +307,7 @@ export class FiveService {
         if (r.state !== 'draft') return;
         if (b.termsHash !== r.termsHash)
           throw new FiveError('Review the current draft before publishing.', 409);
-        if (Date.parse(r.terms.lockAt) <= now + 60_000)
+        if (lockTime(r) <= now + 60_000)
           throw new FiveError('The entry deadline is too close.', 409);
         if (!affordableSquad(r.terms.players))
           throw new FiveError('This catalogue cannot form a legal squad within 40 credits.');

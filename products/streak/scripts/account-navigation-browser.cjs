@@ -222,20 +222,17 @@ async function main() {
             fullPage: true,
           });
           await section('Streak Five');
-          await page
-            .getByRole('heading', { name: 'Streak Five.', exact: true })
-            .waitFor();
+          await page.getByRole('heading', { name: 'Streak Five.', exact: true }).waitFor();
           await page
             .getByRole('heading', { name: 'The next five starts here.', exact: true })
             .waitFor();
+          await page.getByRole('tab', { name: 'More', exact: true }).click();
           assert.equal(
             await page.getByRole('button', { name: 'How it works', exact: true }).count(),
             1,
           );
           await page.reload();
-          await page
-            .getByRole('heading', { name: 'Streak Five.', exact: true })
-            .waitFor();
+          await page.getByRole('heading', { name: 'Streak Five.', exact: true }).waitFor();
           await section('Matchday');
           assert.equal(
             await page.getByRole('link', { name: 'Open match centre' }).getAttribute('href'),

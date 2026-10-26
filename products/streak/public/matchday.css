@@ -60,6 +60,8 @@
 .md-pick-symbol { font-size: 26px; color: var(--amber); }
 .md-pick-details > summary { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0 0; font-size: 11px; color: var(--ink-2); cursor: pointer; list-style: none; }
 .md-pick-details > summary::-webkit-details-marker { display: none; }
+.md-details-chevron { flex-shrink: 0; }
+.md-pick-details[open] .md-details-chevron { transform: rotate(180deg); }
 .md-pick-details > summary:focus-visible { outline: 2px solid var(--amber); outline-offset: 4px; }
 .md-pick { background: linear-gradient(115deg, #ff986f0b, transparent); border: 1px solid #ff986f24; border-radius: 16px; padding: 16px; margin-bottom: 10px; }
 .md-pick > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

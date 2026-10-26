@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { auctionView, isAuction, winningSponsors } from './auction';
+import { lockTime } from './timing';
 
 export class FiveError extends Error {
   constructor(
@@ -20,6 +21,7 @@ export type Player = {
   fixtureId: string;
 };
 export type Terms = {
+  testingPolicy?: 'admin-controlled-v1';
   name: string;
   lockAt: string;
   finalizeAfter: string;
@@ -62,6 +64,8 @@ export type Sponsor = {
   name: string;
   logo: string;
   link: string;
+  introduction?: string;
+  description?: string;
   moderation: 'pending' | 'approved' | 'hidden';
   createdAt: string;
   funding: 'awaiting' | 'submitted' | 'confirmed' | 'conflicted';
@@ -76,6 +80,8 @@ export type Sponsor = {
   auctionCheckedAt?: string;
 };
 export type Round = {
+  testClosedAt?: string;
+  testResultsAt?: string;
   id: string;
   creator: string;
   createdAt: string;
@@ -310,7 +316,7 @@ export function saveEntry(
   reviewedHash: unknown,
   now: number,
 ): void {
-  if (round.state !== 'open' || now >= Date.parse(round.terms.lockAt))
+  if (round.state !== 'open' || now >= lockTime(round))
     throw new FiveError('This gameweek is closed to squad changes.', 409);
   if (reviewedHash !== round.termsHash)
     throw new FiveError('Review the current gameweek rules first.', 409);
@@ -425,11 +431,11 @@ export const fundedPool = (round: Round) =>
     .reduce((n, s) => n + BigInt(s.amountShannons), 0n)
     .toString();
 export function project(round: Round, accountId: string | null, admin: boolean, now: number) {
-  const unlocked = now >= Date.parse(round.terms.lockAt);
+  const unlocked = now >= lockTime(round);
   return {
     id: round.id,
     state: round.state === 'open' && unlocked ? 'locked' : round.state,
-    terms: round.terms,
+    terms: { ...round.terms, lockAt: new Date(lockTime(round)).toISOString() },
     termsHash: round.termsHash,
     revision: round.revision,
     ownId: round.entries.find((e) => e.accountId === accountId)?.publicId ?? null,
@@ -460,6 +466,10 @@ export function project(round: Round, accountId: string | null, admin: boolean, 
       name: s.display === 'named' && s.moderation === 'approved' ? s.name : 'Community supporter',
       logo: s.display === 'named' && s.moderation === 'approved' ? s.logo : '',
       link: s.display === 'named' && s.moderation === 'approved' ? s.link : '',
+      introduction:
+        s.display === 'named' && s.moderation === 'approved' ? (s.introduction ?? '') : '',
+      description:
+        s.display === 'named' && s.moderation === 'approved' ? (s.description ?? '') : '',
     })),
     ownSponsorships: round.sponsors
       .filter((s) => s.accountId === accountId)
@@ -493,6 +503,8 @@ export function project(round: Round, accountId: string | null, admin: boolean, 
               name: s.name,
               logo: s.logo,
               link: s.link,
+              introduction: s.introduction ?? '',
+              description: s.description ?? '',
               moderation: s.moderation,
             })),
         }

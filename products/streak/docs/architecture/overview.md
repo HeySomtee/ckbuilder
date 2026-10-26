@@ -1,5 +1,11 @@
 # Architecture and migration
 
+26 October game-data correction: a local environment setting owns dummy data selection. The uncached application shell pins the mode per document; game APIs reject stale scopes after restart. Hosted and proxied test-mode requests are denied. Public switches and URL-based selection are removed. Survivor creation uses explicit competition cache keys, and Five fixture outlooks load independently through one shared provider query. [Boundaries and evidence](../delivery/games-local-mode-and-outlook.md).
+
+26 October Five workspace retains mounted, account/round-scoped drafts across presentation tabs. Optional sponsor introduction and description use the existing JSON aggregate, bounded validation, immutable intent retries and moderated public projections. Sponsor review retains its original round across refreshes. [Integration and evidence](../delivery/five-workspace.md).
+
+25 October in-app testing selects synthetic Five/Survivor adapters explicitly through a server-enabled data scope. The actual feature components, domain rules, wallet transport and reward journal are reused. A reserved database namespace and bound dedicated rewards address separate dummy rounds from API rounds. Audited admin timestamps can close marked synthetic rounds immediately without changing blockchain time or ordinary published deadlines. [Boundaries and acceptance](../delivery/in-app-games-testing.md).
+
 24 October Five sponsorship auctions add optional frozen round mode, durable signed-admission ordering, canonical confirmation cutoff evidence and an audited winner snapshot. Only the winning amount funds player awards. The existing rewards worker processes losing-bid refunds with refund-only queue scope, queue/credit transaction locking and the retained signed-payout journal. Existing community-funded rounds retain their terms. [Rules and recovery](../delivery/five-sponsor-auction.md).
 
 21 October Five automation adds an API-owned minute scheduler, official FPL deadline/event adapter and public scouting/profile reads. Stable round IDs, database-time cutoffs, immutable terms, semantic score deduplication and fair catch-up preserve restart/concurrency behavior. The scheduler cannot sign rewards. [Lifecycle and verification boundaries](../delivery/five-automatic-gameweeks.md).

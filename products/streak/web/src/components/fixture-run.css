@@ -1,0 +1,62 @@
+.fixture-outlook {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.fixture-outlook-label {
+  font: 8px var(--mono);
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+.fixture-outlook-chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.fixture-chip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #b8c5c00b;
+  color: var(--text);
+  min-width: 0;
+}
+.fixture-chip b {
+  font: 600 10px var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fixture-chip small {
+  font: 8px var(--mono);
+  opacity: 0.75;
+}
+.fixture-chip[data-difficulty='1'],
+.fixture-chip[data-difficulty='2'] {
+  background: #b9ed8a18;
+  border-color: #b9ed8a30;
+  color: #c8edab;
+}
+.fixture-chip[data-difficulty='4'] {
+  background: #ff996f18;
+  border-color: #ff996f30;
+  color: #ffc1a6;
+}
+.fixture-chip[data-difficulty='5'] {
+  background: #c2adea18;
+  border-color: #c2adea30;
+  color: #ddcff5;
+}
+.fixture-chip[data-empty='true'] {
+  background: transparent;
+  color: var(--muted);
+}
+@media (forced-colors: active) {
+  .fixture-chip {
+    border-color: CanvasText;
+  }
+}

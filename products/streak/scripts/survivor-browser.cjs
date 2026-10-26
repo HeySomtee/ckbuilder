@@ -110,6 +110,12 @@ async function main() {
           const pendingPick = new Promise((resolve) => {
             sawPick = resolve;
           });
+          let holdCreate = false,
+            releaseCreate,
+            sawCreate;
+          const pendingCreate = new Promise((resolve) => {
+            sawCreate = resolve;
+          });
           const errors = [],
             external = [];
           await context.route('**/*', async (route) => {
@@ -137,6 +143,17 @@ async function main() {
                   req.method() === 'POST'
                     ? await service.action(actor, req.postDataJSON())
                     : await service.read(actor, url.searchParams.get('competition') || undefined);
+                if (
+                  holdCreate &&
+                  req.method() === 'POST' &&
+                  req.postDataJSON().action === 'create'
+                ) {
+                  holdCreate = false;
+                  sawCreate();
+                  await new Promise((resolve) => {
+                    releaseCreate = resolve;
+                  });
+                }
                 if (holdPick && req.method() === 'POST' && req.postDataJSON().action === 'pick') {
                   holdPick = false;
                   sawPick();
@@ -163,6 +180,24 @@ async function main() {
           await dialog.getByLabel('Competition name').fill('Disposable draft');
           await dialog.getByRole('checkbox').first().check();
           await dialog.getByRole('button', { name: 'Save draft' }).click();
+          await page.getByRole('region', { name: 'Set up Disposable draft' }).waitFor();
+          assert.equal(
+            await page.locator('.survivor-team').count(),
+            0,
+            'Draft has no inactive game board',
+          );
+          const draft = [...store.rows.values()][0];
+          const originalLock = draft.rounds[0].lockAt;
+          draft.rounds[0].lockAt = new Date(Date.now() - 1000).toISOString();
+          await page.reload();
+          await page.getByRole('heading', { name: 'Choose a future opening round' }).waitFor();
+          assert.equal(
+            await page.getByRole('button', { name: 'Publish free competition' }).isEnabled(),
+            false,
+          );
+          draft.rounds[0].lockAt = originalLock;
+          await page.reload();
+          await page.getByRole('heading', { name: 'Ready to open entries?' }).waitFor();
           await page.getByRole('button', { name: 'Delete competition', exact: true }).click();
           await dialog.getByRole('button', { name: 'Keep competition' }).click();
           assert.equal(store.rows.size, 1, 'Cancel preserves the game');
@@ -181,12 +216,48 @@ async function main() {
             await page.getByRole('button', { name: 'Publish free competition' }).isEnabled(),
             false,
           );
+          await page.getByRole('heading', { name: 'Paid entry is not available yet' }).waitFor();
+          assert.equal(await page.locator('.survivor-team').count(), 0);
+          await page.getByRole('button', { name: /The long game.*Review setup/ }).click();
+          assert.equal(
+            await page.locator('.survivor-setup').evaluate((el) => document.activeElement === el),
+            true,
+          );
+          await page.screenshot({
+            path: path.join(out, `${name}-${width}-paid-setup.png`),
+            fullPage: true,
+          });
           await page.getByRole('button', { name: 'Edit draft' }).click();
           await dialog.getByLabel('Entry mode', { exact: true }).selectOption('free');
+          assert.equal(
+            await dialog.getByLabel('Entry fee (tCKB)', { exact: true }).isEnabled(),
+            false,
+          );
           await dialog.getByRole('button', { name: 'Save draft' }).click();
+          await page.getByRole('heading', { name: 'Ready to open entries?' }).waitFor();
+          await page.screenshot({
+            path: path.join(out, `${name}-${width}-free-setup.png`),
+            fullPage: true,
+          });
           await page.getByRole('button', { name: 'Publish free competition' }).click();
           await page.getByRole('button', { name: 'Review free entry' }).click();
+          assert.equal(await page.locator('.survivor-setup').count(), 0);
           await dialog.getByRole('button', { name: 'Accept rules and join free' }).click();
+          await page.getByRole('button', { name: 'Create competition' }).click();
+          await dialog.getByLabel('Competition name').fill('New draft stays selected');
+          await dialog.getByRole('checkbox').first().check();
+          await dialog.getByRole('button', { name: 'Save draft' }).click();
+          await page.getByRole('region', { name: 'Set up New draft stays selected' }).waitFor();
+          assert.ok(new URL(page.url()).searchParams.get('competition'));
+          await page.reload();
+          await page.getByRole('region', { name: 'Set up New draft stays selected' }).waitFor();
+          await page.getByRole('button', { name: 'Delete competition', exact: true }).click();
+          await dialog.getByRole('button', { name: 'Confirm deletion' }).click();
+          await page.getByText('THE LONG GAME · BY STREAK', { exact: true }).waitFor();
+          assert.equal(
+            await page.locator('.survivor-team').first().locator('.fixture-chip').count(),
+            3,
+          );
           await page.getByRole('button', { name: 'Delete competition', exact: true }).click();
           await dialog.getByText(/Their entries and results must be kept/).waitFor();
           assert.equal(await dialog.getByRole('button', { name: 'Confirm deletion' }).count(), 0);
@@ -215,6 +286,30 @@ async function main() {
           await service.action(actor, { action: 'publish', id: 'second-game' });
           await page.reload();
           await page.getByRole('button', { name: 'Pick saved', exact: true }).waitFor();
+          holdCreate = true;
+          await page.getByRole('button', { name: 'Create competition' }).click();
+          await dialog.getByLabel('Competition name').fill('Delayed creation');
+          await dialog.getByRole('checkbox').first().check();
+          await dialog.getByRole('button', { name: 'Save draft' }).click();
+          await pendingCreate;
+          await page.keyboard.press('Escape');
+          await page.getByRole('button', { name: /Second competition.*View & join/ }).click();
+          await page.getByText('SECOND COMPETITION · BY STREAK', { exact: true }).waitFor();
+          const createdResponse = page.waitForResponse(
+            (r) => new URL(r.url()).pathname === '/api/survivor' && r.request().method() === 'POST',
+          );
+          releaseCreate();
+          await createdResponse;
+          await page.getByRole('button', { name: /Delayed creation.*Review setup/ }).waitFor();
+          failRead = true;
+          await page.getByRole('button', { name: /The long game.*View & join/ }).click();
+          await page.getByText('THE LONG GAME · BY STREAK', { exact: true }).waitFor();
+          await page.getByRole('button', { name: 'Refresh competition', exact: true }).waitFor();
+          failRead = false;
+          await page.getByRole('button', { name: 'Refresh competition', exact: true }).click();
+          await page
+            .getByRole('button', { name: 'Refresh competition', exact: true })
+            .waitFor({ state: 'detached' });
           holdPick = true;
           await page
             .locator('.survivor-team')
@@ -222,10 +317,10 @@ async function main() {
             .click();
           await page.getByRole('button', { name: 'Save my pick' }).click();
           await pendingPick;
-          await page.locator('.survivor-switch select').selectOption('second-game');
+          await page.getByRole('button', { name: /Second competition.*View & join/ }).click();
           await page.getByText('SECOND COMPETITION · BY STREAK', { exact: true }).waitFor();
           const response = page.waitForResponse(
-            (r) => r.url().endsWith('/api/survivor') && r.request().method() === 'POST',
+            (r) => new URL(r.url()).pathname === '/api/survivor' && r.request().method() === 'POST',
           );
           releasePick();
           await response;
@@ -237,7 +332,7 @@ async function main() {
             true,
             'Delayed save cannot populate another competition cache.',
           );
-          await page.locator('.survivor-switch select').selectOption(c.id);
+          await page.getByRole('button', { name: /The long game.*View & join/ }).click();
           await page
             .locator('.survivor-team')
             .filter({ has: page.locator('strong', { hasText: /^Manchester City$/ }) })

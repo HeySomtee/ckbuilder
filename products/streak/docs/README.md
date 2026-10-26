@@ -1,5 +1,15 @@
 # Streak documentation
 
+26 October release report: [Week 22: a reason to come back next weekend](../../../reports/week-22.md), with screenshots, the new streakpitch.com domain and explicit testnet limits. [DM draft for Neon](../../../reports/week-22-dm.md).
+
+26 October owner correction implemented locally: [environment-only game data, consistent Beta labels, Survivor competition discovery and next-three fixture outlooks](delivery/games-local-mode-and-outlook.md). All 71 major checks passed in one run; local API is back on regular football data.
+
+26 October implemented locally: [Five tabs, captain/save states, mobile return navigation and sponsor showcase](delivery/five-workspace.md). All required checks have passing coverage across the major run and documented follow-ups. Independent review accepted; original failed receipts remain. Logo/favicon design is next.
+
+25 October design review: [Five workspace tabs, captain guidance, editing states and sponsor showcase](../design/five-workspace-review/README.md). Archived synthetic preview, approved and integrated on 26 October.
+
+25 October in-app testing: [actual Five/Survivor pages, dummy data, real testnet payment paths and immediate admin deadlines](delivery/in-app-games-testing.md). Active locally with passing required check coverage; physical-wallet and hosted acceptance remain separate.
+
 24 October release: [official deadline enforcement, short local-chain rehearsal and Render configuration](delivery/five-release-rehearsal.md).
 
 24 October Five: [sponsor auctions, cumulative bids and automatic losing-bid refunds](delivery/five-sponsor-auction.md). Applies to newly created rounds; existing community-funded gameweeks keep their terms.

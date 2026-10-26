@@ -1,0 +1,405 @@
+.five-page [role='tabpanel'][hidden] {
+  display: none;
+}
+.five-workspace-tabs {
+  display: flex;
+  gap: 22px;
+  border-bottom: 1px solid var(--five-line);
+  margin-bottom: 12px;
+}
+.five-workspace-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: 9px 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--five-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.five-workspace-tabs button[aria-selected='true'] {
+  border-bottom-color: var(--coral);
+  color: var(--text);
+}
+.five-workspace-tabs svg {
+  width: 14px;
+  height: 14px;
+}
+.five-back-squad {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: #abc9df;
+  padding: 10px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.five-page [role='tabpanel'] {
+  min-width: 0;
+}
+.five-page [role='tabpanel'] > .five-actions {
+  margin: 16px 0;
+}
+.five-sponsor-credit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  margin: 0 0 14px;
+  min-height: 56px;
+  border: 1px solid #abc9df30;
+  border-radius: 12px;
+  background: linear-gradient(115deg, #abc9df0a, transparent 70%);
+}
+.five-sponsor-credit img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.five-sponsor-credit > span:first-of-type {
+  min-width: 0;
+}
+.five-sponsor-credit small {
+  display: block;
+  font: 8px var(--mono, monospace);
+  letter-spacing: 1px;
+  color: var(--five-muted);
+  margin-bottom: 5px;
+}
+.five-sponsor-credit strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.five-sponsor-credit span > span {
+  font-size: 11px;
+  color: var(--five-muted);
+  margin-left: 12px;
+}
+.five-sponsor-credit .five-credit-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #abc9df;
+}
+.five-credit-link svg {
+  width: 16px;
+  height: 16px;
+}
+.five-sponsor-showcases {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.five-sponsor-showcase {
+  padding: 28px;
+  border-radius: 18px;
+  background: radial-gradient(ellipse at 100% 0, #85abdf18, transparent 65%), #17221e;
+  overflow-wrap: anywhere;
+}
+.five-sponsor-showcase .eyebrow {
+  font-size: 9px;
+  color: #abc9df;
+}
+.five-sponsor-identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 24px 0;
+}
+.five-sponsor-identity img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 14px;
+}
+.five-sponsor-identity h2 {
+  font-size: 28px;
+  margin: 0;
+}
+.five-sponsor-identity p {
+  font-size: 13px;
+  color: #abc9df;
+}
+.five-sponsor-description {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--five-muted);
+  white-space: pre-wrap;
+}
+.five-sponsor-showcase a {
+  gap: 10px;
+  margin: 12px 0;
+}
+.five-sponsor-contribution {
+  border-top: 1px solid var(--five-line);
+  padding-top: 18px;
+  margin-top: 20px;
+  display: grid;
+  gap: 10px;
+}
+.five-sponsor-contribution small {
+  color: var(--five-muted);
+  font: 9px var(--mono, monospace);
+  letter-spacing: 1px;
+}
+.five-sponsor-contribution strong {
+  font: 22px var(--mono, monospace);
+}
+.five-captain-guide {
+  margin: 10px;
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #b9ed8a30;
+  border-radius: 10px;
+  background: #b9ed8a07;
+}
+.five-captain-token {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #b9ed8a70;
+  border-radius: 50%;
+  color: var(--five-lime);
+  font-size: 12px;
+}
+.five-captain-guide strong {
+  font-size: 11px;
+}
+.five-captain-guide p {
+  margin: 4px 0 0;
+  font-size: 10px;
+  color: var(--five-muted);
+  line-height: 1.5;
+}
+.five-captain-guide button {
+  margin-left: auto;
+  min-height: 44px;
+  border: 0;
+  padding: 8px;
+  background: transparent;
+  color: var(--five-lime);
+  font-size: 11px;
+}
+.five-captain-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 54px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--five-line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+}
+.five-captain-option small {
+  display: block;
+  color: var(--five-muted);
+  font-size: 10px;
+  margin-top: 4px;
+  text-align: left;
+}
+.five-captain-option strong {
+  color: var(--five-lime);
+  font-size: 11px;
+}
+#five-save-hint {
+  font-size: 11px;
+  color: var(--five-lime);
+  line-height: 1.5;
+  margin: 9px 0;
+}
+.five-pitch {
+  height: 364px;
+  grid-template-rows: repeat(4, 1fr);
+}
+.five-slot {
+  align-self: center;
+}
+.five-slot[data-position='FWD'] {
+  grid-row: 1;
+  grid-column: 1 / 3;
+}
+.five-slot[data-position='MID'] {
+  grid-row: 2;
+}
+.five-slot[data-position='DEF'] {
+  grid-row: 3;
+  grid-column: 1 / 3;
+}
+.five-slot[data-position='GK'] {
+  grid-row: 4;
+  grid-column: 1 / 3;
+}
+.five-pitch-player .five-jersey {
+  width: 50px;
+  height: 50px;
+}
+.five-pitch-player strong {
+  line-height: 13px;
+  padding-block: 2px;
+}
+.five-slot > small {
+  line-height: 11px;
+  margin-top: 2px;
+  font-size: 9px;
+}
+@media (min-width: 761px) {
+  .five-builder-toolbar {
+    display: none;
+  }
+}
+.five-scout > .five-back-squad {
+  margin: 6px 10px 0;
+}
+.five-dialog > .five-back-squad {
+  margin-top: 16px;
+}
+.five-test-indicator {
+  color: var(--five-lime);
+  border: 1px solid var(--five-line);
+  border-radius: 20px;
+  padding: 7px 10px;
+  font-size: 10px;
+}
+@media (max-width: 760px) {
+  .five-workspace-tabs {
+    gap: 0;
+    justify-content: space-between;
+  }
+  .five-workspace-tabs button {
+    font-size: 11px;
+    padding-inline: 3px;
+  }
+  .five-round-bar {
+    gap: 8px;
+    padding: 6px 0 10px;
+    font-size: 10px;
+  }
+  .five-round-bar select {
+    min-height: 40px;
+    max-width: 190px;
+  }
+  .five-round-bar span:last-child {
+    width: auto;
+  }
+  .five-sponsor-credit .five-credit-link {
+    font-size: 0;
+  }
+  .five-sponsor-credit span > span {
+    display: none;
+  }
+  .five-sponsor-showcase {
+    padding: 20px;
+  }
+  .five-sponsor-identity h2 {
+    font-size: 24px;
+  }
+  .five-scout {
+    overflow: visible;
+  }
+  .five-scout > .five-back-squad {
+    position: sticky;
+    top: 52px;
+    z-index: 4;
+    width: calc(100% - 20px);
+    background: #14221a;
+  }
+  .five-builder-toolbar > div {
+    display: none;
+  }
+  .five-builder-toolbar nav {
+    width: 100%;
+  }
+  .five-builder-toolbar nav button {
+    flex: 1;
+  }
+  .five-captain-guide {
+    gap: 7px;
+    padding: 8px;
+  }
+  .five-captain-token {
+    display: none;
+  }
+  .five-auction {
+    display: flex;
+    flex-direction: column;
+  }
+  .five-auction-action {
+    order: -1;
+    border-top: 0;
+    border-bottom: 1px solid var(--five-line);
+    padding: 0 0 12px;
+  }
+}
+@media (forced-colors: active) {
+  .five-workspace-tabs button[aria-selected='true'] {
+    border-bottom-color: Highlight;
+  }
+  .five-sponsor-credit,
+  .five-captain-guide {
+    border-color: CanvasText;
+  }
+}
+.five-player-info > span {
+  min-width: 0;
+}
+.five-player-info .fixture-outlook {
+  margin-top: 7px;
+  min-width: 0;
+  width: 100%;
+  max-width: 180px;
+}
+.five-player-info .fixture-outlook-label {
+  display: none;
+}
+.five-player-info .fixture-chip small {
+  display: inline;
+  font-size: 8px;
+}
+.five-fixture-loading {
+  display: flex;
+  gap: 4px;
+  margin-top: 7px;
+}
+.five-fixture-loading i {
+  width: 38px;
+  height: 23px;
+  border-radius: 5px;
+  background: #b8c5c012;
+  animation: five-fixture-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes five-fixture-pulse {
+  to {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .five-fixture-loading i {
+    animation: none;
+  }
+}
+.five-profile > .fixture-outlook {
+  margin: 16px 0;
+  max-width: 340px;
+}

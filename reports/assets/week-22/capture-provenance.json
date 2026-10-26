@@ -1,0 +1,48 @@
+{
+  "capturedAt": "2026-10-26T17:45:04.712Z",
+  "source": "http://127.0.0.1:4100",
+  "mode": "api",
+  "authentication": "anonymous",
+  "entry": "Unsigned unsaved browser draft. No login, signatures or mutations.",
+  "screenshots": [
+    {
+      "file": "five-squad-1440.png",
+      "width": 1440,
+      "description": "Actual app, API-sourced players and prices, unsaved sample squad."
+    },
+    {
+      "file": "five-profile-1440.png",
+      "width": 1440,
+      "description": "Actual player profile with API data. No submitted entry."
+    },
+    {
+      "file": "five-squad-390.png",
+      "width": 390,
+      "description": "Actual app, API-sourced players and prices, unsaved sample squad."
+    },
+    {
+      "file": "five-profile-390.png",
+      "width": 390,
+      "description": "Actual player profile with API data. No submitted entry."
+    },
+    {
+      "file": "sponsor-auction.png",
+      "width": 1440,
+      "source": "Built-app five-browser.cjs isolated Chromium journey",
+      "data": "Synthetic accounts, bids and balances. No live sponsor."
+    },
+    {
+      "file": "survivor-board.png",
+      "width": 1440,
+      "source": "Built-app games-test-browser.cjs isolated Chromium journey, viewport capture",
+      "data": "Synthetic competition and entrants. No live prize."
+    }
+  ],
+  "errors": [],
+  "domainCheck": {
+    "url": "https://streakpitch.com/",
+    "status": 200,
+    "method": "Read-only anonymous HTTPS request",
+    "checkedAt": "2026-10-26T17:53:31.810Z"
+  }
+}

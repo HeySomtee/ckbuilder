@@ -1,9 +1,10 @@
 import type { Round, Sponsor } from './domain';
+import { lockTime } from './timing';
 
 /** Published auction-v1 rule: allow canonical confirmation after signed admission closes. */
 export const AUCTION_GRACE_MS = 30 * 60_000;
 export const isAuction = (round: Round) => round.terms.sponsorshipMode === 'auction';
-export const auctionCutoff = (round: Round) => Date.parse(round.terms.lockAt) + AUCTION_GRACE_MS;
+export const auctionCutoff = (round: Round) => lockTime(round) + AUCTION_GRACE_MS;
 
 export function auctionBids(round: Round) {
   const groups = new Map<
@@ -38,12 +39,7 @@ export function auctionBids(round: Round) {
 }
 
 export function closeAuction(round: Round, now: number) {
-  if (
-    !isAuction(round) ||
-    round.auction ||
-    round.state !== 'open' ||
-    now < Date.parse(round.terms.lockAt)
-  )
+  if (!isAuction(round) || round.auction || round.state !== 'open' || now < lockTime(round))
     return false;
   if (now < auctionCutoff(round) && round.sponsors.some((s) => s.funding === 'submitted'))
     return false;
@@ -80,10 +76,10 @@ export function auctionView(round: Round, accountId: string | null, now: number)
       ? 'cancelled'
       : settled
         ? 'settled'
-        : now < Date.parse(round.terms.lockAt)
+        : now < lockTime(round)
           ? 'open'
           : 'confirming',
-    closesAt: round.terms.lockAt,
+    closesAt: new Date(lockTime(round)).toISOString(),
     confirmationCutoff: new Date(auctionCutoff(round)).toISOString(),
     leadingShannons: settled ? round.auction!.amountShannons : (leader?.amount.toString() ?? '0'),
     bidderCount: bids.length,

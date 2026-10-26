@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { assertGameScope } from '../games-test/scope';
 import { FiveError, type Round } from './domain';
 export type Summary = Pick<Round, 'id' | 'state' | 'createdAt'> & { name: string; lockAt: string };
 export interface FiveStorage {
@@ -14,15 +15,19 @@ export interface FiveStorage {
 }
 export class PgFiveStorage implements FiveStorage {
   private ready?: Promise<void>;
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool: Pool,
+    private readonly testing = false,
+  ) {}
   async clock() {
     const row = await this.pool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
     return row.rows[0].now.getTime();
   }
   private init() {
-    this.ready ??= this.pool
-      .query(
-        `CREATE TABLE IF NOT EXISTS streak_five_rounds (
+    this.ready ??= assertGameScope(this.pool, this.testing)
+      .then(() =>
+        this.pool.query(
+          `CREATE TABLE IF NOT EXISTS streak_five_rounds (
       id text PRIMARY KEY, creator text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
       data jsonb NOT NULL);
       CREATE TABLE IF NOT EXISTS streak_five_audit (
@@ -31,6 +36,7 @@ export class PgFiveStorage implements FiveStorage {
         PRIMARY KEY(round_id,revision));
       CREATE TABLE IF NOT EXISTS streak_five_funding_inputs (
         outpoint text PRIMARY KEY,intent text NOT NULL);`,
+        ),
       )
       .then(() => {})
       .catch((error) => {
@@ -147,6 +153,8 @@ export class PgFiveStorage implements FiveStorage {
         if (
           round.scoreRevision !== JSON.parse(before).scoreRevision ||
           round.state !== JSON.parse(before).state ||
+          round.testClosedAt !== JSON.parse(before).testClosedAt ||
+          round.testResultsAt !== JSON.parse(before).testResultsAt ||
           JSON.stringify(round.auction) !== JSON.stringify(JSON.parse(before).auction)
         )
           await client.query(
@@ -157,6 +165,8 @@ export class PgFiveStorage implements FiveStorage {
               JSON.stringify({
                 state: round.state,
                 termsHash: round.termsHash,
+                ...(round.testClosedAt ? { testClosedAt: round.testClosedAt } : {}),
+                ...(round.testResultsAt ? { testResultsAt: round.testResultsAt } : {}),
                 rulesVersion: round.rulesVersion,
                 rawStats: round.rawStats,
                 scoreSource: round.scoreSource,

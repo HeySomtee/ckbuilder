@@ -1,3 +1,4 @@
+import { gamesPath } from '../../lib/games-data';
 import { isRecord, request } from '../../lib/http';
 
 export type Team = { id: string; name: string; code: string; logo?: string };
@@ -41,6 +42,7 @@ export type Competition = {
   entries: Entry[];
 };
 export type SurvivorData = {
+  testMode?: boolean;
   now: string;
   viewerId: string | null;
   admin: boolean;
@@ -161,6 +163,7 @@ export function parseSurvivor(value: unknown): SurvivorData {
   const data = obj(value);
   if (typeof data.admin !== 'boolean') bad();
   return {
+    testMode: data.testMode === true,
     now: date(data.now),
     viewerId: data.viewerId === null ? null : str(data.viewerId),
     admin: data.admin as boolean,
@@ -178,10 +181,13 @@ export function parseSurvivor(value: unknown): SurvivorData {
 }
 export const loadSurvivor = async (id: string, signal: AbortSignal) =>
   parseSurvivor(
-    await request(`/survivor${id ? `?competition=${encodeURIComponent(id)}` : ''}`, signal),
+    await request(
+      gamesPath(`/survivor${id ? `?competition=${encodeURIComponent(id)}` : ''}`),
+      signal,
+    ),
   );
 export const actSurvivor = async (body: unknown) =>
-  parseSurvivor(await request('/survivor', undefined, body));
+  parseSurvivor(await request(gamesPath('/survivor'), undefined, body));
 export const money = (shannons: string) => {
   const value = BigInt(shannons),
     decimals = (value % 100000000n).toString().padStart(8, '0').replace(/0+$/, '');

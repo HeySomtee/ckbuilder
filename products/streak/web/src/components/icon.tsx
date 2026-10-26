@@ -13,7 +13,9 @@ export function Icon({
     | 'matchday'
     | 'community'
     | 'account'
-    | 'more';
+    | 'more'
+    | 'chevron-down'
+    | 'chevron-up';
 }) {
   const paths = {
     markets: 'M4 20V10m8 10V4m8 16V8M2 20h20',
@@ -29,6 +31,8 @@ export function Icon({
       'M3 21v-4a5 5 0 0 1 10 0v4 M17 12a5 5 0 0 1 4 5v4 M8 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6 M17 3a3 3 0 0 1 0 6',
     account: 'M4 21a8 8 0 0 1 16 0 M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8',
     more: 'M5 11v2 M12 11v2 M19 11v2',
+    'chevron-down': 'm6 9 6 6 6-6',
+    'chevron-up': 'm6 15 6-6 6 6',
   };
   return (
     <svg

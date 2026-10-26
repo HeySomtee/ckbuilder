@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { ccc } from '@ckb-ccc/core';
+import { FiveFunding } from './modules/five/funding';
 import {
   affordableSquad,
   allocate,
@@ -71,6 +73,117 @@ class MemoryStore implements FiveStorage {
   }
 }
 async function main() {
+  const metadataStore = new MemoryStore();
+  const metadataRound = newRound('metadata', 'admin', { ...terms, sponsorship: true }, now);
+  metadataRound.state = 'open';
+  metadataStore.rows.set(metadataRound.id, metadataRound);
+  const offlineClient = new ccc.ClientPublicTestnet({ url: 'http://127.0.0.1:1', fallbacks: [] });
+  const address = async (byte: string) =>
+    (
+      await ccc.Address.fromScript(
+        { codeHash: '0x' + '11'.repeat(32), hashType: 'type', args: '0x' + byte.repeat(20) },
+        offlineClient,
+      )
+    ).toString();
+  const funding = new FiveFunding(metadataStore, offlineClient, await address('22'));
+  const sponsorActor = { ...actor, wallet: await address('33') };
+  const contribution = {
+    sponsorId: 'profile',
+    amountShannons: '10000000000',
+    display: 'named',
+    name: 'Independent builder',
+    logo: '',
+    link: 'https://example.com',
+    introduction: 'A community project',
+    description: 'Tools for players and builders.',
+    custodyAccepted: true,
+  };
+  await funding.intent(sponsorActor, metadataRound.id, contribution);
+  await funding.intent(sponsorActor, metadataRound.id, contribution);
+  assert.equal(
+    (await metadataStore.load(metadataRound.id))!.sponsors.length,
+    1,
+    'Exact metadata retry is idempotent',
+  );
+  await assert.rejects(
+    funding.intent(sponsorActor, metadataRound.id, { ...contribution, description: 'Changed' }),
+    /different details/,
+  );
+  await assert.rejects(
+    funding.intent(sponsorActor, metadataRound.id, {
+      ...contribution,
+      sponsorId: 'too-long',
+      description: 'x'.repeat(241),
+    }),
+    /too long/,
+  );
+  await assert.rejects(
+    funding.intent(sponsorActor, metadataRound.id, {
+      ...contribution,
+      sponsorId: 'bad-copy',
+      description: 'line\nbreak',
+    }),
+    /Text/,
+  );
+  await metadataStore.change(metadataRound.id, (round) => {
+    round.sponsors[0].funding = 'confirmed';
+  });
+  let record = (await metadataStore.load(metadataRound.id))!;
+  assert.equal(
+    project(record, null, false, now).sponsors[0].description,
+    '',
+    'Unapproved description stays private',
+  );
+  assert.equal(
+    project(record, admin.id, true, now).moderation?.[0].description,
+    contribution.description,
+  );
+  await metadataStore.change(metadataRound.id, (round) => {
+    round.sponsors[0].moderation = 'approved';
+  });
+  record = (await metadataStore.load(metadataRound.id))!;
+  assert.equal(project(record, null, false, now).sponsors[0].description, contribution.description);
+  record.sponsors[0].display = 'anonymous';
+  assert.equal(
+    project(record, null, false, now).sponsors[0].introduction,
+    '',
+    'Anonymous profile fields never leak',
+  );
+  record.sponsors[0].display = 'named';
+  record.sponsors[0].moderation = 'hidden';
+  assert.equal(
+    project(record, null, false, now).sponsors[0].description,
+    '',
+    'Hidden descriptions never leak',
+  );
+  record.sponsors[0].moderation = 'approved';
+  delete record.sponsors[0].introduction;
+  delete record.sponsors[0].description;
+  assert.equal(
+    project(record, null, false, now).sponsors[0].description,
+    '',
+    'Legacy profiles remain readable',
+  );
+  record.sponsors[0].description = contribution.description;
+  record.sponsors[0].submittedSequence = 1;
+  record.sponsors[0].confirmedAt = new Date(now).toISOString();
+  record.terms.sponsorshipMode = 'auction';
+  assert.deepEqual(
+    project(record, null, false, now).sponsors,
+    [],
+    'Open bids do not expose branding',
+  );
+  record.auction = {
+    closedAt: new Date(now).toISOString(),
+    winnerWallet: 'another-wallet',
+    winnerSponsorIds: ['other'],
+    amountShannons: '20000000000',
+  };
+  assert.deepEqual(
+    project(record, null, false, now).sponsors,
+    [],
+    'Losing bids do not expose branding',
+  );
   assert.equal(affordableSquad(terms.players), true);
   assert.equal(affordableSquad(terms.players.map((p) => ({ ...p, teamId: 'same' }))), false);
   assert.equal(affordableSquad(terms.players.map((p) => ({ ...p, cost: 81 }))), false);

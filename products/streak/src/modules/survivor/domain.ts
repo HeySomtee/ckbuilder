@@ -12,6 +12,7 @@ export class SurvivorError extends Error {
 export type Team = { id: string; name: string; code: string; logo?: string };
 export type Fixture = { id: string; kickoff: string; home: Team; away: Team };
 export type Slate = {
+  testingPolicy?: 'admin-controlled-v1';
   key: string;
   label: string;
   lockAt: string;
@@ -50,6 +51,8 @@ export type Entry = {
   missedRound?: number;
 };
 export type Round = Slate & {
+  testClosedAt?: string;
+  testResolvedAt?: string;
   state: 'scheduled' | 'locked' | 'final';
   results: Record<string, Result>;
   observed: Record<string, string>;
@@ -79,6 +82,18 @@ export type Competition = {
   audit: { at: string; action: string; round?: number }[];
 };
 export const stamp = (time: number) => new Date(time).toISOString();
+export const lockTime = (round: Round) =>
+  round.testingPolicy === 'admin-controlled-v1' && round.testClosedAt
+    ? Math.min(Date.parse(round.lockAt), Date.parse(round.testClosedAt))
+    : Date.parse(round.lockAt);
+export const resolveTime = (round: Round) =>
+  round.testingPolicy === 'admin-controlled-v1' && round.testResolvedAt
+    ? Math.min(Date.parse(round.resolveAt), Date.parse(round.testResolvedAt))
+    : Date.parse(round.resolveAt);
+const kickoffTime = (round: Round, fixture: Fixture) =>
+  round.testingPolicy === 'admin-controlled-v1' && round.testClosedAt
+    ? Math.min(Date.parse(fixture.kickoff), Date.parse(round.testClosedAt))
+    : Date.parse(fixture.kickoff);
 const fail = (message: string): never => {
   throw new SurvivorError(message);
 };
@@ -197,7 +212,7 @@ export function join(
   now: number,
 ) {
   if (c.entries.some((e) => e.accountId === accountId)) return;
-  if (c.state !== 'open' || now >= Date.parse(c.rounds[0].lockAt))
+  if (c.state !== 'open' || now >= lockTime(c.rounds[0]))
     throw new SurvivorError('Entries have closed.', 409);
   if (termsHash !== c.termsHash)
     throw new SurvivorError('The terms changed. Review this competition again.', 409);
@@ -228,7 +243,7 @@ export function savePick(
     roundIndex !== c.currentRound ||
     entrant.status !== 'active' ||
     round.state !== 'scheduled' ||
-    now >= Date.parse(round.lockAt)
+    now >= lockTime(round)
   )
     throw new SurvivorError('This round is locked or your run has ended.', 409);
   if (entrant.used.includes(teamId))
@@ -264,12 +279,12 @@ export function observe(
         // A gap can end after the cutoff while concealing an earlier withdrawal.
         if (
           observation.historyGap &&
-          cursor < Math.min(Date.parse(observation.observedAt), Date.parse(round.resolveAt))
+          cursor < Math.min(Date.parse(observation.observedAt), resolveTime(round))
         ) {
           if (!round.voidFixtures.includes(fixture.id)) round.voidFixtures.push(fixture.id);
           delete round.results[fixture.id];
         }
-        if (Date.parse(observation.observedAt) > Date.parse(round.resolveAt)) continue;
+        if (Date.parse(observation.observedAt) > resolveTime(round)) continue;
         if (
           observation.kickoff !== fixture.kickoff ||
           observation.homeTeamId !== fixture.home.id ||
@@ -281,7 +296,7 @@ export function observe(
         round.observed[fixture.id] = observation.observedAt;
         if (
           observation.result &&
-          Date.parse(observation.result.confirmedAt) >= Date.parse(fixture.kickoff) &&
+          Date.parse(observation.result.confirmedAt) >= kickoffTime(round, fixture) &&
           !round.voidFixtures.includes(fixture.id)
         )
           round.results[fixture.id] = observation.result;
@@ -322,7 +337,7 @@ export function advance(c: Competition, results: Record<string, Result>, now: nu
       return cancel(c, now, 'The opening slate no longer offers every entrant a legal choice.');
     return complete(c, now, 'No legal next round for every survivor.');
   }
-  if (now < Date.parse(round.lockAt)) return;
+  if (now < lockTime(round)) return;
   if (round.state === 'scheduled') {
     if (c.currentRound === 0 && c.entries.length < 2)
       return cancel(c, now, 'Fewer than two entrants at the opening deadline.');
@@ -344,15 +359,15 @@ export function advance(c: Competition, results: Record<string, Result>, now: nu
     if (
       !result ||
       !Number.isFinite(Date.parse(result.confirmedAt)) ||
-      Date.parse(result.confirmedAt) > Math.min(now, Date.parse(round.resolveAt)) ||
-      Date.parse(result.confirmedAt) < Date.parse(fixture.kickoff)
+      Date.parse(result.confirmedAt) > Math.min(now, resolveTime(round)) ||
+      Date.parse(result.confirmedAt) < kickoffTime(round, fixture)
     )
       continue;
     const previous = round.results[fixture.id];
     if (!previous || Date.parse(result.confirmedAt) >= Date.parse(previous.confirmedAt))
       round.results[fixture.id] = result;
   }
-  if (now < Date.parse(round.resolveAt)) return;
+  if (now < resolveTime(round)) return;
   const active = c.entries.filter((e) => e.status === 'active');
   let advancing = 0;
   for (const entry of active) {
@@ -399,7 +414,7 @@ export function advance(c: Competition, results: Record<string, Result>, now: nu
   )
     return complete(c, now, 'No legal next round for every survivor.');
   // A delayed worker must not eliminate everyone for a round that never opened.
-  if (now >= Date.parse(next.lockAt))
+  if (now >= lockTime(next))
     return complete(
       c,
       now,
@@ -420,7 +435,9 @@ export function project(c: Competition, accountId: string | null, now: number) {
     prizeStatus: 'announced' as const,
     rounds: c.rounds.map((r) => ({
       ...r,
-      state: r.state === 'scheduled' && now >= Date.parse(r.lockAt) ? ('locked' as const) : r.state,
+      lockAt: stamp(lockTime(r)),
+      resolveAt: stamp(resolveTime(r)),
+      state: r.state === 'scheduled' && now >= lockTime(r) ? ('locked' as const) : r.state,
     })),
     entries: c.entries.map((e) => ({
       id: e.publicId,
@@ -430,7 +447,7 @@ export function project(c: Competition, accountId: string | null, now: number) {
       missedRound: e.missedRound,
       picks: Object.fromEntries(
         Object.entries(e.picks).filter(
-          ([index]) => e === own || now >= Date.parse(c.rounds[Number(index)].lockAt),
+          ([index]) => e === own || now >= lockTime(c.rounds[Number(index)]),
         ),
       ),
     })),

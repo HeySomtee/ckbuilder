@@ -319,6 +319,8 @@ async function adapter() {
     event: 1,
     team_h: 1,
     team_a: 2,
+    team_h_difficulty: 2,
+    team_a_difficulty: 4,
     started: false,
     kickoff_time: new Date(start + 26 * hour).toISOString(),
     finished: false,
@@ -366,6 +368,22 @@ async function adapter() {
   assert.equal(scout.players[0].form, -0.5);
   assert.equal(scout.players[0].transfersIn, 1234);
   assert.equal(scout.players[0].chance, 75);
+  const [schedule, sameSchedule] = await Promise.all([feed.schedule(), feed.schedule()]);
+  assert.deepEqual(schedule.teams, sameSchedule.teams);
+  assert.equal(
+    calls.filter((x) => x.endsWith('/fixtures/')).length,
+    1,
+    'One shared fixture fetch, not one per player',
+  );
+  assert.deepEqual(schedule.teams['1'][0], {
+    event: 1,
+    opponent: 'TWO',
+    home: true,
+    kickoff: fixture.kickoff_time,
+    difficulty: 2,
+  });
+  assert.equal(schedule.teams['2'][0].difficulty, 4);
+  assert.equal(schedule.teams['2'][0].home, false);
   const profile = await feed.profile(1);
   assert.equal(profile.history[0].fivePoints, 7);
   assert.equal(profile.history[0].fplPoints, 10);

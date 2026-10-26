@@ -112,6 +112,11 @@ async function browserChecks() {
     isolated: true,
   });
   run(
+    'Actual game pages with controlled dummy data',
+    [join(product, 'scripts/games-test-browser.cjs')],
+    { cwd: product, isolated: true },
+  );
+  run(
     'Survivor admin and free-entry browser regression',
     [join(product, 'scripts/survivor-browser.cjs')],
     {
@@ -269,6 +274,14 @@ try {
       run(
         'Isolated Survivor PostgreSQL admission regression',
         [join(product, 'scripts/survivor-postgres.cjs')],
+        {
+          cwd: product,
+          isolated: true,
+        },
+      );
+      run(
+        'In-app game test controls and isolated lifecycle',
+        [join(product, 'scripts/games-test-postgres.cjs')],
         {
           cwd: product,
           isolated: true,

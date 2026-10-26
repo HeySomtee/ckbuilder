@@ -1,6 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { GameTestPanel } from '../games-test/panel';
+import { gamesDataMode } from '../../lib/games-data';
+import { useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { FormEvent, ReactNode } from 'react';
+import type { FormEvent, ReactNode, RefObject } from 'react';
 import type { Account } from '../account/api';
 import { actFive, loadFive, money, shannons } from './api';
 import type { FiveData, FiveRound, Player } from './api';
@@ -10,8 +12,17 @@ import { useNow } from '../../lib/use-now';
 import { Sponsorship } from './sponsorship';
 import { SponsorAuction } from './auction';
 import { RewardsPanel } from './rewards-panel';
-import { loadScouting } from './scouting-api';
+import { loadScouting, loadSchedule } from './scouting-api';
+import { FixtureRun } from '../../components/fixture-run';
 import { PlayerProfile, compactNumber } from './player-profile';
+import {
+  BackToSquad,
+  SponsorCredit,
+  SponsorShowcase,
+  WorkspaceTabs,
+  type WorkspaceTab,
+} from './workspace';
+import './workspace.css';
 const date = (s: string) =>
   new Date(s).toLocaleString(undefined, {
     day: 'numeric',
@@ -126,12 +137,14 @@ function Builder({
   authenticated,
   scoutingAvailable,
   now,
+  squadControl,
 }: {
+  squadControl: RefObject<(() => void) | null>;
   now: number;
   scoutingAvailable: boolean;
   round: FiveRound;
   pending: boolean;
-  onSave: (players: string[], captain: string) => void;
+  onSave: (players: string[], captain: string) => Promise<void>;
   onSignIn: () => void;
   authenticated: boolean;
 }) {
@@ -142,15 +155,34 @@ function Builder({
     [search, setSearch] = useState(''),
     [sort, setSort] = useState('form');
   const [profile, setProfile] = useState<Player | null>(null),
-    [mobilePanel, setMobilePanel] = useState('squad');
+    [mobilePanel, setMobilePanel] = useState('squad'),
+    [captainPicker, setCaptainPicker] = useState(false);
+  const squadButton = useRef<HTMLButtonElement>(null);
+  const backToSquad = () => {
+    setProfile(null);
+    setCaptainPicker(false);
+    setMobilePanel('squad');
+    requestAnimationFrame(() => {
+      squadButton.current?.focus();
+      squadButton.current?.scrollIntoView({ block: 'nearest' });
+    });
+  };
+  useImperativeHandle(squadControl, () => backToSquad);
   const scout = useQuery({
-    queryKey: ['five-scouting'],
+    queryKey: ['five-scouting', gamesDataMode],
     queryFn: ({ signal }) => loadScouting(signal),
     enabled: scoutingAvailable,
     staleTime: 60000,
     retry: 1,
   });
   const stats = new Map(scout.data?.players.map((p) => [p.id, p]));
+  const schedule = useQuery({
+    queryKey: ['five-fixture-outlook', gamesDataMode],
+    queryFn: ({ signal }) => loadSchedule(signal),
+    enabled: scoutingAvailable,
+    staleTime: 60000,
+    retry: false,
+  });
   const [error, setError] = useState(''),
     [review, setReview] = useState(false),
     [limit, setLimit] = useState(40);
@@ -160,6 +192,19 @@ function Builder({
   const cost = selected.reduce((n, p) => n + p.cost, 0),
     locked = round.state !== 'open' || now >= Date.parse(round.terms.lockAt);
   const complete = selected.length === 5 && ids.includes(captain) && cost <= 400;
+  const unchanged =
+    !!own &&
+    captain === own.captain &&
+    ids.length === own.players?.length &&
+    ids.every((id) => own.players?.includes(id));
+  const missing =
+    selected.length < 5
+      ? `Pick ${5 - selected.length} more player${selected.length === 4 ? '' : 's'} to complete your five.`
+      : !ids.includes(captain)
+        ? 'Choose a captain before saving your five.'
+        : cost > 400
+          ? 'Your squad exceeds the 40-credit budget.'
+          : '';
   const choose = (p: Player) => {
     if (locked || pending) return;
     setError('');
@@ -210,7 +255,11 @@ function Builder({
     <div className="five-builder" data-mobile-panel={mobilePanel}>
       <div className="five-builder-toolbar">
         <nav aria-label="Team builder view">
-          <button aria-pressed={mobilePanel === 'squad'} onClick={() => setMobilePanel('squad')}>
+          <button
+            ref={squadButton}
+            aria-pressed={mobilePanel === 'squad'}
+            onClick={() => setMobilePanel('squad')}
+          >
             My five <b>{ids.length}/5</b>
           </button>
           <button
@@ -251,7 +300,7 @@ function Builder({
               const p = selected.find((p) => p.position === pos && !used.has(p.id));
               if (p) used.add(p.id);
               return (
-                <div className={`five-slot slot-${i}`} key={i}>
+                <div className={`five-slot slot-${i}`} data-position={pos} key={i}>
                   {p ? (
                     <>
                       <button
@@ -303,6 +352,26 @@ function Builder({
               );
             })}
           </div>
+          {!locked && (
+            <div className="five-captain-guide">
+              <span className="five-captain-token">C</span>
+              <div>
+                <strong>
+                  {ids.includes(captain)
+                    ? `${selected.find((p) => p.id === captain)?.name} wears the armband`
+                    : 'One more call: choose your captain'}
+                </strong>
+                <p>Tap C beside a shirt. Double points, including deductions.</p>
+              </div>
+              <button
+                type="button"
+                disabled={!selected.length || pending}
+                onClick={() => setCaptainPicker(true)}
+              >
+                {ids.includes(captain) ? 'Change' : 'Choose'}
+              </button>
+            </div>
+          )}
         </div>
         <div className="glass five-budget">
           <div>
@@ -313,7 +382,8 @@ function Builder({
           </div>
           <button
             className="btn primary"
-            disabled={pending || locked || !complete}
+            disabled={pending || locked || !complete || unchanged}
+            aria-describedby="five-save-hint"
             onClick={() => (authenticated ? setReview(true) : onSignIn())}
           >
             {pending ? (
@@ -324,19 +394,36 @@ function Builder({
             ) : locked ? (
               'Squad locked'
             ) : authenticated ? (
-              'Review your five'
+              own ? (
+                unchanged ? (
+                  'Changes saved'
+                ) : (
+                  'Save changes'
+                )
+              ) : (
+                'Review your five'
+              )
             ) : (
               'Sign in to save'
             )}
           </button>
-          <small>
-            {own
-              ? 'Your submitted squad is saved. Edits need saving again.'
-              : 'Free entry. No wallet payment.'}
-          </small>
+          <p id="five-save-hint" role="status">
+            {locked
+              ? 'Picks are locked for this gameweek.'
+              : missing ||
+                (unchanged
+                  ? 'All changes saved.'
+                  : own
+                    ? 'Your previous team stays entered until you save these changes.'
+                    : 'Five picked. Captain chosen. You are ready.')}
+          </p>
+          <small>Free entry. No wallet payment.</small>
         </div>
         {review && (
-          <Modal title="Your five, ready to go." onClose={() => setReview(false)}>
+          <Modal
+            title={own ? 'Save your changes?' : 'Your five, ready to go.'}
+            onClose={() => setReview(false)}
+          >
             {selected.map((p) => (
               <div className="five-summary-row" key={p.id}>
                 <span>
@@ -353,17 +440,61 @@ function Builder({
             <button
               className="btn primary"
               disabled={pending}
-              onClick={() => {
-                onSave(ids, captain);
-                setReview(false);
+              onClick={async () => {
+                setError('');
+                try {
+                  await onSave(ids, captain);
+                  setReview(false);
+                } catch (failure) {
+                  setError(
+                    failure instanceof Error
+                      ? failure.message
+                      : 'Unable to save. Your draft is retained.',
+                  );
+                }
               }}
             >
-              Save my five
+              {pending ? (
+                <>
+                  <span className="five-spinner" />
+                  Saving your five
+                </>
+              ) : own ? (
+                'Save changes'
+              ) : (
+                'Save my five'
+              )}
             </button>
+            {error && <p role="alert">{error}</p>}
+          </Modal>
+        )}
+        {captainPicker && (
+          <Modal title="Who gets the armband?" onClose={() => setCaptainPicker(false)}>
+            <p>Choose one of your five. Your captain scores double, including deductions.</p>
+            {selected.map((player) => (
+              <button
+                className="five-captain-option"
+                key={player.id}
+                disabled={locked || pending}
+                aria-pressed={captain === player.id}
+                onClick={() => {
+                  setCaptain(player.id);
+                  setCaptainPicker(false);
+                }}
+              >
+                <span>
+                  {player.name}
+                  <small>{player.position}</small>
+                </span>
+                <strong>{captain === player.id ? 'Captain' : 'Make captain'}</strong>
+              </button>
+            ))}
+            <BackToSquad onClick={backToSquad} />
           </Modal>
         )}
       </section>
       <section className="glass five-scout">
+        <BackToSquad onClick={backToSquad} />
         <header>
           <p className="eyebrow">THE SCOUTING ROOM</p>
           <h2>Player market</h2>
@@ -423,6 +554,12 @@ function Builder({
           <span>OUT</span>
           <span />
         </div>
+        {schedule.isError && (
+          <p className="five-scout-status" role="status">
+            Fixture outlook is delayed.{' '}
+            <button onClick={() => void schedule.refetch()}>Retry fixtures</button>
+          </p>
+        )}
         <div className="five-player-list">
           {shown.slice(0, limit).map((p) => {
             const stat = stats.get(p.id);
@@ -447,6 +584,15 @@ function Builder({
                     <small>
                       {stat?.teamCode ?? p.team} · {p.position}
                     </small>
+                    {schedule.isPending && scoutingAvailable ? (
+                      <span className="five-fixture-loading" aria-label="Loading next fixtures">
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                    ) : (
+                      <FixtureRun fixtures={schedule.data?.teams[p.teamId] ?? []} />
+                    )}
                   </span>
                 </button>
                 <b className="five-price" data-label="CR">
@@ -496,6 +642,7 @@ function Builder({
               setProfile(null);
             }}
           />
+          <BackToSquad onClick={backToSquad} />
         </Modal>
       )}
     </div>
@@ -702,6 +849,17 @@ export default function FivePage({
   onSignIn: () => void;
   signInPending: boolean;
 }) {
+  const [tab, setTab] = useState<WorkspaceTab>('team');
+  const squadControl = useRef<(() => void) | null>(null);
+  const [sponsorRound, setSponsorRound] = useState<FiveRound | null>(null);
+  const backToTeam = () => {
+    setTab('team');
+    squadControl.current?.();
+    requestAnimationFrame(() => {
+      document.getElementById('five-tab-team')?.focus();
+      document.getElementById('five-tab-team')?.scrollIntoView({ block: 'nearest' });
+    });
+  };
   const client = useQueryClient(),
     [selection, setSelection] = useState(''),
     [modal, setModal] = useState<
@@ -713,7 +871,7 @@ export default function FivePage({
     [scoreSource, setScoreSource] = useState(''),
     [complete, setComplete] = useState(false);
   const identity = account?.id ?? 'guest';
-  const key = ['private', 'five', identity, selection];
+  const key = ['private', 'five', identity, selection, gamesDataMode];
   const clock = useNow(true),
     live = useRef(true);
   useEffect(() => {
@@ -752,7 +910,14 @@ export default function FivePage({
       if (!live.current) return;
       client.setQueryData(v.key, data);
       if (selection === v.selection && identity === v.identity)
-        setMessage('Saved. Your gameweek is up to date.');
+        setMessage(v.body.action === 'enter' ? '' : 'Saved. Your gameweek is up to date.');
+      if (
+        v.body.action === 'testControl' &&
+        v.body.control === 'start' &&
+        selection === v.selection &&
+        identity === v.identity
+      )
+        setSelection(data.detail?.id ?? '');
       void client.invalidateQueries({ queryKey: ['private', 'five', v.identity] });
     },
     onError: (error, v) => {
@@ -762,6 +927,17 @@ export default function FivePage({
   });
   const data = query.data,
     r = data?.detail;
+  const activeSponsorRound = r?.id === sponsorRound?.id ? r : sponsorRound;
+  const openSponsorship = () => {
+    if (!account) {
+      onSignIn();
+      return;
+    }
+    if (r) {
+      setSponsorRound(r);
+      setModal('sponsor');
+    }
+  };
   const actionAsync = async (body: Record<string, unknown>) => {
     await mutation.mutateAsync({ body, key, identity, selection });
   };
@@ -794,11 +970,29 @@ export default function FivePage({
             Streak <em>Five.</em>
           </h1>
         </div>
+        {gamesDataMode === 'test' && <span className="five-test-indicator">Test playground</span>}
+      </header>
+      <WorkspaceTabs value={tab} onChange={setTab} />
+      <section
+        id="five-panel-more"
+        role="tabpanel"
+        aria-labelledby="five-tab-more"
+        hidden={tab !== 'more'}
+      >
+        <BackToSquad onClick={backToTeam} />{' '}
+        <GameTestPanel
+          admin={data?.admin === true}
+          game="five"
+          id={r?.id}
+          state={r?.state}
+          busy={mutation.isPending}
+          run={action}
+        />
         <div className="five-actions">
           <button className="btn" onClick={() => setModal('rules')}>
             How it works
           </button>
-          {data?.admin && (
+          {data?.admin && !data.testMode && (
             <button className="btn primary" onClick={() => setModal('admin')}>
               {data.automation?.enabled
                 ? 'Gameweek controls'
@@ -808,7 +1002,59 @@ export default function FivePage({
             </button>
           )}
         </div>
-      </header>
+        {data && r && (
+          <>
+            {' '}
+            {data.admin && !data.testMode && !data.automation?.enabled && (
+              <div className="five-admin-bar">
+                {r.state === 'draft' ? (
+                  <button
+                    className="btn primary"
+                    disabled={mutation.isPending}
+                    onClick={() => action({ action: 'publish', id: r.id, termsHash: r.termsHash })}
+                  >
+                    Publish gameweek
+                  </button>
+                ) : r.state !== 'final' && r.state !== 'cancelled' ? (
+                  <>
+                    <button
+                      className="btn"
+                      disabled={mutation.isPending || r.state === 'open' || !data.feedAvailable}
+                      onClick={() => action({ action: 'sync', id: r.id })}
+                    >
+                      Refresh player scores
+                    </button>
+                    <button
+                      className="btn"
+                      disabled={mutation.isPending || r.state === 'open'}
+                      onClick={() => setModal('scores')}
+                    >
+                      Import score revision
+                    </button>
+                    <button
+                      className="btn"
+                      disabled={mutation.isPending || r.state === 'open'}
+                      onClick={() => setModal('finalize')}
+                    >
+                      Finalize round
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  className="btn"
+                  disabled={mutation.isPending || r.state === 'final' || r.state === 'cancelled'}
+                  onClick={() => setModal('cancel')}
+                >
+                  Cancel gameweek
+                </button>
+                <small>
+                  Rules are fixed after publishing. Scores remain provisional until finalization.
+                </small>
+              </div>
+            )}
+          </>
+        )}
+      </section>
       {data?.automation?.enabled && data.automation.state === 'delayed' && (
         <div className="five-message" role="status">
           {data.automation.message}
@@ -886,197 +1132,185 @@ export default function FivePage({
                     : 'Squads locked'}
             </span>
           </div>
-          {r.auction ? (
-            <SponsorAuction
+          <section
+            id="five-panel-team"
+            role="tabpanel"
+            aria-labelledby="five-tab-team"
+            hidden={tab !== 'team'}
+          >
+            <SponsorCredit round={r} onOpen={() => setTab('sponsors')} />{' '}
+            <Builder
+              squadControl={squadControl}
+              now={serverNow}
+              scoutingAvailable={data.feedAvailable}
+              key={`${identity}:${r.id}`}
               round={r}
-              available={data.fundingAvailable}
-              onBid={() => (account ? setModal('sponsor') : onSignIn())}
+              pending={mutation.isPending}
+              authenticated={!!account}
+              onSignIn={onSignIn}
+              onSave={(players, captain) =>
+                actionAsync({ action: 'enter', id: r.id, players, captain, termsHash: r.termsHash })
+              }
             />
-          ) : (
-            <section className="five-prize glass">
-              <div>
-                <p className="eyebrow">
-                  {r.poolShannons === '0' ? 'PLAY FOR THE FOOTBALL' : 'COMMUNITY-FUNDED PRIZE POOL'}
-                </p>
-                <h2>{r.poolShannons === '0' ? 'Free to play' : `${money(r.poolShannons)} tCKB`}</h2>
+          </section>
+          <section
+            id="five-panel-standings"
+            role="tabpanel"
+            aria-labelledby="five-tab-standings"
+            hidden={tab !== 'standings'}
+          >
+            <BackToSquad onClick={backToTeam} />{' '}
+            <section className="glass five-standings">
+              <header>
+                <p className="eyebrow">THE WEEKEND TABLE</p>
+                <h2>{r.state === 'final' ? 'Final standings' : 'Leaderboard'}</h2>
+                <small>
+                  {r.scoreRevision
+                    ? `Score revision ${r.scoreRevision} · ${r.scoresAt ? date(r.scoresAt) : ''}`
+                    : 'Scores appear after the deadline.'}
+                </small>
+              </header>
+              {r.standings.length ? (
+                r.standings.map((e, i) => (
+                  <details className="five-standing-detail" key={e.id}>
+                    <summary className={`five-standing ${e.id === r.ownId ? 'own' : ''}`}>
+                      <span>{i + 1}</span>
+                      <strong>
+                        {e.name}
+                        {e.id === r.ownId ? ' · You' : ''}
+                      </strong>
+                      <span>{e.pending ? 'Pending' : `${e.points} pts`}</span>
+                      {r.state === 'final' && BigInt(r.rewards[e.id] ?? '0') > 0n && (
+                        <small>{money(r.rewards[e.id])} tCKB allocated</small>
+                      )}
+                    </summary>
+                    <div className="five-score-breakdown">
+                      {r.entries
+                        .find((entry) => entry.id === e.id)
+                        ?.players?.map((id) => {
+                          const player = r.terms.players.find((p) => p.id === id),
+                            score = r.scores[id];
+                          const captain =
+                            r.entries.find((entry) => entry.id === e.id)?.captain === id;
+                          return (
+                            <div key={id}>
+                              <strong>
+                                {player?.name ?? 'Player'}
+                                {captain ? ' · Captain ×2' : ''}
+                              </strong>
+                              <span>
+                                {score
+                                  ? `${score.points * (captain ? 2 : 1)} pts`
+                                  : 'Awaiting confirmed statistics'}
+                              </span>
+                              {score && (
+                                <small>
+                                  {score.lines
+                                    .map((l) => `${l.label} ${l.points > 0 ? '+' : ''}${l.points}`)
+                                    .join(' · ')}
+                                </small>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </details>
+                ))
+              ) : (
                 <p>
-                  {r.poolShannons === '0'
-                    ? 'No prize pool yet. Sponsor the gameweek to add one.'
-                    : `Top ${r.terms.qualifyingBps / 100}% share the pool in proportion to their final points. Cutoff ties qualify.`}
+                  {r.entries.length
+                    ? 'Squads and standings stay private until the gameweek locks.'
+                    : 'Be the first to put your football instinct on the team sheet.'}
                 </p>
-              </div>
-              {r.terms.sponsorship && (
-                <button
-                  className="btn"
-                  onClick={() => (account ? setModal('sponsor') : onSignIn())}
-                  disabled={!data.fundingAvailable || r.state !== 'open'}
-                >
-                  Sponsor this gameweek
-                </button>
               )}
-              <small>Testnet · No cash value</small>
             </section>
-          )}
-          {r.sponsors.length > 0 && (
-            <div className="five-sponsors">
-              {r.sponsors.map((s) => (
-                <div key={s.id}>
-                  {s.logo.startsWith('https://') && (
-                    <img src={s.logo} alt="" referrerPolicy="no-referrer" loading="lazy" />
-                  )}
-                  <span>{s.name}</span>
-                  {s.link.startsWith('https://') && (
-                    <a href={s.link} target="_blank" rel="noopener noreferrer sponsored">
-                      Explore sponsor ↗
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          {data.admin && !data.automation?.enabled && (
-            <div className="five-admin-bar">
-              {r.state === 'draft' ? (
-                <button
-                  className="btn primary"
-                  disabled={mutation.isPending}
-                  onClick={() => action({ action: 'publish', id: r.id, termsHash: r.termsHash })}
-                >
-                  Publish gameweek
-                </button>
-              ) : r.state !== 'final' && r.state !== 'cancelled' ? (
-                <>
-                  <button
-                    className="btn"
-                    disabled={mutation.isPending || r.state === 'open' || !data.feedAvailable}
-                    onClick={() => action({ action: 'sync', id: r.id })}
-                  >
-                    Refresh player scores
-                  </button>
-                  <button
-                    className="btn"
-                    disabled={mutation.isPending || r.state === 'open'}
-                    onClick={() => setModal('scores')}
-                  >
-                    Import score revision
-                  </button>
-                  <button
-                    className="btn"
-                    disabled={mutation.isPending || r.state === 'open'}
-                    onClick={() => setModal('finalize')}
-                  >
-                    Finalize round
-                  </button>
-                </>
-              ) : null}
-              <button
-                className="btn"
-                disabled={mutation.isPending || r.state === 'final' || r.state === 'cancelled'}
-                onClick={() => setModal('cancel')}
-              >
-                Cancel gameweek
-              </button>
-              <small>
-                Rules are fixed after publishing. Scores remain provisional until finalization.
-              </small>
-            </div>
-          )}
-          <RewardsPanel
-            data={data}
-            pending={mutation.isPending}
-            action={action}
-            onContinue={() => setModal('sponsor')}
-          />
-          <Builder
-            now={serverNow}
-            scoutingAvailable={data.feedAvailable}
-            key={`${identity}:${r.id}`}
-            round={r}
-            pending={mutation.isPending}
-            authenticated={!!account}
-            onSignIn={onSignIn}
-            onSave={(players, captain) =>
-              action({ action: 'enter', id: r.id, players, captain, termsHash: r.termsHash })
-            }
-          />
-          <section className="glass five-standings">
-            <header>
-              <p className="eyebrow">THE WEEKEND TABLE</p>
-              <h2>{r.state === 'final' ? 'Final standings' : 'Leaderboard'}</h2>
-              <small>
-                {r.scoreRevision
-                  ? `Score revision ${r.scoreRevision} · ${r.scoresAt ? date(r.scoresAt) : ''}`
-                  : 'Scores appear after the deadline.'}
-              </small>
-            </header>
-            {r.standings.length ? (
-              r.standings.map((e, i) => (
-                <details className="five-standing-detail" key={e.id}>
-                  <summary className={`five-standing ${e.id === r.ownId ? 'own' : ''}`}>
-                    <span>{i + 1}</span>
-                    <strong>
-                      {e.name}
-                      {e.id === r.ownId ? ' · You' : ''}
-                    </strong>
-                    <span>{e.pending ? 'Pending' : `${e.points} pts`}</span>
-                    {r.state === 'final' && BigInt(r.rewards[e.id] ?? '0') > 0n && (
-                      <small>{money(r.rewards[e.id])} tCKB allocated</small>
-                    )}
-                  </summary>
-                  <div className="five-score-breakdown">
-                    {r.entries
-                      .find((entry) => entry.id === e.id)
-                      ?.players?.map((id) => {
-                        const player = r.terms.players.find((p) => p.id === id),
-                          score = r.scores[id];
-                        const captain =
-                          r.entries.find((entry) => entry.id === e.id)?.captain === id;
-                        return (
-                          <div key={id}>
-                            <strong>
-                              {player?.name ?? 'Player'}
-                              {captain ? ' · Captain ×2' : ''}
-                            </strong>
-                            <span>
-                              {score
-                                ? `${score.points * (captain ? 2 : 1)} pts`
-                                : 'Awaiting confirmed statistics'}
-                            </span>
-                            {score && (
-                              <small>
-                                {score.lines
-                                  .map((l) => `${l.label} ${l.points > 0 ? '+' : ''}${l.points}`)
-                                  .join(' · ')}
-                              </small>
-                            )}
-                          </div>
-                        );
-                      })}
-                  </div>
-                </details>
-              ))
+          </section>
+          <section
+            id="five-panel-sponsors"
+            role="tabpanel"
+            aria-labelledby="five-tab-sponsors"
+            hidden={tab !== 'sponsors'}
+          >
+            <BackToSquad onClick={backToTeam} />{' '}
+            {r.auction ? (
+              <SponsorAuction round={r} available={data.fundingAvailable} onBid={openSponsorship} />
             ) : (
-              <p>
-                {r.entries.length
-                  ? 'Squads and standings stay private until the gameweek locks.'
-                  : 'Be the first to put your football instinct on the team sheet.'}
+              <section className="five-prize glass">
+                <div>
+                  <p className="eyebrow">
+                    {r.poolShannons === '0'
+                      ? 'PLAY FOR THE FOOTBALL'
+                      : 'COMMUNITY-FUNDED PRIZE POOL'}
+                  </p>
+                  <h2>
+                    {r.poolShannons === '0' ? 'Free to play' : `${money(r.poolShannons)} tCKB`}
+                  </h2>
+                  <p>
+                    {r.poolShannons === '0'
+                      ? 'No prize pool yet. Sponsor the gameweek to add one.'
+                      : `Top ${r.terms.qualifyingBps / 100}% share the pool in proportion to their final points. Cutoff ties qualify.`}
+                  </p>
+                </div>
+                {r.terms.sponsorship && (
+                  <button
+                    className="btn"
+                    onClick={openSponsorship}
+                    disabled={!data.fundingAvailable || r.state !== 'open'}
+                  >
+                    Sponsor this gameweek
+                  </button>
+                )}
+                <small>Testnet · No cash value</small>
+              </section>
+            )}
+            <SponsorShowcase round={r} />
+          </section>
+          <section
+            id="five-panel-activity"
+            role="tabpanel"
+            aria-labelledby="five-tab-activity"
+            hidden={tab !== 'activity'}
+          >
+            <BackToSquad onClick={backToTeam} />{' '}
+            <RewardsPanel
+              data={data}
+              pending={mutation.isPending}
+              action={action}
+              onContinue={openSponsorship}
+            />
+            {!r.ownSponsorships.length && !data.rewardsAccount && (
+              <p className="five-message">
+                Your sponsor bids, confirmations and rewards will appear here.
               </p>
             )}
           </section>
         </>
       )}
-      {modal === 'sponsor' && r && account && (
+      {modal === 'sponsor' && activeSponsorRound && account && (
         <Modal
-          title={r.auction ? 'Bid for the sponsor spot' : 'Sponsor this gameweek'}
+          title={activeSponsorRound.auction ? 'Bid for the sponsor spot' : 'Sponsor this gameweek'}
           onClose={() => setModal(null)}
         >
           <Sponsorship
-            round={r}
+            key={`${identity}:${activeSponsorRound.id}`}
+            round={activeSponsorRound}
             account={account}
             onData={(data) => {
               if (data.viewerId !== account.id)
                 throw Error('Your sign-in changed. Refresh before continuing.');
-              if (live.current) client.setQueryData(key, data);
+              if (!live.current) return;
+              if (data.detail)
+                client.setQueryData(
+                  ['private', 'five', account.id, data.detail.id, gamesDataMode],
+                  data,
+                );
+              void client.invalidateQueries({ queryKey: ['private', 'five', account.id] });
+            }}
+          />
+          <BackToSquad
+            onClick={() => {
+              setModal(null);
+              backToTeam();
             }}
           />
         </Modal>

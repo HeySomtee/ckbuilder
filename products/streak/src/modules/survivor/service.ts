@@ -114,7 +114,13 @@ export class SurvivorService {
       string,
       FixtureObservation | FixtureObservation[]
     > = () => ({}),
+    private readonly testing = false,
   ) {}
+  private slates(now: number) {
+    return eligibleSlates(this.fixtures(), now).map((slate) =>
+      this.testing ? { ...slate, testingPolicy: 'admin-controlled-v1' as const } : slate,
+    );
+  }
   private observationSnapshot(): Record<string, Observation[]> {
     return Object.fromEntries(
       Object.entries(this.observations()).map(([id, value]) => [
@@ -136,14 +142,17 @@ export class SurvivorService {
   async read(actor: Actor, selection?: string) {
     const now = Date.now(),
       all = await this.storage.list();
-    const competitions = all.filter((c) => c.state !== 'draft' || this.isAdmin(actor));
+    const priority = { open: 0, running: 1, draft: 2, complete: 3, cancelled: 4 };
+    const competitions = all
+      .filter((c) => c.state !== 'draft' || this.isAdmin(actor))
+      .sort((a, b) => priority[a.state] - priority[b.state]);
     const selected = selection ? competitions.find((c) => c.id === selection) : competitions[0];
     const full = selected ? await this.storage.load(selected.id) : null;
     return {
       now: new Date(now).toISOString(),
       viewerId: actor?.id ?? null,
       admin: this.isAdmin(actor),
-      slates: this.isAdmin(actor) ? eligibleSlates(this.fixtures(), now) : [],
+      slates: this.isAdmin(actor) ? this.slates(now) : [],
       competitions: competitions.map((c) => ({
         id: c.id,
         state: c.state,
@@ -170,7 +179,7 @@ export class SurvivorService {
       const keys = body.roundKeys as string[];
       if (new Set(keys).size !== keys.length)
         throw new SurvivorError('Each round can be selected once.');
-      const available = eligibleSlates(this.fixtures(), Date.now());
+      const available = this.slates(Date.now());
       const slates = keys.map((key) => {
         const slate = available.find((s) => s.key === key);
         if (!slate)
@@ -182,7 +191,7 @@ export class SurvivorService {
       });
       slates.sort((a, b) => a.lockAt.localeCompare(b.lockAt));
       const revalidate = (now: number) => {
-        const fresh = eligibleSlates(this.fixtures(), now);
+        const fresh = this.slates(now);
         if (
           slates.some(
             (s) => JSON.stringify(fresh.find((f) => f.key === s.key)) !== JSON.stringify(s),

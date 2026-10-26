@@ -148,6 +148,8 @@ export function RewardsPanel({
               <span>
                 {s.name}
                 <small>{s.moderation}</small>
+                {s.introduction && <small>{s.introduction}</small>}
+                {s.description && <p>{s.description}</p>}
                 {s.logo && (
                   <a href={s.logo} target="_blank" rel="noopener noreferrer">
                     Review logo ↗

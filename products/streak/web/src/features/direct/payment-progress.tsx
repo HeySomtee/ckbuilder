@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Icon } from '../../components/icon';
 import './payment-progress.css';
 
 export type PaymentStage =
@@ -95,7 +96,7 @@ export function PaymentProgress({
           </small>
         </span>
         <span className="payment-progress-chevron" aria-hidden="true">
-          {expanded ? '⌄' : '⌃'}
+          <Icon name={expanded ? 'chevron-down' : 'chevron-up'} />
         </span>
       </button>
     </aside>,

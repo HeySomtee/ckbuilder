@@ -1,7 +1,9 @@
+import { gamesDataMode } from '../../lib/games-data';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { loadPlayer } from './scouting-api';
 import type { Player } from './api';
+import { FixtureRun } from '../../components/fixture-run';
 export const compactNumber = (n: number) =>
   Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 export function PlayerProfile({
@@ -17,7 +19,7 @@ export function PlayerProfile({
 }) {
   const [tab, setTab] = useState('history');
   const query = useQuery({
-    queryKey: ['five-player-profile', player.id],
+    queryKey: ['five-player-profile', player.id, gamesDataMode],
     queryFn: ({ signal }) => loadPlayer(player.id, signal),
     staleTime: 60000,
     retry: 1,
@@ -49,6 +51,7 @@ export function PlayerProfile({
       )}
       {p && (
         <>
+          <FixtureRun fixtures={d.fixtures.slice(0, 3)} />
           {p.news && (
             <p className="five-player-news">
               {p.news}

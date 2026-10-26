@@ -137,6 +137,21 @@ async function main() {
             catalogue: async () => terms,
             results: async () => ({ stats: {}, source: 'Synthetic', complete: false }),
             scouting: async () => ({ observedAt: new Date().toISOString(), players: scouts }),
+            schedule: async () => ({
+              observedAt: new Date().toISOString(),
+              teams: Object.fromEntries(
+                players.map((p) => [
+                  p.teamId,
+                  [1, 2, 3].map((n) => ({
+                    event: 8 + n,
+                    opponent: ['ARS', 'CHE', 'LIV'][n - 1],
+                    home: n % 2 === 0,
+                    kickoff: new Date(now + n * 7 * 86400000).toISOString(),
+                    difficulty: n + 1,
+                  })),
+                ]),
+              ),
+            }),
             profile: async (id) => ({
               observedAt: new Date().toISOString(),
               player: scouts.find((p) => p.id === String(id)),
@@ -169,6 +184,8 @@ async function main() {
           assert.equal(store.rows.size, 1, 'scheduler published the synthetic week');
           let failProfile = true,
             failScout = true,
+            failSchedule = true,
+            scheduleCalls = 0,
             profileCalls = 0;
           const errors = [],
             external = [];
@@ -191,6 +208,12 @@ async function main() {
               });
             if (url.pathname === '/api/five') {
               try {
+                if (url.searchParams.has('schedule')) {
+                  scheduleCalls++;
+                  return failSchedule
+                    ? json({ error: 'Synthetic fixture interruption' }, 503)
+                    : json(await service.schedule());
+                }
                 if (url.searchParams.has('scout')) {
                   if (failScout) return json({ error: 'Synthetic scouting interruption' }, 503);
                   return json(await service.scouting());
@@ -253,6 +276,23 @@ async function main() {
           );
           await page.getByLabel('Sort players').selectOption('form');
           const readableName = page.locator('.five-player-info strong').first();
+          await page.getByRole('button', { name: 'Retry fixtures', exact: true }).waitFor();
+          failSchedule = false;
+          await page.getByRole('button', { name: 'Retry fixtures', exact: true }).click();
+          await page
+            .locator('.five-player-info')
+            .first()
+            .locator('.fixture-chip b', { hasText: 'ARS' })
+            .waitFor();
+          assert.equal(
+            await page.locator('.five-player-info').first().locator('.fixture-chip').count(),
+            3,
+          );
+          assert.equal(
+            scheduleCalls,
+            2,
+            'One failed request and one shared retry serve every player',
+          );
           assert.ok(
             await readableName.evaluate((el) => el.clientWidth >= 60),
             'player names have readable width',
@@ -296,13 +336,9 @@ async function main() {
           await page.getByRole('button', { name: 'Captain Creator', exact: true }).click();
           await page.getByRole('button', { name: 'Review your five', exact: true }).click();
           await dialog.getByRole('button', { name: 'Save my five', exact: true }).click();
-          await page
-            .getByText('Your submitted squad is saved. Edits need saving again.', { exact: true })
-            .waitFor();
+          await page.getByText('All changes saved.', { exact: true }).waitFor();
           await page.reload();
-          await page
-            .getByText('Your submitted squad is saved. Edits need saving again.', { exact: true })
-            .waitFor();
+          await page.getByText('All changes saved.', { exact: true }).waitFor();
           assert.equal(await page.locator('.five-pitch-player>strong').count(), 5);
           assert.equal(
             await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),

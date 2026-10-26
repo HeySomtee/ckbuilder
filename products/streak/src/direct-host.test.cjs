@@ -32,6 +32,41 @@ function sample(root) {
     STREAK_DIRECT_CATALOGUE_URL: 'http://127.0.0.1:10000/api/direct/fixtures',
   };
 }
+
+test('test games signer stays isolated while normal and dummy workers coexist', () => {
+  const env = {
+    ...sample(path.resolve(os.tmpdir(), 'synthetic-streak-mount')),
+    STREAK_FIVE_NETWORK: 'testnet',
+    STREAK_GAMES_TEST_ENABLED: '1',
+    STREAK_GAMES_TEST_DATABASE_URL: 'postgresql://synthetic:synthetic@127.0.0.1/games_test',
+    STREAK_GAMES_TEST_REWARDS_ADDRESS: 'ckt1' + 'a'.repeat(40),
+    STREAK_GAMES_TEST_REWARDS_PRIVATE_KEY: '0x' + '77'.repeat(32),
+  };
+  const { environments } = buildConfig(env);
+  assert.throws(() => buildConfig({ ...env, STREAK_GAMES_DATA_MODE: 'test' }), /local only/);
+  assert.equal(environments.api.STREAK_GAMES_TEST_REWARDS_PRIVATE_KEY, undefined);
+  assert.equal(environments.sponsor.STREAK_GAMES_TEST_REWARDS_PRIVATE_KEY, undefined);
+  assert.equal(environments.worker.STREAK_GAMES_TEST_REWARDS_PRIVATE_KEY, undefined);
+  assert.equal(
+    environments.testRewards.STREAK_GAMES_TEST_REWARDS_PRIVATE_KEY,
+    env.STREAK_GAMES_TEST_REWARDS_PRIVATE_KEY,
+  );
+  for (const key of [
+    'TREASURY_PRIVATE_KEY',
+    'STREAK_DIRECT_PRIVATE_KEY',
+    'STREAK_FIVE_REWARDS_PRIVATE_KEY',
+    'DATABASE_URL',
+  ])
+    assert.equal(environments.testRewards[key], undefined);
+  assert.throws(
+    () => buildConfig({ ...env, STREAK_GAMES_TEST_REWARDS_PRIVATE_KEY: env.TREASURY_PRIVATE_KEY }),
+    /separate/,
+  );
+  assert.throws(
+    () => buildConfig({ ...env, STREAK_GAMES_TEST_DATABASE_URL: env.DATABASE_URL }),
+    /separate/,
+  );
+});
 test('hosted child environments isolate signer, database, Telegram and inherited injection', () => {
   const env = sample(path.resolve(os.tmpdir(), 'synthetic-streak-mount'));
   const {

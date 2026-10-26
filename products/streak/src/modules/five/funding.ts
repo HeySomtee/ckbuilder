@@ -1,3 +1,4 @@
+import { lockTime } from './timing';
 import { createHash } from 'node:crypto';
 import { ccc } from '@ckb-ccc/core';
 import { amount, FiveError, https, identifier, text, type Sponsor } from './domain';
@@ -33,7 +34,9 @@ export class FiveFunding {
       throw new FiveError('Choose public or anonymous recognition.');
     const name = named ? text(b.name, 64) : '',
       logo = named ? https(b.logo) : '',
-      link = named ? https(b.link) : '';
+      link = named ? https(b.link) : '',
+      introduction = named ? text(b.introduction ?? '', 80) : '',
+      description = named ? text(b.description ?? '', 240) : '';
     if (named && !name) throw new FiveError('Add a public sponsor name, or choose anonymous.');
     if (b.custodyAccepted !== true)
       throw new FiveError('Review and accept testnet rewards-wallet custody.');
@@ -46,12 +49,14 @@ export class FiveFunding {
           old.name !== name ||
           old.logo !== logo ||
           old.link !== link ||
+          (old.introduction ?? '') !== introduction ||
+          (old.description ?? '') !== description ||
           old.display !== b.display
         )
           throw new FiveError('This contribution already has different details.', 409);
         return;
       }
-      if (r.state !== 'open' || now >= Date.parse(r.terms.lockAt) || !r.terms.sponsorship)
+      if (r.state !== 'open' || now >= lockTime(r) || !r.terms.sponsorship)
         throw new FiveError('Sponsorship is closed for this gameweek.', 409);
       if (BigInt(value) < BigInt(r.terms.minimumShannons))
         throw new FiveError('This contribution is below the gameweek minimum.');
@@ -69,6 +74,8 @@ export class FiveFunding {
         name,
         logo,
         link,
+        introduction,
+        description,
         moderation: 'pending',
         createdAt: new Date(now).toISOString(),
         funding: 'awaiting',
@@ -165,7 +172,7 @@ export class FiveFunding {
             );
           return;
         }
-        if (current.state !== 'open' || now >= Date.parse(current.terms.lockAt))
+        if (current.state !== 'open' || now >= lockTime(current))
           throw new FiveError(
             'The sponsorship deadline has passed. This payment was not submitted.',
             409,
@@ -317,7 +324,7 @@ export class FiveFunding {
     if (!round || !isAuction(round) || round.auction || round.state !== 'open') return;
     const now = await this.store.clock();
     if (
-      now < Date.parse(round.terms.lockAt) ||
+      now < lockTime(round) ||
       (now < auctionCutoff(round) && round.sponsors.some((s) => s.funding === 'submitted'))
     )
       return;

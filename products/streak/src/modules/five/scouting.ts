@@ -30,6 +30,10 @@ export type FplEvent = {
 };
 export type FplSeason = { season: string; events: FplEvent[] };
 export type ScoutData = { observedAt: string; players: ScoutPlayer[] };
+export type FixtureSchedule = {
+  observedAt: string;
+  teams: Record<string, PlayerProfile['fixtures']>;
+};
 export type PlayerProfile = {
   observedAt: string;
   player: ScoutPlayer;

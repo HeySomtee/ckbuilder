@@ -5,13 +5,20 @@ import { postgresConfig } from '../../infrastructure/postgres-config';
 import { PgFiveStorage } from './storage';
 import { FiveFunding } from './funding';
 import { FiveRewards } from './rewards';
+import { testConfig, testPool } from '../games-test/runtime';
+import { bindTestWallet } from '../games-test/scope';
 
 /** Dedicated process: no legacy or prediction signing material, no .env loading. */
 async function main() {
   if (process.env.STREAK_FIVE_NETWORK !== 'testnet') throw Error('Set STREAK_FIVE_NETWORK=testnet');
-  const key = process.env.STREAK_FIVE_REWARDS_PRIVATE_KEY,
-    address = process.env.STREAK_FIVE_REWARDS_ADDRESS;
+  const testing = process.argv.includes('--games-test');
+  const config = testing ? testConfig() : null;
+  const key = testing
+      ? process.env.STREAK_GAMES_TEST_REWARDS_PRIVATE_KEY
+      : process.env.STREAK_FIVE_REWARDS_PRIVATE_KEY,
+    address = config?.address ?? process.env.STREAK_FIVE_REWARDS_ADDRESS;
   const database =
+    config?.database ??
     process.env.STREAK_FIVE_DATABASE_URL ??
     process.env.STREAK_SURVIVOR_DATABASE_URL ??
     process.env.DATABASE_URL;
@@ -19,7 +26,12 @@ async function main() {
     throw Error('Configure the dedicated Five rewards wallet and database');
   if (process.env.TREASURY_PRIVATE_KEY || process.env.STREAK_DIRECT_PRIVATE_KEY)
     throw Error('Run Five rewards separately from other signing keys');
-  const pool = new Pool({ ...postgresConfig(database), max: 3, connectionTimeoutMillis: 5000 });
+  if (testing && process.env.STREAK_FIVE_REWARDS_PRIVATE_KEY)
+    throw Error('Run test rewards separately from the regular rewards signer');
+  const pool = testing
+    ? testPool(database)
+    : new Pool({ ...postgresConfig(database), max: 3, connectionTimeoutMillis: 5000 });
+  if (testing) await bindTestWallet(pool, address);
   pool.on('error', () => console.warn('[five-rewards] database connection interrupted'));
   const client = new ccc.ClientPublicTestnet({
     url: 'https://testnet.ckb.dev/',
@@ -28,11 +40,11 @@ async function main() {
     maxConcurrent: 2,
   });
   const signer = new ccc.SignerCkbPrivateKey(client, key),
-    store = new PgFiveStorage(pool);
+    store = new PgFiveStorage(pool, testing);
   if ((await signer.getRecommendedAddress()) !== address)
     throw Error('Dedicated Five rewards address does not match signer');
   const funding = new FiveFunding(store, client, address),
-    rewards = new FiveRewards(pool, client, address);
+    rewards = new FiveRewards(pool, client, address, testing);
   let stopped = false,
     cursor = 0;
   const credited = new Map<string, number>();

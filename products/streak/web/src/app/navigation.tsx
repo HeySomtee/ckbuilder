@@ -109,7 +109,9 @@ export function AppNavigation({ active, mobile = false }: { active: string; mobi
             >
               <Icon name={entry.icon} />
               {mobile && entry.id === 'activity' ? 'Activity' : entry.label}
-              {!mobile && entry.id === 'five' && <small className="nav-coming">Beta</small>}
+              {!mobile && ['five', 'survivor'].includes(entry.id) && (
+                <small className="nav-coming">Beta</small>
+              )}
             </a>
           </Fragment>
         ))}
@@ -147,7 +149,9 @@ export function AppNavigation({ active, mobile = false }: { active: string; mobi
               >
                 <Icon name={entry.icon} />
                 {entry.label}
-                {entry.id === 'five' && <small className="nav-coming">Beta</small>}
+                {['five', 'survivor'].includes(entry.id) && (
+                  <small className="nav-coming">Beta</small>
+                )}
               </a>
             ))}
           </nav>

@@ -48,6 +48,8 @@
 }
 .payment-progress-chevron {
   color: #a8c9da;
+  display: inline-flex;
+  flex-shrink: 0;
 }
 .payment-orbit {
   width: 34px;

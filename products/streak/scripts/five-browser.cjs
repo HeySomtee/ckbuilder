@@ -137,6 +137,7 @@ async function main() {
           page.on('pageerror', (e) => errors.push(e.message));
           await page.goto(origin + '/season/?view=five');
           await page.getByRole('heading', { name: 'The next five starts here.' }).waitFor();
+          await page.getByRole('tab', { name: 'More', exact: true }).click();
           await page.getByRole('button', { name: '+ Create gameweek', exact: true }).click();
           const dialog = page.getByRole('dialog');
           await dialog.getByText('Import your own licensed catalogue', { exact: true }).click();
@@ -176,6 +177,7 @@ async function main() {
           await dialog.getByLabel('Minimum contribution (tCKB)').fill('500');
           await dialog.getByRole('button', { name: 'Save settings' }).click();
           await page.getByRole('button', { name: 'Publish gameweek', exact: true }).click();
+          await page.getByRole('tab', { name: 'My five', exact: true }).click();
           if (width <= 760)
             await page.getByRole('button', { name: 'Players', exact: true }).click();
           await page.getByRole('button', { name: 'Add Keeper', exact: true }).waitFor();
@@ -189,13 +191,9 @@ async function main() {
           await page.getByRole('button', { name: 'Captain Creator', exact: true }).click();
           await page.getByRole('button', { name: 'Review your five', exact: true }).click();
           await dialog.getByRole('button', { name: 'Save my five', exact: true }).click();
-          await page
-            .getByText('Your submitted squad is saved. Edits need saving again.', { exact: true })
-            .waitFor();
+          await page.getByText('All changes saved.', { exact: true }).waitFor();
           await page.reload();
-          await page
-            .getByText('Your submitted squad is saved. Edits need saving again.', { exact: true })
-            .waitFor();
+          await page.getByText('All changes saved.', { exact: true }).waitFor();
           assert.equal(await page.locator('.five-pitch-player>strong').count(), 5);
           assert.equal(
             await page
@@ -203,6 +201,29 @@ async function main() {
               .getAttribute('aria-pressed'),
             'true',
           );
+          await page.getByRole('button', { name: 'Captain Runner', exact: true }).click();
+          assert.match(await page.locator('#five-save-hint').innerText(), /previous team/);
+          if (width <= 760)
+            await page.getByRole('button', { name: 'Players', exact: true }).click();
+          await page.getByRole('tab', { name: 'Sponsors', exact: true }).click();
+          await page
+            .locator('#five-panel-sponsors')
+            .getByRole('button', { name: 'Back to squad', exact: true })
+            .click();
+          assert.equal(
+            await page
+              .getByRole('button', { name: 'Captain Runner', exact: true })
+              .getAttribute('aria-pressed'),
+            'true',
+          );
+          assert(
+            await page.getByRole('button', { name: 'Captain Runner', exact: true }).isVisible(),
+            'Back to squad returns to the pitch, not the retained player list',
+          );
+          await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+          await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+          await page.getByText('All changes saved.', { exact: true }).waitFor();
+          await page.getByRole('tab', { name: 'Sponsors', exact: true }).click();
           assert.equal(
             await page
               .getByRole('button', { name: 'Sponsor this gameweek', exact: true })
@@ -213,6 +234,7 @@ async function main() {
             await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
             false,
           );
+          await page.getByRole('tab', { name: 'More', exact: true }).click();
           await page.getByRole('button', { name: 'How it works', exact: true }).click();
           await page.keyboard.press('Escape');
           assert.equal(await page.getByRole('dialog').count(), 0);
@@ -223,6 +245,7 @@ async function main() {
             true,
           );
           await page.evaluate(() => scrollTo(0, 0));
+          await page.getByRole('tab', { name: 'My five', exact: true }).click();
           await page.screenshot({ path: path.join(out, `${name}-${width}.png`), fullPage: true });
           const auctionTerms = parseTerms({
             ...terms,
@@ -257,10 +280,19 @@ async function main() {
           });
           auctionFixture = true;
           await page.reload();
+          await page.getByRole('tab', { name: 'Sponsors', exact: true }).click();
           await page.getByText('Another sponsor leads', { exact: true }).waitFor();
           await page.getByRole('button', { name: 'Increase your bid', exact: true }).click();
           await dialog.getByRole('heading', { name: 'Bid for the sponsor spot' }).waitFor();
           await dialog.getByLabel('Add to your bid (tCKB)').fill('1000');
+          await dialog.getByLabel('Show a sponsor name', { exact: true }).check();
+          await dialog.getByLabel('Public name', { exact: true }).fill('Builder');
+          await dialog
+            .getByLabel('One-line introduction (optional)', { exact: true })
+            .fill('For the community');
+          await dialog
+            .getByLabel('About your product (optional)', { exact: false })
+            .fill('Independent tools for players.');
           assert.equal(
             await dialog.getByRole('button', { name: 'Review bid', exact: true }).isDisabled(),
             true,
@@ -272,9 +304,17 @@ async function main() {
           );
           await page.keyboard.press('Escape');
           await store.change('auction-ui', (r) => {
-            r.sponsors.push(bid('topup', actor.wallet, '100000000000', 3));
+            r.sponsors.push({
+              ...bid('topup', actor.wallet, '100000000000', 3),
+              display: 'named',
+              name: 'Touchline Tools',
+              introduction: 'A home for football builders',
+              description: 'Independent tools for the community.',
+              moderation: 'approved',
+            });
           });
           await page.reload();
+          await page.getByRole('tab', { name: 'Sponsors', exact: true }).click();
           await page.getByText("You're leading", { exact: true }).waitFor();
           assert.equal(
             await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
@@ -291,9 +331,14 @@ async function main() {
           // Explicit selection keeps the closed auction visible instead of the other open round.
           await page.getByLabel('Gameweek', { exact: true }).selectOption('auction-ui');
           await page.reload();
+          await page.getByRole('tab', { name: 'Sponsors', exact: true }).click();
           // Reload resets selection; choose it again through the public gameweek selector.
           await page.getByLabel('Gameweek', { exact: true }).selectOption('auction-ui');
           await page.getByText('You won the sponsor spot', { exact: true }).waitFor();
+          await page
+            .locator('.five-sponsor-showcase')
+            .getByText('Independent tools for the community.', { exact: true })
+            .waitFor();
           assert.equal(
             await page.getByRole('button', { name: 'Increase your bid', exact: true }).count(),
             0,

@@ -1,3 +1,5 @@
+import { testGames } from './modules/games-test/runtime';
+import { localGameMode, requestGameMode } from './modules/games-test/mode';
 /**
  * Streak Terminal — HTTP server.
  *
@@ -191,16 +193,21 @@ async function currentUserId(req: IncomingMessage): Promise<string | null> {
 
 async function handleSurvivor(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   try {
+    const mode = requestGameMode(req, url);
     const id = await currentUserId(req);
     const user = id ? await read(db => db.users.find(user => user.id === id)) : undefined;
     const actor = user?.wallet?.address ? { id: user.id, name: user.username || 'Player', wallet: user.wallet.address } : null;
-    const service = survivorService();
+    const controls = mode === 'test' ? await testGames() : null;
+    const service = controls ? controls.survivor : survivorService();
+    const body = req.method === 'POST' ? await readJson(req) : null;
     const data = req.method === 'POST'
-      ? await service.action(actor, await readJson(req))
+      ? controls && body?.action === 'testControl'
+        ? await controls.action(actor, { ...body, action: body.control, game: 'survivor' })
+        : await service.action(actor, body)
       : await service.read(actor, url.searchParams.get('competition') ?? undefined);
-    sendJson(res, 200, data);
+    sendJson(res, 200, { ...data, testMode: !!controls });
   } catch (error) {
-    if (error instanceof SurvivorError) return sendJson(res, error.status, { error: error.message });
+    if (error instanceof SurvivorError || error instanceof FiveError) return sendJson(res, error.status, { error: error.message });
     console.warn('[survivor] request unavailable');
     sendJson(res, 503, { error: 'Survivor could not refresh right now. Your saved entry stays safe. Please retry.' });
   }
@@ -208,20 +215,26 @@ async function handleSurvivor(req: IncomingMessage, res: ServerResponse, url: UR
 
 async function handleFive(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   try {
+    const mode = requestGameMode(req, url);
     const id = await currentUserId(req);
     const user = id ? await read(db => db.users.find(user => user.id === id)) : undefined;
     const actor = user?.wallet?.address ? { id: user.id, name: user.username || 'Player', wallet: user.wallet.address } : null;
-    const service = fiveService();
-    if(req.method === 'GET' && (url.searchParams.has('scout') || url.searchParams.has('player'))) {
+    const controls = mode === 'test' ? await testGames() : null;
+    const service = controls ? controls.five : fiveService();
+    if(req.method === 'GET' && (url.searchParams.has('scout') || url.searchParams.has('player') || url.searchParams.has('schedule'))) {
       if(!sponsorRate(`five-scout:${req.socket.remoteAddress}`,60))return sendJson(res,429,{error:'Please wait before refreshing player scouting.'});
+      if(url.searchParams.has('schedule')) return sendJson(res,200,await service.schedule());
       const player=url.searchParams.get('player');
       if(player!==null && !/^[1-9][0-9]{0,5}$/.test(player))return sendJson(res,400,{error:'Choose a valid player.'});
       return sendJson(res,200,player===null?await service.scouting():await service.player(Number(player)));
     }
+    const body = req.method === 'POST' ? await readJson(req) : null;
     const data = req.method === 'POST'
-      ? await service.action(actor, await readJson(req))
+      ? controls && body?.action === 'testControl'
+        ? await controls.action(actor, { ...body, action: body.control, game: 'five' })
+        : await service.action(actor, body)
       : await service.read(actor, url.searchParams.get('round') ?? undefined);
-    sendJson(res, 200, data);
+    sendJson(res, 200, { ...data, testMode: !!controls });
   } catch (error) {
     if (error instanceof FiveError) return sendJson(res, error.status, { error: error.message });
     console.warn('[five] request unavailable');
@@ -260,6 +273,13 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: 
       s = await stat(filePath);
     }
     if (!s.isFile()) throw new Error("not a file");
+    if (filePath === resolve(PUBLIC_DIR, 'season/index.html')) {
+      const mode = localGameMode(req);
+      const html = (await readFile(filePath, 'utf8')).replace('<head>', `<head><meta name="streak-games-data" content="${mode}">`);
+      res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store', 'Content-Length': String(Buffer.byteLength(html)) });
+      res.end(req.method === 'HEAD' ? undefined : html);
+      return;
+    }
     const stamp = `${s.size}-${s.mtimeMs}`;
     const etag = `W/"${stamp}"`;
     const headers: Record<string, string> = {

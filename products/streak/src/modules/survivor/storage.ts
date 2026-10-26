@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { assertGameScope } from '../games-test/scope';
 import { SurvivorError, type Competition } from './domain';
 
 export type CompetitionSummary = Pick<Competition, 'id' | 'state' | 'terms' | 'createdAt'>;
@@ -16,10 +17,13 @@ const schema = `CREATE TABLE IF NOT EXISTS streak_survivor_competitions (
 CREATE INDEX IF NOT EXISTS streak_survivor_state ON streak_survivor_competitions(state, created_at DESC);`;
 export class PgSurvivorStorage implements SurvivorStorage {
   private ready?: Promise<void>;
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool: Pool,
+    private readonly testing = false,
+  ) {}
   private init() {
-    this.ready ??= this.pool
-      .query(schema)
+    this.ready ??= assertGameScope(this.pool, this.testing)
+      .then(() => this.pool.query(schema))
       .then(() => {})
       .catch((error) => {
         this.ready = undefined;

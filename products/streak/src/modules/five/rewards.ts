@@ -1,5 +1,6 @@
 import { ccc } from '@ckb-ccc/core';
 import type { Pool } from 'pg';
+import { assertGameScope } from '../games-test/scope';
 import { FiveError, type Round } from './domain';
 import { CONFIRMATIONS } from './funding';
 import { isAuction } from './auction';
@@ -22,13 +23,15 @@ export class FiveRewards {
     readonly pool: Pool,
     readonly chain: ccc.Client,
     readonly address: string,
+    private readonly testing = false,
   ) {
     if (chain.addressPrefix !== 'ckt') throw Error('Five rewards are testnet only');
   }
   async init() {
-    this.ready ??= this.pool
-      .query(
-        `
+    this.ready ??= assertGameScope(this.pool, this.testing)
+      .then(() =>
+        this.pool.query(
+          `
       CREATE TABLE IF NOT EXISTS streak_five_credits (
         id text PRIMARY KEY, wallet text NOT NULL, amount numeric(30,0) NOT NULL CHECK(amount>0),
         payout_id text);
@@ -41,6 +44,7 @@ export class FiveRewards {
       CREATE TABLE IF NOT EXISTS streak_five_reward_runtime (
         id integer PRIMARY KEY CHECK(id=1), address text NOT NULL, heartbeat timestamptz NOT NULL);
     `,
+        ),
       )
       .then(() => {})
       .catch((e) => {

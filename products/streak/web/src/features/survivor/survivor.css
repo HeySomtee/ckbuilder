@@ -28,6 +28,163 @@
 .survivor-intro p {
   margin: 0;
 }
+.survivor-setup {
+  margin-bottom: 24px;
+  padding: clamp(18px, 3vw, 30px);
+  scroll-margin-top: 20px;
+  background: radial-gradient(ellipse at top right, #9fc7e610, transparent 70%);
+}
+.survivor-setup-heading,
+.survivor-setup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.survivor-setup h2 {
+  font-size: clamp(23px, 3vw, 32px);
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+}
+.survivor-setup-steps {
+  display: flex;
+  padding: 18px 0;
+  margin: 20px 0;
+  list-style: none;
+  border-block: 1px solid #ffffff10;
+  gap: 24px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.survivor-setup-steps li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.survivor-setup-steps b {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #ffffff20;
+  border-radius: 50%;
+  font: 11px var(--mono);
+}
+.survivor-setup-steps [aria-current='step'] {
+  color: var(--mint);
+}
+.survivor-setup-steps [aria-current='step'] b {
+  background: #b9ed8a12;
+  border-color: #b9ed8a55;
+}
+.survivor-setup-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  font-size: 12px;
+}
+.survivor-setup-summary > div {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.survivor-setup-summary small {
+  font: 9px var(--mono);
+  letter-spacing: 1px;
+}
+.survivor-setup-summary strong {
+  font-size: 17px;
+}
+.survivor-setup-summary span {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.survivor-setup-publish {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid #9fc7e62b;
+  border-radius: 14px;
+  background: linear-gradient(130deg, #9fc7e60a, transparent);
+}
+.survivor-setup-publish h3 {
+  margin: 0;
+  font-size: 18px;
+}
+.survivor-setup-publish p {
+  margin: 8px 0 0;
+  max-width: 70ch;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.survivor-setup-schedule {
+  margin-top: 14px;
+  font-size: 12px;
+}
+.survivor-setup-schedule summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.survivor-setup-schedule summary::-webkit-details-marker {
+  display: none;
+}
+.survivor-setup-schedule[open] summary svg {
+  transform: rotate(180deg);
+}
+.survivor-setup-footer {
+  margin-top: 12px;
+  border-top: 1px solid #ffffff10;
+  padding-top: 12px;
+}
+.survivor-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: survivor-spin 0.8s linear infinite;
+}
+@keyframes survivor-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .survivor-spinner {
+    animation: none;
+  }
+}
+@media (max-width: 600px) {
+  .survivor-setup-steps {
+    gap: 12px;
+    font-size: 10px;
+  }
+  .survivor-setup-steps li {
+    flex: 1;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .survivor-setup-summary {
+    grid-template-columns: 1fr 1fr;
+    gap: 20px 14px;
+  }
+  .survivor-setup-summary > div:last-child {
+    grid-column: 1 / -1;
+  }
+  .survivor-setup-publish {
+    padding: 16px;
+  }
+  .survivor-setup-publish .survivor-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
 .survivor-create {
   display: inline-flex;
   align-items: center;
@@ -314,8 +471,72 @@
 .survivor-team:disabled {
   cursor: default;
 }
+.survivor-team[data-used='true']:disabled {
+  filter: grayscale(1);
+  background: #7f89850a;
+  border-style: dashed;
+  opacity: 0.5;
+}
+.survivor-team[data-used='true'] .survivor-team-status {
+  color: var(--muted);
+}
+.survivor-team .fixture-outlook {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+.survivor-team .fixture-chip b {
+  margin: 0;
+  font-size: 10px;
+}
+.survivor-competitions {
+  margin: 20px 0;
+}
+.survivor-competition-list {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: none;
+}
+.survivor-competition-list::-webkit-scrollbar {
+  display: none;
+}
+.survivor-competition-card {
+  flex: 0 0 260px;
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  padding: 18px;
+  color: var(--text);
+}
+.survivor-competition-card > strong {
+  font-size: 16px;
+}
+.survivor-competition-card > span {
+  font-size: 11px;
+}
+.survivor-competition-card .survivor-tag {
+  width: fit-content;
+}
+.survivor-competition-card[aria-pressed='true'] {
+  border-color: #b9ed8a80;
+}
+.survivor-competition-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--mint);
+}
+.survivor-competition-link svg {
+  width: 16px;
+  height: 16px;
+}
 .survivor-team:has(.survivor-team-status):disabled {
   opacity: 0.75;
+}
+.survivor-team[data-used='true']:disabled {
+  opacity: 0.5;
 }
 .survivor-team strong {
   font-size: 13px;

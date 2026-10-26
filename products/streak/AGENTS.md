@@ -22,6 +22,7 @@ The owner approved the Streak UI and architecture on **15 October 2026**, includ
 - The approved target gives CKB authority over new prediction funds and claims. The configured football oracle remains trusted for results. PostgreSQL owns identity, fantasy competition state and read models. A read model is never an entitlement to spend a cell.
 - Five, daily streaks, revivals, crews, badges and campaign awards remain application features initially. They cannot change contract principal, payouts or refunds. Campaign awards need a separately approved budget and published rules.
 - The preview is synthetic. Never reuse sample balances, fees, player scores, transaction success or fixture results as a production fallback.
+- Owner correction, 26 October: Five/Survivor dummy data is a local environment setting, not a public UI or URL switch. Preserve separate test stores and rewards recovery, deny hosted test-mode requests, and reject stale document scopes after mode changes. Admin deadline controls are local-test tools. Both games use consistent Beta labels until release status is deliberately changed.
 
 ## Code and state ownership
 
@@ -39,6 +40,8 @@ Owner priority, 19 October 2026: reliability, measured speed and polished core j
 Pending work needs truthful animated progress, an accessible status, reduced-motion support and a recovery path; do not leave users staring at static Checking text or hide the whole page behind chain reads. Distinguish checking, wallet approval and broadcast/confirmation. Keep selected details and drafts stable across background refresh. Informational notices are compact and dismissible; necessary restrictions remain visible at the affected action. Test real team names/logo fallbacks, centered close controls, keyboard focus, small screens, slow requests and recovery. Document measured improvements and any physical-wallet checks that could not be performed. Passing synthetic tests alone is not evidence of a polished hosted journey.
 
 Use the [design system](docs/design/system.md) and approved [preview](design/season-preview/README.md) as the reference. Preserve the coral/graphite football identity, clear glass, directional rims, dense payment surfaces and native scrolling. Use semantic tokens rather than copying values into every feature.
+
+Owner correction, 25 October 2026: use stroked SVG icons for dropdown and disclosure chevrons, not text glyph substitutes. Reuse the shared Icon component in React and the same geometry in legacy surfaces. Keep expanded state, accessible labels and keyboard behavior intact.
 
 Every interaction has appropriate press, focus, pending, success, failure and disabled behavior. Keep 44px primary touch targets, visible focus, semantic labels and keyboard/touch alternatives. Amounts and consequences must remain legible without blur or colour. Latest owner correction, 16 October: the prediction slip has one X close button with an accessible label. Close and Escape retain the draft. Clear slip is a separate explicit action. Payment stays inside the slip; Wallet and My activity have distinct routes and purposes.
 

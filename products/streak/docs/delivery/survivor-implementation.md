@@ -1,5 +1,17 @@
 # Streak Survivor implementation
 
+## 26 October draft setup correction
+
+The owner reported that Continue setup appeared unfinished. It previously only selected a draft, while publication lived inside the game hero and the draft displayed an unusable team board. Drafts now open a dedicated host workspace before the competition list. Creation and Review setup focus that workspace. The review shows entry terms, announced prize, first deadline and expandable schedule, with explicit Publish free competition and Edit draft actions. The game board appears after publication, when the existing free-entry review becomes available.
+
+Paid drafts explain that fee collection is not implemented. Expired opening rounds explain how to choose a future schedule. Both restrictions remain beside the disabled publish action. Free-entry editing disables the irrelevant fee input; publication has animated pending feedback with reduced-motion support. No server rule, fee handling, authorization, database or prize-payout behavior changed. Survivor prizes are still host announcements, not funded or automatically claimable awards.
+
+Verification: the frontend build and hook lint passed, along with six synthetic Chromium/WebKit journeys at 320, 390 and 1440 pixels. Coverage includes setup navigation/focus, expired and paid drafts, publication, joining, saved picks, delayed responses, private standings, errors and final results. All 71 required checks then passed in one `npm run quality:major` run, from 11:44:16 to 12:08:36 UTC on 26 October, using disposable PostgreSQL and local chains. Screenshots are in `.quality-artifacts/survivor-implementation/*-free-setup.png` and `*-paid-setup.png`; focused log: `.quality-artifacts/survivor-setup-browser.log`. Full evidence: `.quality-artifacts/survivor-setup-major.log` and `.quality-artifacts/survivor-setup-major.json`.
+
+Read-only local HTTP checks returned 200 for the regular-data page and its new Survivor bundle, including Review setup and the paid-entry explanation. This frontend change needs a page refresh, not an API restart. Existing local stores and workers were retained. These are isolated application tests and read-only serving checks, not owner wallet or hosted acceptance. No commit, push or deployment was performed.
+
+## Original implementation record
+
 19 October 2026. The owner approved the [interactive design](../../design/survivor-review/README.md) and requested implementation after the Activity release. Activity and the fixture-status correction were pushed to main as `df147f17261dc8cf08d1131dc5f2d2bed1a0c6e9`, after all 53 local release checks passed. Survivor is a subsequent local change, not part of that release.
 
 ## Play and administration

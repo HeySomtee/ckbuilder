@@ -90,6 +90,7 @@ reports/
 | 19 | Sharded parimutuel pools, backed shares and payouts | [reports/week-19.md](reports/week-19.md) | [src/week19/contract-lab](src/week19/contract-lab) |
 | 20 | Independent claims and public testnet settlement | [reports/week-20.md](reports/week-20.md) | [src/week20/contract-lab](src/week20/contract-lab) |
 | 21 | Real fixtures, sponsored market creation and combined payments | [reports/week-21.md](reports/week-21.md) | [products/streak](products/streak) |
+| 22 | Five, Survivor, sponsor auctions and streakpitch.com | [reports/week-22.md](reports/week-22.md) | [products/streak](products/streak) |
 
 ## Setup
 

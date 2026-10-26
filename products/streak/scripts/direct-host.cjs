@@ -21,6 +21,9 @@ const API = [
   'STREAK_FIVE_FPL_ENABLED',
   'STREAK_FIVE_NETWORK',
   'STREAK_FIVE_REWARDS_ADDRESS',
+  'STREAK_GAMES_TEST_ENABLED',
+  'STREAK_GAMES_TEST_DATABASE_URL',
+  'STREAK_GAMES_TEST_REWARDS_ADDRESS',
   'APP_PUBLIC_URL',
   'TELEGRAM_BOT_TOKEN',
   'TELEGRAM_BOT_USERNAME',
@@ -65,6 +68,8 @@ function contained(root, target) {
   );
 }
 function buildConfig(env) {
+  if (env.STREAK_GAMES_DATA_MODE && env.STREAK_GAMES_DATA_MODE !== 'api')
+    throw Error('Hosted games use regular API data. STREAK_GAMES_DATA_MODE=test is local only.');
   if (env.NODE_ENV !== 'production') throw Error('Hosted launcher requires NODE_ENV=production.');
   if (env.STREAK_DIRECT_DURABLE_STATE_ACK !== '1')
     throw Error('Verify the durable disk, then set STREAK_DIRECT_DURABLE_STATE_ACK=1.');
@@ -171,6 +176,50 @@ function buildConfig(env) {
       ]),
     };
   }
+  let testRewards;
+  if (env.STREAK_GAMES_TEST_ENABLED === '1') {
+    requireValue(env, 'STREAK_GAMES_TEST_DATABASE_URL');
+    requireValue(env, 'STREAK_GAMES_TEST_REWARDS_ADDRESS', /^ckt1[a-z0-9]{20,250}$/);
+    const testKey = requireValue(
+      env,
+      'STREAK_GAMES_TEST_REWARDS_PRIVATE_KEY',
+      /^(?:0x)?[0-9a-fA-F]{64}$/,
+    );
+    if (env.STREAK_FIVE_NETWORK !== 'testnet') throw Error('Test games require testnet.');
+    if (
+      [env.TREASURY_PRIVATE_KEY, env.STREAK_DIRECT_PRIVATE_KEY, env.STREAK_FIVE_REWARDS_PRIVATE_KEY]
+        .filter(Boolean)
+        .some(
+          (k) => k.replace(/^0x/, '').toLowerCase() === testKey.replace(/^0x/, '').toLowerCase(),
+        )
+    )
+      throw Error('Use a separate test games rewards key.');
+    const identity = (value) => {
+      const url = new URL(value);
+      return `${url.hostname}:${url.port || '5432'}${url.pathname}`;
+    };
+    if (
+      [env.DATABASE_URL, env.STREAK_FIVE_DATABASE_URL, env.STREAK_SURVIVOR_DATABASE_URL]
+        .filter(Boolean)
+        .some((db) => identity(db) === identity(env.STREAK_GAMES_TEST_DATABASE_URL))
+    )
+      throw Error('Test games require a separate database.');
+    if (env.STREAK_GAMES_TEST_REWARDS_ADDRESS === env.STREAK_FIVE_REWARDS_ADDRESS)
+      throw Error('Test games require a separate rewards address.');
+    testRewards = {
+      ...pick(env, COMMON),
+      NODE_ENV: 'production',
+      STREAK_SKIP_ENV_FILE: '1',
+      ...pick(env, [
+        'STREAK_FIVE_NETWORK',
+        'STREAK_FIVE_REWARDS_ADDRESS',
+        'STREAK_GAMES_TEST_ENABLED',
+        'STREAK_GAMES_TEST_DATABASE_URL',
+        'STREAK_GAMES_TEST_REWARDS_ADDRESS',
+        'STREAK_GAMES_TEST_REWARDS_PRIVATE_KEY',
+      ]),
+    };
+  }
   return {
     stateRoot: path.resolve(stateRoot),
     directories: directories.map((dir) => path.resolve(dir)),
@@ -188,6 +237,7 @@ function buildConfig(env) {
       sponsor: { ...operator, ...ipc, STREAK_DIRECT_CATALOGUE_URL: catalogue },
       worker: operator,
       ...(rewards ? { rewards } : {}),
+      ...(testRewards ? { testRewards } : {}),
     },
   };
 }
@@ -276,6 +326,7 @@ async function runHost(config, options = {}) {
     sponsor: ['products/streak/scripts/direct-sponsor.cjs', '--serve'],
     worker: ['products/streak/scripts/direct-worker.cjs', '--once'],
     rewards: ['products/streak/dist/modules/five/worker.js'],
+    testRewards: ['products/streak/dist/modules/five/worker.js', '--games-test'],
   };
   const log = options.log || ((message) => console.log(`[streak-host] ${message}`));
   const children = new Set();
@@ -415,6 +466,7 @@ async function runHost(config, options = {}) {
     if (!(await waitReady(sponsorCheck, 'Sponsor'))) return await done;
     log('API and atomic sponsor are ready. Starting serialized settlement passes.');
     if (config.environments.rewards) start('rewards');
+    if (config.environments.testRewards) start('testRewards');
     runWorker();
   } catch {
     void stop(1, 'Hosted startup failed. Check configuration and local port ownership.');

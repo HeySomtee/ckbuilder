@@ -1,8 +1,11 @@
+import { GameTestPanel } from '../games-test/panel';
+import { gamesDataMode } from '../../lib/games-data';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
 import type { Account } from '../account/api';
 import { Icon } from '../../components/icon';
+import { FixtureRun } from '../../components/fixture-run';
 import { actSurvivor, decimalAmount, loadSurvivor, money, toShannons } from './api';
 import type { Competition, SurvivorData, Team } from './api';
 import './survivor.css';
@@ -120,11 +123,14 @@ export default function SurvivorPage({
   const [dialogMode, setDialogMode] = useState<'rules' | 'join' | 'admin' | 'delete'>('rules');
   const [deleteTarget, setDeleteTarget] = useState<Competition | null>(null);
   const [editing, setEditing] = useState<Competition | null>(null);
+  const [entryMode, setEntryMode] = useState<'free' | 'paid'>('free');
+  const [setupTarget, setSetupTarget] = useState('');
+  const setup = useRef<HTMLElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const alive = useRef(true);
   const viewEpoch = useRef(0);
   const identity = account?.id ?? null;
-  const key = ['private', 'survivor', identity ?? 'public', selection];
+  const key = ['private', 'survivor', identity ?? 'public', selection, gamesDataMode];
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -156,33 +162,57 @@ export default function SurvivorPage({
         cacheKey,
         deleted:
           typeof body === 'object' && body !== null && 'action' in body && body.action === 'delete',
+        created:
+          typeof body === 'object' && body !== null && 'action' in body && body.action === 'create',
       };
     },
     retry: false,
-    onSuccess: ({ data, epoch, cacheKey, deleted }) => {
+    onSuccess: ({ data, epoch, cacheKey, deleted, created }) => {
       if (!alive.current) return;
-      client.setQueryData(cacheKey, data);
-      if (deleted)
+      if (created && data.detail)
+        client.setQueryData(
+          ['private', 'survivor', identity ?? 'public', data.detail.id, gamesDataMode],
+          data,
+        );
+      else client.setQueryData(cacheKey, data);
+      if (deleted || created)
         void client.invalidateQueries({ queryKey: ['private', 'survivor', identity ?? 'public'] });
       if (epoch !== viewEpoch.current) return;
       setChosen('');
       dialog.current?.close();
-      if (deleted) {
+      if (deleted || created) {
         const nextId = data.detail?.id ?? '';
+        if (created) setSetupTarget(nextId);
         client.removeQueries({ queryKey: ['private', 'survivor', identity ?? 'public'] });
-        client.setQueryData(['private', 'survivor', identity ?? 'public', nextId], data);
+        client.setQueryData(
+          ['private', 'survivor', identity ?? 'public', nextId, gamesDataMode],
+          data,
+        );
         setSelection(nextId);
         const url = new URL(location.href);
         if (nextId) url.searchParams.set('competition', nextId);
         else url.searchParams.delete('competition');
         history.replaceState(null, '', url);
       }
-      setNotice(deleted ? 'Competition deleted.' : 'Saved. Your competition is up to date.');
+      setNotice(
+        deleted
+          ? 'Competition deleted.'
+          : created
+            ? 'Draft saved. Review the details below before opening entries.'
+            : 'Saved. Your competition is up to date.',
+      );
     },
   });
   const data = query.data,
     c = data?.detail,
     round = c?.rounds[c.currentRound];
+  useEffect(() => {
+    if (setupTarget && c?.id === setupTarget && c.state === 'draft' && setup.current) {
+      setup.current.focus({ preventScroll: true });
+      setup.current.scrollIntoView({ block: 'start' });
+      setSetupTarget('');
+    }
+  }, [setupTarget, c?.id, c?.state]);
   const own = c?.entries.find((e) => e.id === c.ownId);
   const saved = own?.picks[String(c?.currentRound)];
   const [clock, setClock] = useState(Date.now());
@@ -199,6 +229,12 @@ export default function SurvivorPage({
     ['open', 'running'].includes(c?.state ?? '');
   const canPick = open && own?.status === 'active';
   const busy = action.isPending || query.isError || query.isPending;
+  const publishing =
+    action.isPending &&
+    typeof action.variables === 'object' &&
+    action.variables !== null &&
+    'action' in action.variables &&
+    action.variables.action === 'publish';
   const show = (mode: typeof dialogMode) => {
     if (!action.isPending) action.reset();
     setDialogMode(mode);
@@ -245,12 +281,22 @@ export default function SurvivorPage({
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const adminOpen = (existing: Competition | null) => {
     setEditing(existing);
+    setEntryMode(existing?.terms.mode ?? 'free');
     setRequestId(crypto.randomUUID());
     setNotice('');
     show('admin');
   };
   return (
     <div className="survivor-page">
+      <GameTestPanel
+        admin={data?.admin === true}
+        game="survivor"
+        id={c?.id}
+        round={c?.currentRound}
+        state={c?.state}
+        busy={action.isPending}
+        run={(body) => action.mutate(body)}
+      />
       <header className="survivor-intro">
         <div>
           <span className="eyebrow">ONE TEAM. EVERY ROUND.</span>
@@ -307,19 +353,175 @@ export default function SurvivorPage({
           </button>
         </section>
       )}
-      {data && data.competitions.length > 1 && (
-        <label className="survivor-switch">
-          Competition
-          <select value={c?.id ?? ''} onChange={(e) => changeCompetition(e.target.value)}>
-            {data.competitions.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.terms.name} · {item.state}
-              </option>
+      {c?.state === 'draft' && data?.admin && (
+        <section
+          className="glass survivor-setup"
+          ref={setup}
+          tabIndex={-1}
+          aria-label={`Set up ${c.terms.name}`}
+        >
+          <div className="survivor-setup-heading">
+            <div>
+              <span className="eyebrow">HOST WORKSPACE · PRIVATE DRAFT</span>
+              <h2>{c.terms.name}</h2>
+            </div>
+            <span className="survivor-tag">Not open for entries</span>
+          </div>
+          <ol className="survivor-setup-steps" aria-label="Competition setup progress">
+            <li>
+              <b>1</b>
+              <span>Draft saved</span>
+            </li>
+            <li aria-current="step">
+              <b>2</b>
+              <span>Review & publish</span>
+            </li>
+            <li>
+              <b>3</b>
+              <span>Join & pick</span>
+            </li>
+          </ol>
+          <div className="survivor-setup-summary">
+            <div>
+              <small>ENTRY</small>
+              <strong>
+                {c.terms.mode === 'free' ? 'Free to play' : `${money(c.terms.feeShannons)} entry`}
+              </strong>
+              <span>Up to {c.terms.limit} players</span>
+            </div>
+            <div>
+              <small>HOST-ANNOUNCED PRIZE</small>
+              <strong>{money(c.terms.prizeShannons)}</strong>
+              <span>Arranged by you, not held by Streak</span>
+            </div>
+            <div>
+              <small>FIRST PICK DEADLINE</small>
+              <strong>{date(c.rounds[0].lockAt)}</strong>
+              <span>
+                {c.rounds.length} {c.rounds.length === 1 ? 'round' : 'rounds'} scheduled · Local
+                time
+              </span>
+            </div>
+          </div>
+          <div className="survivor-setup-publish">
+            <div>
+              <h3>
+                {c.terms.mode !== 'free'
+                  ? 'Paid entry is not available yet'
+                  : serverNow >= Date.parse(c.rounds[0].lockAt)
+                    ? 'Choose a future opening round'
+                    : 'Ready to open entries?'}
+              </h3>
+              <p id="survivor-publish-help">
+                {c.terms.mode !== 'free'
+                  ? 'Keep this as a paid draft, or edit it to use free entry. Entry-fee collection is not implemented, so this draft cannot be published.'
+                  : serverNow >= Date.parse(c.rounds[0].lockAt)
+                    ? 'The first pick deadline has passed. Edit the draft and choose upcoming rounds before publishing.'
+                    : 'Publishing makes this competition visible to everyone and locks its rules and schedule. You can then join and choose your first team.'}
+              </p>
+            </div>
+            <div className="survivor-actions">
+              <button
+                className="survivor-primary"
+                disabled={
+                  busy || c.terms.mode !== 'free' || serverNow >= Date.parse(c.rounds[0].lockAt)
+                }
+                aria-describedby="survivor-publish-help"
+                aria-busy={publishing}
+                onClick={() => action.mutate({ action: 'publish', id: c.id })}
+              >
+                {publishing && <span className="survivor-spinner" aria-hidden="true" />}
+                {publishing ? 'Publishing competition…' : 'Publish free competition'}
+              </button>
+              <button className="quiet" disabled={busy} onClick={() => adminOpen(c)}>
+                Edit draft
+              </button>
+            </div>
+          </div>
+          <details className="survivor-setup-schedule">
+            <summary>
+              Review {c.rounds.length} scheduled {c.rounds.length === 1 ? 'round' : 'rounds'}
+              <Icon name="chevron-down" />
+            </summary>
+            {c.rounds.map((r, i) => (
+              <div className="survivor-schedule" key={r.key}>
+                <strong>
+                  Round {i + 1}: {r.label}
+                </strong>
+                <span>Pick by {date(r.lockAt)}</span>
+                <small>
+                  {r.fixtures.map((f) => `${f.home.name} vs ${f.away.name}`).join(' · ')}
+                </small>
+              </div>
             ))}
-          </select>
-        </label>
+          </details>
+          <div className="survivor-setup-footer">
+            <button className="quiet" onClick={() => show('rules')}>
+              Competition rules
+            </button>
+            <button
+              className="quiet"
+              disabled={busy}
+              onClick={() => {
+                setDeleteTarget(c);
+                show('delete');
+              }}
+            >
+              Delete competition
+            </button>
+          </div>
+        </section>
       )}
-      {c && round && (
+      {data && data.competitions.length > 0 && (
+        <section className="survivor-competitions" aria-label="Competitions">
+          <div className="survivor-section-head">
+            <div>
+              <span className="eyebrow">FIND YOUR NEXT RUN</span>
+              <h2>Competitions</h2>
+            </div>
+          </div>
+          <div className="survivor-competition-list">
+            {data.competitions.map((item) => (
+              <button
+                type="button"
+                className="glass survivor-competition-card"
+                key={item.id}
+                aria-pressed={c?.id === item.id}
+                onClick={() => {
+                  changeCompetition(item.id);
+                  setSetupTarget(item.state === 'draft' ? item.id : '');
+                }}
+              >
+                <span className="survivor-tag">
+                  {item.state === 'draft'
+                    ? 'Draft · not published'
+                    : item.state === 'open'
+                      ? 'Open for entries'
+                      : item.state === 'running'
+                        ? 'In play'
+                        : item.state === 'complete'
+                          ? 'Finished'
+                          : 'Cancelled'}
+                </span>
+                <strong>{item.terms.name}</strong>
+                <span>
+                  {item.terms.mode === 'free' ? 'Free entry' : 'Paid entry · draft only'} ·{' '}
+                  {money(item.terms.prizeShannons)} announced prize
+                </span>
+                <span className="survivor-competition-link">
+                  {item.state === 'draft'
+                    ? 'Review setup'
+                    : item.state === 'open'
+                      ? 'View & join'
+                      : 'View competition'}{' '}
+                  <Icon name="arrow" />
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {c && round && c.state !== 'draft' && (
         <>
           <section className="glass survivor-hero">
             <div className="survivor-hero-copy">
@@ -347,20 +549,7 @@ export default function SurvivorPage({
                     Delete competition
                   </button>
                 )}
-                {c.state === 'draft' ? (
-                  <>
-                    <button
-                      className="survivor-primary"
-                      disabled={busy || c.terms.mode !== 'free'}
-                      onClick={() => action.mutate({ action: 'publish', id: c.id })}
-                    >
-                      Publish free competition
-                    </button>
-                    <button className="quiet" onClick={() => adminOpen(c)}>
-                      Edit draft
-                    </button>
-                  </>
-                ) : !own && c.state === 'open' && open ? (
+                {!own && c.state === 'open' && open ? (
                   <button
                     className="survivor-primary"
                     disabled={!accountReady || signInPending || c.entries.length >= c.terms.limit}
@@ -474,13 +663,15 @@ export default function SurvivorPage({
                         const opponent = fixture.home.id === team.id ? fixture.away : fixture.home;
                         const used = own?.used.includes(team.id) && saved?.teamId !== team.id;
                         const next = c.rounds
-                          .slice(c.currentRound + 1)
+                          .slice(c.currentRound)
                           .flatMap((r) => r.fixtures)
-                          .find((f) => f.home.id === team.id || f.away.id === team.id);
+                          .filter((f) => f.home.id === team.id || f.away.id === team.id)
+                          .slice(0, 3);
                         return (
                           <button
                             className="survivor-team glass"
                             key={team.id}
+                            data-used={used ? 'true' : 'false'}
                             aria-pressed={selectedTeam === team.id}
                             disabled={
                               !canPick ||
@@ -496,7 +687,7 @@ export default function SurvivorPage({
                                 {round.voidFixtures.includes(fixture.id)
                                   ? 'FIXTURE CHANGED'
                                   : used
-                                    ? 'PLAYED'
+                                    ? 'ALREADY USED'
                                     : selectedTeam === team.id
                                       ? saved?.teamId === team.id
                                         ? 'SAVED ✓'
@@ -509,11 +700,15 @@ export default function SurvivorPage({
                               vs {opponent.name} · {fixture.home.id === team.id ? 'Home' : 'Away'}
                             </span>
                             <small>{date(fixture.kickoff)}</small>
-                            <span className="survivor-next">
-                              {next
-                                ? `NEXT: ${next.home.id === team.id ? next.away.name : next.home.name}`
-                                : 'No later fixture in this competition'}
-                            </span>
+                            <FixtureRun
+                              label="Next fixtures in this competition"
+                              fixtures={next.map((f) => ({
+                                opponent: f.home.id === team.id ? f.away.code : f.home.code,
+                                opponentName: f.home.id === team.id ? f.away.name : f.home.name,
+                                home: f.home.id === team.id,
+                                kickoff: f.kickoff,
+                              }))}
+                            />
                           </button>
                         );
                       }),
@@ -786,10 +981,13 @@ export default function SurvivorPage({
                   <select
                     aria-label="Entry mode"
                     name="mode"
-                    defaultValue={editing?.terms.mode ?? 'free'}
+                    value={entryMode}
+                    onChange={(event) =>
+                      setEntryMode(event.target.value === 'paid' ? 'paid' : 'free')
+                    }
                   >
                     <option value="free">Free entry</option>
-                    <option value="paid">Fee-gated draft</option>
+                    <option value="paid">Paid entry (draft only)</option>
                   </select>
                 </label>
                 <label>
@@ -797,6 +995,7 @@ export default function SurvivorPage({
                   <input
                     name="fee"
                     inputMode="decimal"
+                    disabled={entryMode === 'free'}
                     defaultValue={editing ? decimalAmount(editing.terms.feeShannons) : '100'}
                   />
                 </label>
@@ -822,11 +1021,12 @@ export default function SurvivorPage({
                 </label>
               </div>
               <p className="survivor-notice">
-                You can save fee-gated drafts. Only free competitions can publish today. Prizes are
-                host announcements, not funded balances.
+                {entryMode === 'paid'
+                  ? 'Paid entry cannot open yet. You can save your plans as a draft, or choose free entry to publish now.'
+                  : 'Free entry needs no wallet payment. Any prize is arranged by you separately.'}
               </p>
               <fieldset>
-                <legend>Published rounds</legend>
+                <legend>Choose your rounds</legend>
                 <p>
                   Choose the complete schedule before opening entries. Each round includes all 20
                   clubs, with no repeat fixture per club.
@@ -861,6 +1061,11 @@ export default function SurvivorPage({
               >
                 {action.isPending ? 'Saving competition…' : 'Save draft'}
               </button>
+              <p>
+                {entryMode === 'free'
+                  ? 'Next: review your competition and publish it to open entries.'
+                  : 'Your draft stays private until free entry is selected and you publish it.'}
+              </p>
             </form>
           )}
         </div>

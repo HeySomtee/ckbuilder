@@ -1,3 +1,4 @@
+import { gamesPath } from '../../lib/games-data';
 import { isRecord, request } from '../../lib/http';
 export type Player = {
   id: string;
@@ -46,7 +47,15 @@ export type FiveRound = {
     ownShannons: string;
     ownStatus: string;
   } | null;
-  sponsors: { id: string; name: string; amountShannons: string; logo: string; link: string }[];
+  sponsors: {
+    id: string;
+    name: string;
+    amountShannons: string;
+    logo: string;
+    link: string;
+    introduction?: string;
+    description?: string;
+  }[];
   ownSponsorships: {
     id: string;
     amountShannons: string;
@@ -57,7 +66,15 @@ export type FiveRound = {
     transactionHash: string;
     auctionOutcome?: string;
   }[];
-  moderation?: { id: string; name: string; logo: string; link: string; moderation: string }[];
+  moderation?: {
+    id: string;
+    name: string;
+    logo: string;
+    link: string;
+    moderation: string;
+    introduction?: string;
+    description?: string;
+  }[];
 };
 export type RewardAccount = {
   availableShannons: string;
@@ -68,6 +85,7 @@ export type RewardAccount = {
   status: string;
 };
 export type FiveData = {
+  testMode?: boolean;
   automation?: { enabled: boolean; state: string; lastSyncedAt: string | null; message: string };
   rewardsAccount: RewardAccount | null;
   now: string;
@@ -199,6 +217,8 @@ export function parseFive(value: unknown): FiveData {
           amountShannons: amt(s.amountShannons),
           logo: str(s.logo),
           link: str(s.link),
+          introduction: s.introduction === undefined ? '' : str(s.introduction, 80),
+          description: s.description === undefined ? '' : str(s.description, 240),
         };
       }),
       ownSponsorships: arr(r.ownSponsorships).map((v) => {
@@ -224,6 +244,8 @@ export function parseFive(value: unknown): FiveData {
                 name: str(s.name),
                 logo: str(s.logo),
                 link: str(s.link),
+                introduction: s.introduction === undefined ? '' : str(s.introduction, 80),
+                description: s.description === undefined ? '' : str(s.description, 240),
                 moderation: str(s.moderation),
               };
             }),
@@ -252,6 +274,7 @@ export function parseFive(value: unknown): FiveData {
           status: str(reward.status),
         }
       : null,
+    testMode: d.testMode === true,
     now: str(d.now),
     admin: bool(d.admin),
     viewerId: nil(d.viewerId),
@@ -265,9 +288,11 @@ export function parseFive(value: unknown): FiveData {
   };
 }
 export const loadFive = async (id: string, signal: AbortSignal) =>
-  parseFive(await request(`/five${id ? `?round=${encodeURIComponent(id)}` : ''}`, signal));
+  parseFive(
+    await request(gamesPath(`/five${id ? `?round=${encodeURIComponent(id)}` : ''}`), signal),
+  );
 export const actFive = async (body: Record<string, unknown>) =>
-  parseFive(await request('/five', undefined, body));
+  parseFive(await request(gamesPath('/five'), undefined, body));
 export function shannons(input: string): string {
   if (!/^(0|[1-9]\d{0,8})(\.\d{1,8})?$/.test(input))
     throw new Error('Enter a valid tCKB amount with up to 8 decimal places.');

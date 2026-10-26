@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { gamesDataMode } from '../../lib/games-data';
 import type { ccc } from '@ckb-ccc/core';
 import type { Account } from '../account/api';
 import { assertWalletAccount, chooseWallet, getWalletState } from '../../lib/wallet';
@@ -25,7 +26,9 @@ export function Sponsorship({
   const [named, setNamed] = useState(false),
     [name, setName] = useState(''),
     [logo, setLogo] = useState(''),
-    [link, setLink] = useState('');
+    [link, setLink] = useState(''),
+    [introduction, setIntroduction] = useState(''),
+    [description, setDescription] = useState('');
   const [accepted, setAccepted] = useState(false),
     [stage, setStage] = useState(''),
     [error, setError] = useState('');
@@ -51,6 +54,8 @@ export function Sponsorship({
             name,
             logo,
             link,
+            introduction,
+            description,
             custodyAccepted: accepted,
           });
       const intent = existing ?? data?.detail?.ownSponsorships.find((s) => s.id === id);
@@ -146,14 +151,21 @@ export function Sponsorship({
       <div className="five-contribution-saved" role="status">
         <span className="five-spinner" />
         <h3>{auction ? 'Your bid is on its way.' : 'Your contribution is on its way.'}</h3>
-        <p>
-          You can close this panel and keep exploring. Its status stays below the gameweek pool
-          while the chain confirms it.
-        </p>
+        <p>You can close this panel and keep exploring. Follow confirmation in the Activity tab.</p>
       </div>
     );
   return (
     <div className="five-admin-form">
+      <p className="five-sponsor-round">
+        <strong>{round.terms.name}</strong> · {auction ? 'Bids' : 'Contributions'} close{' '}
+        {new Date(round.terms.lockAt).toLocaleString()}
+      </p>
+      {gamesDataMode === 'test' && (
+        <p className="five-message">
+          Synthetic gameweek. This sends real testnet tCKB to the separate test rewards wallet. The
+          admin may close bidding and apply dummy results immediately.
+        </p>
+      )}
       <p>
         {auction
           ? 'Win this gameweek’s sponsor spot. Your confirmed top-ups combine into one bid. Only the winning total funds the prize pool.'
@@ -198,6 +210,28 @@ export function Sponsorship({
                       disabled={!!stage}
                       onChange={(e) => setName(e.target.value)}
                     />
+                  </label>
+                  <label>
+                    One-line introduction (optional)
+                    <input
+                      value={introduction}
+                      maxLength={80}
+                      disabled={!!stage}
+                      onChange={(e) => setIntroduction(e.target.value)}
+                      placeholder="What should players remember about you?"
+                    />
+                  </label>
+                  <label>
+                    About your product (optional)
+                    <textarea
+                      value={description}
+                      maxLength={240}
+                      rows={3}
+                      disabled={!!stage}
+                      onChange={(e) => setDescription(e.target.value.replace(/[\r\n]+/g, ' '))}
+                      placeholder="Tell the players what you are building."
+                    />
+                    <small>{description.length} / 240 characters</small>
                   </label>
                   <label>
                     Logo URL (optional)

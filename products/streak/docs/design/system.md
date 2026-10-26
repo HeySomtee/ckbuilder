@@ -1,5 +1,7 @@
 # Streak design and interaction system
 
+25 October dropdown correction: use proper SVG chevrons for disclosure controls. React uses the shared Icon component; retained vanilla screens use the same 24px viewBox path and currentColor stroke. Do not substitute angle characters or triangle glyphs. Existing native select SVG indicators remain appropriate. Keep icons decorative and expose expanded state on the controlling element.
+
 20 October Survivor admin action: Create competition uses a compact coral-tinted clear-glass button with a plus tile, 12px semibold label, 44px minimum height and visible hover/focus. Creation actions should not use the external-link arrow. Preserve native button semantics and forced-colors contrast.
 
 20 October select indicators: Season and retained legacy pages share `public/select-controls.css`. Single-choice selects use a 14px chevron positioned 12px from the inline end, with 38px end padding so labels cannot overlap it. Keep native select behavior, exclude multiple/list selects, mirror the indicator in RTL and restore the platform indicator in forced-colors mode. Feature background/padding rules must not override this shared spacing.

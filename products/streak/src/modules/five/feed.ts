@@ -10,7 +10,7 @@ import {
   type Terms,
 } from './domain';
 import type { FiveFeed } from './service';
-import type { FplSeason, ScoutData, ScoutPlayer, PlayerProfile } from './scouting';
+import type { FplSeason, ScoutData, ScoutPlayer, PlayerProfile, FixtureSchedule } from './scouting';
 const list = (value: unknown, max: number) => {
   if (!Array.isArray(value) || value.length > max)
     throw new FiveError('The player feed returned incomplete data.', 503);
@@ -94,6 +94,65 @@ export class FplFiveFeed implements FiveFeed {
         } satisfies ScoutPlayer;
       }),
     };
+  }
+  async schedule(): Promise<FixtureSchedule> {
+    const [bootstrap, raw] = await Promise.all([
+      this.get('bootstrap-static/'),
+      this.get('fixtures/'),
+    ]);
+    const teams = new Map(
+      list(object(bootstrap).teams, 30).map((v) => {
+        const t = object(v);
+        return [integer(t.id, 1, 100), text(t.short_name ?? t.name, 80)];
+      }),
+    );
+    const outlook: FixtureSchedule['teams'] = {};
+    const now = Date.now();
+    const fixtures = list(raw, 500)
+      .map((value) => {
+        const f = object(value);
+        if (
+          f.kickoff_time != null &&
+          (typeof f.kickoff_time !== 'string' || !Number.isFinite(Date.parse(f.kickoff_time)))
+        )
+          throw new FiveError('Fixture dates are unavailable.', 503);
+        return f;
+      })
+      .filter(
+        (f) =>
+          f.finished !== true &&
+          f.started !== true &&
+          (f.kickoff_time == null || Date.parse(String(f.kickoff_time)) > now),
+      );
+    fixtures.sort(
+      (a, b) =>
+        (a.kickoff_time == null ? Infinity : Date.parse(String(a.kickoff_time))) -
+        (b.kickoff_time == null ? Infinity : Date.parse(String(b.kickoff_time))),
+    );
+    for (const f of fixtures) {
+      const h = integer(f.team_h, 1, 100),
+        a = integer(f.team_a, 1, 100);
+      if (!teams.has(h) || !teams.has(a))
+        throw new FiveError('Fixture teams are unavailable.', 503);
+      const kickoff = f.kickoff_time == null ? null : text(f.kickoff_time, 40);
+      if (kickoff !== null && !Number.isFinite(Date.parse(kickoff)))
+        throw new FiveError('Fixture dates are unavailable.', 503);
+      for (const [id, opponent, home, difficulty] of [
+        [h, a, true, f.team_h_difficulty],
+        [a, h, false, f.team_a_difficulty],
+      ] as const) {
+        const next = (outlook[String(id)] ??= []);
+        if (next.length < 3)
+          next.push({
+            event: f.event == null ? null : integer(f.event, 1, 38),
+            opponent: teams.get(opponent)!,
+            home,
+            kickoff,
+            difficulty: integer(difficulty, 1, 5),
+          });
+      }
+    }
+    return { observedAt: new Date().toISOString(), teams: outlook };
   }
   async profile(id: number): Promise<PlayerProfile> {
     integer(id, 1, 1000000);
