@@ -1,5 +1,14 @@
 # Architecture and migration
 
+28 October wallet Activity uses the [event-driven index](../delivery/event-driven-activity.md).
+The operator relays sanitized durable journal observations over authenticated local IPC.
+The API commits deduplicated jobs and PostgreSQL owner records, reads those records
+without a wallet provider, and separates canonical recovery from page requests.
+Existing live transaction validation remains collection authority. Browser discovery
+is now explicit recovery.
+
+27 October wallet correction: original JoyID P-256 passkeys use strict proof normalization and deterministic pinned-lock binding without a remote identity service. EVM discovery allows delayed announcements; UTXO Global and JoyID public metadata have explicit restoration adapters. REI stays explicit-only because its SDK requests accounts when checking connection. Sign-in remains separate from payment, with errors visible in the slip. Sponsored prediction lock support remains native secp256k1 and EVM. [Details and limitations](../delivery/wallet-compatibility.md).
+
 26 October game-data correction: a local environment setting owns dummy data selection. The uncached application shell pins the mode per document; game APIs reject stale scopes after restart. Hosted and proxied test-mode requests are denied. Public switches and URL-based selection are removed. Survivor creation uses explicit competition cache keys, and Five fixture outlooks load independently through one shared provider query. [Boundaries and evidence](../delivery/games-local-mode-and-outlook.md).
 
 26 October Five workspace retains mounted, account/round-scoped drafts across presentation tabs. Optional sponsor introduction and description use the existing JSON aggregate, bounded validation, immutable intent retries and moderated public projections. Sponsor review retains its original round across refreshes. [Integration and evidence](../delivery/five-workspace.md).

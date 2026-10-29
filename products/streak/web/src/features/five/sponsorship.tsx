@@ -1,3 +1,4 @@
+import { CellLoader } from '../../components/cell-loader';
 import { useRef, useState } from 'react';
 import { gamesDataMode } from '../../lib/games-data';
 import type { ccc } from '@ckb-ccc/core';
@@ -149,7 +150,7 @@ export function Sponsorship({
   if (saved)
     return (
       <div className="five-contribution-saved" role="status">
-        <span className="five-spinner" />
+        <CellLoader variant="wave" />
         <h3>{auction ? 'Your bid is on its way.' : 'Your contribution is on its way.'}</h3>
         <p>You can close this panel and keep exploring. Follow confirmation in the Activity tab.</p>
       </div>
@@ -284,11 +285,12 @@ export function Sponsorship({
           <button
             className="btn primary"
             disabled={!accepted || !!stage}
+            aria-busy={!!stage}
             onClick={() => void prepare()}
           >
             {stage ? (
               <>
-                <span className="five-spinner" />
+                <CellLoader variant="orbit" />
                 {stage}
               </>
             ) : auction ? (
@@ -312,10 +314,15 @@ export function Sponsorship({
             Approval sends exactly this contribution to the dedicated rewards wallet. Your remaining
             change stays yours.
           </p>
-          <button className="btn primary" disabled={!!stage} onClick={() => void submit()}>
+          <button
+            className="btn primary"
+            disabled={!!stage}
+            aria-busy={!!stage}
+            onClick={() => void submit()}
+          >
             {stage ? (
               <>
-                <span className="five-spinner" />
+                <CellLoader variant="orbit" />
                 {stage}
               </>
             ) : signed.current ? (

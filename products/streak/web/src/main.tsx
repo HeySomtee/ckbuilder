@@ -1,4 +1,4 @@
-import { Component, StrictMode } from 'react';
+import { Component, StrictMode, useLayoutEffect } from 'react';
 import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -6,10 +6,40 @@ import { App } from './app/app';
 import { Landing } from './app/landing';
 import './design-system/styles.css';
 
+function finishStartup(immediate = false) {
+  const landingRecovery = document.getElementById('streak-landing-recovery');
+  const hadRecoveryFocus = landingRecovery?.contains(document.activeElement);
+  document.documentElement.dataset.streakShellReady = 'true';
+  document.dispatchEvent(new CustomEvent('streak:shell-ready', { detail: { immediate } }));
+  document.getElementById('streak-landing-recovery')?.remove();
+  // A failed startup-controller download must not cover a successfully mounted app.
+  const splash = document.getElementById('streak-startup');
+  if (splash?.dataset.phase !== 'presenting' && splash?.dataset.phase !== 'exiting') {
+    splash?.remove();
+    const root = document.getElementById('root');
+    if (root) root.inert = false;
+  }
+  if (hadRecoveryFocus) {
+    const root = document.getElementById('root');
+    if (root) {
+      root.tabIndex = -1;
+      root.focus({ preventScroll: true });
+    }
+  }
+}
+
+function ShellReady({ children }: { children: ReactNode }) {
+  useLayoutEffect(finishStartup, []);
+  return children;
+}
+
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+  componentDidCatch() {
+    finishStartup(true);
   }
   render() {
     return this.state.failed ? (
@@ -41,7 +71,7 @@ if (document.documentElement.dataset.streakLegacyRedirect !== 'true')
     <StrictMode>
       <ErrorBoundary>
         <QueryClientProvider client={client}>
-          {isMarkets ? <App /> : <Landing />}
+          <ShellReady>{isMarkets ? <App /> : <Landing />}</ShellReady>
         </QueryClientProvider>
       </ErrorBoundary>
     </StrictMode>,

@@ -1,5 +1,46 @@
 # Streak documentation
 
+29 October: [shared cell loaders](delivery/connected-loading.md) are implemented
+across the dapp after owner approval. Six motion groups and eight real application
+loading states pass in Chromium/WebKit. Final release verification/publication
+remains pending. See the [work tracker](work-tracker.md) for current scope.
+
+29 October [refined cell loading preview](../design/loading-signature-review/README.md):
+rotating/pulsating squares and a horizontal connected sine wave, shown at actual
+UI sizes. Eight Chromium/WebKit verification groups pass. Await design approval
+before application integration.
+
+29 October [local Activity wiring and calmer retry UI](delivery/event-driven-activity.md)
+are verified with persistent records, four browser journeys and disposable
+PostgreSQL checks. [Landing pages skip the splash](delivery/startup-identity.md);
+all 58 startup browser groups pass. Publication and hosted acceptance remain
+pending, with the earlier local launcher gap resolved.
+
+29 October [longer, skippable startup reveal](delivery/startup-identity.md) is
+verified locally with 38 Chromium/WebKit groups. The [production test plan](delivery/hosted-acceptance-plan.md)
+now waits for development completion and a frozen deployed candidate before
+selecting fresh fixtures. No hosted test or publication is claimed.
+
+28 October [event-driven Activity delivered locally](delivery/event-driven-activity.md), with all 75 required checks covered by passing results across the full run and documented follow-ups. Final indexed/recovery browser verification passed at 14:24:04 UTC; independent reviews accepted. Publication and physical-wallet acceptance remain separate. This supersedes the implementation-in-progress entries below.
+
+28 October approved implementation: [event-driven wallet Activity](delivery/event-driven-activity.md) adds durable public event delivery, owner-indexed PostgreSQL reads, canonical recovery and signer-independent startup prefetch. Focused tests and independent review are complete; final major verification is in progress. Earlier proposal-only entries below are historical. The linked-block loading preview still awaits separate approval.
+
+28 October Activity proposal refinement: [event-driven wallet records](architecture/wallet-activity-index.md), backed by durable delivery and targeted reconciliation. [Engineering notes](architecture/wallet-activity-index-technical.md) identify existing journal hooks and the distinction between submitted, admitted, reported and collectible states. Proposal only; no index runtime is implemented.
+
+28 October [linked-block loading signature](../design/loading-signature-review/README.md): interactive preview for payment buttons, Activity, games and minimized confirmation status. Responsive Chromium/WebKit and reduced-motion checks passed. Await approval before replacing site-wide loaders.
+
+28 October owner-approved [logo and startup integration](delivery/startup-identity.md). The [production test plan](delivery/hosted-acceptance-plan.md) is now a short checklist. Read the [plain-language activity proposal](architecture/wallet-activity-index.md) first; its [engineering notes](architecture/wallet-activity-index-technical.md) retain implementation details. The durable index remains for review.
+
+28 October implemented: [bounded Activity startup warmup](delivery/activity-startup-warmup.md) shares cached reads after sign-in without delaying the shell. Focused unit/build/lint/browser checks passed and independent review accepted. The durable index remains a separate architecture proposal.
+
+28 October refinement: [two-strike / chart-r splash](../design/splash-review/README.md) adds CKB cell and prediction motifs in an isolated preview. [Wallet activity index design](architecture/wallet-activity-index.md) documents current scan costs, durable owner-index architecture, bounded prefetch and app-wide performance targets. [Hosted acceptance](delivery/hosted-acceptance-plan.md) explicitly runs on streakpitch.com; local results do not count as hosted acceptance.
+
+28 October: [hosted acceptance plan](delivery/hosted-acceptance-plan.md) for six QA wallets, tonight's prediction coverage and GW9 Five/Survivor deadlines. Public hosted and official FPL snapshots verified; no test bets executed. [Animated startup preview](../design/splash-review/README.md) is isolated at port 4198 awaiting design approval.
+
+27 October branding integration: [approved On form wordmark and favicon](../design/brand-review/README.md) now appear across local Season, landing and retained legacy surfaces. Build, lint, static policies and both responsive browser suites passed. Includes application asset mapping and downloadable vector/icon packs. Commit, push and hosted rollout remain pending.
+
+27 October local implementation: [wallet compatibility, visible login recovery and restoration](delivery/wallet-compatibility.md). Independent identity review accepted; all 71 major checks and the subsequent scoped static/build check passed. Physical wallet and hosted acceptance remain separate.
+
 26 October release report: [Week 22: a reason to come back next weekend](../../../reports/week-22.md), with screenshots, the new streakpitch.com domain and explicit testnet limits. [DM draft for Neon](../../../reports/week-22-dm.md).
 
 26 October owner correction implemented locally: [environment-only game data, consistent Beta labels, Survivor competition discovery and next-three fixture outlooks](delivery/games-local-mode-and-outlook.md). All 71 major checks passed in one run; local API is back on regular football data.

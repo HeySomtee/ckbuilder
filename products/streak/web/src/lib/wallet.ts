@@ -50,11 +50,11 @@ export function disconnectWallet(
   publish(null, notice);
 }
 
-/** Restore only an already-authorized EVM wallet. Never request access or sign. */
+/** Restore a prior wallet using read-only APIs. Never request access or sign. */
 export async function restoreWallet(expectedAddress?: string): Promise<void> {
   if (state.connection || selection) return;
   if (restoration) return restoration;
-  let hint: { address: string; name: string; until: number };
+  let hint: { address: string; name: string; until: number; family?: string };
   try {
     const value: unknown = JSON.parse(localStorage.getItem(REMEMBERED_WALLET) ?? 'null');
     if (
@@ -73,7 +73,12 @@ export async function restoreWallet(expectedAddress?: string): Promise<void> {
       (expectedAddress && value.address !== expectedAddress)
     )
       return;
-    hint = { address: value.address, name: value.name, until: value.until };
+    hint = {
+      address: value.address,
+      name: value.name,
+      until: value.until,
+      family: 'family' in value && typeof value.family === 'string' ? value.family : 'evm',
+    };
   } catch {
     return;
   }
@@ -81,22 +86,40 @@ export async function restoreWallet(expectedAddress?: string): Promise<void> {
   const pending = (async () => {
     const { ccc } = await import('@ckb-ccc/connector');
     if (state.revision !== revision || selection) return;
-    const candidates: InstanceType<typeof ccc.Eip6963.Signer>[] = [];
-    const stop = new ccc.Eip6963.SignerFactory(
-      new ccc.ClientPublicTestnet({
-        url: 'https://testnet.ckb.dev/',
-        fallbacks: [],
-        timeout: 15_000,
-        maxConcurrent: 4,
-      }),
-    ).subscribeSigners((signer, detail) => {
-      if (
-        (detail?.info.name ?? 'EVM') === hint.name &&
-        !candidates.some((s) => s.provider === signer.provider)
-      )
-        candidates.push(signer);
+    const client = new ccc.ClientPublicTestnet({
+      url: 'https://testnet.ckb.dev/',
+      fallbacks: [],
+      timeout: 15_000,
+      maxConcurrent: 4,
     });
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    const candidates: ccc.Signer[] = [];
+    // REI's isConnected calls ckb_requestAccounts, so it remains explicit-only.
+    if (hint.family === 'utxo-ckb' && hint.name === 'UTXO Global Wallet') {
+      candidates.push(
+        ...ccc.UtxoGlobal.getUtxoGlobalSigners(client)
+          .filter(({ signer }) => signer.type === ccc.SignerType.CKB)
+          .map(({ signer }) => signer),
+      );
+    } else if (hint.family === 'joyid-ckb' && hint.name === 'JoyID Passkey') {
+      candidates.push(
+        ...ccc.JoyId.getJoyIdSigners(client, 'Streak', '/favicon.ico')
+          .filter(({ signer }) => signer.signType === ccc.SignerSignType.JoyId)
+          .map(({ signer }) => signer),
+      );
+    }
+    const stop =
+      hint.family === 'evm'
+        ? new ccc.Eip6963.SignerFactory(client).subscribeSigners((signer, detail) => {
+            if (
+              (detail?.info.name ?? 'EVM') === hint.name &&
+              !candidates.some((s) => 'provider' in s && s.provider === signer.provider)
+            )
+              candidates.push(signer);
+          })
+        : () => {};
+    // Extension announcements may arrive after page startup. This runs in the
+    // background and never blocks browsing or opens wallet permission prompts.
+    if (hint.family === 'evm') await new Promise((resolve) => setTimeout(resolve, 1_000));
     stop();
     if (candidates.length !== 1 || state.revision !== revision || selection) return;
     const signer = candidates[0];
@@ -340,13 +363,24 @@ export async function chooseWallet(): Promise<ccc.Signer> {
       updated();
     });
     const retained = await retainWallet(signer, revision);
-    if (signer.type === ccc.SignerType.EVM && 'provider' in signer && state.connection) {
+    const family =
+      signer.type === ccc.SignerType.EVM && 'provider' in signer
+        ? 'evm'
+        : walletName === 'UTXO Global Wallet' && signer.type === ccc.SignerType.CKB
+          ? 'utxo-ckb'
+          : walletName === 'JoyID Passkey' && signer.signType === ccc.SignerSignType.JoyId
+            ? 'joyid-ckb'
+            : undefined;
+    // Never leave an older provider hint behind after selecting another wallet.
+    forgetWallet();
+    if (family && state.connection) {
       try {
         localStorage.setItem(
           REMEMBERED_WALLET,
           JSON.stringify({
             address: state.connection.address,
             name: walletName,
+            family,
             until: Date.now() + 7 * 86400_000,
           }),
         );

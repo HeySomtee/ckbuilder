@@ -80,6 +80,7 @@ export async function syntheticChain(cutoffMs) {
   let failBroadcast = true,
     conflictClaim = true,
     conflictingHash = null;
+  let settledPosition = null;
   const rpc = async (method, args) => {
     const p = args[0];
     if (method === 'cell') return live.get(pointKey(p)) ? json(live.get(pointKey(p))) : null;
@@ -178,6 +179,15 @@ export async function syntheticChain(cutoffMs) {
       outputsData: [ccc.hexFrom(reserve), ccc.hexFrom(claim)],
     });
     commit(tx);
+    settledPosition = {
+      id: pointKey(shard.outPoint),
+      outcome: ticket.outcome,
+      principalShannons: ticket.principal.toString(),
+      storageShannons: (321n * CKB).toString(),
+      entitlementShannons: (ticket.principal + 321n * CKB).toString(),
+      outPoint: { txHash: tx.hash(), index: 1 },
+      transactionHash: shard.outPoint.txHash,
+    };
     return tx.hash();
   }
   return {
@@ -187,6 +197,27 @@ export async function syntheticChain(cutoffMs) {
     settle,
     ownerHash: owner.hash(),
     address: address.toString(),
+    activitySnapshot() {
+      if (!settledPosition) throw Error('Synthetic settlement must be created first.');
+      const collected = [...txs.values()].find((tx) =>
+        tx.inputs.some(
+          (input) => pointKey(input.previousOutput) === pointKey(settledPosition.outPoint),
+        ),
+      );
+      return {
+        phase: 'settled',
+        settlement: { outcome: settledPosition.outcome, emptyWinner: false },
+        positions: [
+          {
+            ...settledPosition,
+            status: collected ? 'claimed' : 'claimable',
+            ...(collected ? { claimTransactionHash: collected.hash() } : {}),
+          },
+        ],
+        checkedAt: Date.now(),
+        historyComplete: true,
+      };
+    },
     get conflictingHash() {
       return conflictingHash;
     },

@@ -9,6 +9,7 @@ import type { SponsoredClient, SponsoredReview } from './sponsored-client';
 import type { SponsoredRecord } from './sponsored-journal';
 import type { DemandFixture } from './sponsored-protocol';
 import type { Outcome } from './protocol';
+import { PaymentButtonState } from './payment-progress';
 
 const names = ['Home', 'Draw', 'Away'] as const;
 const money = (value: string) => `${displayShannons(BigInt(value))} tCKB`;
@@ -159,7 +160,11 @@ export function SponsoredCheckout({
         }
         onClick={() => prepare.mutate()}
       >
-        {prepare.isPending ? 'Preparing transaction...' : 'Review testnet prediction'}
+        {prepare.isPending ? (
+          <PaymentButtonState label="Preparing transaction..." />
+        ) : (
+          'Review testnet prediction'
+        )}
       </button>
       {notice && (
         <p className="notice" role="status">
@@ -229,7 +234,11 @@ export function SponsoredCheckout({
               disabled={working || now >= review.expiresAt}
               onClick={() => submit.mutate()}
             >
-              {submit.isPending ? 'Completing your prediction...' : 'Sign prediction in wallet'}
+              {submit.isPending ? (
+                <PaymentButtonState label="Completing your prediction..." />
+              ) : (
+                'Sign prediction in wallet'
+              )}
             </button>
             <button className="quiet" disabled={working} onClick={() => setReview(null)}>
               Back to editing
@@ -304,7 +313,18 @@ export function SponsoredTransaction({
       <a href={href(record.hash)} target="_blank" rel="noreferrer">
         View transaction
       </a>
-      <p>{recovery.data?.message ?? 'Your exact signed prediction is saved on this device.'}</p>
+      <p role="status">
+        {recovery.isFetching ? (
+          <PaymentButtonState
+            variant="wave"
+            label={
+              recovery.data?.message ?? 'Your exact signed prediction is saved on this device.'
+            }
+          />
+        ) : (
+          (recovery.data?.message ?? 'Your exact signed prediction is saved on this device.')
+        )}
+      </p>
       {recovery.data?.confirmations ? <p>{recovery.data.confirmations} confirmations</p> : null}
       {(recovery.error ?? resume.error ?? resolve.error ?? discard.error) && (
         <p className="pick-error" role="alert">
@@ -318,7 +338,11 @@ export function SponsoredTransaction({
           disabled={working || resume.isPending || recovery.data?.inputsLive !== true}
           onClick={() => resume.mutate()}
         >
-          {resume.isPending ? 'Resuming original transaction...' : 'Resume original transaction'}
+          {resume.isPending ? (
+            <PaymentButtonState label="Resuming original transaction..." />
+          ) : (
+            'Resume original transaction'
+          )}
         </button>
       )}
       {state !== 'discarded' &&
@@ -330,7 +354,11 @@ export function SponsoredTransaction({
             disabled={working || discard.isPending || resume.isPending}
             onClick={() => discard.mutate()}
           >
-            Discard unshared expired signature
+            {discard.isPending ? (
+              <PaymentButtonState label="Discard unshared expired signature" />
+            ) : (
+              'Discard unshared expired signature'
+            )}
           </button>
         )}
       {['conflict', 'unknown', 'reorg', 'awaiting-sponsor'].includes(state) && (
@@ -357,7 +385,11 @@ export function SponsoredTransaction({
             }
             onClick={() => resolve.mutate()}
           >
-            Verify conflicting spend
+            {resolve.isPending ? (
+              <PaymentButtonState label="Verify conflicting spend" />
+            ) : (
+              'Verify conflicting spend'
+            )}
           </button>
         </details>
       )}

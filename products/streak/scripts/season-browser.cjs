@@ -620,7 +620,8 @@ async function main() {
       // Recovery must work without loading the new application's JavaScript.
       await page.route('**/season/assets/*.js', (route) => route.abort());
       await recoveryReads.goto(base + '/');
-      await page.getByRole('heading', { name: 'Streak is loading.' }).waitFor();
+      await page.getByRole('status').filter({ hasText: 'Let’s get you back in.' }).waitFor();
+      assert.equal(await page.locator('#streak-startup-progress').isVisible(), false);
       await page.getByRole('link', { name: 'Open current Wallet', exact: true }).click();
       await page.waitForURL('**/index.html#wallet');
       await page.locator('#connect-top').waitFor();

@@ -1,4 +1,5 @@
 /** Matchday screens share the app's route lifecycle and completion-based poller. */
+import { cellLoaderMarkup } from './cell-loader.js';
 export function createMatchdayView({ api, esc, teamMark, fmtCkb, fmtDateTime, isActiveView, startPolling }) {
   const minute = (m, extra) => m == null ? "—" : `${m}${extra ? `+${extra}` : ""}′`;
   const time = (iso) => iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
@@ -13,7 +14,7 @@ export function createMatchdayView({ api, esc, teamMark, fmtCkb, fmtDateTime, is
     }
   };
   const notice = (section, emptyText) => {
-    if (!section) return `<div class="md-empty">Fetching match coverage…</div>`;
+    if (!section) return `<div class="md-empty" role="status">${cellLoaderMarkup('wave')} Fetching match coverage</div>`;
     if (section.state === "ready") return "";
     return `<div class="md-notice ${section.state === "stale" ? "md-delayed" : ""}" role="status">${esc(section.message || (section.state === "empty" ? emptyText : "Coverage is unavailable right now."))}</div>`;
   };

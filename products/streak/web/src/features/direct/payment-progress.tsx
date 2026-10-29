@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../../components/icon';
+import { CellLoader } from '../../components/cell-loader';
 import './payment-progress.css';
 
 export type PaymentStage =
@@ -52,7 +53,7 @@ export function PaymentProgress({
       hidden={hidden}
       aria-label="Payment progress"
     >
-      {expanded && (
+      {expanded && !hidden && (
         <div className="payment-progress-details">
           <header>
             <span>PAYMENT TRACKER</span>
@@ -76,17 +77,15 @@ export function PaymentProgress({
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
       >
-        <span className={`payment-orbit ${moving ? 'is-moving' : ''}`} aria-hidden="true">
+        <span className="payment-orbit" aria-hidden="true">
           {stage === 'confirmed' ? (
             '✓'
           ) : stage === 'attention' || stage === 'not-sent' ? (
             '!'
+          ) : moving && !hidden ? (
+            <CellLoader />
           ) : (
-            <>
-              <i />
-              <i />
-              <i />
-            </>
+            <Icon name="wallet" />
           )}
         </span>
         <span className="payment-progress-copy">
@@ -104,14 +103,16 @@ export function PaymentProgress({
   );
 }
 
-export function PaymentButtonState({ label }: { label: string }) {
+export function PaymentButtonState({
+  label,
+  variant = 'orbit',
+}: {
+  label: string;
+  variant?: 'orbit' | 'wave';
+}) {
   return (
     <span className="payment-button-state" aria-live="polite">
-      <span className="payment-button-dots" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </span>
+      <CellLoader variant={variant} />
       <span>{label}</span>
     </span>
   );

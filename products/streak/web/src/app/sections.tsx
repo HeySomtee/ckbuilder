@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Icon } from '../components/icon';
+import { CellLoader } from '../components/cell-loader';
 import { TeamBadge } from '../components/team-badge';
 import { getMarkets } from '../features/markets/api';
 import { poolLabel } from '../features/markets/pools';
@@ -124,13 +125,17 @@ function Overview({
           </header>
           {fixtures.isPending && (
             <p className="notice" role="status">
+              <CellLoader variant="wave" />
               Loading this weekend's fixtures...
             </p>
           )}
           {fixtures.isError && (
             <div className="notice error" role="alert">
               <p>Fixtures are unavailable right now.</p>
-              <button onClick={() => void fixtures.refetch()}>Retry fixtures</button>
+              <button aria-busy={fixtures.isFetching} onClick={() => void fixtures.refetch()}>
+                {fixtures.isFetching && <CellLoader variant="orbit" />}
+                Retry fixtures
+              </button>
             </div>
           )}
           {fixtures.data && fixtures.data.markets.length === 0 && (

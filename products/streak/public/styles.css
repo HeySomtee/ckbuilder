@@ -1224,20 +1224,16 @@ button.outcome.away:hover {
   color: var(--amber);
   display: inline-block;
 }
-.activity.run .a-spin {
-  animation: aspin 1s linear infinite;
-}
 .activity.ok .a-spin {
   color: var(--up);
 }
 .activity.err .a-spin {
   color: var(--down);
 }
-@keyframes aspin {
-  to {
-    transform: rotate(360deg);
-  }
-}
+.loading-ledger { display: grid; justify-items: center; gap: 12px; padding: 60px 20px; color: var(--ink-2); font: 11px var(--mono); letter-spacing: 0.08em; }
+.loading-ledger .cell-loader--wave { width: 62px; height: 29px; }
+.loading-inline { display: inline-flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: 0.08em; }
+button > .cell-loader { margin-inline-end: 5px; }
 
 /* ── Fund hint banner + onboarding ──────────────────────────────────────── */
 .fund-hint {

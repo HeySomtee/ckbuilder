@@ -1,3 +1,4 @@
+import { CellLoader } from '../../components/cell-loader';
 import { GameTestPanel } from '../games-test/panel';
 import { gamesDataMode } from '../../lib/games-data';
 import { useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
@@ -132,9 +133,11 @@ function Rulebook() {
 function Builder({
   round,
   pending,
+  saving,
   onSave,
   onSignIn,
   authenticated,
+  signInPending,
   scoutingAvailable,
   now,
   squadControl,
@@ -144,9 +147,11 @@ function Builder({
   scoutingAvailable: boolean;
   round: FiveRound;
   pending: boolean;
+  saving: boolean;
   onSave: (players: string[], captain: string) => Promise<void>;
   onSignIn: () => void;
   authenticated: boolean;
+  signInPending: boolean;
 }) {
   const own = round.entries.find((e) => e.id === round.ownId);
   const [ids, setIds] = useState<string[]>(own?.players ?? []),
@@ -383,12 +388,13 @@ function Builder({
           <button
             className="btn primary"
             disabled={pending || locked || !complete || unchanged}
+            aria-busy={saving || (!authenticated && signInPending)}
             aria-describedby="five-save-hint"
             onClick={() => (authenticated ? setReview(true) : onSignIn())}
           >
-            {pending ? (
+            {saving ? (
               <>
-                <span className="five-spinner" />
+                <CellLoader variant="orbit" />
                 Saving your five
               </>
             ) : locked ? (
@@ -404,7 +410,10 @@ function Builder({
                 'Review your five'
               )
             ) : (
-              'Sign in to save'
+              <>
+                {signInPending && <CellLoader variant="orbit" />}
+                Sign in to save
+              </>
             )}
           </button>
           <p id="five-save-hint" role="status">
@@ -440,6 +449,7 @@ function Builder({
             <button
               className="btn primary"
               disabled={pending}
+              aria-busy={saving}
               onClick={async () => {
                 setError('');
                 try {
@@ -454,9 +464,9 @@ function Builder({
                 }
               }}
             >
-              {pending ? (
+              {saving ? (
                 <>
-                  <span className="five-spinner" />
+                  <CellLoader variant="orbit" />
                   Saving your five
                 </>
               ) : own ? (
@@ -535,14 +545,17 @@ function Builder({
         </div>
         {scout.isPending && scoutingAvailable && (
           <p className="five-scout-status" role="status">
-            <span className="five-spinner" />
+            <CellLoader variant="wave" />
             Updating player stats
           </p>
         )}
         {scout.isError && (
           <p className="five-scout-status" role="status">
             Scouting stats are delayed. Your squad is available.{' '}
-            <button onClick={() => void scout.refetch()}>Retry stats</button>
+            <button aria-busy={scout.isFetching} onClick={() => void scout.refetch()}>
+              {scout.isFetching && <CellLoader variant="orbit" />}
+              Retry stats
+            </button>
           </p>
         )}
         <div className="five-player-heading">
@@ -557,7 +570,10 @@ function Builder({
         {schedule.isError && (
           <p className="five-scout-status" role="status">
             Fixture outlook is delayed.{' '}
-            <button onClick={() => void schedule.refetch()}>Retry fixtures</button>
+            <button aria-busy={schedule.isFetching} onClick={() => void schedule.refetch()}>
+              {schedule.isFetching && <CellLoader variant="orbit" />}
+              Retry fixtures
+            </button>
           </p>
         )}
         <div className="five-player-list">
@@ -652,11 +668,13 @@ function Admin({
   data,
   onAction,
   pending,
+  pendingBody,
   onClose,
 }: {
   data: FiveData;
   onAction: (body: Record<string, unknown>) => Promise<void>;
   pending: boolean;
+  pendingBody?: Record<string, unknown>;
   onClose: () => void;
 }) {
   const r = data.detail;
@@ -780,7 +798,12 @@ function Admin({
             <p>
               Entry deadline: {date(r.terms.lockAt)}. Terms and prices become fixed when published.
             </p>
-            <button className="btn primary" disabled={pending}>
+            <button
+              className="btn primary"
+              disabled={pending}
+              aria-busy={pendingBody?.action === 'edit'}
+            >
+              {pendingBody?.action === 'edit' && <CellLoader variant="orbit" />}
               Save settings
             </button>
           </>
@@ -804,8 +827,10 @@ function Admin({
               type="button"
               className="btn primary"
               disabled={!data.feedAvailable || pending}
+              aria-busy={pendingBody?.action === 'import'}
               onClick={() => run({ action: 'import', id: draftId, event })}
             >
+              {pendingBody?.action === 'import' && <CellLoader variant="orbit" />}
               Import player catalogue
             </button>
             {!data.feedAvailable && (
@@ -827,7 +852,12 @@ function Admin({
                 Include terms, deadlines and player prices. No sample player data is supplied as a
                 production fallback.
               </p>
-              <button className="btn" disabled={pending}>
+              <button
+                className="btn"
+                disabled={pending}
+                aria-busy={pendingBody?.action === 'create'}
+              >
+                {pendingBody?.action === 'create' && <CellLoader variant="orbit" />}
                 Create draft
               </button>
             </details>
@@ -927,6 +957,12 @@ export default function FivePage({
   });
   const data = query.data,
     r = data?.detail;
+  const pendingBody =
+    mutation.isPending &&
+    mutation.variables.identity === identity &&
+    mutation.variables.selection === selection
+      ? mutation.variables.body
+      : undefined;
   const activeSponsorRound = r?.id === sponsorRound?.id ? r : sponsorRound;
   const openSponsorship = () => {
     if (!account) {
@@ -986,6 +1022,7 @@ export default function FivePage({
           id={r?.id}
           state={r?.state}
           busy={mutation.isPending}
+          pendingControl={pendingBody?.action === 'testControl' ? pendingBody.control : undefined}
           run={action}
         />
         <div className="five-actions">
@@ -1011,8 +1048,10 @@ export default function FivePage({
                   <button
                     className="btn primary"
                     disabled={mutation.isPending}
+                    aria-busy={pendingBody?.action === 'publish'}
                     onClick={() => action({ action: 'publish', id: r.id, termsHash: r.termsHash })}
                   >
+                    {pendingBody?.action === 'publish' && <CellLoader variant="orbit" />}
                     Publish gameweek
                   </button>
                 ) : r.state !== 'final' && r.state !== 'cancelled' ? (
@@ -1020,8 +1059,10 @@ export default function FivePage({
                     <button
                       className="btn"
                       disabled={mutation.isPending || r.state === 'open' || !data.feedAvailable}
+                      aria-busy={pendingBody?.action === 'sync'}
                       onClick={() => action({ action: 'sync', id: r.id })}
                     >
+                      {pendingBody?.action === 'sync' && <CellLoader variant="orbit" />}
                       Refresh player scores
                     </button>
                     <button
@@ -1070,7 +1111,7 @@ export default function FivePage({
       )}
       {query.isPending && (
         <div className="five-loading" role="status">
-          <span className="five-spinner" />
+          <CellLoader variant="wave" />
           Loading gameweeks
         </div>
       )}
@@ -1078,7 +1119,8 @@ export default function FivePage({
         <div className="glass five-empty-state">
           <h2>Let’s get your team sheet back.</h2>
           <p>{query.error.message}</p>
-          <button className="btn" onClick={() => void query.refetch()}>
+          <button className="btn" aria-busy={query.isFetching} onClick={() => void query.refetch()}>
+            {query.isFetching && <CellLoader variant="orbit" />}
             Try again
           </button>
         </div>
@@ -1093,7 +1135,13 @@ export default function FivePage({
               : 'No gameweek is open yet. Entry is free, with or without a sponsor.'}
           </p>
           {!account && (
-            <button className="btn" disabled={signInPending} onClick={onSignIn}>
+            <button
+              className="btn"
+              disabled={signInPending}
+              aria-busy={signInPending}
+              onClick={onSignIn}
+            >
+              {signInPending && <CellLoader variant="orbit" />}
               Sign in
             </button>
           )}
@@ -1146,7 +1194,9 @@ export default function FivePage({
               key={`${identity}:${r.id}`}
               round={r}
               pending={mutation.isPending}
+              saving={pendingBody?.action === 'enter'}
               authenticated={!!account}
+              signInPending={signInPending}
               onSignIn={onSignIn}
               onSave={(players, captain) =>
                 actionAsync({ action: 'enter', id: r.id, players, captain, termsHash: r.termsHash })
@@ -1275,6 +1325,7 @@ export default function FivePage({
             <RewardsPanel
               data={data}
               pending={mutation.isPending}
+              pendingBody={pendingBody}
               action={action}
               onContinue={openSponsorship}
             />
@@ -1328,8 +1379,10 @@ export default function FivePage({
           <button
             className="btn primary"
             disabled={!reason.trim() || mutation.isPending}
+            aria-busy={pendingBody?.action === 'cancel'}
             onClick={() => void modalAction({ action: 'cancel', id: r.id, reason })}
           >
+            {pendingBody?.action === 'cancel' && <CellLoader variant="orbit" />}
             Confirm cancellation
           </button>
           {modalError && <p role="alert">{modalError}</p>}
@@ -1345,6 +1398,7 @@ export default function FivePage({
           data={data}
           onAction={actionAsync}
           pending={mutation.isPending}
+          pendingBody={pendingBody}
           onClose={() => setModal(null)}
         />
       )}
@@ -1427,7 +1481,12 @@ export default function FivePage({
               />
               All eligible fixtures and records are final
             </label>
-            <button className="btn primary" disabled={mutation.isPending}>
+            <button
+              className="btn primary"
+              disabled={mutation.isPending}
+              aria-busy={pendingBody?.action === 'scores'}
+            >
+              {pendingBody?.action === 'scores' && <CellLoader variant="orbit" />}
               Save score revision
             </button>
             {modalError && <p role="alert">{modalError}</p>}
@@ -1448,10 +1507,12 @@ export default function FivePage({
           <button
             className="btn primary"
             disabled={!r.scoresComplete || mutation.isPending}
+            aria-busy={pendingBody?.action === 'finalize'}
             onClick={() => {
               void modalAction({ action: 'finalize', id: r.id, revision: r.revision });
             }}
           >
+            {pendingBody?.action === 'finalize' && <CellLoader variant="orbit" />}
             Confirm final scores
           </button>
           {modalError && <p role="alert">{modalError}</p>}

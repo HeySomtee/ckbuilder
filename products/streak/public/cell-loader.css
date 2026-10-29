@@ -1,0 +1,140 @@
+.cell-loader-host {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 0;
+  margin-inline-end: 6px;
+}
+.cell-loader {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+  overflow: visible;
+}
+.cell-loader--orbit {
+  width: 24px;
+  height: 24px;
+}
+.cell-loader--wave {
+  width: 44px;
+  height: 21px;
+}
+.cell-loader .cell-block {
+  fill: currentColor;
+  fill-opacity: 0.1;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-opacity: 0.9;
+}
+.cell-loader .home {
+  color: var(--cell-home, #94badd);
+}
+.cell-loader .draw {
+  color: var(--cell-draw, #a9d8a6);
+}
+.cell-loader .away {
+  color: var(--cell-away, #db9b9b);
+}
+.cell-loader .cell-link {
+  fill: none;
+  stroke: var(--cell-link, #aec4b6);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-opacity: 0.7;
+}
+.cell-loader .cell-orbit,
+.cell-loader .cell-pulse {
+  transform-origin: 20px 20px;
+}
+.cell-loader .cell-orbit {
+  animation: streak-cell-orbit 4.8s linear infinite;
+}
+.cell-loader .cell-pulse {
+  animation: streak-cell-breathe 2.4s ease-in-out infinite;
+}
+.cell-loader--wave .cell-link {
+  stroke-dasharray: 1;
+  animation: streak-cell-connect 2.4s ease-in-out infinite;
+}
+.cell-loader--wave .cell-link.second {
+  animation-delay: -1.8s;
+}
+.cell-loader--wave .cell-block {
+  animation: streak-cell-shimmer 2.4s ease-in-out infinite;
+}
+.cell-loader--wave .draw {
+  animation-delay: -1.8s;
+}
+.cell-loader--wave .away {
+  animation-delay: -1.2s;
+}
+.cell-loader[data-paused='true'] * {
+  animation-play-state: paused !important;
+}
+.cell-loader[data-reduced='true'] * {
+  animation: none !important;
+}
+.cell-loader[data-reduced='true'] .cell-link {
+  stroke-dasharray: none;
+}
+@keyframes streak-cell-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes streak-cell-breathe {
+  0%,
+  100% {
+    transform: scale(0.94);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+@keyframes streak-cell-connect {
+  0%,
+  100% {
+    stroke-dashoffset: 1;
+    opacity: 0.2;
+  }
+  30%,
+  64% {
+    stroke-dashoffset: 0;
+    opacity: 0.85;
+  }
+  88% {
+    stroke-dashoffset: -1;
+    opacity: 0.2;
+  }
+}
+@keyframes streak-cell-shimmer {
+  0%,
+  100% {
+    fill-opacity: 0.06;
+    stroke-opacity: 0.65;
+  }
+  50% {
+    fill-opacity: 0.19;
+    stroke-opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell-loader * {
+    animation: none !important;
+  }
+  .cell-loader .cell-link {
+    stroke-dasharray: none;
+  }
+}
+@media (forced-colors: active) {
+  .cell-loader .cell-block {
+    color: CanvasText;
+  }
+  .cell-loader .cell-link {
+    stroke: CanvasText;
+  }
+}

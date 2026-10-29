@@ -1,0 +1,1509 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Streak | Connected motion</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0d1511;
+        --surface: #15211b;
+        --ink: #f1f3ed;
+        --muted: #a1afa6;
+        --line: #bdd2c51c;
+        --coral: #ff986f;
+        --mint: #b9e982;
+        --blue: #94badd;
+        --green: #a9d8a6;
+        --red: #db9b9b;
+        font-family: Arial, Helvetica, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--coral);
+        outline-offset: 4px;
+      }
+      button {
+        color: inherit;
+      }
+      svg {
+        display: block;
+        flex: none;
+      }
+      button:disabled {
+        cursor: default;
+      }
+      button[hidden],
+      [hidden] {
+        display: none !important;
+      }
+      .studio {
+        max-width: 1320px;
+        margin: auto;
+        padding: 28px 36px 60px;
+      }
+      .studio-bar {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--line);
+      }
+      .studio-brand {
+        width: 124px;
+        height: auto;
+      }
+      .studio-note {
+        margin-left: auto;
+        text-align: right;
+        font:
+          10px/1.7 Consolas,
+          monospace;
+        letter-spacing: 1.5px;
+        color: var(--muted);
+      }
+      .studio-note strong {
+        color: var(--coral);
+        font-weight: 400;
+      }
+      .intro {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 28px;
+        margin: 32px 0 26px;
+      }
+      .overline {
+        font:
+          10px/1.5 Consolas,
+          monospace;
+        letter-spacing: 1.6px;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+      h1 {
+        font-size: clamp(28px, 4vw, 44px);
+        letter-spacing: -1.7px;
+        line-height: 1.08;
+        margin: 9px 0 10px;
+      }
+      .intro p {
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--muted);
+        max-width: 370px;
+        margin: 0;
+      }
+      .origin {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        background: #1a2b203e;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 15px 19px;
+        min-width: 230px;
+      }
+      .origin span {
+        font-size: 11px;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+      .origin strong {
+        display: block;
+        color: var(--ink);
+        font-size: 12px;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+      }
+      .states {
+        display: flex;
+        padding: 4px;
+        background: #ffffff04;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        gap: 4px;
+      }
+      .states button {
+        min-height: 40px;
+        padding: 0 16px;
+        border: 0;
+        background: none;
+        border-radius: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .states button[aria-pressed='true'] {
+        color: var(--ink);
+        background: #d9e8de12;
+        box-shadow: inset 0 0 0 1px #dfede116;
+      }
+      .controls label {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 12px;
+        color: var(--muted);
+        margin-left: auto;
+        min-height: 44px;
+      }
+      .controls input {
+        accent-color: var(--coral);
+      }
+      .replay {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 44px;
+        border: 0;
+        padding: 0;
+        background: none;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .replay svg {
+        width: 15px;
+        height: 15px;
+      }
+      .canvas {
+        position: relative;
+        background:
+          radial-gradient(ellipse at 85% 0, #244c3830, transparent 52%),
+          linear-gradient(140deg, #171c16, #111d17 65%, #13211e);
+        border: 1px solid #bbd7c92b;
+        border-radius: 22px;
+        padding: 30px;
+        overflow: hidden;
+        box-shadow: 0 22px 70px #0002;
+      }
+      .canvas-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--line);
+      }
+      .canvas h2 {
+        font-size: 27px;
+        letter-spacing: -1px;
+        margin: 6px 0;
+      }
+      .canvas-head p {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0;
+      }
+      .refresh {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0 13px;
+        min-height: 42px;
+        background: #ffffff02;
+        font-size: 12px;
+        color: #b8c8bd;
+        white-space: nowrap;
+      }
+      .refresh .status-icon {
+        width: 15px;
+        height: 15px;
+        color: var(--mint);
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 312px;
+        gap: 28px;
+        margin-top: 22px;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin: 0 0 23px;
+      }
+      .stat {
+        padding: 0 0 18px;
+        border-bottom: 1px solid var(--line);
+      }
+      .stat small {
+        font:
+          9px Consolas,
+          monospace;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+      }
+      .stat b {
+        font:
+          600 23px Consolas,
+          monospace;
+        display: block;
+        margin-top: 9px;
+        letter-spacing: -1px;
+      }
+      .stat b em {
+        font-style: normal;
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--muted);
+        letter-spacing: 0;
+      }
+      .stat:nth-child(2) b {
+        color: var(--mint);
+      }
+      .tabs {
+        display: flex;
+        gap: 23px;
+        border-bottom: 1px solid var(--line);
+        margin-bottom: 2px;
+      }
+      .tabs span {
+        font-size: 12px;
+        color: var(--muted);
+        padding: 0 0 13px;
+      }
+      .tabs .selected {
+        color: var(--ink);
+        border-bottom: 2px solid var(--coral);
+      }
+      .tabs b {
+        font:
+          10px Consolas,
+          monospace;
+        margin-left: 7px;
+        background: #dfe9df0a;
+        border-radius: 4px;
+        padding: 3px 5px;
+        color: #bac5bd;
+      }
+      .rows {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .prediction {
+        display: grid;
+        grid-template-columns: 35px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 0;
+        border-bottom: 1px solid #bed6c613;
+      }
+      .crest {
+        width: 31px;
+        height: 36px;
+        clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+        background: #be626226;
+        border-top: 2px solid #bb7774;
+        color: #e4aaaa;
+        font:
+          9px Consolas,
+          monospace;
+        display: grid;
+        place-items: center;
+        padding-bottom: 5px;
+      }
+      .crest.city {
+        background: #719ab826;
+        border-color: #96b8ca;
+        color: #b2cddd;
+      }
+      .crest.palace {
+        background: #8594c426;
+        border-color: #9baed7;
+        color: #b6c6e5;
+      }
+      .prediction strong {
+        display: block;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .prediction p {
+        font-size: 11px;
+        margin: 4px 0 0;
+        color: var(--muted);
+      }
+      .prediction .amount {
+        text-align: right;
+        font:
+          12px/1.5 Consolas,
+          monospace;
+        white-space: nowrap;
+      }
+      .prediction .amount span {
+        display: block;
+        color: var(--muted);
+        font:
+          10px/1.8 Arial,
+          Helvetica,
+          sans-serif;
+      }
+      .prediction .amount.ready {
+        color: var(--mint);
+      }
+      .saved-note {
+        font-size: 10px;
+        line-height: 1.65;
+        color: #8a9e91;
+        margin: 13px 0 0;
+        min-height: 34px;
+      }
+      .section-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+        font:
+          9px/1.4 Consolas,
+          monospace;
+        letter-spacing: 1px;
+        color: #8fa596;
+        text-transform: uppercase;
+        margin-bottom: 13px;
+      }
+      .section-label b {
+        font-weight: 400;
+        color: #617f6c;
+      }
+      .payment {
+        border: 1px solid #bed3c82b;
+        border-radius: 16px;
+        background: linear-gradient(130deg, #e4f0e908, #15241c70);
+        padding: 19px;
+        box-shadow: inset 0 1px #eff6ee19;
+      }
+      .payment-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 21px;
+      }
+      .payment-header h3 {
+        font-size: 17px;
+        letter-spacing: -0.5px;
+        margin: 0;
+      }
+      .count {
+        font:
+          10px Consolas,
+          monospace;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        padding: 4px 6px;
+        border-radius: 6px;
+      }
+      .mini-pick {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        font-size: 11px;
+        border-bottom: 1px solid var(--line);
+        padding: 10px 0;
+      }
+      .mini-pick strong {
+        display: block;
+        font-size: 11px;
+      }
+      .mini-pick small {
+        font-size: 10px;
+        color: var(--coral);
+        display: block;
+        margin-top: 4px;
+      }
+      .mini-pick > span:last-child {
+        font:
+          11px Consolas,
+          monospace;
+        color: #c3d2c8;
+      }
+      .invoice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 10px;
+        color: var(--muted);
+        margin: 20px 0 15px;
+      }
+      .invoice b {
+        font:
+          600 17px Consolas,
+          monospace;
+        color: var(--ink);
+      }
+      .action {
+        display: flex;
+        gap: 9px;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        width: 100%;
+        border: 1px solid #ffbd9d40;
+        border-radius: 10px;
+        background: #ff986f;
+        color: #1c251e;
+        font-weight: 700;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .action:disabled {
+        background: #b878583d;
+        color: #f1dbc9;
+        border-color: #bc8c6b31;
+      }
+      .action .chain {
+        --home: #d4e4ef;
+        --draw: #d8ebd5;
+        --away: #f0d7ce;
+        width: 35px;
+      }
+      .action .status-icon {
+        width: 17px;
+        height: 17px;
+      }
+      .action-note {
+        font-size: 10px;
+        line-height: 1.6;
+        color: var(--muted);
+        margin: 10px 0 0;
+        min-height: 32px;
+      }
+      .wallet-stage {
+        margin-top: 24px;
+      }
+      .wallet-button {
+        border: 1px solid #b3d1c128;
+        background: #15261b;
+        color: #c0d1c4;
+        box-shadow: inset 0 1px #d1ebd20b;
+      }
+      .wallet-button:disabled {
+        background: #15261b;
+        color: #c0d1c4;
+        border-color: #b3d1c128;
+      }
+      .wallet-button .chain {
+        --home: var(--blue);
+        --draw: var(--green);
+        --away: var(--red);
+        width: 35px;
+      }
+      .wallet-note {
+        font-size: 10px;
+        line-height: 1.6;
+        color: var(--muted);
+        margin: 10px 1px 0;
+        min-height: 32px;
+      }
+      .page-example {
+        margin-top: 26px;
+      }
+      .page-loader {
+        min-height: 178px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        background: linear-gradient(150deg, #c4e3d405, #11211945);
+        padding: 24px;
+        text-align: center;
+      }
+      .page-loader .chain {
+        width: 84px;
+        margin-bottom: 19px;
+      }
+      .page-loader strong {
+        font-size: 13px;
+      }
+      .page-loader p {
+        font-size: 11px;
+        color: var(--muted);
+        line-height: 1.7;
+        margin: 8px 0 0;
+        max-width: 260px;
+      }
+      .page-loader .status-icon {
+        width: 29px;
+        height: 29px;
+        color: var(--mint);
+        margin-bottom: 18px;
+      }
+      .retry-link {
+        min-height: 40px;
+        padding: 5px 12px;
+        margin-top: 10px;
+        color: var(--coral);
+        border: 0;
+        background: none;
+        font-size: 12px;
+      }
+      .dock-section {
+        margin-top: 25px;
+        max-width: 480px;
+      }
+      .dock {
+        border: 1px solid #abc6ba33;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #d5e7dc08, #102019);
+        box-shadow: 0 9px 25px #0002;
+        overflow: hidden;
+      }
+      .dock-toggle {
+        border: 0;
+        background: none;
+        width: 100%;
+        padding: 15px 16px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        text-align: left;
+      }
+      .dock-toggle .chain {
+        width: 38px;
+      }
+      .dock-toggle .status-icon {
+        width: 23px;
+        height: 23px;
+        color: var(--mint);
+      }
+      .dock-copy {
+        min-width: 0;
+        flex: 1;
+      }
+      .dock-copy strong {
+        font-size: 12px;
+        line-height: 1.5;
+        display: block;
+      }
+      .dock-copy small {
+        font-size: 10px;
+        color: var(--muted);
+        line-height: 1.6;
+        display: block;
+        margin-top: 2px;
+      }
+      .chevron {
+        width: 16px;
+        height: 16px;
+        color: #a0b5a7;
+        transition: transform 0.2s;
+      }
+      .dock-toggle[aria-expanded='true'] .chevron {
+        transform: rotate(180deg);
+      }
+      .dock-detail {
+        font-size: 11px;
+        line-height: 1.8;
+        color: var(--muted);
+        border-top: 1px solid var(--line);
+        margin: 0 16px;
+        padding: 13px 0 16px;
+      }
+      .dock-detail p {
+        margin: 0;
+      }
+      .dock-detail button {
+        color: var(--coral);
+        border: 0;
+        background: none;
+        padding: 10px 0 0;
+        font-size: 11px;
+        min-height: 38px;
+      }
+      .canvas-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        border-top: 1px solid var(--line);
+        padding-top: 17px;
+        margin-top: 24px;
+        font:
+          9px/1.7 Consolas,
+          monospace;
+        letter-spacing: 0.4px;
+        color: #789381;
+      }
+      .footnote {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.7;
+        margin-top: 20px;
+      }
+      .footnote strong {
+        font-weight: 400;
+        color: #d3ddd5;
+      }
+      .live-status {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .chain {
+        --home: var(--blue);
+        --draw: var(--green);
+        --away: var(--red);
+        display: block;
+        width: 48px;
+        height: auto;
+        flex: none;
+        overflow: visible;
+      }
+      .origin .chain {
+        width: 62px;
+      }
+      .chain .cell {
+        fill: currentColor;
+        fill-opacity: 0.1;
+        stroke: currentColor;
+        stroke-width: 1.35;
+        stroke-opacity: 0.9;
+      }
+      .chain .home {
+        color: var(--home);
+      }
+      .chain .draw {
+        color: var(--draw);
+      }
+      .chain .away {
+        color: var(--away);
+      }
+      .chain .link {
+        fill: none;
+        stroke: #aec4b6;
+        stroke-width: 1.1;
+        stroke-linecap: round;
+        stroke-opacity: 0.7;
+      }
+      .chain--circular {
+        width: 28px;
+      }
+      .chain .orbit,
+      .chain .pulse {
+        transform-origin: 20px 20px;
+      }
+      .chain .orbit {
+        animation: cell-orbit 4.8s linear infinite;
+      }
+      .chain .pulse {
+        animation: cell-breathe 2.4s ease-in-out infinite;
+      }
+      .chain--horizontal .link {
+        stroke-dasharray: 1;
+        animation: cell-connect 2.4s ease-in-out infinite;
+      }
+      .chain--horizontal .link.second {
+        animation-delay: -1.8s;
+      }
+      .chain--horizontal .cell {
+        animation: cell-shimmer 2.4s ease-in-out infinite;
+      }
+      .chain--horizontal .draw {
+        animation-delay: -1.8s;
+      }
+      .chain--horizontal .away {
+        animation-delay: -1.2s;
+      }
+      @keyframes cell-orbit {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes cell-breathe {
+        0%,
+        100% {
+          transform: scale(0.94);
+          opacity: 0.7;
+        }
+        50% {
+          transform: scale(1.04);
+          opacity: 1;
+        }
+      }
+      @keyframes cell-connect {
+        0%,
+        100% {
+          stroke-dashoffset: 1;
+          opacity: 0.2;
+        }
+        30%,
+        64% {
+          stroke-dashoffset: 0;
+          opacity: 0.85;
+        }
+        88% {
+          stroke-dashoffset: -1;
+          opacity: 0.2;
+        }
+      }
+      @keyframes cell-shimmer {
+        0%,
+        100% {
+          fill-opacity: 0.06;
+          stroke-opacity: 0.65;
+        }
+        50% {
+          fill-opacity: 0.19;
+          stroke-opacity: 1;
+        }
+      }
+      .motion-studies {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-bottom: 26px;
+      }
+      .motion-study {
+        position: relative;
+        border: 1px solid #bdd2c524;
+        border-radius: 20px;
+        padding: 22px 26px;
+        overflow: hidden;
+        background: radial-gradient(ellipse at 50% 30%, #7ba18c0c, transparent 70%), #111a16;
+      }
+      .study-stage {
+        display: grid;
+        place-items: center;
+        height: 160px;
+      }
+      .study-stage .chain--circular {
+        width: 84px;
+      }
+      .study-stage .chain--horizontal {
+        width: 156px;
+      }
+      .study-caption {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 16px;
+      }
+      .study-caption h2 {
+        font-size: 17px;
+        letter-spacing: -0.5px;
+        margin: 0 0 6px;
+      }
+      .study-caption p {
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--muted);
+        margin: 0;
+      }
+      .study-caption small {
+        color: var(--muted);
+        font:
+          10px Consolas,
+          monospace;
+        white-space: nowrap;
+      }
+      .action .chain--circular,
+      .refresh .chain--circular {
+        width: 24px;
+      }
+      .action .chain--horizontal {
+        width: 43px;
+      }
+      .motion-toggle {
+        min-height: 44px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        background: #ffffff04;
+        border-radius: 9px;
+        font-size: 12px;
+      }
+      .motion-paused .chain *,
+      .page-hidden .chain * {
+        animation-play-state: paused !important;
+      }
+      body[data-state='error'] .refresh {
+        border-color: #d2c19b40;
+        color: #d4c6a4;
+      }
+      body[data-state='error'] .dock {
+        border-color: #d2c19b40;
+      }
+      body[data-state='error'] .dock .status-icon {
+        color: #d4c6a4;
+      }
+      body[data-state='success'] .refresh {
+        color: var(--mint);
+      }
+      .chain[data-static] *,
+      .no-motion .chain * {
+        animation: none !important;
+        stroke-dashoffset: 0 !important;
+      }
+      .no-motion * {
+        transition: none !important;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .chain * {
+          animation: none !important;
+          stroke-dashoffset: 0 !important;
+        }
+        * {
+          transition: none !important;
+        }
+      }
+      @media (max-width: 900px) {
+        .studio {
+          padding: 24px;
+        }
+        .layout {
+          grid-template-columns: minmax(0, 1fr) 280px;
+          gap: 22px;
+        }
+        .canvas {
+          padding: 24px;
+        }
+        .intro {
+          align-items: start;
+        }
+        .origin {
+          min-width: 200px;
+        }
+        .states button {
+          padding: 0 12px;
+        }
+      }
+      @media (max-width: 720px) {
+        .motion-studies {
+          gap: 12px;
+        }
+        .motion-study {
+          padding: 16px;
+        }
+        .study-stage {
+          height: 130px;
+        }
+        .study-stage .chain--circular {
+          width: 66px;
+        }
+        .study-stage .chain--horizontal {
+          width: 110px;
+        }
+        .study-caption {
+          display: block;
+        }
+        .study-caption h2 {
+          font-size: 15px;
+        }
+        .study-caption p {
+          font-size: 11px;
+        }
+        .study-caption small {
+          display: block;
+          margin-top: 12px;
+        }
+        .studio {
+          padding: 20px 16px 36px;
+        }
+        .studio-bar {
+          padding-bottom: 20px;
+          gap: 12px;
+        }
+        .studio-brand {
+          width: 105px;
+        }
+        .studio-note {
+          font-size: 8px;
+          letter-spacing: 0.8px;
+        }
+        .intro {
+          margin: 25px 0 22px;
+          display: block;
+        }
+        .intro p {
+          font-size: 12px;
+          max-width: 320px;
+        }
+        .origin {
+          display: none;
+        }
+        h1 {
+          font-size: 34px;
+        }
+        .controls {
+          gap: 7px 18px;
+        }
+        .states {
+          width: 100%;
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 2px;
+        }
+        .states button {
+          padding: 0 4px;
+          font-size: 10px;
+          min-height: 42px;
+        }
+        .controls label {
+          margin-left: 0;
+          font-size: 11px;
+        }
+        .replay {
+          margin-left: auto;
+          font-size: 11px;
+        }
+        .canvas {
+          padding: 19px 15px;
+          border-radius: 18px;
+        }
+        .canvas-head {
+          align-items: start;
+          gap: 8px;
+          padding-bottom: 20px;
+        }
+        .canvas-head h2 {
+          font-size: 24px;
+        }
+        .canvas-head p {
+          max-width: 150px;
+          line-height: 1.6;
+          font-size: 11px;
+        }
+        .refresh {
+          padding: 0 8px;
+          min-height: 38px;
+          font-size: 10px;
+          gap: 6px;
+          margin-top: 9px;
+        }
+        .refresh .chain {
+          width: 29px;
+        }
+        .canvas-head .overline {
+          font-size: 8px;
+          letter-spacing: 1px;
+        }
+        .layout {
+          grid-template-columns: 1fr;
+          gap: 29px;
+          margin-top: 20px;
+        }
+        .stats {
+          gap: 10px;
+        }
+        .stat small {
+          font-size: 8px;
+          letter-spacing: 0;
+        }
+        .stat b {
+          font-size: 21px;
+        }
+        .stat b em {
+          font-size: 10px;
+        }
+        .prediction {
+          gap: 9px;
+          grid-template-columns: 28px minmax(0, 1fr) auto;
+        }
+        .crest {
+          width: 25px;
+          height: 30px;
+          font-size: 8px;
+        }
+        .prediction strong {
+          font-size: 11px;
+        }
+        .prediction p {
+          font-size: 10px;
+        }
+        .prediction .amount {
+          font-size: 11px;
+        }
+        .prediction .amount span {
+          font-size: 9px;
+        }
+        .payment {
+          padding: 17px;
+        }
+        .wallet-stage {
+          margin-top: 22px;
+        }
+        .page-loader {
+          min-height: 165px;
+        }
+        .dock-section {
+          margin-top: 27px;
+        }
+        .dock-toggle {
+          padding: 14px 12px;
+          gap: 10px;
+        }
+        .dock-copy strong {
+          font-size: 11px;
+        }
+        .dock-copy small {
+          font-size: 10px;
+        }
+        .canvas-footer {
+          font-size: 8px;
+          display: block;
+        }
+        .canvas-footer span {
+          display: block;
+          margin: 5px 0;
+        }
+        .footnote {
+          font-size: 10px;
+          display: block;
+        }
+        .footnote span {
+          display: block;
+          margin-bottom: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body data-state="loading">
+    <main class="studio">
+      <header class="studio-bar">
+        <img class="studio-brand" src="assets/wordmark.svg" alt="Streak" width="342" height="86" />
+        <div class="studio-note">
+          <strong>CONNECTED MOTION</strong><br />DESIGN PREVIEW / ILLUSTRATIVE DATA
+        </div>
+      </header>
+      <section class="intro">
+        <div>
+          <div class="overline">THE STREAK SIGNATURE</div>
+          <h1>Every move. Connected.</h1>
+          <p>
+            The three cells inside our logo become one familiar rhythm, wherever the game is
+            loading.
+          </p>
+        </div>
+        <div class="origin">
+          <span data-chain="horizontal"></span
+          ><span><strong>From the mark itself.</strong>Three cells. Two rhythms.</span>
+        </div>
+      </section>
+      <section class="motion-studies" aria-label="Two cell loading animations">
+        <article class="motion-study">
+          <div class="overline">01 / CIRCULAR</div>
+          <div class="study-stage"><span data-chain="circular"></span></div>
+          <div class="study-caption">
+            <div>
+              <h2>Spin. Breathe. Repeat.</h2>
+              <p>Three cells orbit with a gentle pulse.</p>
+            </div>
+            <small>BUTTONS · REFRESH</small>
+          </div>
+        </article>
+        <article class="motion-study">
+          <div class="overline">02 / HORIZONTAL</div>
+          <div class="study-stage"><span data-chain="horizontal"></span></div>
+          <div class="study-caption">
+            <div>
+              <h2>A wave of connection.</h2>
+              <p>Cells rise and fall. Their links draw in.</p>
+            </div>
+            <small>PANELS · STATUS</small>
+          </div>
+        </article>
+      </section>
+      <div class="controls" aria-label="Preview controls">
+        <div class="states" role="group" aria-label="Loading state">
+          <button data-state="loading" aria-pressed="true">Loading</button
+          ><button data-state="slow" aria-pressed="false">Taking longer</button
+          ><button data-state="error" aria-pressed="false">Needs attention</button
+          ><button data-state="success" aria-pressed="false">Complete</button>
+        </div>
+        <button class="motion-toggle" id="pause" aria-pressed="false">Pause motion</button>
+        <label><input type="checkbox" id="reduce" /> Reduced motion</label
+        ><button class="replay" id="replay">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            aria-hidden="true"
+          >
+            <path d="M3 10a9 9 0 1 1 1 8M3 4v6h6" /></svg
+          >Replay motion
+        </button>
+      </div>
+      <div class="live-status" id="preview-status" role="status" aria-live="polite">
+        Preview state: loading. Sample data only.
+      </div>
+      <section class="canvas" aria-label="Streak loading examples">
+        <header class="canvas-head">
+          <div>
+            <div class="overline">YOUR MATCHDAY, ON RECORD</div>
+            <h2>My activity.</h2>
+            <p>Your calls. Their results. All in one place.</p>
+          </div>
+          <div class="refresh" id="refresh">
+            <span data-chain="circular"></span><span data-label="refresh">Refreshing</span>
+          </div>
+        </header>
+        <div class="layout">
+          <div class="activity">
+            <div class="stats">
+              <div class="stat"><small>Open predictions</small><b>2</b></div>
+              <div class="stat">
+                <small>Ready to collect</small><b>421 <em>tCKB</em></b>
+              </div>
+              <div class="stat"><small>Completed</small><b>4</b></div>
+            </div>
+            <div class="tabs">
+              <span class="selected">Active <b>3</b></span
+              ><span>History <b>4</b></span>
+            </div>
+            <ul class="rows">
+              <li class="prediction">
+                <span class="crest" aria-hidden="true">ARS</span>
+                <div>
+                  <strong>Arsenal vs Chelsea</strong>
+                  <p>Arsenal to win</p>
+                </div>
+                <div class="amount">100 tCKB<span>Open</span></div>
+              </li>
+              <li class="prediction">
+                <span class="crest city" aria-hidden="true">MCI</span>
+                <div>
+                  <strong>Man City vs Liverpool</strong>
+                  <p>Draw</p>
+                </div>
+                <div class="amount">200 tCKB<span>Open</span></div>
+              </li>
+              <li class="prediction">
+                <span class="crest palace" aria-hidden="true">CRY</span>
+                <div>
+                  <strong>Crystal Palace vs Everton</strong>
+                  <p>Refund + returned storage</p>
+                </div>
+                <div class="amount ready">421 tCKB<span>Ready to collect</span></div>
+              </li>
+            </ul>
+            <p class="saved-note" data-label="activity">
+              Showing your saved activity while we check for updates.
+            </p>
+            <div class="page-example">
+              <div class="section-label"><span>Page / first load</span><b>Streak Five</b></div>
+              <div class="page-loader">
+                <span data-chain></span><strong data-label="page">Opening your gameweek</strong>
+                <p data-label="pageNote">Getting the player list and your saved five.</p>
+                <button class="retry-link" data-retry hidden>Try again</button>
+              </div>
+            </div>
+          </div>
+          <aside aria-label="Payment loading examples">
+            <div class="section-label"><span>Button / prepare</span><b>Prediction slip</b></div>
+            <div class="payment">
+              <div class="payment-header">
+                <h3>Your slip</h3>
+                <span class="count">2 picks</span>
+              </div>
+              <div class="mini-pick">
+                <span><strong>Arsenal vs Chelsea</strong><small>Arsenal to win</small></span
+                ><span>100 tCKB</span>
+              </div>
+              <div class="mini-pick">
+                <span><strong>Man City vs Liverpool</strong><small>Draw</small></span
+                ><span>200 tCKB</span>
+              </div>
+              <div class="invoice"><span>Wallet total · estimate</span><b>942 tCKB</b></div>
+              <button class="action" id="payment-action" disabled aria-busy="true">
+                <span data-chain="circular"></span
+                ><span data-label="payment">Preparing payment</span>
+              </button>
+              <p class="action-note" data-label="paymentNote">
+                Your picks stay saved while we prepare the review.
+              </p>
+            </div>
+            <div class="wallet-stage">
+              <div class="section-label"><span>Button / your approval</span><b>Wallet</b></div>
+              <button class="action wallet-button" id="wallet-action" disabled aria-busy="true">
+                <span data-chain></span><span data-label="wallet">Waiting for wallet</span>
+              </button>
+              <p class="wallet-note" data-label="walletNote">
+                Action needed: open your wallet to review the request.
+              </p>
+            </div>
+          </aside>
+        </div>
+        <div class="dock-section">
+          <div class="section-label">
+            <span>Background / keep exploring</span><b>Minimized status</b>
+          </div>
+          <div class="dock">
+            <button
+              class="dock-toggle"
+              id="dock-toggle"
+              aria-expanded="false"
+              aria-controls="dock-detail"
+            >
+              <span data-chain></span
+              ><span class="dock-copy"
+                ><strong data-label="dock">Waiting for confirmation</strong
+                ><small data-label="dockNote">2 picks · signed payment example</small></span
+              ><svg
+                class="chevron"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                aria-hidden="true"
+              >
+                <path d="m7 10 5 5 5-5" />
+              </svg>
+            </button>
+            <div class="dock-detail" id="dock-detail" hidden>
+              <p data-label="dockDetail">
+                Your payment has been submitted. You can keep exploring. Illustrative state only.
+              </p>
+              <button id="back-activity">Back to activity</button>
+            </div>
+          </div>
+        </div>
+        <footer class="canvas-footer">
+          <span>SAMPLE MATCHES, AMOUNTS AND STATUSES</span
+          ><span>CKB PUDGE TESTNET / MOTION STUDY</span>
+        </footer>
+      </section>
+      <footer class="footnote">
+        <span
+          ><strong>Quiet by design.</strong> Connected cells replace spinners and bouncing dots.
+          Existing content stays visible during refresh.</span
+        ><span>Indeterminate motion. No percentage, confirmation count or wallet request.</span>
+      </footer>
+      <noscript
+        ><p>
+          This motion preview needs JavaScript for its controls. No wallet or API is connected.
+        </p></noscript
+      >
+    </main>
+    <script>
+      const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+      // Native SVG animation keeps links attached to the moving cells without a JS frame loop.
+      const samples = Array.from({ length: 33 }, (_, i) => (i / 32) * Math.PI * 2);
+      const waveY = (time, cell) => (10 + 3.8 * Math.sin(time - (cell * Math.PI) / 2)).toFixed(3);
+      const animate = (attribute, values) =>
+        `<animate attributeName="${attribute}" values="${values.join(';')}" dur="2.4s" repeatCount="indefinite" calcMode="linear"/>`;
+      function chain(variant, moving) {
+        const staticAttribute = moving ? '' : 'data-static';
+        if (variant === 'circular')
+          return `<svg class="chain chain--circular" ${staticAttribute} viewBox="0 0 40 40" aria-hidden="true"><g class="orbit"><g class="pulse"><path class="link first" d="M22.3 13l4.9 8.5"/><path class="link second" d="M25.5 25.5h-11"/><rect class="cell home" x="16" y="5" width="8" height="8" rx="1.1"/><rect class="cell draw" x="25.5" y="21.5" width="8" height="8" rx="1.1"/><rect class="cell away" x="6.5" y="21.5" width="8" height="8" rx="1.1"/></g></g></svg>`;
+        const links = [0, 1]
+          .map((i) => {
+            const x = 14 + i * 20;
+            const values = samples.map(
+              (t) =>
+                `M${x} ${(+waveY(t, i) + 4).toFixed(3)}L${x + 12} ${(+waveY(t, i + 1) + 4).toFixed(3)}`,
+            );
+            return `<path class="link ${i ? 'second' : 'first'}" pathLength="1" d="M${x} 14h12">${moving ? animate('d', values) : ''}</path>`;
+          })
+          .join('');
+        const cells = ['home', 'draw', 'away']
+          .map(
+            (color, i) =>
+              `<rect class="cell ${color}" x="${6 + i * 20}" y="10" width="8" height="8" rx="1.1">${
+                moving
+                  ? animate(
+                      'y',
+                      samples.map((t) => waveY(t, i)),
+                    )
+                  : ''
+              }</rect>`,
+          )
+          .join('');
+        return `<svg class="chain chain--horizontal" ${staticAttribute} viewBox="0 0 60 28" aria-hidden="true">${links}${cells}</svg>`;
+      }
+      const icons = {
+        success: `<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m7.5 12 3 3 6-6"/></svg>`,
+        error: `<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 3h.01"/></svg>`,
+      };
+      const labels = {
+        loading: {
+          refresh: 'Refreshing',
+          activity: 'Showing your saved activity while we check for updates.',
+          page: 'Opening your gameweek',
+          pageNote: 'Getting the player list and your saved five.',
+          payment: 'Preparing payment',
+          paymentNote: 'Your picks stay saved while we prepare the review.',
+          wallet: 'Waiting for wallet',
+          walletNote: 'Action needed: open your wallet to review the request.',
+          dock: 'Waiting for confirmation',
+          dockNote: '2 picks · signed payment example',
+          dockDetail:
+            'Your payment has been submitted. You can keep exploring. Illustrative state only.',
+        },
+        slow: {
+          refresh: 'Still checking',
+          activity: 'Taking a little longer. Your saved activity stays visible.',
+          page: 'Still bringing your gameweek in',
+          pageNote: 'You can browse another section while this finishes.',
+          payment: 'Still preparing',
+          paymentNote: 'Taking longer than usual. Your picks are safe to keep editing later.',
+          wallet: 'Waiting for your approval',
+          walletNote: 'Check your wallet window. Streak cannot approve on your behalf.',
+          dock: 'Still waiting for confirmation',
+          dockNote: 'Keep exploring · your transaction stays saved',
+          dockDetail:
+            'A signed transaction stays saved while Streak checks the network. Keep exploring; there is no need to send it again. This is a design example only.',
+        },
+        error: {
+          refresh: 'Refresh paused',
+          activity: 'Could not refresh just now. Your saved activity is still here.',
+          page: 'Let’s try that again',
+          pageNote: 'The player list could not be refreshed. Your saved squad stays where it is.',
+          payment: 'Try again',
+          paymentNote: 'Could not prepare the review. No payment was sent in this preview.',
+          wallet: 'Try wallet again',
+          walletNote: 'The preview request was interrupted. Nothing has been signed.',
+          dock: 'Confirmation needs a check',
+          dockNote: 'Open for details · transaction preserved',
+          dockDetail:
+            'Illustrative connection issue: the signed transaction stays saved. Refresh its status before trying another payment. No real payment was sent by this preview.',
+        },
+        success: {
+          refresh: 'Up to date',
+          activity: 'Preview complete. Your activity stays in place without a full-page reload.',
+          page: 'Your gameweek is ready',
+          pageNote: 'Illustrative completion selected. The squad builder would appear here.',
+          payment: 'Review ready',
+          paymentNote: 'The next step would be your review, before any wallet signature.',
+          wallet: 'Approval received',
+          walletNote: 'Illustrative approval only. No real wallet is connected.',
+          dock: 'Payment confirmed · preview',
+          dockNote: '2 picks · open to see the result',
+          dockDetail:
+            'Illustrative success selected in the preview controls. In the app, this state must follow verified transaction evidence, never an animation timer.',
+        },
+      };
+      let current = 'loading';
+      let paused = false;
+      let motionFrame;
+      function syncPlayback() {
+        const stopped = paused || document.hidden;
+        document.body.classList.toggle('motion-paused', paused);
+        document.body.classList.toggle('page-hidden', document.hidden);
+        const pause = document.getElementById('pause');
+        pause.setAttribute('aria-pressed', String(paused));
+        pause.textContent = paused ? 'Resume motion' : 'Pause motion';
+        document.querySelectorAll('svg.chain').forEach((svg) => {
+          if (stopped) svg.pauseAnimations();
+          else svg.unpauseAnimations();
+        });
+      }
+      function render(state) {
+        current = state;
+        document.body.dataset.state = state;
+        document
+          .querySelectorAll('.states button')
+          .forEach((button) =>
+            button.setAttribute('aria-pressed', String(button.dataset.state === state)),
+          );
+        document
+          .querySelectorAll('[data-label]')
+          .forEach((node) => (node.textContent = labels[state][node.dataset.label]));
+        document.querySelectorAll('[data-chain]').forEach((node) => {
+          const pending = state === 'loading' || state === 'slow';
+          const moving =
+            pending &&
+            !motionPreference.matches &&
+            !document.getElementById('reduce').checked &&
+            !node.closest('.origin');
+          node.innerHTML =
+            !pending && !node.closest('.origin, .motion-study')
+              ? icons[state]
+              : chain(node.dataset.chain || 'horizontal', moving);
+        });
+        syncPlayback();
+        // Let a changed OS motion preference reach the renderer before starting
+        // newly inserted SVG timelines. Chromium otherwise leaves the wave frozen.
+        cancelAnimationFrame(motionFrame);
+        motionFrame = requestAnimationFrame(() => {
+          document.querySelectorAll('.chain animate').forEach((node) => node.beginElement());
+          syncPlayback();
+        });
+        document
+          .querySelectorAll('[data-retry]')
+          .forEach((node) => (node.hidden = state !== 'error'));
+        for (const id of ['payment-action', 'wallet-action']) {
+          const button = document.getElementById(id);
+          button.disabled = state !== 'error';
+          button.setAttribute('aria-busy', String(state === 'loading' || state === 'slow'));
+        }
+        document.getElementById('preview-status').textContent =
+          `Preview state: ${state === 'success' ? 'complete' : state}. All matches, amounts and transaction states are illustrative.`;
+      }
+      document
+        .querySelectorAll('.states button')
+        .forEach((button) => button.addEventListener('click', () => render(button.dataset.state)));
+      document
+        .querySelectorAll('[data-retry],#payment-action,#wallet-action')
+        .forEach((button) => button.addEventListener('click', () => render('loading')));
+      document.getElementById('replay').addEventListener('click', () => render(current));
+      document.getElementById('pause').addEventListener('click', () => {
+        paused = !paused;
+        syncPlayback();
+      });
+      document.addEventListener('visibilitychange', syncPlayback);
+      motionPreference.addEventListener('change', () => render(current));
+      document.getElementById('reduce').addEventListener('change', (event) => {
+        document.body.classList.toggle('no-motion', event.target.checked);
+        render(current);
+      });
+      document.getElementById('dock-toggle').addEventListener('click', (event) => {
+        const open = event.currentTarget.getAttribute('aria-expanded') !== 'true';
+        event.currentTarget.setAttribute('aria-expanded', String(open));
+        document.getElementById('dock-detail').hidden = !open;
+      });
+      document.getElementById('back-activity').addEventListener('click', () => {
+        const title = document.querySelector('.canvas-head h2');
+        title.tabIndex = -1;
+        title.scrollIntoView({
+          behavior:
+            document.body.classList.contains('no-motion') ||
+            matchMedia('(prefers-reduced-motion:reduce)').matches
+              ? 'instant'
+              : 'smooth',
+          block: 'center',
+        });
+        title.focus({ preventScroll: true });
+      });
+      render('loading');
+    </script>
+  </body>
+</html>

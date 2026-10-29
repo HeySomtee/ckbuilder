@@ -19,6 +19,7 @@ import { boundedJson } from './cli';
 import { provisioningCatalogueUrl } from './provision';
 import { createFixtureReader } from './fixture-reader';
 import { startHostedRecovery } from './hosted-drain';
+import { ActivityEventOutbox } from '../activity/outbox';
 
 function secret(value: string | undefined): string {
   if (!value || !/^[0-9a-f]{64}$/.test(value))
@@ -66,8 +67,9 @@ export function createSponsorServer(
   batch?: BatchService,
 ) {
   const expected = Buffer.from(`Bearer ${secret(ipcSecret)}`);
+  const activity = new ActivityEventOutbox(legacy.options.journal);
   let active = 0;
-  return createServer(async (req, res) => {
+  const server = createServer(async (req, res) => {
     const actual = Buffer.from(req.headers.authorization ?? '');
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
       return reply(res, 401, { error: 'Sponsor IPC authentication required.' });
@@ -80,6 +82,16 @@ export function createSponsorServer(
     let operation = 'unknown';
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      if (url.pathname.startsWith('/activity/')) {
+        operation = 'activity';
+        if (req.method === 'GET' && url.pathname === '/activity/events')
+          return reply(res, 200, activity.read());
+        if (req.method === 'POST' && url.pathname === '/activity/ack') {
+          const payload = await body(req);
+          return reply(res, 200, { acknowledged: activity.acknowledge(payload.request) });
+        }
+        return reply(res, 404, { error: 'Unknown activity relay operation.' });
+      }
       const atomic = url.pathname.startsWith('/batch/');
       const service = atomic ? batch : legacy;
       if (!service)
@@ -186,13 +198,16 @@ export function createSponsorServer(
         }),
       );
       reply(res, busy ? 429 : 409, {
-        error: busy
-          ? 'Sponsor queue is busy. Your picks and any saved payment are safe. Try again shortly.'
-          : safe
-            ? message
-            : operation === 'offer'
-              ? 'Payment review is temporarily unavailable. No payment was sent by this review. Your picks are saved; try again shortly.'
-              : 'Sponsor request could not complete. Your signed payment may still confirm. Check its saved status before retrying.',
+        error:
+          operation === 'activity'
+            ? 'Activity relay is temporarily unavailable. Its durable observations remain recoverable.'
+            : busy
+              ? 'Sponsor queue is busy. Your picks and any saved payment are safe. Try again shortly.'
+              : safe
+                ? message
+                : operation === 'offer'
+                  ? 'Payment review is temporarily unavailable. No payment was sent by this review. Your picks are saved; try again shortly.'
+                  : 'Sponsor request could not complete. Your signed payment may still confirm. Check its saved status before retrying.',
       });
     } finally {
       if (['offer', 'submit', 'resume'].includes(operation))
@@ -207,6 +222,8 @@ export function createSponsorServer(
       active--;
     }
   });
+  server.once('close', () => activity.close());
+  return server;
 }
 
 export async function runSponsorService(): Promise<void> {

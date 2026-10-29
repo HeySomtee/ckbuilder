@@ -1,14 +1,26 @@
 import type { Descriptor } from './protocol.ts';
-import type { MarketSnapshot, Position } from './discovery.ts';
+import type {
+  ActivitySnapshot as MarketSnapshot,
+  ActivityPosition as Position,
+} from '../../../../shared/activity-wire';
 import type { JournalRecord } from './journal.ts';
 
 export const descriptorKey = (d: Descriptor) =>
   `${d.type.codeHash}:${d.type.args}:${d.creationTxHash}`;
+/** Admission replaces the pending label, not the birth identity of the displayed pick. */
+export function activityPositionKey(descriptor: Descriptor, position: Position): string {
+  const birth =
+    position.status === 'submitted' && position.id.startsWith('submitted:')
+      ? position.id.slice('submitted:'.length)
+      : position.id;
+  return `${descriptorKey(descriptor)}:${birth}`;
+}
 export type ActivityState =
   | 'upcoming'
   | 'live'
   | 'settling'
   | 'verifying'
+  | 'submitted'
   | 'refund-pending'
   | 'won'
   | 'lost'
@@ -22,6 +34,7 @@ export function activityState(
   kickoff = 0,
   now = Date.now(),
 ): ActivityState {
+  if (position.status === 'submitted') return 'submitted';
   if (position.status === 'refunded') return 'refund';
   if (position.status === 'claimable' || position.status === 'claimed') {
     if (!snapshot.settlement) return 'settled';
@@ -69,6 +82,7 @@ export const stateLabels: Record<ActivityState, string> = {
   live: 'In play',
   settling: 'Awaiting settlement',
   verifying: 'Verifying entry',
+  submitted: 'Confirming payment',
   'refund-pending': 'Refund pending',
   won: 'Won',
   lost: 'Lost',

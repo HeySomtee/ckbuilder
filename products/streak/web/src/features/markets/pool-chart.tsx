@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CellLoader } from '../../components/cell-loader';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { outcomes } from './api';
 import type { Market } from './api';
@@ -176,6 +177,7 @@ export function PoolChart({
         </svg>
         {!points.length && (
           <div className="chart-empty">
+            {isWaiting && <CellLoader variant="wave" />}
             <strong>
               {isWaiting
                 ? 'Reading the pool...'

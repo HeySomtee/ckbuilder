@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
 import type { Account } from '../account/api';
 import { Icon } from '../../components/icon';
+import { CellLoader } from '../../components/cell-loader';
 import { FixtureRun } from '../../components/fixture-run';
 import { actSurvivor, decimalAmount, loadSurvivor, money, toShannons } from './api';
 import type { Competition, SurvivorData, Team } from './api';
@@ -295,6 +296,16 @@ export default function SurvivorPage({
         round={c?.currentRound}
         state={c?.state}
         busy={action.isPending}
+        pendingControl={
+          action.isPending &&
+          typeof action.variables === 'object' &&
+          action.variables !== null &&
+          'action' in action.variables &&
+          action.variables.action === 'testControl' &&
+          'control' in action.variables
+            ? action.variables.control
+            : undefined
+        }
         run={(body) => action.mutate(body)}
       />
       <header className="survivor-intro">
@@ -321,11 +332,14 @@ export default function SurvivorPage({
           <strong>Let's get this back on track.</strong>
           <p>{(action.error ?? query.error)?.message}</p>
           <button
+            className="survivor-refresh"
+            aria-busy={query.isFetching}
             onClick={() => {
               action.reset();
               void query.refetch();
             }}
           >
+            {query.isFetching && <CellLoader variant="orbit" />}
             Refresh competition
           </button>
         </div>
@@ -336,8 +350,9 @@ export default function SurvivorPage({
         </p>
       )}
       {query.isPending && (
-        <div className="glass survivor-empty" aria-busy="true">
-          Loading the Survivor board…
+        <div className="glass survivor-empty survivor-loading" role="status" aria-busy="true">
+          <CellLoader variant="wave" />
+          <span>Loading the Survivor board…</span>
         </div>
       )}
       {data && !c && (
@@ -430,7 +445,7 @@ export default function SurvivorPage({
                 aria-busy={publishing}
                 onClick={() => action.mutate({ action: 'publish', id: c.id })}
               >
-                {publishing && <span className="survivor-spinner" aria-hidden="true" />}
+                {publishing && <CellLoader variant="orbit" />}
                 {publishing ? 'Publishing competition…' : 'Publish free competition'}
               </button>
               <button className="quiet" disabled={busy} onClick={() => adminOpen(c)}>
@@ -553,6 +568,7 @@ export default function SurvivorPage({
                   <button
                     className="survivor-primary"
                     disabled={!accountReady || signInPending || c.entries.length >= c.terms.limit}
+                    aria-busy={signInPending}
                     onClick={() => (account ? show('join') : onSignIn())}
                   >
                     {signInPending
@@ -562,7 +578,7 @@ export default function SurvivorPage({
                         : account
                           ? 'Review free entry'
                           : 'Sign in to join'}{' '}
-                    <Icon name="arrow" />
+                    {signInPending ? <CellLoader variant="orbit" /> : <Icon name="arrow" />}
                   </button>
                 ) : (
                   <span className="survivor-tag">
@@ -734,6 +750,7 @@ export default function SurvivorPage({
                         disabled={
                           busy || !canPick || !selectedTeam || selectedTeam === saved?.teamId
                         }
+                        aria-busy={action.isPending}
                         onClick={() =>
                           action.mutate({
                             action: 'pick',
@@ -743,6 +760,7 @@ export default function SurvivorPage({
                           })
                         }
                       >
+                        {action.isPending && <CellLoader variant="orbit" />}
                         {action.isPending
                           ? 'Saving your pick…'
                           : selectedTeam === saved?.teamId
@@ -933,8 +951,10 @@ export default function SurvivorPage({
                   <button
                     className="survivor-primary"
                     disabled={busy}
+                    aria-busy={action.isPending}
                     onClick={() => action.mutate({ action: 'delete', id: deleteTarget.id })}
                   >
+                    {action.isPending && <CellLoader variant="orbit" />}
                     {action.isPending ? 'Deleting competition…' : 'Confirm deletion'}
                   </button>
                 )}
@@ -955,8 +975,10 @@ export default function SurvivorPage({
               <button
                 className="survivor-primary"
                 disabled={busy}
+                aria-busy={action.isPending}
                 onClick={() => action.mutate({ action: 'join', id: c.id, termsHash: c.termsHash })}
               >
+                {action.isPending && <CellLoader variant="orbit" />}
                 {action.isPending ? 'Securing your place…' : 'Accept rules and join free'}
               </button>
             </>
@@ -1058,7 +1080,9 @@ export default function SurvivorPage({
               <button
                 className="survivor-primary"
                 disabled={action.isPending || !data.slates.length}
+                aria-busy={action.isPending}
               >
+                {action.isPending && <CellLoader variant="orbit" />}
                 {action.isPending ? 'Saving competition…' : 'Save draft'}
               </button>
               <p>

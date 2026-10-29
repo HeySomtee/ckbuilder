@@ -112,13 +112,18 @@
   margin: 0 0 5px;
 }
 .wallet-capacity {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: clamp(25px, 2.7vw, 30px);
   font-weight: 600;
   letter-spacing: -0.04em;
   line-height: 1.4;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
+}
+.wallet-capacity > span {
+  min-width: 0;
 }
 .wallet-caption {
   color: var(--muted);
@@ -168,7 +173,7 @@
   background: #ffa77f;
   color: var(--canvas);
 }
-.wallet-primary svg {
+.wallet-primary > svg {
   width: 16px;
   height: 16px;
 }

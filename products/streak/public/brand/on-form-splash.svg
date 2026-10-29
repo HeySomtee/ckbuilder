@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-44 -12 430 110" role="img" aria-label="Streak"><defs><mask id="cuts"><rect width="64" height="64" fill="white"/><rect class="cut cut-one" x="0" y="28.5" width="64" height="3" fill="black"/><rect class="cut cut-two" x="0" y="41.5" width="64" height="3" fill="black"/></mask></defs><style>
+.s-letter{animation:solidify .45s ease-out both}
+.cut{transform-box:fill-box;transform-origin:left center;animation:cut .18s ease-out both}
+.cut-one{animation-delay:.25s}.cut-two{transform-origin:right center;animation-delay:.65s}
+.letters{animation:solidify .45s ease-out .65s both}
+.chart-r{stroke-dasharray:100;animation:chart .65s ease-out .85s both}
+.r-cell,.cell-links,.cell-dot{animation:solidify .3s ease-out both}
+.r-cell-one{animation-delay:1.05s}.r-cell-two{animation-delay:1.2s}.r-cell-three{animation-delay:1.35s}
+.cell-links{animation-delay:1.4s}.cell-dot{animation-delay:1.45s}
+.strike{stroke-dasharray:100;fill:none;stroke-linecap:round;opacity:0;animation:strike .4s ease-in-out both}
+.strike.one{animation-delay:.1s}.strike.two{animation-delay:.5s}
+.seed{fill:none;stroke-width:1;opacity:0;animation:seed .55s ease-out both}
+.seed.b{animation-delay:.08s}.seed.c{animation-delay:.16s}
+@keyframes solidify{from{opacity:.8}to{opacity:1}}
+@keyframes cut{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes chart{from{stroke-dashoffset:18;stroke:#ff986f}to{stroke-dashoffset:0;stroke:#f1f3ed}}
+@keyframes strike{0%{opacity:0;stroke-dashoffset:100}20%{opacity:1}65%{opacity:1;stroke-dashoffset:0}100%{opacity:0;stroke-dashoffset:-100}}
+@keyframes seed{0%{opacity:0;transform:translateX(-12px)}25%{opacity:.8}100%{opacity:0;transform:translateX(16px)}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}.strike,.seed{display:none}.chart-r{stroke-dashoffset:0}}
+</style><g transform="translate(-37 16)"><path class="seed a" d="M0 0H12V12H0Z" stroke="#94badd"/><path class="seed b" d="M0 18H12V30H0Z" stroke="#a9d8a6"/><path class="seed c" d="M0 36H12V48H0Z" stroke="#db9b9b"/></g><g class="s-letter" transform="translate(-8.65 17.3077) scale(.96154)"><path d="M55 8H21L9 20V30L39 43V47H9V60H43L55 48V37L25 24V21H55Z" fill="#ff986f" mask="url(#cuts)"/></g><g class="letters" fill="#f1f3ed"><path d="M61 12H75V27H88V40H75V56Q75 61 81 61H88V73H79Q61 73 61 56V40H54V27H61Z"/><g fill-rule="evenodd" transform="translate(19 0)"><path d="M181 54H147Q149 63 160 63Q168 63 175 58L181 67Q172 75 159 75Q132 75 132 50Q132 25 157 25Q181 25 181 48V54ZM147 44H167Q166 36 157 36Q149 36 147 44Z"/><path d="M210 25Q220 25 226 31V27H240V73H226V67Q220 75 209 75Q187 75 187 50Q187 25 210 25ZM214 38Q202 38 202 50Q202 62 214 62Q226 62 226 50Q226 38 214 38Z"/><path d="M249 9H263V46L278 27H296L278 49L298 73H279L263 53V73H249Z"/></g></g><path class="chart-r" d="M102 67V43L116 30L126 39L137 28L145 32" pathLength="100" fill="none" stroke="#f1f3ed" stroke-width="12" stroke-linejoin="round" stroke-linecap="square"/><g class="r-cells" fill="none" stroke-width="1.8" stroke-linejoin="round"><path class="cell-links" d="M122 67H126M134 67H138" stroke="#a2b0a6" stroke-width="1.5"/><rect class="r-cell r-cell-one" x="114" y="63" width="8" height="8" rx="1" stroke="#94badd"/><rect class="r-cell r-cell-two" x="126" y="63" width="8" height="8" rx="1" stroke="#a9d8a6"/><rect class="r-cell r-cell-three" x="138" y="63" width="8" height="8" rx="1" stroke="#db9b9b"/></g><rect class="cell-dot" x="323" y="60" width="12" height="12" rx="2" fill="#ff986f"/><path class="strike one" d="M-24 46.15H69" stroke="#ffe5d3" stroke-width="1.8" pathLength="100"/><path class="strike two" d="M69 58.65H-24" stroke="#ffe5d3" stroke-width="1.8" pathLength="100"/></svg>

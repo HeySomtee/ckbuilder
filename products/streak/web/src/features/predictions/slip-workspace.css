@@ -4,6 +4,11 @@
 .prediction-slip [hidden] {
   display: none !important;
 }
+.slip-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .prediction-slip .slip-head {
   padding: 14px 18px 0;
 }

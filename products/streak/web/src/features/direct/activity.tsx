@@ -1,19 +1,34 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import type { DirectClient, Review } from './client';
 import type { Descriptor, Point } from './protocol';
-import type { MarketSnapshot, Position } from './discovery';
+import type {
+  ActivitySnapshot as MarketSnapshot,
+  ActivityPosition as Position,
+} from '../../../../shared/activity-wire';
+import type { Account } from '../account/api';
+import {
+  activityGroups,
+  activityIndexQuery,
+  activityIndexKey,
+  refreshActivityIndex,
+} from './activity-index';
 import type { JournalRecord } from './journal';
 import type { Market } from '../markets/api';
 import { getPublicMarket } from '../predictions/api';
+import { activityQuery } from './activity-query';
 import { displayShannons } from '../predictions/draft';
 import { TeamBadge } from '../../components/team-badge';
 import { Notice } from '../../components/notice';
 import { BusyState } from '../../components/busy-state';
+import { CellLoader } from '../../components/cell-loader';
+import { Icon } from '../../components/icon';
+import { PaymentButtonState } from './payment-progress';
 import { useNow } from '../../lib/use-now';
 import {
   activityState,
+  activityPositionKey,
   collectionLabel,
   descriptorKey,
   isCollected,
@@ -35,6 +50,8 @@ type Observation = {
 type Row = Observation & { snapshot: MarketSnapshot; position: Position; key: string };
 
 export function Activity({
+  account,
+  onRecoveryChange,
   client,
   ownerHash,
   descriptors,
@@ -56,6 +73,8 @@ export function Activity({
   error,
   onRefresh,
 }: {
+  account: Account | null;
+  onRecoveryChange: (active: boolean) => void;
   client?: DirectClient;
   ownerHash?: string;
   descriptors: Descriptor[];
@@ -83,47 +102,26 @@ export function Activity({
   const [limit, setLimit] = useState(8);
   const [selected, setSelected] = useState<string | null>(null);
   const [showPayments, setShowPayments] = useState(false);
+  const [retryingEmptyRead, setRetryingEmptyRead] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const now = useNow(true);
   const queryClient = useQueryClient();
-  const chosen = descriptors.slice(0, limit);
+  const [chainRecovery, setChainRecovery] = useState(false);
+  function selectRecovery(active: boolean) {
+    setChainRecovery(active);
+    onRecoveryChange(active);
+  }
+  const indexed = useInfiniteQuery(activityIndexQuery(queryClient, account));
+  const index = indexed.data?.pages[0];
+  const groups = activityGroups(indexed.data?.pages);
+  const hasIndex = !!index?.available;
+  const recover = chainRecovery;
+  const chosen = recover ? descriptors.slice(0, limit) : groups.map((g) => g.descriptor);
   const observations = useQueries({
-    queries: chosen.map((descriptor) => ({
-      queryKey: ['direct-private', ownerHash, 'activity', descriptorKey(descriptor)],
-      enabled: !!client,
-      queryFn: async ({ signal }: { signal: AbortSignal }) => {
-        signal.throwIfAborted();
-        const snapshot = await client!.discover(
-          descriptor,
-          (partial) => {
-            if (signal.aborted) return;
-            queryClient.setQueryData<MarketSnapshot>(
-              ['direct-private', ownerHash, 'activity', descriptorKey(descriptor)],
-              (previous) => ({
-                ...partial,
-                positions: [
-                  ...partial.positions,
-                  ...(previous?.positions ?? []).filter(
-                    (p) =>
-                      ['claimed', 'refunded'].includes(p.status) &&
-                      !partial.positions.some((n) => n.id === p.id),
-                  ),
-                ],
-              }),
-            );
-          },
-          signal,
-        );
-        signal.throwIfAborted();
-        return snapshot;
-      },
-      staleTime: 60_000,
-      retry: false,
-      refetchInterval: 60_000,
-      refetchIntervalInBackground: false,
-      refetchOnWindowFocus: false,
-    })),
+    queries: recover
+      ? chosen.map((descriptor) => activityQuery(queryClient, client, ownerHash, descriptor))
+      : [],
   });
   const fixtures = useQueries({
     queries: chosen.map((descriptor) => ({
@@ -137,27 +135,37 @@ export function Activity({
   const data: Observation[] = chosen.map((descriptor, index) => {
     const read = observations[index],
       fixture = fixtures[index].data?.market;
+    const group = groups[index];
     return {
       descriptor,
-      snapshot: read.data,
+      snapshot: recover ? read.data : group.snapshot,
       market:
         fixture?.matchId === descriptor.fixtureId &&
         Date.parse(fixture.kickoff) === descriptor.cutoffMs
           ? fixture
           : undefined,
-      error:
-        read.isError || (read.dataUpdatedAt > 0 && now - read.dataUpdatedAt > 120_000)
-          ? 'This market needs a fresh chain check.'
-          : undefined,
+      error: (
+        recover
+          ? read.isError || (read.dataUpdatedAt > 0 && now - read.dataUpdatedAt > 120_000)
+          : group.stale
+      )
+        ? 'This market is catching up with CKB.'
+        : undefined,
     };
   });
   const observed = {
     data,
-    isFetching: observations.some((q) => q.isFetching),
-    isPending:
-      (sourcesLoading || observations.some((q) => q.isPending)) &&
-      !observations.some((q) => q.data),
-    isError: observations.some((q) => q.isError),
+    isFetching: recover
+      ? observations.some((q) => q.isFetching)
+      : indexed.isFetching || !!index?.updating,
+    isPending: recover
+      ? (sourcesLoading || observations.some((q) => q.isPending)) &&
+        !observations.some((q) => q.data)
+      : indexed.isPending ||
+        (groups.length === 0 && index?.updatedAt === null && index.coverage === 'indexing'),
+    isError: recover
+      ? observations.some((q) => q.isError)
+      : indexed.isError || index?.available === false,
   };
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
@@ -172,15 +180,15 @@ export function Activity({
           ...o,
           snapshot: o.snapshot!,
           position,
-          key: `${descriptorKey(o.descriptor)}:${position.id}`,
+          key: activityPositionKey(o.descriptor, position),
         }))
       : [],
   );
-  const stale = observed.isError || sourceIssue || !!observed.data?.some((o) => o.error);
+  const stale =
+    observed.isError || (recover && sourceIssue) || !!observed.data?.some((o) => o.error);
   const incomplete =
     stale ||
-    descriptors.length > limit ||
-    sourcesLoading ||
+    (recover ? descriptors.length > limit || sourcesLoading : index?.coverage !== 'complete') ||
     !!observed.data?.some(
       (o) => o.error || o.snapshot?.uncertainty || o.snapshot?.historyComplete === false,
     );
@@ -193,6 +201,11 @@ export function Activity({
       returnParts(r.position),
   );
   const readyTotal = ready.reduce((sum, r) => sum + returnParts(r.position)!.total, 0n);
+  const summary = !recover && hasIndex ? index.summary : undefined;
+  const emptyReadFailure =
+    ((!recover && retryingEmptyRead) || (!observed.isPending && stale)) &&
+    (recover || !hasIndex) &&
+    !data.some((o) => o.snapshot);
   const [retained, setRetained] = useState<Row | null>(null);
   const freshCurrent = rows.find((r) => r.key === selected);
   const current = freshCurrent ?? (retained?.key === selected ? retained : undefined);
@@ -236,10 +249,24 @@ export function Activity({
     setTab(next);
     setFilter('all');
   }
+  const refreshIndex = useMutation({
+    mutationFn: () => refreshActivityIndex(),
+    retry: false,
+    onSettled: () => {
+      if (account) void queryClient.invalidateQueries({ queryKey: activityIndexKey(account) });
+    },
+  });
   const refresh = () => {
+    if (!recover && account) {
+      refreshIndex.mutate();
+      return;
+    }
     onRefresh();
     void queryClient.invalidateQueries({ queryKey: ['direct-private', ownerHash, 'activity'] });
   };
+  const refreshPending = recover
+    ? observations.some((q) => q.isFetching)
+    : indexed.isFetching || refreshIndex.isPending;
   const filters =
     tab === 'open'
       ? [
@@ -265,14 +292,16 @@ export function Activity({
           </h1>
           <p>Your calls. Their results. Every return accounted for.</p>
         </div>
-        <button
-          className="quiet activity-collect"
-          aria-busy={observed.isFetching}
-          onClick={refresh}
-          disabled={!client || observed.isFetching}
-        >
-          {observed.isFetching ? 'Updating activity' : 'Refresh activity'}
-        </button>
+        {!emptyReadFailure && (
+          <button
+            className="quiet activity-collect"
+            aria-busy={refreshPending}
+            onClick={refresh}
+            disabled={(!account && !client) || refreshPending}
+          >
+            {refreshPending ? <PaymentButtonState label="Updating activity" /> : 'Refresh activity'}
+          </button>
+        )}
       </header>
       {working && !selected && (
         <BusyState
@@ -280,309 +309,481 @@ export function Activity({
           detail="You can keep browsing this page. Your transfer progress stays here."
         />
       )}
-      {!client ? (
+      {(!account && !recover) || (recover && !client) ? (
         <section className="glass activity-empty">
-          {connectionPending ? (
+          {connectionPending && connecting ? (
             <BusyState
-              label="Opening your predictions"
-              detail="Connecting your selected wallet to your activity."
+              label={account ? 'Connecting your wallet' : 'Opening your account'}
+              detail="Your saved activity stays separate from wallet approvals."
             />
           ) : (
             <>
               <h2>Your matchday history starts here</h2>
-              <p>Connect your wallet to follow open bets and collect returns.</p>
+              <p>
+                {account
+                  ? 'Connect your wallet to recover positions directly from CKB.'
+                  : 'Sign in to see your saved predictions and returns.'}
+              </p>
             </>
           )}
           <button className="connect" disabled={connecting} onClick={onConnect}>
-            {connecting
-              ? 'Connecting...'
-              : connectionPending
-                ? 'Retry wallet checks'
-                : 'Connect wallet'}
+            {connecting ? (
+              <PaymentButtonState label="Connecting..." />
+            ) : account ? (
+              'Connect wallet'
+            ) : (
+              'Sign in with wallet'
+            )}
           </button>
+          {!account && client && (
+            <button className="quiet" onClick={() => selectRecovery(true)}>
+              Recover from chain
+            </button>
+          )}
         </section>
       ) : (
         <>
-          <div className="activity-summary" aria-label="Verified activity summary">
-            <div>
-              <span>Open predictions</span>
-              <strong
-                className={observed.isPending ? 'activity-skeleton' : ''}
-                aria-label={observed.isPending ? 'Loading open predictions' : undefined}
-              >
-                {observed.isPending
-                  ? '\u00a0'
-                  : stale && !data.some((o) => o.snapshot)
-                    ? 'Unavailable'
-                    : rows.filter((r) => !isHistory(r.position)).length}
-              </strong>
-              <small>{incomplete ? 'In checked markets' : 'Following your next result'}</small>
-            </div>
-            <div>
-              <span>Ready to collect</span>
-              <strong
-                className={observed.isPending ? 'activity-skeleton' : ''}
-                aria-label={observed.isPending ? 'Loading returns' : undefined}
-              >
-                {observed.isPending
-                  ? '\u00a0'
-                  : stale && !data.some((o) => o.snapshot)
-                    ? 'Unavailable'
-                    : money(readyTotal)}
-              </strong>
+          {emptyReadFailure ? (
+            <section className="activity-retry-card" aria-labelledby="activity-retry-title">
+              <span className="activity-retry-icon">
+                <Icon name="activity" />
+              </span>
+              <div className="activity-retry-copy" role="status">
+                <h2 id="activity-retry-title">Let’s bring your activity back.</h2>
+                <p>We couldn’t load your predictions just now. Try again in a moment.</p>
+              </div>
               <button
+                className="activity-collect"
+                aria-busy={refreshPending || retryingEmptyRead}
+                disabled={refreshPending || retryingEmptyRead}
                 onClick={() => {
-                  switchTab('history');
-                  setFilter('collect');
+                  if (recover) refresh();
+                  else {
+                    setRetryingEmptyRead(true);
+                    void indexed.refetch().then(
+                      () => setRetryingEmptyRead(false),
+                      () => setRetryingEmptyRead(false),
+                    );
+                  }
                 }}
               >
-                View {ready.length} claims <span aria-hidden="true">↗</span>
+                {refreshPending || retryingEmptyRead ? (
+                  <PaymentButtonState label="Trying again" />
+                ) : (
+                  'Retry activity'
+                )}
               </button>
-              <small>Includes refundable storage, before network fees</small>
-            </div>
-            <div>
-              <span>Completed predictions</span>
-              <strong
-                className={observed.isPending ? 'activity-skeleton' : ''}
-                aria-label={observed.isPending ? 'Loading completed predictions' : undefined}
-              >
-                {observed.isPending
-                  ? '\u00a0'
-                  : stale && !data.some((o) => o.snapshot)
-                    ? 'Unavailable'
-                    : rows.filter((r) => isCollected(r.position)).length}
-              </strong>
-              <small>Return collected</small>
-            </div>
-          </div>
-          <button
-            className="activity-payment-strip"
-            aria-expanded={showPayments}
-            onClick={() => setShowPayments(!showPayments)}
-          >
-            <span className="activity-payment-icon" aria-hidden="true">
-              ↗
-            </span>
-            <span>
-              <strong>Payments & recovery</strong>
-              <small>Follow saved payments separately from accepted bets.</small>
-            </span>
-            <span>{showPayments ? 'Hide' : 'View'} →</span>
-          </button>
-          {showPayments && <div>{recovery}</div>}
-          {notice && <Notice title={notice} dismissible />}
-          {stale && (
-            <Notice
-              title="Some markets are still catching up"
-              dismissible
-              actions={<button onClick={refresh}>Retry checks</button>}
-            >
-              Your previous activity stays visible. Each return is checked separately before
-              collection.
-            </Notice>
-          )}
-          {(observed.isFetching || sourcesLoading) && (
-            <div className="activity-progress" role="status">
-              <span className="activity-progress-track" />
-              <span>
-                Finding your predictions{' '}
-                <small>
-                  {observations.filter((q) => q.data).length} of {chosen.length} markets checked
-                </small>
-              </span>
-            </div>
-          )}
-          <div className="activity-toolbar">
-            <div className="activity-tabs" role="tablist" aria-label="Prediction history">
-              {(['open', 'history'] as const).map((value, index) => (
-                <button
-                  key={value}
-                  id={`activity-${value}-tab`}
-                  role="tab"
-                  tabIndex={tab === value ? 0 : -1}
-                  aria-selected={tab === value}
-                  aria-controls="activity-list"
-                  onKeyDown={(event) => {
-                    if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
-                      event.preventDefault();
-                      const next =
-                        event.key === 'Home'
-                          ? 'open'
-                          : event.key === 'End'
-                            ? 'history'
-                            : index === 0
-                              ? 'history'
-                              : 'open';
-                      switchTab(next);
-                      document.getElementById(`activity-${next}-tab`)?.focus();
-                    }
-                  }}
-                  onClick={() => switchTab(value)}
-                >
-                  {value === 'open' ? 'Open bets' : 'History'}{' '}
-                  <small>
-                    {rows.filter((r) => (value === 'history') === isHistory(r.position)).length}
-                  </small>
-                </button>
-              ))}
-            </div>
-            <label className="activity-search">
-              <span className="sr-only">Search predictions</span>
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Find a match or pick"
-                maxLength={120}
-              />
-            </label>
-          </div>
-          <div className="activity-filters" role="group" aria-label="Filter predictions">
-            {filters.map(([value, label]) => (
-              <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <div
-            id="activity-list"
-            className="activity-list glass"
-            role="tabpanel"
-            aria-labelledby={`activity-${tab}-tab`}
-            aria-busy={observed.isFetching}
-          >
-            {listed.map((r) => {
-              const state = rowState(r),
-                pending = pendingClaim(r.position, r.descriptor, records),
-                collected = isCollected(r.position);
-              return (
-                <article className="activity-bet" key={r.key}>
-                  <div className="activity-fixture">
-                    <small>
-                      {r.market?.competition ?? 'CKB prediction'} ·{' '}
-                      {new Date(r.descriptor.cutoffMs).toLocaleString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </small>
-                    <div>
-                      {r.market ? (
-                        <>
-                          <TeamBadge
-                            logo={r.market.homeLogo}
-                            code={r.market.homeCode}
-                            side="home"
-                          />
-                          <strong>{r.market.home}</strong>
-                          <span>vs</span>
-                          <TeamBadge
-                            logo={r.market.awayLogo}
-                            code={r.market.awayCode}
-                            side="away"
-                          />
-                          <strong>{r.market.away}</strong>
-                        </>
-                      ) : (
-                        <strong>{r.descriptor.label}</strong>
-                      )}
-                    </div>
-                    <span
-                      className="activity-pick"
-                      data-outcome={['home', 'draw', 'away'][r.position.outcome]}
-                    >
-                      {pickName(r)}
-                    </span>
-                  </div>
-                  <div className="activity-stake">
-                    <small>Stake</small>
-                    <strong>{money(r.position.principalShannons)}</strong>
-                  </div>
-                  <div className="activity-result">
-                    <strong data-state={state}>{stateLabels[state]}</strong>
-                    <small>
-                      {collected
-                        ? 'Collected'
-                        : pending
-                          ? 'Checking saved transfer'
-                          : r.position.status === 'claimable'
-                            ? 'Return available'
-                            : state === 'verifying'
-                              ? 'Payment is not yet an accepted bet'
-                              : state === 'settling'
-                                ? 'Waiting for on-chain settlement'
-                                : 'Independent prediction'}
-                    </small>
-                  </div>
+              <details className="activity-recovery-options">
+                <summary>
+                  Recovery options <Icon name="chevron-down" />
+                </summary>
+                <p>
+                  You can review payments saved in this browser or check your wallet’s positions
+                  directly on CKB. A direct check can take longer.
+                </p>
+                <div className="activity-recovery-actions">
                   <button
-                    className={ready.includes(r) ? 'activity-collect' : 'quiet'}
-                    onClick={() => open(r)}
+                    className="quiet"
+                    aria-expanded={showPayments}
+                    onClick={() => setShowPayments(!showPayments)}
                   >
-                    {ready.includes(r) ? collectionLabel(state) : 'Details'}{' '}
+                    {showPayments ? 'Hide saved payments' : 'Review saved payments'}
+                  </button>
+                  {recover ? (
+                    account && (
+                      <button className="quiet" onClick={() => selectRecovery(false)}>
+                        Back to saved activity
+                      </button>
+                    )
+                  ) : (
+                    <button className="quiet" onClick={() => selectRecovery(true)}>
+                      Recover from chain
+                    </button>
+                  )}
+                </div>
+                {showPayments &&
+                  (recovery ?? (
+                    <button className="quiet" disabled={connecting} onClick={onConnect}>
+                      {connecting ? (
+                        <PaymentButtonState label="Connecting wallet..." />
+                      ) : (
+                        'Connect wallet for saved payment recovery'
+                      )}
+                    </button>
+                  ))}
+              </details>
+            </section>
+          ) : (
+            <>
+              <div className="activity-summary" aria-label="Verified activity summary">
+                <div>
+                  <span>Open predictions</span>
+                  <strong
+                    className={observed.isPending ? 'activity-skeleton' : ''}
+                    aria-label={observed.isPending ? 'Loading open predictions' : undefined}
+                  >
+                    {observed.isPending ? (
+                      <CellLoader variant="wave" />
+                    ) : (
+                      (summary?.open ?? rows.filter((r) => !isHistory(r.position)).length)
+                    )}
+                  </strong>
+                  <small>{incomplete ? 'In checked markets' : 'Following your next result'}</small>
+                </div>
+                <div>
+                  <span>{incomplete ? 'Last checked returns' : 'Ready to collect'}</span>
+                  <strong
+                    className={observed.isPending ? 'activity-skeleton' : ''}
+                    aria-label={observed.isPending ? 'Loading returns' : undefined}
+                  >
+                    {observed.isPending ? (
+                      <CellLoader variant="wave" />
+                    ) : (
+                      money(summary?.collectibleShannons ?? readyTotal)
+                    )}
+                  </strong>
+                  <button
+                    onClick={() => {
+                      switchTab('history');
+                      setFilter(incomplete ? 'all' : 'collect');
+                    }}
+                  >
+                    {incomplete
+                      ? 'Review saved returns'
+                      : `View ${summary?.claimable ?? ready.length} claims`}{' '}
                     <span aria-hidden="true">↗</span>
                   </button>
-                </article>
-              );
-            })}
-            {listed.length === 0 && (
-              <div className="activity-empty">
-                {observed.isPending ? (
-                  <BusyState
-                    label="Finding your predictions"
-                    detail="Your positions will appear as each market is checked."
+                  <small>Includes refundable storage, before network fees</small>
+                </div>
+                <div>
+                  <span>Completed predictions</span>
+                  <strong
+                    className={observed.isPending ? 'activity-skeleton' : ''}
+                    aria-label={observed.isPending ? 'Loading completed predictions' : undefined}
+                  >
+                    {observed.isPending ? (
+                      <CellLoader variant="wave" />
+                    ) : (
+                      (summary?.completed ?? rows.filter((r) => isCollected(r.position)).length)
+                    )}
+                  </strong>
+                  <small>Return collected</small>
+                </div>
+              </div>
+              <button
+                className="activity-payment-strip"
+                aria-expanded={showPayments}
+                onClick={() => setShowPayments(!showPayments)}
+              >
+                <span className="activity-payment-icon" aria-hidden="true">
+                  ↗
+                </span>
+                <span>
+                  <strong>Payments & recovery</strong>
+                  <small>Follow saved payments separately from accepted bets.</small>
+                </span>
+                <span>{showPayments ? 'Hide' : 'View'} →</span>
+              </button>
+              {showPayments && (
+                <div>
+                  {recovery ?? (
+                    <button className="quiet" disabled={connecting} onClick={onConnect}>
+                      {connecting ? (
+                        <PaymentButtonState label="Connecting wallet..." />
+                      ) : (
+                        'Connect wallet for saved payment recovery'
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
+              {notice && <Notice title={notice} dismissible />}
+              {!recover && (indexed.isError || index?.available === false) && (
+                <Notice
+                  title="Couldn’t refresh activity"
+                  dismissible
+                  actions={
+                    <>
+                      <button onClick={() => void indexed.refetch()}>Retry activity</button>
+                      <button onClick={() => selectRecovery(true)}>Recover from chain</button>
+                    </>
+                  }
+                >
+                  Showing your last saved activity. Returns are checked again before collection.
+                </Notice>
+              )}
+              {recover && (
+                <Notice
+                  title="Checking directly on CKB"
+                  actions={
+                    account ? (
+                      <button
+                        onClick={() => {
+                          selectRecovery(false);
+                          void indexed.refetch();
+                        }}
+                      >
+                        Back to saved activity
+                      </button>
+                    ) : undefined
+                  }
+                >
+                  Recovery checks each available market. Your signed transactions remain saved.
+                </Notice>
+              )}
+              {refreshIndex.isError && (
+                <Notice title="Activity refresh could not start" dismissible>
+                  {refreshIndex.error.message}
+                </Notice>
+              )}
+              {stale && (recover || (!indexed.isError && index?.available !== false)) && (
+                <Notice
+                  title="Some markets are still catching up"
+                  dismissible
+                  actions={
+                    <>
+                      <button onClick={refresh}>Retry checks</button>
+                      {!recover && (
+                        <button onClick={() => selectRecovery(true)}>Recover from chain</button>
+                      )}
+                    </>
+                  }
+                >
+                  Your previous activity stays visible. Each return is checked separately before
+                  collection.
+                </Notice>
+              )}
+              {(observed.isFetching || (recover && sourcesLoading)) && (
+                <div className="activity-progress" role="status">
+                  <CellLoader variant="wave" />
+                  <span>
+                    {recover ? 'Finding your predictions' : 'Updating your saved activity'}{' '}
+                    <small>
+                      {recover
+                        ? `${observations.filter((q) => q.data).length} of ${chosen.length} markets checked`
+                        : 'You can keep browsing while records catch up.'}
+                    </small>
+                  </span>
+                </div>
+              )}
+              <div className="activity-toolbar">
+                <div className="activity-tabs" role="tablist" aria-label="Prediction history">
+                  {(['open', 'history'] as const).map((value, index) => (
+                    <button
+                      key={value}
+                      id={`activity-${value}-tab`}
+                      role="tab"
+                      tabIndex={tab === value ? 0 : -1}
+                      aria-selected={tab === value}
+                      aria-controls="activity-list"
+                      onKeyDown={(event) => {
+                        if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+                          event.preventDefault();
+                          const next =
+                            event.key === 'Home'
+                              ? 'open'
+                              : event.key === 'End'
+                                ? 'history'
+                                : index === 0
+                                  ? 'history'
+                                  : 'open';
+                          switchTab(next);
+                          document.getElementById(`activity-${next}-tab`)?.focus();
+                        }
+                      }}
+                      onClick={() => switchTab(value)}
+                    >
+                      {value === 'open' ? 'Open bets' : 'History'}{' '}
+                      <small>
+                        {rows.filter((r) => (value === 'history') === isHistory(r.position)).length}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+                <label className="activity-search">
+                  <span className="sr-only">Search predictions</span>
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Find a match or pick"
+                    maxLength={120}
                   />
-                ) : (
-                  <>
-                    <h2>
-                      {observed.isPending
-                        ? 'Checking your positions'
-                        : search || filter !== 'all'
-                          ? 'No matching predictions'
-                          : incomplete
-                            ? 'No positions found in the markets checked'
-                            : tab === 'open'
-                              ? 'Your next call starts here'
-                              : 'Your settled predictions will appear here'}
-                    </h2>
-                    <p>
-                      {observed.isPending
-                        ? 'Reading confirmed market state from CKB.'
-                        : 'Payments, accepted entries and settled results are tracked separately.'}
-                    </p>
-                  </>
-                )}
-                {tab === 'open' && (
-                  <a className="quiet" href="/season/">
-                    Explore markets ↗
-                  </a>
+                </label>
+              </div>
+              <div className="activity-filters" role="group" aria-label="Filter predictions">
+                {filters.map(([value, label]) => (
+                  <button
+                    key={value}
+                    aria-pressed={filter === value}
+                    onClick={() => setFilter(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div
+                id="activity-list"
+                className="activity-list glass"
+                role="tabpanel"
+                aria-labelledby={`activity-${tab}-tab`}
+                aria-busy={observed.isFetching}
+              >
+                {listed.map((r) => {
+                  const state = rowState(r),
+                    pending = pendingClaim(r.position, r.descriptor, records),
+                    collected = isCollected(r.position);
+                  return (
+                    <article className="activity-bet" key={r.key}>
+                      <div className="activity-fixture">
+                        <small>
+                          {r.market?.competition ?? 'CKB prediction'} ·{' '}
+                          {new Date(r.descriptor.cutoffMs).toLocaleString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </small>
+                        <div>
+                          {r.market ? (
+                            <>
+                              <TeamBadge
+                                logo={r.market.homeLogo}
+                                code={r.market.homeCode}
+                                side="home"
+                              />
+                              <strong>{r.market.home}</strong>
+                              <span>vs</span>
+                              <TeamBadge
+                                logo={r.market.awayLogo}
+                                code={r.market.awayCode}
+                                side="away"
+                              />
+                              <strong>{r.market.away}</strong>
+                            </>
+                          ) : (
+                            <strong>{r.descriptor.label}</strong>
+                          )}
+                        </div>
+                        <span
+                          className="activity-pick"
+                          data-outcome={['home', 'draw', 'away'][r.position.outcome]}
+                        >
+                          {pickName(r)}
+                        </span>
+                      </div>
+                      <div className="activity-stake">
+                        <small>Stake</small>
+                        <strong>{money(r.position.principalShannons)}</strong>
+                      </div>
+                      <div className="activity-result">
+                        <strong data-state={state}>{stateLabels[state]}</strong>
+                        <small>
+                          {collected
+                            ? 'Collected'
+                            : pending
+                              ? 'Checking saved transfer'
+                              : r.position.status === 'claimable'
+                                ? 'Return available'
+                                : state === 'verifying' || state === 'submitted'
+                                  ? 'Payment is not yet an accepted bet'
+                                  : state === 'settling'
+                                    ? 'Waiting for on-chain settlement'
+                                    : 'Independent prediction'}
+                        </small>
+                      </div>
+                      <button
+                        className={ready.includes(r) ? 'activity-collect' : 'quiet'}
+                        onClick={() => open(r)}
+                      >
+                        {ready.includes(r) ? collectionLabel(state) : 'Details'}{' '}
+                        <span aria-hidden="true">↗</span>
+                      </button>
+                    </article>
+                  );
+                })}
+                {listed.length === 0 && (
+                  <div className="activity-empty">
+                    {observed.isPending ? (
+                      <BusyState
+                        label={recover ? 'Finding your predictions' : 'Opening your activity'}
+                        detail={
+                          recover
+                            ? 'Your positions will appear as each market is checked.'
+                            : 'Your saved records appear here while recent changes are checked.'
+                        }
+                      />
+                    ) : (
+                      <>
+                        <h2>
+                          {observed.isPending
+                            ? 'Checking your positions'
+                            : search || filter !== 'all'
+                              ? 'No matching predictions'
+                              : incomplete
+                                ? 'No positions found in the markets checked'
+                                : tab === 'open'
+                                  ? 'Your next call starts here'
+                                  : 'Your settled predictions will appear here'}
+                        </h2>
+                        <p>
+                          {observed.isPending
+                            ? 'Reading confirmed market state from CKB.'
+                            : 'Payments, accepted entries and settled results are tracked separately.'}
+                        </p>
+                      </>
+                    )}
+                    {tab === 'open' && (
+                      <a className="quiet" href="/season/">
+                        Explore markets ↗
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-          {descriptors.length > limit && (
-            <button
-              className="quiet activity-more"
-              disabled={observed.isFetching}
-              onClick={() => setLimit((n) => n + 8)}
-            >
-              Check eight more markets ({Math.min(limit, descriptors.length)} of{' '}
-              {descriptors.length})
-            </button>
+              {recover && descriptors.length > limit && (
+                <button
+                  className="quiet activity-more"
+                  disabled={observed.isFetching}
+                  onClick={() => setLimit((n) => n + 8)}
+                >
+                  Check eight more markets ({Math.min(limit, descriptors.length)} of{' '}
+                  {descriptors.length})
+                </button>
+              )}
+              {!recover && indexed.hasNextPage && (
+                <button
+                  className="quiet activity-more"
+                  disabled={indexed.isFetchingNextPage}
+                  onClick={() => void indexed.fetchNextPage()}
+                >
+                  {indexed.isFetchingNextPage ? (
+                    <PaymentButtonState label="Loading more predictions..." />
+                  ) : (
+                    'Show more predictions'
+                  )}
+                </button>
+              )}
+              <p className="activity-coverage">
+                {recover
+                  ? 'Direct recovery covers the available market definitions.'
+                  : index?.updatedAt
+                    ? `Saved activity updated ${new Date(index.updatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}.`
+                    : 'Preparing your saved activity.'}{' '}
+                {incomplete ? 'Some records are still catching up. ' : ''}Every collection gets a
+                fresh chain check. Payment confirmation and entry acceptance are tracked separately.
+              </p>
+              {observed.data
+                ?.filter((o) => o.error || o.snapshot?.uncertainty)
+                .map((o) => (
+                  <details className="activity-read-issue" key={descriptorKey(o.descriptor)}>
+                    <summary>{o.descriptor.label}: incomplete chain read</summary>
+                    <p>{o.error ?? o.snapshot?.uncertainty}</p>
+                  </details>
+                ))}
+            </>
           )}
-          <p className="activity-coverage">
-            History covers available market definitions and bounded, verified chain records. Older
-            markets missing from the operator registry may need a recovery backup. A payment
-            confirmation alone does not confirm entry acceptance.
-          </p>
-          {observed.data
-            ?.filter((o) => o.error || o.snapshot?.uncertainty)
-            .map((o) => (
-              <details className="activity-read-issue" key={descriptorKey(o.descriptor)}>
-                <summary>{o.descriptor.label}: incomplete chain read</summary>
-                <p>{o.error ?? o.snapshot?.uncertainty}</p>
-              </details>
-            ))}
         </>
       )}
       {error && !selected && (
@@ -665,9 +866,13 @@ export function Activity({
               </div>
               <h3>{stateLabels[rowState(current)]}</h3>
               <ol className="activity-timeline">
-                <li>Payment confirmed on CKB</li>
                 <li>
-                  {current.position.status === 'pending-validation'
+                  {current.position.status === 'submitted'
+                    ? 'Payment submitted; awaiting CKB confirmation'
+                    : 'Payment confirmed on CKB'}
+                </li>
+                <li>
+                  {['submitted', 'pending-validation'].includes(current.position.status)
                     ? 'Entry acceptance is being verified'
                     : ['refund-required', 'refunded'].includes(current.position.status)
                       ? 'Entry did not qualify; refund path'
@@ -748,11 +953,13 @@ export function Activity({
                     }
                     onClick={onSign}
                   >
-                    {signing
-                      ? (claimStage ?? 'Checking your return...')
-                      : now >= currentReview.expiresAt
-                        ? 'Review expired'
-                        : 'Sign claim in wallet'}
+                    {signing ? (
+                      <PaymentButtonState label={claimStage ?? 'Checking your return...'} />
+                    ) : now >= currentReview.expiresAt ? (
+                      'Review expired'
+                    ) : (
+                      'Sign claim in wallet'
+                    )}
                   </button>
                   <button
                     className="quiet"
@@ -772,9 +979,21 @@ export function Activity({
                   className="activity-collect"
                   aria-busy={working}
                   disabled={working}
-                  onClick={() => onClaim(current.descriptor, current.position.outPoint)}
+                  onClick={() =>
+                    client ? onClaim(current.descriptor, current.position.outPoint) : onConnect()
+                  }
                 >
-                  {working ? 'Preparing wallet approval...' : collectionLabel(rowState(current))}
+                  {working ? (
+                    <PaymentButtonState label="Preparing wallet approval..." />
+                  ) : !client ? (
+                    connecting ? (
+                      <PaymentButtonState label="Connecting wallet..." />
+                    ) : (
+                      'Connect wallet to collect'
+                    )
+                  ) : (
+                    collectionLabel(rowState(current))
+                  )}
                 </button>
               )}
               {selectedPending && (
@@ -816,6 +1035,11 @@ export function Activity({
                 </a>
               </details>
             </>
+          ) : selected && observed.isFetching ? (
+            <BusyState
+              label="Checking prediction"
+              detail="This position is being refreshed. You can close this panel while it updates."
+            />
           ) : (
             <p className="activity-message">
               This position is being refreshed. Close the panel and refresh activity if it remains

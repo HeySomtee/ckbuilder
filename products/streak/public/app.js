@@ -12,6 +12,9 @@
 
 import { createApiClient, createPoller } from "./runtime.js";
 import { createMatchdayView } from "./matchday.js";
+import { cellLoaderMarkup, observeCellLoaders } from "./cell-loader.js";
+
+observeCellLoaders(document.body);
 
 // Reading a ledger never needs the wallet SDK. Load its remote dependency graph
 // only when the user connects or signs, keeping startup independent of the CDN.
@@ -307,7 +310,7 @@ function renderActivities() {
     .map(
       (a) => `
     <div class="activity ${a.status}">
-      <span class="a-spin">${a.status === "run" ? "\u27f3" : a.status === "ok" ? "\u2713" : "\u2715"}</span>
+      <span class="a-spin" aria-hidden="true">${a.status === "run" ? cellLoaderMarkup('orbit') : a.status === "ok" ? "\u2713" : "\u2715"}</span>
       <span class="a-label">${esc(a.label)}</span>
     </div>
   `,
@@ -662,7 +665,7 @@ function navHtml() {
       )
       .join("");
   return `
-    <a class="ledger-brand" href="#/dashboard" data-route="dashboard"><img class="brand-mark" src="/mark.svg" alt=""><span class="wordmark">Streak<span>Football predictions</span></span></a>
+    <a class="ledger-brand" href="#/dashboard" data-route="dashboard"><img class="streak-wordmark" src="/brand/on-form-wordmark.svg" alt="Streak" width="324" height="86"></a>
     <div class="rail-section">Match centre</div>
     ${links([
       ["dashboard", "dash", "Overview", "01"],
@@ -767,7 +770,7 @@ function ensureNavDelegation() {
       closeMobileNav();
       const button = t.closest("#signout");
       button.disabled = true;
-      button.textContent = "Signing out…";
+      button.innerHTML = pendingLabel("Signing out");
       try {
         await api("/logout", { method: "POST" });
       } catch (error) {
@@ -905,7 +908,7 @@ function updateStatusBar() {
   if (bar.dataset.signature !== signature) {
     bar.dataset.signature = signature;
     bar.innerHTML = `
-      <a class="app-brand" href="#/dashboard" data-route="dashboard" aria-label="Streak home"><img class="brand-mark" src="/mark.svg" alt=""><span>streak</span></a>
+      <a class="app-brand" href="#/dashboard" data-route="dashboard" aria-label="Streak home"><img class="streak-wordmark" src="/brand/on-form-wordmark.svg" alt="Streak" width="324" height="86"></a>
       <nav class="desktop-nav" id="desktop-nav" aria-label="Main navigation">${primaryNavHtml()}</nav>
       <span class="right"><span class="feed-status ${live?.enabled ? "" : "muted"}"><span class="pulse ${live?.simulated ? "sim" : live?.enabled ? "" : "off"}"></span>${live?.simulated ? "Simulated" : live?.enabled ? "Live feed" : "Offline"}</span><a class="header-balance" href="#/wallet" data-route="wallet">${fmtCkb(u?.escrowCkb)} <small>CKB</small> <span>↗</span></a><button class="mobile-nav-btn" id="mobile-nav-toggle" data-nav-toggle aria-label="Open navigation" aria-controls="mobile-nav-drawer" aria-expanded="${$("#mobile-nav-drawer")?.classList.contains("on") ? "true" : "false"}">☰</button></span>
     `;
@@ -929,16 +932,20 @@ function updateFootBar() {
   const f = $("#foot");
   if (!f) return;
   const c = state.dashboard?.counts;
-  const html = `<span class="footer-mark">S</span><span>Settled on Nervos CKB</span><span class="footer-stats">${fmtInt(c?.openMarkets)} open markets <span>·</span> ${fmtCkb(c?.totalPoolCkb)} CKB in pools</span><span class="right">2% protocol · 1% creator</span>`;
+  const html = `<img class="footer-mark" src="/brand/on-form-mark.svg" alt="" width="24" height="24"><span>Settled on Nervos CKB</span><span class="footer-stats">${fmtInt(c?.openMarkets)} open markets <span>·</span> ${fmtCkb(c?.totalPoolCkb)} CKB in pools</span><span class="right">2% protocol · 1% creator</span>`;
   if (f.innerHTML !== html) f.innerHTML = html;
 }
 
 function spinner() {
-  return `<div class="loading-ledger" role="status" style="padding:60px;text-align:center;color:var(--ink-2);font-family:var(--mono);font-size:11px;letter-spacing:0.08em">Loading Streak…</div>`;
+  return `<div class="loading-ledger" role="status">${cellLoaderMarkup('wave')}<span>Loading Streak</span></div>`;
 }
 
 function spinnerInline() {
-  return `<span class="dim mono" style="font-size:10px;letter-spacing:0.14em">CHECKING…</span>`;
+  return `<span class="loading-inline dim mono" role="status">${cellLoaderMarkup('wave')}<span>Checking</span></span>`;
+}
+
+function pendingLabel(label) {
+  return `${cellLoaderMarkup('orbit')} <span>${esc(label)}</span>`;
 }
 
 // ─────────────────────────────────────────────────────────── tape feed ─────
@@ -1880,7 +1887,7 @@ function confirmBet({ market, side, amount, asStreakPick }) {
   $("#bet-confirm").onclick = async () => {
     const btn = $("#bet-confirm");
     btn.disabled = true;
-    btn.textContent = "Submitting…";
+    btn.innerHTML = pendingLabel("Submitting");
     try {
       const r = await api(`/markets/${encodeURIComponent(market.id)}/bet`, {
         method: "POST",
@@ -2024,7 +2031,7 @@ function confirmRenew() {
   $("#renew-go").onclick = async () => {
     const btn = $("#renew-go");
     btn.disabled = true;
-    btn.textContent = "Approve in wallet…";
+    btn.innerHTML = pendingLabel("Approve in wallet");
     let txHash;
     try {
       txHash = await broadcastTransfer(fee);
@@ -2066,7 +2073,7 @@ function confirmReset() {
   $("#reset-go").onclick = async () => {
     const button = $("#reset-go");
     button.disabled = true;
-    button.textContent = "Resetting…";
+    button.innerHTML = pendingLabel("Resetting");
     try {
       await api("/reset", { method: "POST" });
       closeModal();
@@ -2247,7 +2254,7 @@ async function renderWallet() {
     }
     const btn = $("#dep-go");
     btn.disabled = true;
-    btn.textContent = "APPROVE IN WALLET…";
+    btn.innerHTML = pendingLabel("APPROVE IN WALLET");
     let txHash;
     try {
       txHash = await broadcastTransfer(amt);
@@ -2277,7 +2284,7 @@ async function renderWallet() {
     }
     const btn = $("#wd-go");
     btn.disabled = true;
-    btn.textContent = "SIGNING…";
+    btn.innerHTML = pendingLabel("SIGNING");
     try {
       const r = await api("/wallet/withdraw", {
         method: "POST",
@@ -2301,7 +2308,7 @@ async function renderWallet() {
     tgConnect.onclick = async () => {
       const btn = tgConnect;
       btn.disabled = true;
-      btn.textContent = "CREATING LINK…";
+      btn.innerHTML = pendingLabel("CREATING LINK");
       try {
         const r = await api("/integrations/telegram/connect", {
           method: "POST",
@@ -2321,7 +2328,7 @@ async function renderWallet() {
     tgDisconnect.onclick = async () => {
       const btn = tgDisconnect;
       btn.disabled = true;
-      btn.textContent = "DISCONNECTING…";
+      btn.innerHTML = pendingLabel("DISCONNECTING");
       try {
         const r = await api("/integrations/telegram/disconnect", {
           method: "POST",
@@ -2526,7 +2533,7 @@ function promptCreateCrew() {
   go.onclick = async () => {
     const name = input.value.trim();
     go.disabled = true;
-    go.textContent = "Creating…";
+    go.innerHTML = pendingLabel("Creating");
     try {
       const { crew } = await api("/crews", { method: "POST", body: { name } });
       closeModal();
@@ -2553,7 +2560,7 @@ async function doJoinCrew(code) {
   if (button?.disabled) return;
   if (button) {
     button.disabled = true;
-    button.textContent = "Joining…";
+    button.innerHTML = pendingLabel("Joining");
   }
   try {
     const { crew } = await api("/crews/join", {
@@ -2588,7 +2595,7 @@ function confirmLeaveCrew(crewId, name) {
   $("#crew-leave-go").onclick = async () => {
     const button = $("#crew-leave-go");
     button.disabled = true;
-    button.textContent = "Leaving…";
+    button.innerHTML = pendingLabel("Leaving");
     try {
       await api(`/crews/${encodeURIComponent(crewId)}/leave`, {
         method: "POST",
@@ -2697,7 +2704,7 @@ function renderLanding() {
   root.innerHTML = `
     <div class="landing-page">
       <header class="landing-header">
-        <a class="landing-brand" href="#/" aria-label="Streak home"><img class="brand-mark" src="/mark.svg" alt=""><span class="wordmark">streak<span>Football. In play.</span></span></a>
+        <a class="landing-brand" href="#/" aria-label="Streak home"><img class="streak-wordmark" src="/brand/on-form-wordmark.svg" alt="Streak" width="324" height="86"></a>
         <nav class="landing-nav" aria-label="Explore Streak"><button data-scroll="market-preview">Match centre</button><button data-scroll="how-it-works">How it works</button><button data-scroll="streak-feature">Daily streak</button></nav>
         <button class="btn btn-glass" id="connect-top">Connect wallet <span aria-hidden="true">↗</span></button>
       </header>
@@ -2711,7 +2718,7 @@ function renderLanding() {
           <div id="connect-status" class="connect-status" role="status"></div>
         </section>
         <section class="market-preview" id="market-preview" aria-label="Interactive market example">
-          <div class="preview-toolbar"><span class="preview-brand">S<span>/</span></span><span>THE MATCH CENTRE</span><span class="preview-example">Interactive preview · example data</span></div>
+          <div class="preview-toolbar"><span class="preview-brand"><img src="/brand/on-form-mark.svg" alt="" width="24" height="24"></span><span>THE MATCH CENTRE</span><span class="preview-example">Interactive preview · example data</span></div>
           <div class="preview-content">
             <div class="preview-fixture">
               <div class="preview-match-meta"><span class="preview-tag">MATCH WINNER</span><span>Illustrative fixture</span></div>
@@ -2738,14 +2745,14 @@ function renderLanding() {
         <section class="streak-feature" id="streak-feature"><div class="streak-feature-copy"><span class="eyebrow">More than a match</span><h2>A little instinct.<br><em>A streak of your own.</em></h2><p>One daily pick. A run that tells your story. Track your form, compare with your crew and see where you stand.</p><button class="btn btn-glass" id="connect-streak">Start your streak <span aria-hidden="true">↗</span></button></div><div class="streak-art" aria-label="Example of a five-pick streak"><span class="streak-orbit orbit-one"></span><span class="streak-orbit orbit-two"></span><div class="streak-medallion"><span>DAILY STREAK</span><strong>5<span>↗</span></strong><span>PICKS IN A ROW</span></div><div class="streak-form"><span>✓</span><span>✓</span><span>✓</span><span>✓</span><span>✓</span><span>6</span><span>7</span></div><small>Example streak</small></div></section>
         <section class="landing-finale"><span class="eyebrow">The next call is yours</span><h2>Football feels different<br>when <em>you're in it.</em></h2><button class="btn btn-amber" id="connect-bottom">Connect wallet <span aria-hidden="true">↗</span></button><p>Live pools. Daily picks. Verifiable results.</p></section>
       </main>
-      <footer class="landing-footer"><a class="landing-brand" href="#/"><img class="brand-mark" src="/mark.svg" alt=""><span class="wordmark">streak</span></a><span>Football predictions on Nervos CKB</span><span class="network-tag">Pudge testnet</span></footer>
+      <footer class="landing-footer"><a class="landing-brand" href="#/"><img class="streak-wordmark" src="/brand/on-form-wordmark.svg" alt="Streak" width="324" height="86"></a><span>Football predictions on Nervos CKB</span><span class="network-tag">Pudge testnet</span></footer>
     </div>
   `;
   const go = async (btn) => {
     const status = $("#connect-status");
     const label = btn.textContent;
     btn.disabled = true;
-    btn.textContent = "CONNECTING…";
+    btn.innerHTML = pendingLabel("CONNECTING");
     if (status)
       status.textContent =
         "Approve the connection and signature in your wallet…";
@@ -2815,7 +2822,7 @@ function promptSetUsername(firstTime = false) {
       return;
     }
     go.disabled = true;
-    go.textContent = "Saving…";
+    go.innerHTML = pendingLabel("Saving");
     try {
       const r = await api("/me/username", {
         method: "POST",
@@ -3102,7 +3109,7 @@ async function hydrateReceiptVerification(id, host, compact = false) {
   const retry = verdict.querySelector("[data-recheck-receipt]");
   if (retry) {
     retry.disabled = true;
-    retry.textContent = "Checking…";
+    retry.innerHTML = pendingLabel("Checking");
   }
   try {
     const data = await api(`/receipts/${encodeURIComponent(id)}?verify=1`, {

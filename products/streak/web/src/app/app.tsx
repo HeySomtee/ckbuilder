@@ -13,6 +13,7 @@ import { MarketDetail } from '../features/markets/detail';
 import { createDraftStore } from '../features/predictions/draft';
 import type { Outcome } from '../features/predictions/draft';
 import { PredictionSlip } from '../features/predictions/slip';
+import { Brand } from '../components/brand';
 import { followMarket, marketHref, navigateMarket, useMarketRoute } from '../lib/market-route';
 import { navigateActivity, useDirectRoute } from '../lib/direct-route';
 import { useSectionRoute, sectionHref, followSection } from '../lib/section-route';
@@ -21,6 +22,7 @@ import { SectionPage } from './sections';
 import { getAtomicEntryEnabled } from '../features/direct/availability-api';
 import { Notice } from '../components/notice';
 import { BusyState } from '../components/busy-state';
+import { CellLoader } from '../components/cell-loader';
 import { poolLabel } from '../features/markets/pools';
 import { usePools } from '../features/markets/use-pools';
 import { fixtureLabel, settlementLabel } from '../features/markets/status';
@@ -270,6 +272,49 @@ export function App() {
     if (account.isSuccess) void restoreWallet(account.data?.walletAddress);
   }, [account.isSuccess, account.data?.walletAddress]);
   useEffect(() => {
+    if (!account.isSuccess) return;
+    // A cached read belongs to a verified session, even when no signer is connected.
+    client.removeQueries({
+      predicate: (query) =>
+        query.queryKey[0] === 'private' &&
+        query.queryKey[1] === 'activity-index' &&
+        (query.queryKey[3] !== account.data?.id ||
+          query.queryKey[4] !== account.data?.walletAddress),
+    });
+  }, [client, account.isSuccess, account.data?.id, account.data?.walletAddress]);
+  useEffect(() => {
+    const accountId = account.data?.id;
+    const address = account.data?.walletAddress;
+    if (!accountId || !address) return;
+    const lifetime = new AbortController();
+    const current = () => {
+      const authenticated = client.getQueryData<Awaited<ReturnType<typeof getAccount>>>([
+        'account',
+      ]);
+      return (
+        !lifetime.signal.aborted &&
+        authenticated?.id === accountId &&
+        authenticated.walletAddress === address
+      );
+    };
+    void import('../features/direct/activity-index')
+      .then(({ activityIndexQuery }) =>
+        client.prefetchInfiniteQuery(
+          activityIndexQuery(
+            client,
+            { id: accountId, walletAddress: address },
+            current,
+            lifetime.signal,
+          ),
+        ),
+      )
+      .catch(() => {
+        // Optional preparation never blocks the shell. Activity retains its own
+        // explicit loading, retry and recovery states if this read cannot finish.
+      });
+    return () => lifetime.abort();
+  }, [client, account.data?.id, account.data?.walletAddress]);
+  useEffect(() => {
     const connection = wallet.connection;
     if (!connection || !account.data) return;
     void assertWalletAccount(connection, account.data.walletAddress).catch((error: unknown) => {
@@ -279,8 +324,9 @@ export function App() {
       );
     });
   }, [wallet.connection, account.data]);
+  const [signInStage, setSignInStage] = useState('Connecting wallet');
   const login = useMutation({
-    mutationFn: signIn,
+    mutationFn: () => signIn(setSignInStage),
     retry: false,
     onSuccess: async () => {
       client.removeQueries({ queryKey: ['private'] });
@@ -335,7 +381,13 @@ export function App() {
   ].sort((a, b) => a.name.localeCompare(b.name));
   const pools = usePools(markets.map((m) => m.matchId));
   const accountAction = account.data ? (
-    <button className="quiet" onClick={() => logout.mutate()} disabled={logout.isPending}>
+    <button
+      className="quiet"
+      onClick={() => logout.mutate()}
+      disabled={logout.isPending}
+      aria-busy={logout.isPending}
+    >
+      {logout.isPending && <CellLoader variant="orbit" />}
       {logout.isPending ? 'Signing out…' : 'Sign out'}
     </button>
   ) : (
@@ -343,8 +395,13 @@ export function App() {
       className="connect"
       onClick={() => login.mutate()}
       disabled={login.isPending || account.isPending}
+      aria-busy={login.isPending || account.isPending}
     >
-      <Icon name="wallet" />
+      {login.isPending || account.isPending ? (
+        <CellLoader variant="orbit" />
+      ) : (
+        <Icon name="wallet" />
+      )}
       {login.isPending ? 'Connecting…' : 'Sign in with wallet'}
     </button>
   );
@@ -357,15 +414,23 @@ export function App() {
         <a
           href={sectionHref('overview')}
           className="wordmark"
+          aria-label="Streak overview"
           onClick={(event) => followSection(event, 'overview')}
         >
-          <img src="/mark.svg" alt="" width="34" height="34" />
-          streak<span className="dot">.</span>
+          <Brand />
         </a>
         <AppNavigation active={activePage} />
       </aside>
       <div className="workspace">
         <header className="topbar">
+          <a
+            className="mobile-brand"
+            href={sectionHref('overview')}
+            aria-label="Streak overview"
+            onClick={(event) => followSection(event, 'overview')}
+          >
+            <Brand />
+          </a>
           <span className="breadcrumb">
             Your touchline <span>/</span>{' '}
             <strong>
@@ -462,10 +527,17 @@ export function App() {
                 tone={entryMode.isError ? 'attention' : 'info'}
                 actions={
                   entryMode.isError ? (
-                    <button onClick={() => void entryMode.refetch()}>Try again</button>
+                    <button
+                      aria-busy={entryMode.isFetching}
+                      onClick={() => void entryMode.refetch()}
+                    >
+                      {entryMode.isFetching && <CellLoader variant="orbit" />}
+                      Try again
+                    </button>
                   ) : undefined
                 }
               >
+                {!entryMode.isError && <CellLoader variant="wave" />}
                 {entryMode.isError
                   ? 'Your picks are saved. Retry to check the available checkout.'
                   : 'Checking the current payment flow.'}
@@ -485,12 +557,14 @@ export function App() {
                 }
               >
                 <DirectPage
-                  key={`${directRoute}:${account.data?.id ?? 'guest'}:${wallet.revision}`}
+                  key={`${directRoute}:${account.data?.id ?? 'guest'}:${directRoute === 'activity' ? (account.data?.walletAddress ?? 'session') : wallet.revision}`}
                   marketId={directRoute === 'activity' ? undefined : directRoute}
                   activityOnly={directRoute === 'activity'}
                   draftStore={draftStore}
                   account={account.data ?? null}
                   accountReady={!account.isPending}
+                  onAuthenticate={() => login.mutate()}
+                  authenticating={login.isPending}
                   draftPick={draftState.draft.picks.find((row) => row.marketId === directRoute)}
                 />
               </Suspense>
@@ -560,6 +634,7 @@ export function App() {
             <div className="feed-meta" aria-live="polite">
               <label className="fixture-sort fixture-league">
                 League
+                {!competitions.length && leagueFeed.isPending && <CellLoader variant="orbit" />}
                 <select
                   aria-label="Filter by league"
                   value={competition}
@@ -582,7 +657,12 @@ export function App() {
                   ))}
                 </select>
                 {leagueFeed.isError && competitions.length === 0 && (
-                  <button className="quiet" onClick={() => void leagueFeed.refetch()}>
+                  <button
+                    className="quiet"
+                    aria-busy={leagueFeed.isFetching}
+                    onClick={() => void leagueFeed.refetch()}
+                  >
+                    {leagueFeed.isFetching && <CellLoader variant="orbit" />}
                     Retry leagues
                   </button>
                 )}
@@ -605,6 +685,7 @@ export function App() {
                   : `${count} ${count === 1 ? 'fixture' : 'fixtures'}`}
               </span>
               <span>
+                {feed.isFetching && <CellLoader variant="orbit" />}
                 {feed.isFetching
                   ? 'Updating…'
                   : feed.dataUpdatedAt
@@ -632,7 +713,12 @@ export function App() {
                       : feed.error.message}
                   </p>
                 </div>
-                <button onClick={() => void feed.refetch()} disabled={feed.isFetching}>
+                <button
+                  onClick={() => void feed.refetch()}
+                  disabled={feed.isFetching}
+                  aria-busy={feed.isFetching}
+                >
+                  {feed.isFetching && <CellLoader variant="orbit" />}
                   Retry markets
                 </button>
               </div>
@@ -690,7 +776,12 @@ export function App() {
             )}
             {feed.hasNextPage && (
               <div className="load-more">
-                <button disabled={feed.isFetching} onClick={() => void feed.fetchNextPage()}>
+                <button
+                  disabled={feed.isFetching}
+                  aria-busy={feed.isFetchingNextPage}
+                  onClick={() => void feed.fetchNextPage()}
+                >
+                  {feed.isFetchingNextPage && <CellLoader variant="orbit" />}
                   {feed.isFetchingNextPage ? 'Loading…' : 'Show more fixtures'}
                 </button>
               </div>
@@ -713,6 +804,8 @@ export function App() {
         accountReady={!account.isPending}
         onSignIn={() => login.mutate()}
         signInPending={login.isPending}
+        signInStage={signInStage}
+        signInError={login.error?.message}
         accountKey={
           account.isPending
             ? 'pending'

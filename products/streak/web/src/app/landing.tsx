@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Icon } from '../components/icon';
+import { Brand } from '../components/brand';
+import { CellLoader } from '../components/cell-loader';
 import { getMarkets } from '../features/markets/api';
 import type { Market } from '../features/markets/api';
 import { weekend } from '../features/markets/weekend';
@@ -108,7 +110,7 @@ export function Landing() {
       </a>
       <header className="welcome-header">
         <a className="welcome-brand" href="/" aria-label="Streak home">
-          <span>S</span>streak<span className="welcome-dot">.</span>
+          <Brand />
         </a>
         <nav aria-label="Explore Streak">
           <a href="#how-it-works">How it works</a>
@@ -190,13 +192,17 @@ export function Landing() {
               <div className="welcome-feed" aria-busy={feed.isFetching}>
                 {feed.isPending ? (
                   <p className="welcome-feed-message" role="status">
+                    <CellLoader variant="wave" />
                     Finding your fixtures…
                   </p>
                 ) : feed.isError && !feed.data ? (
                   <div className="welcome-feed-message" role="status">
                     <strong>The fixture feed is taking a break.</strong>
                     <p>You can still explore Streak. Try the schedule again in a moment.</p>
-                    <button onClick={() => void feed.refetch()}>Retry fixtures</button>
+                    <button aria-busy={feed.isFetching} onClick={() => void feed.refetch()}>
+                      {feed.isFetching && <CellLoader variant="orbit" />}
+                      Retry fixtures
+                    </button>
                   </div>
                 ) : fixtures.length ? (
                   fixtures.map((market, index) => (
@@ -416,7 +422,7 @@ export function Landing() {
       </main>
       <footer className="welcome-footer">
         <a className="welcome-brand" href="/" aria-label="Streak home">
-          streak<span className="welcome-dot">.</span>
+          <Brand />
         </a>
         <span>Football predictions on Nervos CKB.</span>
         <a href="/season/">

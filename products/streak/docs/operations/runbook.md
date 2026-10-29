@@ -1,5 +1,15 @@
 # Operations and pilot readiness
 
+28 October [Activity index operations](../delivery/event-driven-activity.md): deploy
+the API and sponsor relay together using the existing database, IPC settings and
+persistent operator disk. No new key or contract is needed. If delivery is delayed,
+check database connectivity and the authenticated loopback sponsor process; do not
+clear signed payment journals. Corrupt generated events are preserved under the
+operator's `activity-outbox/quarantine`. Repair sources, restart the relay to replay,
+and review the preserved files before archiving them or clearing source-review markers.
+Degraded coverage remains visible until that review is complete. A stopped index
+cannot invalidate live CKB claims; explicit browser recovery remains available.
+
 The [direct testnet runbook](direct-testnet.md) covers the separately configured market operator, bounded football worker and independent owner claim recovery. Its file journals are a single-operator pilot boundary, separate from the legacy ledger and API service.
 
 This is the approved operational checklist and response procedure. It does not claim that a deployment, backup policy, alerting system or paid plan already exists. Record environment-specific commands and verified evidence as each integration is implemented. Never commit credentials or real participant data into runbooks.

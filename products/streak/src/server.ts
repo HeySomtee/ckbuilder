@@ -18,6 +18,8 @@ import { telegramAvailable } from './modules/identity/integration-config';
 import { readProvisioningProgress, PROVISION_QUEUE_LIMIT } from './modules/direct/provision';
 import { sponsorProxy, SponsorProxyError } from './modules/direct/sponsor-proxy';
 import { activePoolRecord, PublicPoolCache } from './modules/direct/pools';
+import { activityService, activityOwner, startActivity, unavailableActivity } from './modules/activity/runtime';
+import { validActivityCursor } from './modules/activity/storage';
 import { catalogueStatusMatches } from './modules/predictions/catalogue';
 import { survivorService, tickSurvivor } from './modules/survivor/runtime';
 import { SurvivorError } from './modules/survivor/domain';
@@ -333,7 +335,7 @@ async function handleAuthVerify(req: IncomingMessage, res: ServerResponse): Prom
   const address = await canonicalWalletAddress(body.address);
   const signature = signatureFrom(body.signature);
   if (!address || !signature || typeof body.challengeId !== "string") {
-    return sendJson(res, 400, { error: "Use a supported wallet, address and fresh login challenge. JoyID binding is not supported in this release." });
+    return sendJson(res, 400, { error: "This sign-in proof is unsupported or incomplete. Try MetaMask, Zerion, a native CKB wallet or your original JoyID passkey." });
   }
 
   const message = await takeChallenge(address, body.challengeId, publicOrigin(req));
@@ -1257,7 +1259,7 @@ async function handleSponsor(req:IncomingMessage,res:ServerResponse,url:URL,acti
     const offerId=url.searchParams.get('offerId'),rawHash=url.searchParams.get('rawHash');
     if(!offerId||!/^[0-9a-f-]{36}$/.test(offerId)||!rawHash||!/^0x[0-9a-f]{64}$/.test(rawHash))return sendJson(res,400,{error:'Invalid sponsor recovery identity.'});
     if(!sponsorRate(`status:${req.socket.remoteAddress}`,60))return sendJson(res,429,{error:'Please wait before refreshing transaction status.'});
-    try {sendJson(res,200,await sponsorProxy(`${prefix}/status?offerId=${encodeURIComponent(offerId)}&rawHash=${rawHash}`));}
+    try {sendJson(res,200,await sponsorProxy(`${prefix}/status?offerId=${encodeURIComponent(offerId)}&rawHash=${rawHash}`)); activityService()?.wake();}
     catch {sendJson(res,503,{error:'Sponsor status is unavailable. Keep the saved transaction and try recovery again.'});}
     return;
   }
@@ -1268,7 +1270,7 @@ async function handleSponsor(req:IncomingMessage,res:ServerResponse,url:URL,acti
   const body=await readJson(req);
   if(!body||typeof body!=='object'||Array.isArray(body)||JSON.stringify(body).length>210_000)return sendJson(res,400,{error:'Invalid sponsored request.'});
   if(action==='offer'&&(await canonicalWalletAddress(body.ownerAddress))!==address)return sendJson(res,403,{error:'Use the wallet linked to the signed-in account.'});
-  try {sendJson(res,200,await sponsorProxy(`${prefix}/${action}`,body,address));}
+  try {sendJson(res,200,await sponsorProxy(`${prefix}/${action}`,body,address)); activityService()?.wake();}
   catch(error) {sendJson(res,error instanceof SponsorProxyError?error.status:409,{error:error instanceof SponsorProxyError?error.message:'Sponsored operation could not complete. Preserve any signed transaction and check its status before retrying.'});}
 }
 async function handleDirectMarkets(res: ServerResponse, url: URL): Promise<void> {
@@ -1306,7 +1308,35 @@ async function handleDirectFixtures(res: ServerResponse): Promise<void> {
     coverage: { from: coverage.from.slice(0, 10), to: coverage.to.slice(0, 10), complete: coverage.complete }, fixtures: owned });
 }
 
+async function handleActivity(req:IncomingMessage,res:ServerResponse,url:URL,action:'read'|'refresh'|'hint'):Promise<void> {
+  const user=await requireUser(req,res); if(!user)return;
+  res.setHeader('Cache-Control','private, no-store');
+  if(!sponsorRate(`activity:${action}:${user.id}`,action==='read'?120:12))return sendJson(res,429,{error:'Please wait before refreshing activity.'});
+  // Only the wallet bound by authenticated login determines the owner filter.
+  const owner=await activityOwner(user.wallet.address);
+  const cursor=url.searchParams.get('cursor')??undefined;
+  if(cursor&&!validActivityCursor(cursor))return sendJson(res,400,{error:'Invalid activity page.'});
+  const service=activityService();
+  if(!service)return sendJson(res,action==='read'?200:503,unavailableActivity(owner.ownerHash,owner.address));
+  try {
+    if(action==='read')return sendJson(res,200,await service.read(owner.ownerHash,owner.address,cursor));
+    if(action==='refresh')await service.refresh(owner.ownerHash);
+    else {
+      const body=await readJson(req);
+      if(!body||typeof body!=='object'||Array.isArray(body)||typeof body.transactionHash!=='string'||!/^0x[0-9a-f]{64}$/.test(body.transactionHash)||
+        (body.marketId!==undefined&&(typeof body.marketId!=='string'||!/^[a-zA-Z0-9:_-]{1,160}$/.test(body.marketId))))
+        return sendJson(res,400,{error:'Invalid activity update hint.'});
+      // A hint never changes balances or accepted state and cannot index an arbitrary owner.
+      await service.hint(owner.ownerHash,body.transactionHash,body.marketId);
+    }
+    sendJson(res,202,{queued:true});
+  } catch { sendJson(res,503,{error:'Saved activity is temporarily unavailable. Existing payments and claims remain recoverable.'}); }
+}
+
 const staticRoutes: Record<string, Handler> = {
+  "GET /api/activity": (req,res,url)=>handleActivity(req,res,url,'read'),
+  "POST /api/activity/refresh": (req,res,url)=>handleActivity(req,res,url,'refresh'),
+  "POST /api/activity/hint": (req,res,url)=>handleActivity(req,res,url,'hint'),
   "GET /api/direct/pools": async (req,res,url) => {
     const ids = (url.searchParams.get('fixtures') ?? '').split(',');
     if (ids.length > 24 || new Set(ids).size !== ids.length || ids.some(id=>!/^api-football-[1-9][0-9]{0,14}$/.test(id))) return sendJson(res,400,{error:'Provide up to 24 unique football fixtures.'});
@@ -1446,6 +1476,8 @@ async function boot(): Promise<void> {
   });
   const stopFive = startFiveProgression();
   server.once('close',stopFive);
+  const stopActivity = startActivity();
+  server.once('close',stopActivity);
 
   // A slow oracle or notification service must not hold the listener offline.
   let initialized = false;

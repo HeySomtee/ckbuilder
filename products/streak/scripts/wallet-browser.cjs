@@ -86,9 +86,10 @@ async function main() {
         const external = [],
           unexpectedWrites = [],
           errors = [],
-          requests = [];
+          requests = [],
+          activityAddresses = [];
         const allowedWrites = new Set(['/api/auth/nonce', '/api/auth/verify', '/api/logout']);
-        await context.route('**/*', (route) => {
+        await context.route('**/*', async (route) => {
           const request = route.request(),
             url = new URL(request.url());
           if (url.origin !== base) {
@@ -103,6 +104,34 @@ async function main() {
             return route.fulfill({ contentType: 'text/javascript', body: fixture });
           if (url.pathname === '/api/direct/markets')
             return route.fulfill({ contentType: 'application/json', body: '{"markets":[]}' });
+          if (url.pathname === '/api/activity' && request.method() === 'GET') {
+            // This wallet fixture creates no positions and runs without an index database.
+            // Retain real session/owner verification, then supply its healthy empty read model.
+            const cookies = await context.cookies(url.href);
+            const response = await savedFetch(url.href, {
+              headers: { cookie: cookies.map(({ name, value }) => `${name}=${value}`).join('; ') },
+            });
+            const activity = await response.json();
+            if (!response.ok)
+              return route.fulfill({
+                status: response.status,
+                contentType: 'application/json',
+                body: JSON.stringify(activity),
+              });
+            assert.equal(activity.available, false);
+            assert.equal(activity.coverage, 'unavailable');
+            assert.deepEqual(activity.groups, []);
+            activityAddresses.push(activity.address);
+            return route.fulfill({
+              contentType: 'application/json',
+              body: JSON.stringify({
+                ...activity,
+                available: true,
+                coverage: 'complete',
+                updatedAt: Date.now(),
+              }),
+            });
+          }
           return route.continue();
         });
         await context.routeWebSocket('**/*', (socket) => socket.close());
@@ -136,7 +165,7 @@ async function main() {
               const fixture = await import('/qa-wallet-fixture.js');
               await fixture.connectEvm(document.querySelector('ccc-connector'), options);
             },
-            { keyByte: (0x11 + groups).toString(16), ...options },
+            { keyByte: (0x11 + groups).toString(16), walletName: width === 390 ? 'Zerion' : 'MetaMask', ...options },
           );
         }
         try {
@@ -198,7 +227,12 @@ async function main() {
           await page.waitForURL('**/?view=activity');
           assert.equal(await overview.count(), 0, 'Activity is a distinct page from Wallet.');
           await page.getByRole('heading', { name: 'My activity.', exact: true }).waitFor();
+          await reads.settled();
           await page.getByRole('tab', { name: /Open bets/ }).waitFor();
+          assert.ok(
+            activityAddresses.includes(address),
+            'The empty Activity fixture belongs to the authenticated wallet.',
+          );
           await page.getByRole('button', { name: /Payments & recovery/ }).click();
           await page.getByRole('heading', { name: 'Recent transactions', exact: true }).waitFor();
           await walletNav().click();
@@ -283,7 +317,7 @@ async function main() {
           );
           assert.equal(requests.filter((url) => url === '/api/auth/verify').length, verifies + 1);
           const restoreAddress = await page.evaluate(() => window.syntheticEvm.evmAddress);
-          await context.addInitScript((address) => {
+          await context.addInitScript(({address, walletName}) => {
             const listeners = new Map();
             window.restoreCalls = [];
             const provider = {
@@ -299,22 +333,22 @@ async function main() {
               },
               removeListener: (name, callback) => listeners.get(name)?.delete(callback),
             };
-            addEventListener('eip6963:requestProvider', () =>
+            addEventListener('eip6963:requestProvider', () => setTimeout(() =>
               dispatchEvent(
                 new CustomEvent('eip6963:announceProvider', {
                   detail: {
                     info: {
                       uuid: 'synthetic-restore',
-                      name: 'Synthetic EIP-1193 wallet',
+                      name: walletName,
                       rdns: 'test.synthetic',
                       icon: '',
                     },
                     provider,
                   },
                 }),
-              ),
+              ), 500),
             );
-          }, restoreAddress);
+          }, {address: restoreAddress, walletName: width === 390 ? 'Zerion' : 'MetaMask'});
           await context.route('https://testnet.ckb.dev/**', (route) => {
             const body = route.request().postDataJSON();
             assert.equal(
@@ -399,6 +433,40 @@ async function main() {
             beforeReplacement,
             'Changing account during a signature never verifies the obsolete proof.',
           );
+          await connect.click();
+          await page.locator('ccc-connector').waitFor();
+          await page.evaluate(async (keyByte) => {
+            await (await import('/qa-wallet-fixture.js')).connectNative(document.querySelector('ccc-connector'), keyByte);
+          }, (0x55 + groups).toString(16));
+          await disconnect.waitFor();
+          await signIn.click();
+          await signOut.waitFor();
+          const nativeAddress = await page.evaluate(() => window.syntheticNative.address);
+          const beforeNativeReload = requests.filter(url => url === '/api/auth/verify').length;
+          await context.addInitScript((address) => {
+            window.nativeRestoreCalls = [];
+            const read = (method, value) => async () => { window.nativeRestoreCalls.push(method); return value; };
+            window.utxoGlobal = { ckbSigner: {
+              getNetwork: read('getNetwork', 'nervos_testnet'), isConnected: read('isConnected', true),
+              getAccount: read('getAccount', [address]),
+              connect: () => { throw Error('Unexpected native permission request'); },
+              signMessage: () => { throw Error('Unexpected native signature'); },
+              switchNetwork: () => { throw Error('Unexpected network change'); },
+              on: () => {}, removeListener: () => {},
+            } };
+          }, nativeAddress);
+          await reads.reload();
+          await signOut.waitFor();
+          await disconnect.waitFor();
+          assert.ok((await page.evaluate(() => window.nativeRestoreCalls)).includes('getAccount'));
+          assert.equal(requests.filter(url => url === '/api/auth/verify').length, beforeNativeReload);
+          assert.equal(await page.locator('ccc-connector').count(), 0);
+          await signOut.click();
+          await signIn.waitFor();
+          await reads.reload();
+          await connect.waitFor();
+          assert.equal(await page.evaluate(() => localStorage.getItem('streak-wallet-selection-v1')), null);
+          assert.deepEqual(await page.evaluate(() => window.nativeRestoreCalls), [], 'Sign-out prevents silent native restoration.');
           await reads.settled();
           assert.deepEqual(external, []);
           assert.deepEqual(unexpectedWrites, []);

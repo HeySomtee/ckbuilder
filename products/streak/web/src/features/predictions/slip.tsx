@@ -6,6 +6,7 @@ import type { DraftStore } from './draft';
 import type { Account } from '../account/api';
 import { useNow } from '../../lib/use-now';
 import { TeamBadge } from '../../components/team-badge';
+import { CellLoader } from '../../components/cell-loader';
 import { Notice } from '../../components/notice';
 import { subscribeWallet, getWalletState } from '../../lib/wallet';
 import './slip-workspace.css';
@@ -23,6 +24,8 @@ export function PredictionSlip({
   accountReady,
   onSignIn,
   signInPending,
+  signInStage,
+  signInError,
   onAddMatches,
 }: {
   store: DraftStore;
@@ -34,6 +37,8 @@ export function PredictionSlip({
   accountReady: boolean;
   onSignIn: () => void;
   signInPending: boolean;
+  signInStage?: string;
+  signInError?: string;
   onAddMatches?: () => void;
 }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
@@ -366,7 +371,12 @@ export function PredictionSlip({
                       </svg>
                     </button>
                   </div>
-                  {query.isPending && <p role="status">Loading fixture rules...</p>}
+                  {query.isPending && (
+                    <p className="slip-loading" role="status">
+                      <CellLoader variant="wave" />
+                      <span>Loading fixture rules...</span>
+                    </p>
+                  )}
                   {query.isError && (
                     <p className="pick-error">
                       Fixture details are unavailable. Your pick is retained.{' '}
@@ -445,7 +455,14 @@ export function PredictionSlip({
           ref={setActivityTarget}
         />
         <footer className="slip-footer" hidden={view !== 'picks'}>
-          <Suspense fallback={<p role="status">Loading payment...</p>}>
+          <Suspense
+            fallback={
+              <p className="slip-loading" role="status">
+                <CellLoader variant="wave" />
+                <span>Loading payment...</span>
+              </p>
+            }
+          >
             {checkoutOpened && (
               <BatchCheckout
                 onDismiss={dismiss}
@@ -455,6 +472,8 @@ export function PredictionSlip({
                 accountReady={accountReady}
                 onSignIn={onSignIn}
                 signInPending={signInPending}
+                signInStage={signInStage}
+                signInError={signInError}
                 active={open}
                 activityTarget={activityTarget}
                 feedbackTarget={feedbackTarget}

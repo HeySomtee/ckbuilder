@@ -1,13 +1,16 @@
+import { CellLoader } from '../../components/cell-loader';
 import { useState } from 'react';
 import { money, type FiveData } from './api';
 export function RewardsPanel({
   data,
   pending,
+  pendingBody,
   action,
   onContinue,
 }: {
   data: FiveData;
   pending: boolean;
+  pendingBody?: Record<string, unknown>;
   action: (b: Record<string, unknown>) => void;
   onContinue: () => void;
 }) {
@@ -15,6 +18,13 @@ export function RewardsPanel({
   const r = data.detail,
     a = data.rewardsAccount;
   if (!r) return null;
+  const resolving = (id: string) =>
+    pendingBody?.action === 'resolveContribution' && pendingBody.sponsorId === id;
+  const moderating = (id: string, state: string) =>
+    pendingBody?.action === 'moderate' &&
+    pendingBody.sponsorId === id &&
+    pendingBody.state === state;
+  const collecting = pendingBody?.action === 'claim';
   return (
     <>
       {r.state === 'cancelled' && (
@@ -40,7 +50,7 @@ export function RewardsPanel({
                           : 'Ready for wallet review'}
                   </small>
                 </span>
-                {s.funding === 'submitted' && <span className="five-spinner" />}
+                {s.funding === 'submitted' && <CellLoader variant="orbit" />}
                 {s.funding === 'awaiting' && r.state === 'open' && (
                   <button className="btn" onClick={onContinue}>
                     Continue
@@ -75,6 +85,7 @@ export function RewardsPanel({
                   <button
                     className="btn"
                     disabled={pending || !/^0x[0-9a-f]{64}$/i.test(conflict)}
+                    aria-busy={resolving(s.id)}
                     onClick={() =>
                       action({
                         action: 'resolveContribution',
@@ -84,6 +95,7 @@ export function RewardsPanel({
                       })
                     }
                   >
+                    {resolving(s.id) && <CellLoader variant="orbit" />}
                     Check conflict
                   </button>
                 </details>
@@ -117,16 +129,23 @@ export function RewardsPanel({
               BigInt(a.availableShannons) < BigInt(a.minimumShannons)
             }
             onClick={() => action({ action: 'claim', id: r.id })}
+            aria-busy={
+              collecting ||
+              (data.fundingAvailable && (BigInt(a.pendingShannons) > 0n || a.status === 'queued'))
+            }
           >
             {!data.fundingAvailable ? (
               'Delivery paused'
             ) : BigInt(a.pendingShannons) > 0n || a.status === 'queued' ? (
               <>
-                <span className="five-spinner" />
+                <CellLoader variant="orbit" />
                 {a.status === 'queued' ? 'Collection queued' : 'Sending rewards'}
               </>
             ) : (
-              'Collect rewards'
+              <>
+                {collecting && <CellLoader variant="orbit" />}
+                Collect rewards
+              </>
             )}
           </button>
           {a.transactionHash && (
@@ -164,19 +183,23 @@ export function RewardsPanel({
               <button
                 className="btn"
                 disabled={pending}
+                aria-busy={moderating(s.id, 'approved')}
                 onClick={() =>
                   action({ action: 'moderate', id: r.id, sponsorId: s.id, state: 'approved' })
                 }
               >
+                {moderating(s.id, 'approved') && <CellLoader variant="orbit" />}
                 Approve
               </button>
               <button
                 className="btn"
                 disabled={pending}
+                aria-busy={moderating(s.id, 'hidden')}
                 onClick={() =>
                   action({ action: 'moderate', id: r.id, sponsorId: s.id, state: 'hidden' })
                 }
               >
+                {moderating(s.id, 'hidden') && <CellLoader variant="orbit" />}
                 Hide
               </button>
             </div>

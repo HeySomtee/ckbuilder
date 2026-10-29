@@ -1,7 +1,33 @@
 /* Isolated browser fixture. The application never imports this module. */
 import { ccc } from '@ckb-ccc/core';
 import { Eip6963 } from '@ckb-ccc/eip6963';
+import { UtxoGlobal } from '@ckb-ccc/utxo-global';
 import { Wallet, getBytes } from 'ethers';
+
+export async function connectNative(element, keyByte) {
+  const client = new ccc.ClientPublicTestnet();
+  client.getBalanceSingle = async () => 1234_00000000n;
+  const account = new ccc.SignerCkbPrivateKey(client, `0x${keyByte.repeat(32)}`);
+  const address = await account.getRecommendedAddress();
+  const publicKey = await account.getIdentity();
+  const events = new Map();
+  const calls = [];
+  const provider = {
+    getNetwork: async () => { calls.push('getNetwork'); return 'nervos_testnet'; },
+    isConnected: async () => { calls.push('isConnected'); return true; },
+    getAccount: async () => { calls.push('getAccount'); return [address]; },
+    getPublicKey: async () => [{ address, publicKey }],
+    signMessage: async (message) => { calls.push('signMessage'); return account.signMessageRaw(message); },
+    connect: async () => { throw Error('Already authorized native wallet must not request access'); },
+    switchNetwork: async () => { throw Error('Must not switch network automatically'); },
+    on: (name, listener) => { if (!events.has(name)) events.set(name, new Set()); events.get(name).add(listener); },
+    removeListener: (name, listener) => events.get(name)?.delete(listener),
+  };
+  window.utxoGlobal = { ckbSigner: provider };
+  window.syntheticNative = { address, publicKey, calls };
+  const { signer } = UtxoGlobal.getUtxoGlobalSigners(client).find(row => row.name === 'CKB');
+  element.onClose(() => void element.updateSigner({ name: 'UTXO Global Wallet' }, { name: 'CKB', signer }));
+}
 
 export async function connectEvm(element, options = {}) {
   // Public, unfunded test identities. Never substitute an application key.
@@ -62,7 +88,7 @@ export async function connectEvm(element, options = {}) {
   element.onClose(
     () =>
       void element.updateSigner(
-        { name: 'Synthetic EIP-1193 wallet' },
+        { name: options.walletName ?? 'MetaMask' },
         { name: 'Ethereum', signer },
       ),
   );

@@ -34,6 +34,7 @@ async function main() {
         const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
         const errors = [], external = [], writes = [];
         let signatures = 0, offers = 0, failMode = false, stalePools = false, releasePools, releaseSubmission, reorg = false, rejectNext = false, rejections = 0, busyReview = true, delayedOffer, holdApproval=false, releaseApproval, sponsorOffline=false;
+        let signedIn = false, authAttempts = 0;
         const poolReady = new Promise(resolve => { releasePools = resolve; });
         await context.exposeBinding('checkoutRpc', async (_source, method, args) => {
           const value=await chain.rpc(method,args);
@@ -66,7 +67,15 @@ async function main() {
             return {fixtureId,state:row?.state === 'funded' ? 'ready' : 'uninitialized', ...(row?.state === 'funded' ? {observedAtMs:Date.now(), totals:['10000000000','0','0'],history:[]} : {})};
           }) });
           }
-          if (url.pathname === '/api/me') return json({ user: { id: 'checkout-user', walletAddress: chain.address, username: 'Synthetic checkout', telegramConnected: false, telegramAvailable: false, telegramUsername: null } });
+          if (url.pathname === '/api/auth/nonce') return json({ message: `Streak sign-in\nOrigin: ${base}\nAddress: ${chain.address}\nNonce: checkout-auth\n`, challengeId: 'checkout-auth' });
+          if (url.pathname === '/api/auth/verify') {
+            authAttempts++;
+            if (authAttempts === 1) return json({error:'Synthetic sign-in could not be verified.'},400);
+            await new Promise(resolve => setTimeout(resolve, 350));
+            signedIn = true;
+            return json({ok:true});
+          }
+          if (url.pathname === '/api/me') return signedIn ? json({ user: { id: 'checkout-user', walletAddress: chain.address, username: 'Synthetic checkout', telegramConnected: false, telegramAvailable: false, telegramUsername: null } }) : json({error:'Sign in'},401);
           if (url.pathname === '/api/markets') return json({ markets: chain.fixtures().map(market), total: 8, nextOffset: null, coverage: { complete: true, from: '2020-01-01', to: '2040-01-01' } });
           if (url.pathname === '/api/direct/entry-mode') return failMode ? json({ error: 'Synthetic availability outage' }, 503) : json({ mode: 'atomic' });
           if (url.pathname === '/api/direct/batch/config') { if(holdApproval){holdApproval=false;await new Promise(resolve=>{releaseApproval=resolve;});} return json(BATCH_MANIFEST); }
@@ -223,8 +232,16 @@ async function main() {
         sponsorOffline=false;
         await page.getByText('Payments are temporarily unavailable',{exact:true}).waitFor({state:'hidden',timeout:12000});
         assert.equal(await page.locator('.slip-title-count').innerText(),'1','Automatic recovery preserves the selected pick.');
-        await connect(page.getByRole('button', { name: 'Reconnect wallet to pay', exact: true }));
-        assert.equal(signatures, 0, 'Reconnect never signs a payment.');
+        await connect(page.getByRole('button', { name: 'Connect wallet to pay', exact: true }));
+        const slip = page.getByRole('dialog', {name:'Your prediction slip'});
+        await page.locator('dialog[open]').getByText('Sign-in did not finish', {exact:true}).waitFor();
+        await page.locator('dialog[open]').getByText(/Synthetic sign-in could not be verified/).waitFor();
+        await page.getByRole('button', {name:'Sign in to continue', exact:true}).click();
+        await page.getByRole('button', {name:/Verifying sign-in/}).waitFor();
+        await page.getByRole('button', {name:'Review payment',exact:true}).waitFor();
+        assert.equal(authAttempts,2);
+        assert.equal(await page.locator('dialog[open]').count(),1,'Sign-in preserves the slip for separate payment review.');
+        assert.equal(signatures, 0, 'Signing in never signs a payment.');
         await page.getByRole('button',{name:'Review payment',exact:true}).click();
         await page.getByText(/Sponsor queue is busy/).waitFor();
         assert.equal(signatures,0,'An unsigned busy review cannot ask for a signature or claim money moved.');
@@ -285,7 +302,7 @@ async function main() {
         await page.getByText('Update delayed',{exact:true}).waitFor();
         assert.equal(await page.locator('.detail-outcomes [data-outcome="home"] strong').innerText(),'-','Old observations cannot be shown as current pool odds.');
         assert.equal(offers, 3 + rejections);
-        assert.ok(writes.every(url => ['/api/direct/batch/offer', '/api/direct/batch/submit'].includes(url)));
+        assert.ok(writes.every(url => ['/api/auth/nonce', '/api/auth/verify', '/api/direct/batch/offer', '/api/direct/batch/submit'].includes(url)));
         assert.deepEqual(errors, []);
         assert.deepEqual(external, []);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

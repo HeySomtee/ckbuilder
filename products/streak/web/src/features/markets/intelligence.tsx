@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { CellLoader } from '../../components/cell-loader';
 import { getMatchIntelligence } from './intelligence-api';
 import type { TeamForm } from './intelligence-api';
 import type { Market } from './api';
@@ -70,7 +71,7 @@ export function MatchIntelligence({ market, pool }: { market: Market; pool?: Dir
           <h2>Market vs Machine</h2>
         </div>
         <span className="terminal-state">
-          <i />
+          {!data?.frozen && query.isFetching ? <CellLoader variant="orbit" /> : <i />}
           {data?.frozen ? 'KICKOFF SNAPSHOT' : query.isFetching ? 'UPDATING' : 'PRE-MATCH'}
         </span>
       </header>
@@ -84,7 +85,10 @@ export function MatchIntelligence({ market, pool }: { market: Market; pool?: Dir
       ) : !data ? (
         <div className="terminal-empty">
           <p>Match intelligence is taking a moment.</p>
-          <button onClick={() => void query.refetch()}>Retry intelligence</button>
+          <button aria-busy={query.isFetching} onClick={() => void query.refetch()}>
+            {query.isFetching && <CellLoader variant="orbit" />}
+            Retry intelligence
+          </button>
         </div>
       ) : (
         <>

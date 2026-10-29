@@ -1,0 +1,171 @@
+/* Application entry only. Landing pages never show the brand reveal. */
+.streak-startup {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  place-items: center;
+  overflow: auto;
+  padding: 28px 18px 72px;
+  background:
+    radial-gradient(ellipse at 75% 22%, #203d3038, transparent 52%),
+    radial-gradient(ellipse at 13% 88%, #55332424, transparent 55%), #0e1612;
+  color: #f1f3ed;
+  font-family: Arial, Helvetica, sans-serif;
+  text-align: center;
+}
+html[data-streak-startup='app'] .streak-startup:not([hidden]) {
+  display: grid;
+}
+html[data-streak-startup='app'] #streak-landing-recovery {
+  display: none;
+}
+.streak-startup[hidden] {
+  display: none;
+}
+.streak-startup[data-phase='exiting'] {
+  pointer-events: none;
+}
+.streak-startup-leaving {
+  animation: streak-boot-exit 260ms ease-out forwards;
+}
+@keyframes streak-boot-exit {
+  to {
+    opacity: 0;
+  }
+}
+.streak-startup-content {
+  width: min(430px, 100%);
+}
+.streak-startup-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.streak-startup-progress {
+  display: grid;
+  place-items: center;
+  height: 28px;
+  margin: 12px auto 10px;
+}
+.streak-startup-progress .cell-loader--wave {
+  width: 60px;
+  height: 28px;
+}
+.streak-startup-status {
+  margin: 0;
+  color: #abb8ae;
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0.4px;
+}
+.streak-startup-detail {
+  max-width: 300px;
+  margin: 12px auto 0;
+  color: #a2b0a6;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.streak-startup-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 20px;
+}
+.streak-startup-actions[hidden],
+.streak-startup-detail[hidden],
+.streak-startup-progress[hidden] {
+  display: none;
+}
+.streak-startup-status[hidden] {
+  display: none;
+}
+.streak-startup-skip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 20px;
+  padding: 0 18px;
+  border: 1px solid #b9c9bd26;
+  border-radius: 999px;
+  background: #b9c9bd08;
+  color: #b9c9bd;
+  font:
+    12px Arial,
+    Helvetica,
+    sans-serif;
+  cursor: pointer;
+}
+.streak-startup-skip[hidden] {
+  display: none;
+}
+.streak-startup-skip:hover {
+  background: #b9c9bd12;
+  color: #f1f3ed;
+}
+.streak-startup-skip:focus-visible {
+  outline: 2px solid #ff986f;
+  outline-offset: 4px;
+}
+.streak-startup-actions button,
+.streak-startup-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font:
+    13px Arial,
+    Helvetica,
+    sans-serif;
+  text-decoration: none;
+}
+.streak-startup-actions .streak-startup-retry {
+  background: #ff986f;
+  color: #151e18;
+  border: 0;
+  cursor: pointer;
+  font-weight: 700;
+}
+.streak-startup-actions a {
+  color: #f1f3ed;
+  border: 1px solid #ffffff26;
+}
+.streak-startup-actions :focus-visible {
+  outline: 2px solid #ff986f;
+  outline-offset: 4px;
+}
+.streak-startup-foot {
+  position: absolute;
+  bottom: 27px;
+  left: 18px;
+  right: 18px;
+  color: #7e9285;
+  font: 9px monospace;
+  letter-spacing: 1.6px;
+}
+.streak-startup-fallback {
+  padding: 30px;
+  font:
+    16px/1.6 Arial,
+    Helvetica,
+    sans-serif;
+}
+@media (prefers-reduced-motion: reduce) {
+  .streak-startup-leaving {
+    display: none;
+  }
+}
+@media (forced-colors: active) {
+  .streak-startup {
+    background: Canvas;
+    color: CanvasText;
+  }
+  .streak-startup-actions .streak-startup-retry {
+    border: 1px solid ButtonText;
+  }
+}

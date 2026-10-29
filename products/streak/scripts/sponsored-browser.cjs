@@ -122,6 +122,29 @@ async function main() {
                 walletAddress: chain.address,
               },
             });
+          // This historical lane deliberately exercises explicit chain recovery
+          // when the saved Activity index is unavailable. Indexed read/claim
+          // journeys are exercised by direct-browser.cjs.
+          if (url.pathname === '/api/activity' && request.method() === 'GET')
+            return json({
+              version: 1,
+              network: 'testnet',
+              available: false,
+              ownerHash: chain.ownerHash,
+              address: chain.address,
+              groups: [],
+              nextCursor: null,
+              coverage: 'unavailable',
+              updating: false,
+              updatedAt: null,
+              summary: { open: 0, completed: 0, collectibleShannons: '0', claimable: 0 },
+            });
+          if (url.pathname === '/api/activity/hint' && request.method() === 'POST') {
+            const hint = request.postDataJSON();
+            assert.match(hint.transactionHash, /^0x[0-9a-f]{64}$/);
+            assert.deepEqual(Object.keys(hint).sort(), ['marketId', 'transactionHash']);
+            return json({ queued: true }, 202);
+          }
           // This lane retains v3 signing/recovery. Current v4 entry is exercised
           // by checkout-browser.cjs through the actual application and shared slip.
           if (url.pathname === '/api/direct/entry-mode') return json({ mode: 'legacy' });
@@ -384,10 +407,14 @@ async function main() {
           .getByRole('link', { name: width === 390 ? 'Activity' : 'My activity', exact: true })
           .click();
         assert.equal(new URL(page.url()).searchParams.get('view'), 'activity');
+        await page.locator('.activity-recovery-options > summary').click();
+        await page.getByRole('button', { name: 'Recover from chain', exact: true }).click();
         await page.getByRole('button', { name: /Payments & recovery/ }).click();
         await page.getByRole('article', { name: 'Sponsored prediction transaction' }).waitFor();
         await reads.reload();
         await accountReadFinished(page, 'Sign out');
+        await page.locator('.activity-recovery-options > summary').click();
+        await page.getByRole('button', { name: 'Recover from chain', exact: true }).click();
         await connect(false);
         await page.getByRole('button', { name: /Payments & recovery/ }).click();
         await page.getByRole('article', { name: 'Sponsored prediction transaction' }).waitFor();
@@ -434,7 +461,10 @@ async function main() {
         chain.settle();
         await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
         await page.getByRole('tab', { name: /History/ }).click();
-        await page.locator('.activity-bet').getByRole('button', { name: 'Collect refund', exact: false }).click();
+        await page
+          .locator('.activity-bet')
+          .getByRole('button', { name: 'Collect refund', exact: false })
+          .click();
         const claimDialog = page.getByRole('dialog', { name: /Arsenal vs Chelsea/ });
         await claimDialog.getByRole('button', { name: 'Collect refund', exact: true }).click();
         const claimReview = claimDialog.getByRole('region', { name: 'Review claim' });

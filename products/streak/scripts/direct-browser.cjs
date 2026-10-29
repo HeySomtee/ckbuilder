@@ -101,6 +101,41 @@ async function main() {
           writes = [],
           errors = [];
         let brokenAvailability = false;
+        let indexedAccount = {
+          id: 'indexed-owner',
+          username: 'Indexed owner',
+          walletAddress: chain.address,
+        };
+        let indexFailed = false;
+        let indexUpdating = true;
+        let indexCoverage = 'indexing';
+        let indexUpdatedAt = null;
+        let liveIndexed = false;
+        let indexReads = 0;
+        let rpcRequests = 0;
+        let indexDelay = 300;
+        const indexedPosition = {
+          id: `submitted:${chain.descriptor.creationTxHash}:1`,
+          status: 'submitted',
+          outcome: 0,
+          principalShannons: '10000000000',
+          storageShannons: '32100000000',
+          entitlementShannons: null,
+          outPoint: { txHash: chain.descriptor.creationTxHash, index: 1 },
+          transactionHash: chain.descriptor.creationTxHash,
+        };
+        let indexGroups = [
+          {
+            descriptor: chain.descriptor,
+            stale: false,
+            snapshot: {
+              phase: 'open',
+              positions: [indexedPosition],
+              checkedAt: Date.now(),
+              historyComplete: true,
+            },
+          },
+        ];
         let failedDiscovery = false;
         let monitoredClaim = null;
         const monitoredReads = [];
@@ -112,13 +147,70 @@ async function main() {
           serviceWorkers: 'block',
           reducedMotion: 'reduce',
         });
-        await context.route('**/*', (route) => {
+        await context.route('**/*', async (route) => {
           const request = route.request(),
             url = new URL(request.url());
           if (url.origin !== base) {
             external.push(url.href);
             return route.abort();
           }
+          if (url.pathname === '/api/me' && indexedAccount)
+            return route.fulfill({
+              contentType: 'application/json',
+              body: JSON.stringify({ user: indexedAccount }),
+            });
+          if (url.pathname === '/api/activity' && request.method() === 'GET') {
+            indexReads++;
+            if (indexDelay) await new Promise((done) => setTimeout(done, indexDelay));
+            const groups = liveIndexed
+              ? [{ descriptor: chain.descriptor, stale: false, snapshot: chain.activitySnapshot() }]
+              : indexGroups;
+            const positions = groups.flatMap((group) => group.snapshot.positions);
+            return route.fulfill({
+              status: indexFailed ? 503 : 200,
+              contentType: 'application/json',
+              body: JSON.stringify(
+                indexFailed
+                  ? { error: 'Synthetic index unavailable' }
+                  : {
+                      version: 1,
+                      network: 'testnet',
+                      available: true,
+                      address: indexedAccount?.walletAddress ?? chain.address,
+                      ownerHash: chain.ownerHash,
+                      groups,
+                      nextCursor: null,
+                      coverage: indexCoverage,
+                      updating: indexUpdating,
+                      updatedAt: indexUpdatedAt,
+                      summary: {
+                        open: positions.filter(
+                          (position) =>
+                            !['claimable', 'claimed', 'refunded'].includes(position.status),
+                        ).length,
+                        completed: positions.filter((position) =>
+                          ['claimed', 'refunded'].includes(position.status),
+                        ).length,
+                        collectibleShannons: positions
+                          .filter((position) => position.status === 'claimable')
+                          .reduce((sum, position) => sum + BigInt(position.entitlementShannons), 0n)
+                          .toString(),
+                        claimable: positions.filter((position) => position.status === 'claimable')
+                          .length,
+                      },
+                    },
+              ),
+            });
+          }
+          if (
+            ['/api/activity/refresh', '/api/activity/hint'].includes(url.pathname) &&
+            request.method() === 'POST'
+          )
+            return route.fulfill({
+              status: 202,
+              contentType: 'application/json',
+              body: '{"accepted":true}',
+            });
           if (!['GET', 'HEAD'].includes(request.method())) {
             writes.push(url.pathname);
             return route.abort();
@@ -156,6 +248,7 @@ async function main() {
         phase = `${name} ${width}: load`;
         page.on('pageerror', (error) => errors.push(error.message));
         await page.exposeFunction('syntheticRpc', async (method, args) => {
+          rpcRequests++;
           if (monitoredClaim && method === 'transaction') {
             monitoredReads.push(args[0]);
             if (args[0] === monitoredClaim.hash)
@@ -215,6 +308,181 @@ async function main() {
               }),
             );
         });
+        phase = `${name} ${width}: initial activity outage`;
+        indexFailed = true;
+        const outageRpcCalls = rpcRequests;
+        await reads.goto(base + '/season/?view=activity');
+        await page.getByRole('heading', { name: 'Let’s bring your activity back.' }).waitFor();
+        assert.equal(
+          await page.locator('.activity-summary').count(),
+          0,
+          'An unavailable initial read never invents zero totals or repeats Unavailable stats',
+        );
+        assert.equal(
+          await page.locator('.activity-toolbar').count(),
+          0,
+          'An initial outage offers one useful retry instead of empty filters',
+        );
+        assert.equal(
+          await page.getByRole('button', { name: 'Recover from chain', exact: true }).isVisible(),
+          false,
+          'Chain recovery is secondary to retrying the saved activity',
+        );
+        await page.locator('.activity-recovery-options summary').focus();
+        await page.keyboard.press('Enter');
+        await page.getByRole('button', { name: 'Review saved payments', exact: true }).waitFor();
+        assert.equal(
+          await page.getByRole('button', { name: 'Recover from chain', exact: true }).isVisible(),
+          true,
+        );
+        await page.locator('.activity-recovery-options summary').click();
+        assert.equal(rpcRequests, outageRpcCalls, 'An initial outage never starts a chain scan');
+        assert.equal(
+          await page.locator('ccc-connector').count(),
+          0,
+          'An initial outage never opens a wallet',
+        );
+        assert.ok(
+          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          'The compact recovery card fits the viewport',
+        );
+        await page.screenshot({
+          path: path.join(evidence, `activity-retry-${name}-${width}.png`),
+          fullPage: true,
+        });
+        indexFailed = false;
+        indexDelay = 1000;
+        const readsBeforeRetry = indexReads;
+        await page.getByRole('button', { name: 'Retry activity', exact: true }).click();
+        await page.getByRole('button', { name: 'Trying again', exact: true }).waitFor();
+        await page.locator('.activity-bet').waitFor();
+        indexDelay = 300;
+        assert.ok(indexReads > readsBeforeRetry, 'Retry requests fresh saved records');
+        assert.equal(
+          await page.locator('.activity-retry-card').count(),
+          0,
+          'Successful retry restores activity',
+        );
+        phase = `${name} ${width}: indexed history without a signer`;
+        const initialRpcCalls = rpcRequests;
+        const started = Date.now();
+        await reads.goto(base + '/season/?view=activity');
+        await page.locator('.activity-bet').waitFor();
+        assert.match(
+          await page.locator('.activity-bet').innerText(),
+          /Arsenal[\s\S]*Chelsea[\s\S]*100 tCKB/,
+        );
+        assert.equal(
+          await page.locator('ccc-connector').count(),
+          0,
+          'History never prompts for a wallet',
+        );
+        assert.equal(
+          rpcRequests,
+          initialRpcCalls,
+          'Indexed history sends no browser chain requests',
+        );
+        assert.equal(
+          await page.locator('.activity-summary strong').first().innerText(),
+          '1',
+          'A saved submitted pick shows its count before the first chain snapshot',
+        );
+        assert.equal(
+          await page.locator('.activity-summary .activity-skeleton').count(),
+          0,
+          'Submitted records do not leave summaries in an indefinite loading state',
+        );
+        const readyMs = Date.now() - started;
+        assert.ok(readyMs < 15000, 'History is bounded by the delayed saved-record response');
+        indexUpdating = false;
+        indexCoverage = 'complete';
+        indexUpdatedAt = Date.now();
+        indexedPosition.status = 'accepted';
+        indexedPosition.id = `${chain.descriptor.creationTxHash}:1`;
+        await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+        await page.locator('.activity-bet').getByText('Upcoming', { exact: true }).waitFor();
+        const cachedReads = indexReads;
+        await page.evaluate(() => {
+          history.pushState(null, '', '/season/?view=overview');
+          dispatchEvent(new PopStateEvent('popstate'));
+        });
+        await page.getByRole('heading', { name: 'Good to have you here.' }).waitFor();
+        await page.evaluate(() => {
+          history.pushState(null, '', '/season/?view=activity');
+          dispatchEvent(new PopStateEvent('popstate'));
+        });
+        await page.locator('.activity-bet').waitFor();
+        assert.equal(
+          indexReads,
+          cachedReads,
+          'Fresh route navigation reuses the startup index read',
+        );
+        indexUpdating = true;
+        await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+        await page.locator('.activity-progress').waitFor();
+        await page.getByRole('button', { name: 'Refresh activity', exact: true }).waitFor();
+        assert.equal(
+          await page.getByRole('button', { name: 'Refresh activity', exact: true }).isEnabled(),
+          true,
+          'A pending background payment never disables manual refresh',
+        );
+        indexUpdating = false;
+        indexFailed = true;
+        await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+        await page.getByText('Couldn’t refresh activity', { exact: true }).waitFor();
+        assert.equal(
+          await page.locator('.activity-bet').count(),
+          1,
+          'Failed saved-record refresh retains activity',
+        );
+        assert.equal(
+          rpcRequests,
+          initialRpcCalls,
+          'Index failure does not silently scan the chain',
+        );
+        await page.screenshot({
+          path: path.join(evidence, `activity-indexed-${name}-${width}.png`),
+          fullPage: true,
+        });
+        // The API can remain reachable while a market's canonical refresh is stale.
+        // Recovery must remain an explicit owner action in this state too.
+        indexFailed = false;
+        indexGroups[0].stale = true;
+        await page.getByRole('button', { name: 'Retry activity', exact: true }).click();
+        await page.getByText('Some markets are still catching up', { exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Recover from chain', exact: true }).waitFor();
+        assert.equal(
+          rpcRequests,
+          initialRpcCalls,
+          'Stale indexed data never starts an automatic chain scan',
+        );
+        await page.getByRole('button', { name: 'Recover from chain', exact: true }).click();
+        await page.getByRole('button', { name: 'Connect wallet', exact: true }).waitFor();
+        assert.equal(
+          await page.locator('ccc-connector').count(),
+          0,
+          'Choosing recovery explains connection without opening a wallet prompt',
+        );
+        // A different verified account receives its own empty history on a new document.
+        indexedAccount = {
+          ...indexedAccount,
+          id: 'indexed-other',
+          walletAddress: 'ckt-synthetic-other-account',
+        };
+        indexFailed = false;
+        indexDelay = 0;
+        indexGroups = [];
+        await reads.reload();
+        await page.getByRole('heading', { name: 'Your next call starts here' }).waitFor();
+        assert.equal(
+          await page.locator('.activity-bet').count(),
+          0,
+          'No previous account positions leak',
+        );
+        console.log(
+          `Indexed Activity ${name} ${width}: delayed response ${readyMs}ms; no signer or chain reads; cached navigation and failure retention passed.`,
+        );
+        indexedAccount = null;
         // Historical single-market recovery remains accessible after the main slip moves to atomic v4.
         await reads.goto(base + '/season/?direct=m-api-football-900001');
         await page.getByRole('region', { name: 'Direct testnet predictions' }).waitFor();
@@ -319,14 +587,16 @@ async function main() {
           dispatchEvent(new PopStateEvent('popstate'));
         });
         await page.getByRole('heading', { name: 'My activity.', exact: true }).waitFor();
-        await page.getByText('Some markets are still catching up', { exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Recover from chain', exact: true }).click();
+        await page.getByRole('heading', { name: 'Let’s bring your activity back.' }).waitFor();
         assert.equal(
-          await page.locator('.activity-summary strong').first().innerText(),
-          'Unavailable',
+          await page.locator('.activity-summary').count(),
+          0,
+          'Failed direct recovery also hides unknown totals',
         );
         failedDiscovery = false;
         holdHistory = true;
-        await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+        await page.getByRole('button', { name: 'Retry activity', exact: true }).click();
         await page.locator('.activity-bet').waitFor();
         assert.match(await page.locator('.activity-bet').innerText(), /Verifying entry/);
         await page.getByRole('button', { name: 'Updating activity', exact: true }).waitFor();
@@ -351,7 +621,19 @@ async function main() {
           fullPage: true,
         });
         chain.settle();
-        await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+        indexedAccount = {
+          id: 'indexed-owner',
+          username: 'Indexed owner',
+          walletAddress: chain.address,
+        };
+        liveIndexed = true;
+        await reads.goto(base + '/season/?direct=m-api-football-900001');
+        await connect(false);
+        await page.evaluate(() => {
+          history.pushState(null, '', '/season/?view=activity');
+          dispatchEvent(new PopStateEvent('popstate'));
+        });
+        await page.getByRole('heading', { name: 'My activity.', exact: true }).waitFor();
         await page.getByRole('tab', { name: /History/ }).click();
         const collect = page.locator('.activity-bet').getByRole('button', { name: /Collect/ });
         await collect.waitFor();

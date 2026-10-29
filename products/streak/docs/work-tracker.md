@@ -1,5 +1,133 @@
 # Streak work tracker
 
+29 October owner approved the refined loading preview while publication was
+underway. Shared rotating/pulsating cells and connected-wave loaders are now
+implemented across Season, games, payments, Activity, account, startup and
+retained legacy pages. Six motion groups and eight built application loading
+states pass in Chromium/WebKit; screenshots inspected, frontend build, scoped
+lint and static checks passed. Independent review accepted after detached-node
+cleanup was corrected and tested. See [delivery evidence](delivery/connected-loading.md).
+Next: verify the final staged tree and push the combined candidate with GitHub
+CI omitted. Preserve actual operation states, accessible labels, reduced motion,
+hidden-tab suspension and error/retry controls. The previous publication gate
+was interrupted before completing after this scope change.
+The earlier timeout coincided with Windows battery-triggered hibernation;
+it is not passing evidence. Keep prior publication logs and fresh exact-tree
+verification. Hosted and physical-wallet acceptance remain separate.
+
+29 October publication authorized: push the pending Streak release to GitHub
+with hosted CI omitted. The candidate contains wallet compatibility, the approved
+identity/splash assets, event-driven Activity and its local/UI corrections, and
+the refined loading preview. Keep the loading animation as a preview until its
+application integration is approved. Preserve unrelated local files and runtime
+state outside the commit. The exact candidate must pass the existing local hook;
+reuse that receipt for commit/push instead of repeating suites. Hosted acceptance
+and physical-wallet evidence remain pending after publication. Resume with the
+frozen-candidate production test plan. The later loader approval above supersedes
+this earlier preview-only publication boundary.
+
+The first publication gate passed 56 checks, then stopped at the shared-wallet
+browser fixture's outdated Activity tab assumption. The wallet fixture now supplies
+an authenticated synthetic empty index; historical sponsored recovery explicitly
+opens Recovery options. Signature, claim and original-transaction assertions remain
+required. Preserve `.quality-artifacts/oct29-publication-initial.json` and its log.
+The final exact-candidate result is recorded in the publication commit's validation
+notes; no failed gate is treated as a release pass.
+
+29 October 07:46 UTC: [refined loading preview](../design/loading-signature-review/README.md)
+is ready at `http://127.0.0.1:4199/`. Three square cells rotate and gently pulse
+in circular controls; horizontal cells follow a sine wave while their links draw
+between them. Both appear enlarged and at real UI sizes, with pause, reduced
+motion and explicit state controls. All eight Chromium/WebKit groups at
+320/390/1440px plus OS motion preferences passed; source checks and visual review
+passed. A Chromium motion-preference transition issue was corrected and verified.
+Preview only: application loaders await this revised design's approval. Preserve
+local Activity/splash fixes, final-candidate publication and hosted acceptance.
+
+29 October Activity and landing corrections completed locally at 06:03 UTC. The
+older launcher blocked Activity routes and omitted index startup. Its corrected
+allowlist and dedicated local PostgreSQL setting preserve file-backed accounts;
+all 23 registered markets are now indexed, with 135 event receipts and no retrying
+markets. Empty read failures use one stable retry card with secondary recovery;
+cached records remain visible. Landing pages never show a splash, including
+missing-controller/stylesheet cases. App startup retains its approved reveal.
+Backend types, frontend build/lint, the dedicated PostgreSQL regression, all four
+Activity browser journeys and all 58 startup browser groups passed. Independent
+reviews accepted; mobile/desktop screenshots inspected. See [Activity evidence](delivery/event-driven-activity.md)
+and [startup evidence](delivery/startup-identity.md). No fund movement, commit,
+push or new full-gate receipt. Next: resolve the pending linked-cell loader preview
+decision, then verify and publish the final candidate before hosted acceptance.
+Preserve all earlier unfinished publication and physical-wallet commitments.
+
+29 October splash correction completed locally at 05:40 UTC. The approved
+animation now unfolds over a two-second presentation, with Open Streak/Escape
+skip after shell readiness. Data loads underneath; covered controls stay inert.
+Reduced motion, background tabs and React recovery bypass the presentation;
+missing artwork has a one-second bound. All 38 isolated Chromium/WebKit groups,
+frontend build, lint and syntax checks passed. Independent review accepted after
+the missing-artwork timeout was made immediate; mobile rendering and local HTTP
+asset delivery were verified. [Evidence](delivery/startup-identity.md). No full-gate
+rerun, wallet signature, commit, push or deployment. The revised [production plan](delivery/hosted-acceptance-plan.md)
+defers fixture selection until development, candidate verification and deployment
+are complete. Next: finish the older local launcher's PostgreSQL Activity
+startup/routes while preserving its records. Linked-cell loader preview approval,
+publication and physical-wallet/hosted acceptance remain pending.
+
+29 October owner correction: the startup splash disappears too quickly. Give the
+approved drawing a readable two-second presentation with a ready-shell skip
+control, while startup data continues underneath. Reduced motion and failure
+recovery must stay immediate. This supersedes the earlier no-minimum-duration
+rule. The owner missed the planned hosted bets and wants development finished
+before acceptance: replace expired fixtures with a release-freeze checklist,
+then select fresh matches and gameweeks after the candidate is deployed. Do not
+claim any hosted tests were performed. Splash verification is recorded above;
+preserve the local Activity launcher gap, publication commitments and pending
+linked-cell loader preview decision.
+
+28 October splash correction complete locally at 16:02 UTC: assets had been served correctly, but immediate layout-effect removal and an initially invisible SVG hid the splash on fast starts. The runtime artwork is visible immediately, with compressed motion, image preload and an inert 260ms exit over the usable shell. Reduced motion removes it immediately; input and data never wait. Frontend build, lint, formatting and all 20 isolated Chromium/WebKit startup groups passed, including fast first-frame pixels, input during exit, slow/recovery and missing-controller paths. Independent review accepted; current local HTTP assets are verified. Evidence: `.quality-artifacts/startup-fast-fix-browser.log`. No server/data migration, wallet signature, commit or push. The local Activity launcher integration and earlier publication commitments remain pending.
+
+28 October local reopening: opened <http://127.0.0.1:4100/season/> in the owner's browser. Existing API launcher restarted as PID 6848 with local dummy-game mode, sponsor watchdog as PID 3412, and the persistent local database retained. App, Five and atomic demand returned HTTP 200; sponsorship is enabled. Local-launcher gap discovered: this older wrapper uses file-backed app/auth storage and bypasses normal server boot, so the new PostgreSQL Activity index is not active there. Next local integration must preserve existing records while configuring the index and its startup/routes. This does not change the completed isolated verification or establish hosted acceptance. No commit, push or wallet signature.
+
+28 October verification closeout: final seven-check static/build gate passed at 14:28:19 UTC after the corrected runtime/browser follow-ups. Disposable Activity test database removed; app database and operational services untouched. Event-driven Activity implementation is complete locally, with all 75 required checks covered. Resume with existing publication/hosted acceptance commitments or the separately pending loading-signature preview decision.
+
+28 October event-driven Activity completed locally. All 75 required checks have passing coverage across the major run and documented scoped follow-ups; initial failures are retained (historical sponsored recovery selector, then missing disposable-DB setting in the separate Five contract run). Final Activity browser coverage passed at 14:24:04 UTC, including signer-free reads, stale-record recovery, submitted summaries and live claim flows. Independent identity/recovery reviews accepted. [Delivery and evidence](delivery/event-driven-activity.md). No commit, push, live fund movement or hosted activation. Rebuild/restart API and sponsor together on publication; existing DB/IPC settings suffice. Preserve prior wallet/branding publication and hosted acceptance. Linked-block loader remains preview-only, awaiting approval.
+
+28 October implementation progress: event-driven Activity now has public-only durable event delivery, transactional PostgreSQL receipts/jobs/wallet records, canonical all-owner reconstruction and authenticated recent-first reads. Frontend prefetches after sign-in without an active signer. Explicit chain recovery and live claim checks remain. Focused tests and independent identity/recovery reviews are complete; final major verification is in progress. [Delivery](delivery/event-driven-activity.md) records bounds/configuration. Resume with final gate results, corrections and evidence updates. No publication or live payments. Preserve prior wallet/branding publication and hosted acceptance; linked-block loader remains preview-only.
+
+28 October owner approved implementation of the event-driven wallet Activity index. Implement durable event delivery, PostgreSQL owner records, canonical admission/settlement/claim verification, targeted catch-up/reorg handling, authenticated paginated reads and startup prefetch. Keep actual claim preparation live and preserve signed recovery. Frontend must use indexed records without requiring an active signer to read, with explicit legacy recovery if indexing is unavailable. Independent review and full major gate are required. This supersedes the index pause; the linked-block loader preview still awaits its own approval. No commit/push or production fund movement requested.
+
+28 October architecture discussion: owner proposes event-driven Activity updates on market creation, bet completion and results. Source audit confirms useful durable sponsor/operator journal observations, while direct claims can bypass the API. The proposal now uses durable events as its primary update path, with deduplication and targeted recovery for missing events, pending admissions, external spends and reorgs. Reported results remain distinct from collectible settlement. No runtime/index implementation is approved or performed in this discussion. Preserve the pending linked-block loading-preview approval and earlier publication/acceptance work.
+
+28 October loading-signature preview ready at <http://127.0.0.1:4199/>. Three linked cells from the approved logo supply one indeterminate motion across buttons, Activity refresh, game loading and expandable confirmation status; terminal states are static and manually selected in the preview. Chromium/WebKit checks passed at 320/390/1440px with retry, focus, all four states and reduced motion; independent review accepted. This is design only, awaiting approval before replacing actual loaders. The approved logo/splash is integrated locally with 18 startup browser groups passing; its major gate report records all 72 checks passed at 10:11:39 UTC. The PowerShell wrapper returned 1 from a Vite warning, retained separately in the delivery record. Final formatting/static checks cover the later preview/docs and updated recovery assertion. The temporary test database is removed after verification; no operational app restart or fund movement. Production test plan and architecture explanation are simplified. Resume with loading-signature feedback and existing publication/physical-wallet commitments. Architecture remains paused and no commit/push is requested.
+
+28 October new steering during approved startup verification: derive a site-wide loading signature from the logo's three linked blocks. Prepare an interactive preview before replacing existing loaders. Cover buttons, Activity, wallet approval, games and minimized payment progress with one coherent motif, clear state labels and reduced motion. The approved logo/splash integration and simplified documents remain in progress toward verification; this request does not authorize a durable activity index or publication.
+
+28 October owner approved the refined logo and splash for integration. Apply the permanent connected cells beneath the chart-r and initial-shell motion, preserving fast readiness and failure recovery. Owner also requested a short production test checklist and plain-language architecture explanation; those documents are simplified, with engineering detail retained separately. The durable index is still for review, not approved for implementation. Integration verification is underway; preserve earlier wallet/warmup changes and pending publication/physical-wallet acceptance.
+
+28 October owner follow-up: connected cells must belong to the static logo, with the space beneath the chart-r used for balance. The isolated splash preview now retains three connected cells beneath the r across dark, light, single-colour and reduced-motion wordmarks. The animation assembles this permanent detail; the separate loader is a quiet line. Independent visual review accepted the spacing at primary and header sizes. Focused Chromium/WebKit checks passed at 320/390/1440px, including images, overflow, static variants, retry/completion and reduced motion. Architecture implementation is explicitly paused while the owner reads the proposal. Preserve the existing bounded warmup and unfinished publication/acceptance work; no application branding integration, commit or push in this refinement.
+
+28 October refinement completed locally: second splash/identity proposal uses two cutting strokes, a price-chart r, connected outcome/CKB cells and a cell-shaped dot. Port 4198 preview passed responsive Chromium/WebKit/retry/reduced-motion checks; actual branding integration awaits review. The production-only test plan is saved as Markdown. [Activity startup warmup](delivery/activity-startup-warmup.md) now prefetches at most two recent saved markets after authenticated wallet restoration, sharing foreground query keys and fencing obsolete account results. Eight focused tests, final frontend build/lint and four direct plus four wallet browser journeys passed; independent review accepted. No full major/release/hosted speed claim. Durable owner indexing and broader expensive-operation improvements remain designed but unimplemented in [the architecture proposal](architecture/wallet-activity-index.md). No contract changes, payments, restart, commit or push in this increment. Preserve pending publication, physical-wallet acceptance and earlier commitments.
+
+28 October owner steering: refine splash with two strikes cutting the s, a market-chart r and CKB/blockchain/prediction meaning; retain preview approval before application integration. Second proposal is live at port 4198 with generated static/animated SVGs and passing responsive Chromium/WebKit/retry/reduced-motion checks. The hosted acceptance Markdown now explicitly counts only streakpitch.com results. Owner also requests fast wallet-indexed activity and startup prefetch across expensive operations. Source audit confirms per-market chain fan-out; [durable wallet index proposal](architecture/wallet-activity-index.md) preserves CKB claim authority and avoids a global mutable contract bottleneck. A bounded read-only startup warmup increment is being implemented/reviewed separately; do not mark the durable index or whole-app speed targets complete. Preserve pending release and prior commitments.
+
+28 October splash and hosted acceptance planning completed. Owner approved previewing an animated On form startup, not integration. Isolated port-4198 preview covers quick/slow/retry/reduced-motion states; Chromium/WebKit responsive checks passed. [Six-wallet hosted test plan](delivery/hosted-acceptance-plan.md) records verified GW9 noon-Saturday deadline, tonight's all-outcome prediction coverage, sponsor top-up/refund cases, Five entry/prize coverage, two Survivor competitions and explicit limits. Same-wallet history is not automatic environment sync: public catalogues have 23 local and 5 hosted descriptors with zero identical full market type scripts; Five/Survivor records are database scoped. No bets, game creation, signatures, production settings or publishing executed. Resume with splash design feedback, pending wallet/branding publication and planned manual hosted acceptance. Preserve earlier commitments.
+
+28 October owner requested full local startup. Rebuilt the app, retained the running persistent Docker database and both rewards workers, restarted the API in test mode (PID 26856), and restored sponsor watchdog (32656, signer 36836) plus direct settlement loop (27264). Read-only checks at 07:43 UTC show dummy Five/Survivor HTTP 200, existing Test gameweek 2 open, Five funding available, atomic prediction demand enabled, and successful direct-worker passes. No game records, bids, deadlines or owner signatures were created. Telegram webhook configuration is unavailable; Telegram is not part of this local game acceptance. Evidence: .quality-artifacts/local-full-test-readiness.json and named local-full-test logs. Prior wallet/branding publication and physical-wallet acceptance remain pending. PIDs are dated observations, not durable identifiers.
+
+28 October local startup guidance: verified the existing ignored launchers for the Season API, sponsor watchdog, direct settlement loop, ordinary Five rewards and separate dummy-game rewards. API launcher includes fixture refresh, Five progression and Survivor ticking. All named launcher/config files exist; Docker and process inspection were denied in this session, so running-service health is unverified. Owner receives separate-terminal commands using the persistent streak-survivor-dev database and explicit api/test mode. No services started, keys displayed, runtime changed or publication performed. Preserve pending wallet/branding publication and earlier commitments.
+
+27 October approved On form integration completed locally. Shared React Brand and retained legacy surfaces now use the complete wordmark; browser/touch/compact icons use the same s. Build, lint, static policies, 26 Season Chromium/WebKit groups and legacy responsive checks passed; screenshots and local SVG/PNG/ICO delivery inspected. [Assets and evidence](../design/brand-review/README.md). Supersedes branding-pending entries below. Publication remains pending, alongside earlier wallet acceptance and unfinished product commitments; no commit, push or application worker restart in this increment. Owner's unrelated ignore entry and private/generated state remain untouched.
+
+27 October owner approved On form application integration. Apply the complete wordmark, with its segmented s as the initial letter, to Season/landing and retained legacy branding; use the standalone s for favicon, touch icon and compact insignia. Keep wallet/session/money behavior unchanged. Verify asset delivery, responsive layouts and existing relevant browser journeys. Preserve prior wallet fixes, publication limits and unfinished commitments.
+
+27 October owner selected **On form** as the Streak brand direction. Preserve the complete streak wordmark with the segmented s as its initial letter; use the same s alone for favicon/app insignia. The preview now opens On form and labels it Selected. Direction selection is complete; applying its exported assets to the application remains the next branding step. Preserve pending wallet publication, physical-wallet acceptance and all earlier commitments.
+
+27 October owner branding refinement implemented in the preview: the word streak itself is the primary logo, with the custom insignia replacing its initial s, followed immediately by treak at a shared lowercase height and baseline. Standalone s remains the favicon/app insignia. All three wordmarks, previews and asset packs were regenerated; On form now uses a segmented s so the name stays readable. Chromium responsive and mobile WebKit checks passed. Final concept selection and production integration remain pending; preserve the uncommitted wallet compatibility work and all earlier commitments.
+
+27 October branding preview ready at <http://127.0.0.1:4197/>: three original vector directions, Breakaway (recommended), Touchline and On form, with custom outlined lettering, dark/light/monochrome applications, actual-size favicon previews and downloadable SVG/PNG/ICO packs. Chromium checks passed at 320/390/768/1360 widths and mobile WebKit selection/theme checks passed. Desktop/mobile/contact-sheet visuals were inspected; the mark's counters and mobile header were refined. [Preview and regeneration](../design/brand-review/README.md). Await owner direction selection before applying branding to the actual app. No runtime branding, commit, push or hosted change. Wallet compatibility work remains local and uncommitted; publication and hosted/physical-wallet acceptance remain pending. Preserve all earlier commitments below.
+
+27 October wallet compatibility implemented locally: owner requests MetaMask, Zerion and popular CKB wallet support without asking supervisor Neon to debug. Found JoyID exposed by the chooser but rejected by auth (matching the screenshot's address prefix and HTTP 400), and login errors hidden behind the slip. Implemented strict primary P-256 JoyID proof normalization/address binding, explicit login stages and visible slip errors, delayed EVM discovery, and read-only UTXO Global/JoyID restoration. REI remains explicit because its SDK reads request account access. Sponsored predictions still support native CKB and EVM locks only; the UI now explains unsupported formats before payment review. Independent identity/recovery review accepted. All 71 major checks passed at 11:47:28 UTC; four wallet and six full checkout journeys passed in Chromium/WebKit. A later presentation-only helper class change passed the full static/build lane after a formatting correction; the failed formatting receipt is retained. The disposable test database was removed; application state and workers were untouched. No new Render environment variable is required. Resume with publication when requested and physical-wallet/hosted acceptance; current changes are uncommitted and unpushed. Do not ask Neon for diagnostics. Preserve existing release, logo and all earlier commitments. [Delivery evidence](delivery/wallet-compatibility.md).
+
 Week 22 rollout follow-up: anonymous HTTPS checks after publication found the matching `index-DWsM8nEv.js` frontend on streakpitch.com in API mode, and the served Survivor bundle includes the setup correction. Source and frontend rollout are verified; physical wallet and hosted payment/reward acceptance remain the next operational check.
 
 26 October Week 22 release published as `cfd8dfec20fe186bad1822d58d3eb87a1158e6fe` on `origin/main`. The exact-candidate hook passed all 71 checks at 18:23:53 UTC and push reused its receipt. [Report](../../../reports/week-22.md) and [DM draft](../../../reports/week-22-dm.md) cover Five, sponsor auctions, Survivor, reliability, local full-flow testing and streakpitch.com. Fresh Five screenshots use API data and an unsigned, unsaved squad; auction and Survivor screenshots are explicitly synthetic. The domain returned HTTPS 200; hosted release acceptance and physical MetaMask refund/prize checks remain separate. The DM was not sent. Unrelated .gitignore and nested benchmark work are excluded from the release. Resume with hosted acceptance, owner feedback and original logo/favicon; paid Survivor admission, automatic Survivor payouts and other stated beta limits remain pending. Preserve earlier commitments.

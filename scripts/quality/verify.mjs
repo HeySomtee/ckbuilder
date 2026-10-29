@@ -99,6 +99,18 @@ function buildProduct() {
 
 async function browserChecks() {
   buildProduct();
+  run('Startup splash and bundle recovery', [join(product, 'scripts/startup-browser.cjs')], {
+    cwd: product,
+    isolated: true,
+  });
+  run(
+    'Shared cell loading motion and pending UI',
+    [join(product, 'scripts/cell-loader-browser.cjs')],
+    {
+      cwd: product,
+      isolated: true,
+    },
+  );
   run(
     'Five automatic gameweek and player scouting browser regression',
     [join(product, 'scripts/five-auto-browser.cjs')],
@@ -263,6 +275,11 @@ try {
         isolated: true,
       });
       buildProduct();
+      run(
+        'Isolated event-driven Activity PostgreSQL regression',
+        [join(product, 'scripts/activity-postgres.cjs')],
+        { cwd: product, isolated: true },
+      );
       run(
         'Isolated Five PostgreSQL admission regression',
         [join(product, 'scripts/five-postgres.cjs')],

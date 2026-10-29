@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icon } from '../../components/icon';
+import { CellLoader } from '../../components/cell-loader';
 import { Notice } from '../../components/notice';
 import {
   assertWalletAccount,
@@ -79,6 +80,7 @@ function capacityLabel(value: bigint | undefined, failed: boolean, connected: bo
 /** Compact, reusable navigation summary. It never connects a wallet by itself. */
 export function WalletSummary({ account, accountReady }: WalletProps) {
   const { connection, balance, address } = useWalletBalance(account, accountReady);
+  const balancePending = balance.isFetching && balance.data === undefined;
   const reconnect = useMutation({
     mutationFn: async () => {
       await chooseWallet();
@@ -96,16 +98,17 @@ export function WalletSummary({ account, accountReady }: WalletProps) {
           onClick={(event) => followDirect(event)}
           aria-label="Open My Account"
         >
-          <Icon name="wallet" />
+          {balancePending ? <CellLoader variant="orbit" /> : <Icon name="wallet" />}
           <span>{capacityLabel(balance.data, balance.isError, true)}</span>
         </a>
       ) : (
         <button
           className="wallet-nav-reconnect"
           disabled={reconnect.isPending || !accountReady}
+          aria-busy={reconnect.isPending}
           onClick={() => reconnect.mutate()}
         >
-          <Icon name="wallet" />
+          {reconnect.isPending ? <CellLoader variant="orbit" /> : <Icon name="wallet" />}
           {reconnect.isPending ? 'Connecting...' : 'Reconnect wallet'}
         </button>
       )}
@@ -172,12 +175,24 @@ function TelegramPanel({
             <p className="wallet-connected">
               Connected{account.telegramUsername ? ` as @${account.telegramUsername}` : ''}
             </p>
-            <button className="quiet" disabled={unlink.isPending} onClick={() => unlink.mutate()}>
+            <button
+              className="quiet"
+              disabled={unlink.isPending}
+              aria-busy={unlink.isPending}
+              onClick={() => unlink.mutate()}
+            >
+              {unlink.isPending && <CellLoader variant="orbit" />}
               {unlink.isPending ? 'Disconnecting...' : 'Disconnect Telegram'}
             </button>
           </>
         ) : !account ? (
-          <button className="quiet" disabled={signInPending} onClick={onSignIn}>
+          <button
+            className="quiet"
+            disabled={signInPending}
+            aria-busy={signInPending}
+            onClick={onSignIn}
+          >
+            {signInPending && <CellLoader variant="orbit" />}
             Sign in to connect Telegram
           </button>
         ) : !account.telegramAvailable ? (
@@ -194,8 +209,10 @@ function TelegramPanel({
             <button
               className="quiet"
               disabled={confirmation.isFetching}
+              aria-busy={confirmation.isFetching}
               onClick={() => void confirmation.refetch()}
             >
+              {confirmation.isFetching && <CellLoader variant="orbit" />}
               Check connection
             </button>
           </>
@@ -207,8 +224,10 @@ function TelegramPanel({
             <button
               className="wallet-primary"
               disabled={connect.isPending}
+              aria-busy={connect.isPending}
               onClick={() => connect.mutate()}
             >
+              {connect.isPending && <CellLoader variant="orbit" />}
               {connect.isPending ? 'Preparing link...' : 'Connect Telegram'}
             </button>
           </>
@@ -240,6 +259,7 @@ export function WalletOverview({
   busy = false,
 }: WalletOverviewProps) {
   const { wallet, connection, balance, address } = useWalletBalance(account, accountReady);
+  const balancePending = balance.isFetching && balance.data === undefined;
   const connect = useMutation({
     mutationFn: async () => {
       await chooseWallet();
@@ -285,8 +305,9 @@ export function WalletOverview({
           <div className="wallet-balance-row">
             <div>
               <h2 className="wallet-balance-label">Available balance</h2>
-              <strong className="wallet-capacity">
-                {capacityLabel(balance.data, balance.isError, !!connection)}
+              <strong className="wallet-capacity" role="status" aria-busy={balancePending}>
+                {balancePending && <CellLoader variant="wave" />}
+                <span>{capacityLabel(balance.data, balance.isError, !!connection)}</span>
               </strong>
               <p className="wallet-caption">Spendable CKB. Test tokens have no monetary value.</p>
             </div>
@@ -311,8 +332,10 @@ export function WalletOverview({
                 <button
                   className="quiet"
                   disabled={busy || balance.isFetching}
+                  aria-busy={balance.isFetching}
                   onClick={() => void balance.refetch()}
                 >
+                  {balance.isFetching && <CellLoader variant="orbit" />}
                   {balance.isFetching ? 'Refreshing...' : 'Refresh balance'}
                 </button>
               </>
@@ -320,8 +343,10 @@ export function WalletOverview({
               <button
                 className="wallet-primary"
                 disabled={busy || connect.isPending || !accountReady}
+                aria-busy={connect.isPending}
                 onClick={() => connect.mutate()}
               >
+                {connect.isPending && <CellLoader variant="orbit" />}
                 {connect.isPending ? 'Connecting...' : 'Connect testnet wallet'}
               </button>
             )}

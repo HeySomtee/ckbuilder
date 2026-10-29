@@ -1,3 +1,4 @@
+import { CellLoader } from '../../components/cell-loader';
 import { money, type FiveRound } from './api';
 
 export function SponsorAuction({
@@ -77,7 +78,9 @@ export function SponsorAuction({
         </div>
         {status[a.ownStatus] && (
           <p className="five-auction-status" role="status">
-            {settling && <span className="five-spinner" />}
+            {(settling || ['confirming', 'refunding'].includes(a.ownStatus)) && (
+              <CellLoader variant="wave" />
+            )}
             {status[a.ownStatus]}
           </p>
         )}

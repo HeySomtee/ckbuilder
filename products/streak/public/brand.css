@@ -1,0 +1,47 @@
+/* On form: the complete word is the logo; its initial s is the insignia. */
+.streak-wordmark {
+  display: block;
+  width: 132px;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+  flex: none;
+}
+.rail .wordmark > .streak-wordmark {
+  width: 132px;
+  height: auto;
+  margin: 0;
+}
+.welcome-brand .streak-wordmark,
+.landing-brand .streak-wordmark {
+  width: 148px;
+  height: auto;
+}
+.welcome-footer .streak-wordmark,
+.landing-footer .streak-wordmark {
+  width: 124px;
+}
+.ledger-brand .streak-wordmark,
+.app-brand .streak-wordmark {
+  width: 132px;
+  height: auto;
+}
+img.boot-mark {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+img.footer-mark,
+.preview-brand img {
+  display: block;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+@media (max-width: 600px) {
+  .welcome-brand .streak-wordmark,
+  .landing-brand .streak-wordmark,
+  .app-brand .streak-wordmark {
+    width: 116px;
+  }
+}

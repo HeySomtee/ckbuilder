@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { QueryClient } from '@tanstack/react-query';
+import { activityQuery, warmActivity } from './src/features/direct/activity-query.ts';
 import {
   activityState,
   isHistory,
@@ -18,6 +20,150 @@ const position = {
   entitlementShannons: null,
   outPoint: { txHash: 'position', index: 1 },
 };
+
+const snapshot = () => ({
+  phase: 'open',
+  positions: [],
+  checkedAt: Date.now(),
+  historyComplete: true,
+});
+const gate = () => {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
+test('startup warmup shares an in-flight foreground query and caps discovery at two unique markets', async () => {
+  const cache = new QueryClient();
+  const first = gate(),
+    second = gate();
+  const calls = [];
+  const descriptors = ['one', 'two', 'three'].map((args) => ({
+    ...descriptor,
+    type: { ...descriptor.type, args },
+  }));
+  const reader = {
+    discover: async (d) => {
+      calls.push(d.type.args);
+      await (d.type.args === 'one' ? first.promise : second.promise);
+      return snapshot();
+    },
+  };
+  const lifetime = new AbortController();
+  const warm = warmActivity(
+    cache,
+    reader,
+    'owner',
+    [descriptors[0], descriptors[0], ...descriptors.slice(1)],
+    lifetime.signal,
+    () => true,
+  );
+  const visible = cache.fetchQuery(activityQuery(cache, reader, 'owner', descriptors[0]));
+  assert.deepEqual(calls, ['one'], 'foreground reuses the delayed startup read');
+  first.resolve();
+  await visible;
+  await new Promise((done) => setImmediate(done));
+  assert.deepEqual(calls, ['one', 'two'], 'only one market runs at a time');
+  second.resolve();
+  await warm;
+  await cache.fetchQuery(activityQuery(cache, reader, 'owner', descriptors[0]));
+  await cache.fetchQuery(activityQuery(cache, reader, 'owner', descriptors[1]));
+  assert.deepEqual(calls, ['one', 'two'], 'fresh route reads add zero discovery passes');
+  cache.clear();
+});
+
+test('cancelled warmup never starts a second market or resurrects cleared private rows', async () => {
+  const cache = new QueryClient();
+  const pending = gate();
+  const lifetime = new AbortController();
+  let progress;
+  let calls = 0;
+  const reader = {
+    discover: async (_d, callback) => {
+      calls++;
+      progress = callback;
+      await pending.promise;
+      return snapshot();
+    },
+  };
+  const options = activityQuery(cache, reader, 'owner', descriptor);
+  const warm = warmActivity(
+    cache,
+    reader,
+    'owner',
+    [descriptor, { ...descriptor, creationTxHash: 'second' }],
+    lifetime.signal,
+    () => true,
+  );
+  lifetime.abort();
+  cache.removeQueries({ queryKey: ['direct-private'] });
+  progress(snapshot());
+  pending.resolve();
+  await warm;
+  assert.equal(calls, 1);
+  assert.equal(cache.getQueryData(options.queryKey), undefined);
+  assert.equal(cache.getQueryCache().getAll().length, 0);
+  cache.clear();
+});
+
+test('account guard blocks delayed progress before React cleanup, including a fresh same-key replacement', async () => {
+  const cache = new QueryClient();
+  const pending = gate();
+  let active = true;
+  let progress;
+  const reader = {
+    discover: async (_d, callback) => {
+      progress = callback;
+      await pending.promise;
+      return snapshot();
+    },
+  };
+  const options = activityQuery(cache, reader, 'owner', descriptor, () => active);
+  const read = cache.fetchQuery(options);
+  const rejection = assert.rejects(read, /no longer current/);
+  active = false;
+  progress(snapshot());
+  assert.equal(cache.getQueryData(options.queryKey), undefined);
+  pending.resolve();
+  await rejection;
+  cache.clear();
+
+  const next = gate();
+  const oldReader = {
+    discover: async (_d, callback) => {
+      progress = callback;
+      await next.promise;
+      return snapshot();
+    },
+  };
+  const oldRead = cache.fetchQuery(activityQuery(cache, oldReader, 'owner', descriptor));
+  const oldRejected = oldRead.catch(() => undefined);
+  cache.removeQueries({ queryKey: options.queryKey, exact: true });
+  const fresh = { ...snapshot(), checkedAt: 123 };
+  cache.setQueryData(options.queryKey, fresh);
+  progress({ ...snapshot(), checkedAt: 999 });
+  next.resolve();
+  await oldRejected;
+  assert.equal(cache.getQueryData(options.queryKey).checkedAt, 123);
+  cache.clear();
+});
+
+test('startup with no known descriptors or inactive account makes no discovery requests', async () => {
+  const cache = new QueryClient();
+  let calls = 0;
+  const reader = {
+    discover: async () => {
+      calls++;
+      return snapshot();
+    },
+  };
+  const signal = new AbortController().signal;
+  await warmActivity(cache, reader, 'owner', [], signal, () => true);
+  await warmActivity(cache, reader, 'owner', [descriptor], signal, () => false);
+  assert.equal(calls, 0);
+  cache.clear();
+});
 test('activity separates payment admission, football progress and contract settlement', () => {
   const open = { phase: 'open' };
   assert.equal(activityState(position, open, 'scheduled', 200, 100), 'upcoming');

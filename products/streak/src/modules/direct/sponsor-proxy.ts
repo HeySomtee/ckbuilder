@@ -31,13 +31,14 @@ export async function sponsorProxy(
   if (
     !/^\/(?:batch\/)?(?:configuration|fixture|status|offer|submit|resolve|resume)(?:\?.*)?$/.test(
       path,
-    )
+    ) &&
+    !/^\/activity\/(?:events|ack)$/.test(path)
   )
     throw Error('Invalid sponsor operation');
   const response = await fetch(`${origin.origin}${path}`, {
     method: request === undefined ? 'GET' : 'POST',
     redirect: 'error',
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(path.startsWith('/activity/') ? 5_000 : 60_000),
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     ...(request === undefined
       ? {}

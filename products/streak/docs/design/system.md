@@ -1,5 +1,30 @@
 # Streak design and interaction system
 
+29 October approved loading signature: use three linked square cells throughout
+the app. Compact controls rotate the cells with a gentle pulse; wider loading
+states use the connected sine wave. Consume `CellLoader` in React and the shared
+`public/cell-loader.js` module in legacy pages. Keep status text, failure/retry
+controls and static reduced motion. Stop motion when work ends and pause hidden
+tabs. Skeletons can preserve layout while data arrives. Do not add ring spinners,
+animated ellipsis dots or artificial completion delays. See the
+[implementation record](../delivery/connected-loading.md).
+
+28 October refinement approved: the On form wordmark now has a chart-shaped r with three connected cells permanently beneath it. The segmented s remains the standalone insignia. The approved splash cuts the s with two strokes and assembles the wordmark once during initial document startup. It ends when the application shell mounts, without waiting for the animation, wallet, API or chain. Fast loads may only show part of the motion. Navigation does not replay it. Keep static reduced motion and usable retry/Wallet recovery when bundles fail.
+
+27 October brand selection: the owner chose **On form**, the segmented-s
+wordmark in the [brand review](../../design/brand-review/README.md).
+Use its complete streak wordmark as the primary logo and the same segmented s
+alone for favicon/app insignia. Approved application integration is complete
+locally in `public/brand/`, shared React Brand and retained legacy surfaces.
+
+27 October owner branding direction: the complete word **streak** is the logo.
+Its custom initial **s** is the insignia, integrated into the remaining **treak**
+lettering with matched lowercase height and baseline. Do not put a separate
+insignia beside a wordmark that already contains the s. Use the same s alone
+for favicons, app icons and compact insignia placements. The updated
+[branding preview](../../design/brand-review/README.md) records the selected
+direction, application asset mapping and verification evidence.
+
 25 October dropdown correction: use proper SVG chevrons for disclosure controls. React uses the shared Icon component; retained vanilla screens use the same 24px viewBox path and currentColor stroke. Do not substitute angle characters or triangle glyphs. Existing native select SVG indicators remain appropriate. Keep icons decorative and expose expanded state on the controlling element.
 
 20 October Survivor admin action: Create competition uses a compact coral-tinted clear-glass button with a plus tile, 12px semibold label, 44px minimum height and visible hover/focus. Creation actions should not use the external-link arrow. Preserve native button semantics and forced-colors contrast.

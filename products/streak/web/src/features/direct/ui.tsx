@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ccc } from '@ckb-ccc/core';
 import { getDirectMarkets } from './api';
 import { Activity } from './activity';
+import { activityIndexKey, hintActivityIndex } from './activity-index';
 import { DirectClient } from './client';
 import type { Review } from './client';
 import { SponsoredClient } from './sponsored-client';
@@ -30,6 +31,7 @@ import {
 import { directHref, followDirect } from '../../lib/direct-route';
 import { marketHref, followMarket, navigateMarket } from '../../lib/market-route';
 import { TeamBadge } from '../../components/team-badge';
+import { PaymentButtonState } from './payment-progress';
 import { useNow } from '../../lib/use-now';
 import '../../design-system/direct.css';
 
@@ -90,6 +92,7 @@ function PendingTransaction({
     mutationFn: () => connection.client.broadcast(record),
     retry: false,
     onSuccess: async () => {
+      void hintActivityIndex(record.hash, record.descriptor.id);
       await queryClient.invalidateQueries({ queryKey: ['direct-private', connection.ownerHash] });
       refresh();
     },
@@ -123,6 +126,11 @@ function PendingTransaction({
           {recovery.data.confirmations > 0
             ? ` ${recovery.data.confirmations} confirmation${recovery.data.confirmations === 1 ? '' : 's'}.`
             : ''}
+        </p>
+      )}
+      {recovery.isFetching && !recovery.data && (
+        <p role="status">
+          <PaymentButtonState variant="wave" label="Checking saved transaction..." />
         </p>
       )}
       {recovery.isError && (
@@ -162,9 +170,11 @@ function PendingTransaction({
             }
             onClick={() => resolveConflict.mutate()}
           >
-            {resolveConflict.isPending
-              ? 'Checking confirmed spend...'
-              : 'Verify conflicting transaction'}
+            {resolveConflict.isPending ? (
+              <PaymentButtonState label="Checking confirmed spend..." />
+            ) : (
+              'Verify conflicting transaction'
+            )}
           </button>
           {resolveConflict.isError && (
             <p className="pick-error" role="alert">
@@ -181,7 +191,11 @@ function PendingTransaction({
           disabled={retry.isPending || recovery.isFetching}
           onClick={() => retry.mutate()}
         >
-          {retry.isPending ? 'Checking saved transaction...' : 'Retry saved transaction'}
+          {retry.isPending ? (
+            <PaymentButtonState label="Checking saved transaction..." />
+          ) : (
+            'Retry saved transaction'
+          )}
         </button>
       )}
       {state === 'committed' && record.kind === 'deposit' && (
@@ -226,7 +240,7 @@ function MarketPositions({
           disabled={snapshot.isFetching}
           onClick={() => void snapshot.refetch()}
         >
-          {snapshot.isFetching ? 'Checking...' : 'Check result'}
+          {snapshot.isFetching ? <PaymentButtonState label="Checking..." /> : 'Check result'}
         </button>
       </div>
       {snapshot.isError && (
@@ -299,6 +313,8 @@ export default function DirectPage({
   draftPick,
   activityOnly = false,
   draftStore,
+  onAuthenticate,
+  authenticating = false,
 }: {
   marketId?: string;
   account: Account | null;
@@ -306,6 +322,8 @@ export default function DirectPage({
   draftPick?: Pick;
   activityOnly?: boolean;
   draftStore?: DraftStore;
+  onAuthenticate?: () => void;
+  authenticating?: boolean;
 }) {
   const queryClient = useQueryClient();
   const title = useRef<HTMLHeadingElement>(null);
@@ -345,6 +363,7 @@ export default function DirectPage({
   const [sponsoredBusy, setSponsoredBusy] = useState(false);
   const [visibleMarkets, setVisibleMarkets] = useState(4);
   const [visibleTransactions, setVisibleTransactions] = useState(8);
+  const [activityRecovery, setActivityRecovery] = useState(false);
   useEffect(() => {
     reviewEpoch.current++;
     setReview(null);
@@ -370,6 +389,7 @@ export default function DirectPage({
   });
   const catalogue = useQuery({
     queryKey: ['direct-catalogue'],
+    enabled: !activityOnly || activityRecovery,
     queryFn: ({ signal }) => getDirectMarkets(signal),
     retry: 1,
     staleTime: 15_000,
@@ -439,6 +459,8 @@ export default function DirectPage({
       ],
     }));
     if (!['confirmed', 'resolved'].includes(claimRecovery.data.status)) return;
+    void hintActivityIndex(recentClaim.hash, recentClaim.descriptor.id);
+    if (account) void queryClient.invalidateQueries({ queryKey: activityIndexKey(account) });
     void queryClient.invalidateQueries({
       queryKey: ['direct-private', connection.ownerHash, 'history'],
     });
@@ -446,7 +468,7 @@ export default function DirectPage({
       queryKey: ['direct-private', connection.ownerHash, 'activity'],
     });
     void queryClient.invalidateQueries({ queryKey: ['private', 'wallet-balance'] });
-  }, [claimRecovery.data, connection, queryClient, recentClaim]);
+  }, [claimRecovery.data, connection, queryClient, recentClaim, account]);
   const balance = useQuery({
     queryKey: ['direct-private', connection?.ownerHash, 'balance'],
     enabled: !!connection && !activityOnly,
@@ -482,6 +504,7 @@ export default function DirectPage({
   });
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['direct-private'] });
+    if (account) void queryClient.invalidateQueries({ queryKey: activityIndexKey(account) });
   };
   const prepare = useMutation({
     mutationFn: async (claim?: { descriptor: Descriptor; point: Point }) => {
@@ -559,6 +582,7 @@ export default function DirectPage({
     },
     retry: false,
     onSuccess: ({ revision, result, signed }) => {
+      void hintActivityIndex(signed.hash, signed.descriptor.id);
       if (mounted.current && getWalletState().connection?.revision === revision) {
         setReview(null);
         setNotice(
@@ -630,7 +654,7 @@ export default function DirectPage({
           <h2>Recent transactions</h2>
         </div>
         <button className="quiet" disabled={history.isFetching || working} onClick={refresh}>
-          Refresh status
+          {history.isFetching ? <PaymentButtonState label="Refresh status" /> : 'Refresh status'}
         </button>
       </div>
       {history.isError && (
@@ -713,7 +737,9 @@ export default function DirectPage({
   if (activityOnly)
     return (
       <Activity
-        key={activeWallet?.revision ?? 'disconnected'}
+        key={account ? `${account.id}:${account.walletAddress}` : 'disconnected'}
+        account={account}
+        onRecoveryChange={setActivityRecovery}
         client={connection?.client}
         ownerHash={connection?.ownerHash}
         descriptors={Array.from(savedDescriptors.values())}
@@ -727,8 +753,14 @@ export default function DirectPage({
           batchHistory.isLoading ||
           catalogue.isLoading
         }
-        onConnect={() => (activeWallet ? void linkedWallet.refetch() : connect.mutate())}
-        connecting={connect.isPending || !accountReady || linkedWallet.isFetching}
+        onConnect={() =>
+          !account && onAuthenticate
+            ? onAuthenticate()
+            : activeWallet
+              ? void linkedWallet.refetch()
+              : connect.mutate()
+        }
+        connecting={authenticating || connect.isPending || !accountReady || linkedWallet.isFetching}
         connectionPending={!!activeWallet}
         recovery={paymentTools}
         onClaim={(selected, point) => {
@@ -798,9 +830,18 @@ export default function DirectPage({
         <section className="glass activity-connect">
           <h2>{activeWallet ? 'Loading your predictions' : 'Your matchday history starts here'}</h2>
           <p>
-            {activeWallet
-              ? 'Checking this wallet for saved payments and claims.'
-              : 'Connect your wallet to see your predictions and collect returns.'}
+            {activeWallet ? (
+              linkedWallet.isFetching ? (
+                <PaymentButtonState
+                  variant="wave"
+                  label="Checking this wallet for saved payments and claims."
+                />
+              ) : (
+                'Checking this wallet for saved payments and claims.'
+              )
+            ) : (
+              'Connect your wallet to see your predictions and collect returns.'
+            )}
           </p>
           {!activeWallet && (
             <button
@@ -808,7 +849,7 @@ export default function DirectPage({
               disabled={connect.isPending || !accountReady}
               onClick={() => connect.mutate()}
             >
-              {connect.isPending ? 'Connecting...' : 'Connect wallet'}
+              {connect.isPending ? <PaymentButtonState label="Connecting..." /> : 'Connect wallet'}
             </button>
           )}
           {linkedWallet.isError && (
@@ -824,13 +865,21 @@ export default function DirectPage({
             <p className="eyebrow">CKB PUDGE TESTNET</p>
             <h2>Your available CKB</h2>
             <strong className="direct-balance">
-              {balance.data === undefined
-                ? linkedWallet.isError || balance.isError
-                  ? 'Balance unavailable'
-                  : activeWallet
-                    ? 'Checking balance...'
-                    : 'Connect to view'
-                : money(balance.data)}
+              {balance.data === undefined ? (
+                linkedWallet.isError || balance.isError ? (
+                  'Balance unavailable'
+                ) : activeWallet ? (
+                  linkedWallet.isFetching || balance.isFetching ? (
+                    <PaymentButtonState variant="wave" label="Checking balance..." />
+                  ) : (
+                    'Checking balance...'
+                  )
+                ) : (
+                  'Connect to view'
+                )
+              ) : (
+                money(balance.data)
+              )}
             </strong>
             <p>
               Spendable plain wallet cells. Your existing Streak balance stays in{' '}
@@ -856,7 +905,11 @@ export default function DirectPage({
                 disabled={connect.isPending || !accountReady}
                 onClick={() => connect.mutate()}
               >
-                {connect.isPending ? 'Connecting wallet...' : 'Connect testnet wallet'}
+                {connect.isPending ? (
+                  <PaymentButtonState label="Connecting wallet..." />
+                ) : (
+                  'Connect testnet wallet'
+                )}
               </button>
             )}
             {wallet.notice && <p role="status">{wallet.notice}</p>}
@@ -909,11 +962,16 @@ export default function DirectPage({
                   />
                 ) : !descriptor ? (
                   <p className="notice">
-                    {catalogue.isPending || demand.isFetching
-                      ? 'Checking contract availability...'
-                      : demand.isError
-                        ? 'Market sponsorship is unavailable. Your saved slip is unchanged.'
-                        : 'This fixture is not available for payment yet. Your saved slip is unchanged.'}
+                    {catalogue.isPending || demand.isFetching ? (
+                      <PaymentButtonState
+                        variant="wave"
+                        label="Checking contract availability..."
+                      />
+                    ) : demand.isError ? (
+                      'Market sponsorship is unavailable. Your saved slip is unchanged.'
+                    ) : (
+                      'This fixture is not available for payment yet. Your saved slip is unchanged.'
+                    )}
                     {demand.isError && (
                       <button className="quiet" onClick={() => void demand.refetch()}>
                         Retry sponsorship
@@ -978,7 +1036,11 @@ export default function DirectPage({
                       }
                       onClick={() => prepare.mutate(undefined)}
                     >
-                      {prepare.isPending ? 'Preparing transaction...' : 'Review testnet prediction'}
+                      {prepare.isPending ? (
+                        <PaymentButtonState label="Preparing transaction..." />
+                      ) : (
+                        'Review testnet prediction'
+                      )}
                     </button>
                     <small>
                       One prediction per transaction in this contract version. Your multi-pick draft
@@ -1085,11 +1147,13 @@ export default function DirectPage({
               disabled={working || reviewExpired}
               onClick={() => submit.mutate()}
             >
-              {submit.isPending
-                ? 'Complete the wallet request...'
-                : review.kind === 'claim'
-                  ? 'Sign claim in wallet'
-                  : 'Sign prediction in wallet'}
+              {submit.isPending ? (
+                <PaymentButtonState label="Complete the wallet request..." />
+              ) : review.kind === 'claim' ? (
+                'Sign claim in wallet'
+              ) : (
+                'Sign prediction in wallet'
+              )}
             </button>
             <button className="quiet" disabled={working} onClick={() => setReview(null)}>
               Back to editing

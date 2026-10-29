@@ -116,7 +116,16 @@ export function BatchTransaction({
           </li>
         ))}
       </ul>
-      <p role="status">{recovery.data?.message ?? 'Checking your saved payment...'}</p>
+      <p role="status">
+        {recovery.isFetching ? (
+          <PaymentButtonState
+            variant="wave"
+            label={recovery.data?.message ?? 'Checking your saved payment...'}
+          />
+        ) : (
+          (recovery.data?.message ?? 'Checking your saved payment...')
+        )}
+      </p>
       {error && (
         <p className="pick-error" role="alert">
           {error.message}
@@ -131,7 +140,7 @@ export function BatchTransaction({
           disabled={recovery.isFetching || busy}
           onClick={() => void recovery.refetch()}
         >
-          Refresh status
+          {recovery.isFetching ? <PaymentButtonState label="Refresh status" /> : 'Refresh status'}
         </button>
         {status && ['awaiting-sponsor', 'unknown', 'reorg'].includes(status) && (
           <button
@@ -139,7 +148,7 @@ export function BatchTransaction({
             disabled={busy || recovery.data?.inputsLive !== true}
             onClick={() => resume.mutate()}
           >
-            {resume.isPending ? 'Resuming...' : 'Resume payment'}
+            {resume.isPending ? <PaymentButtonState label="Resuming..." /> : 'Resume payment'}
           </button>
         )}
       </div>
@@ -158,7 +167,7 @@ export function BatchTransaction({
             disabled={busy || !/^0x[0-9a-f]{64}$/.test(conflict.trim())}
             onClick={() => resolve.mutate()}
           >
-            Verify conflict
+            {resolve.isPending ? <PaymentButtonState label="Verify conflict" /> : 'Verify conflict'}
           </button>
         </details>
       )}
@@ -167,7 +176,11 @@ export function BatchTransaction({
         current.status !== 'discarded' &&
         now >= current.offer.expiresAt && (
           <button className="quiet" disabled={busy} onClick={() => discard.mutate()}>
-            Discard expired, unshared signature
+            {discard.isPending ? (
+              <PaymentButtonState label="Discard expired, unshared signature" />
+            ) : (
+              'Discard expired, unshared signature'
+            )}
           </button>
         )}
     </article>
@@ -238,6 +251,8 @@ export function BatchCheckout({
   accountReady,
   onSignIn,
   signInPending,
+  signInStage,
+  signInError,
   active,
   onBusy,
   onDismiss,
@@ -252,6 +267,8 @@ export function BatchCheckout({
   accountReady: boolean;
   onSignIn: () => void;
   signInPending: boolean;
+  signInStage?: string;
+  signInError?: string;
   active: boolean;
   onBusy: (busy: boolean) => void;
   onDismiss?: () => void;
@@ -593,9 +610,13 @@ export function BatchCheckout({
               </Notice>
             ) : receiptRows.length === 0 ? (
               <p className="batch-hint">
-                {archive.isPending
-                  ? 'Loading saved payments…'
-                  : 'Your payment receipts will appear here. Your current picks stay in Picks.'}
+                {archive.isFetching ? (
+                  <PaymentButtonState variant="wave" label="Loading saved payments…" />
+                ) : archive.isPending ? (
+                  'Loading saved payments…'
+                ) : (
+                  'Your payment receipts will appear here. Your current picks stay in Picks.'
+                )}
               </p>
             ) : (
               receiptRows.map(
@@ -668,22 +689,33 @@ export function BatchCheckout({
               : null
         }
         review={review}
+        loading={config.isFetching}
         active={active && view === 'picks'}
       />
       {snapshot.draft.picks.length > 0 && (
         <>
           {!account ? (
-            <button
-              className="review-button"
-              disabled={!accountReady || signInPending || disabled}
-              onClick={onSignIn}
-            >
-              {signInPending ? (
-                <PaymentButtonState label="Connecting wallet" />
-              ) : (
-                'Connect wallet to pay'
+            <>
+              {signInError && !signInPending && (
+                <Notice title="Sign-in did not finish" tone="attention">
+                  {signInError} Your picks are saved. Sign-in does not send a payment.
+                </Notice>
               )}
-            </button>
+              <button
+                className="review-button"
+                disabled={!accountReady || signInPending || disabled}
+                onClick={onSignIn}
+              >
+                {signInPending ? (
+                  <PaymentButtonState label={signInStage ?? 'Connecting wallet'} />
+                ) : connection ? (
+                  'Sign in to continue'
+                ) : (
+                  'Connect wallet to pay'
+                )}
+              </button>
+              <p className="batch-hint">Sign-in is free. You will review the payment separately.</p>
+            </>
           ) : !connection ? (
             <button
               className="review-button"
@@ -696,6 +728,13 @@ export function BatchCheckout({
                 'Reconnect wallet to pay'
               )}
             </button>
+          ) : !['CkbSecp256k1', 'EvmPersonal'].includes(connection.signer.signType) ? (
+            <Notice title="Choose a wallet for predictions" tone="attention">
+              Sponsored predictions support MetaMask, Zerion and native CKB wallets such as UTXO
+              Global and REI. This wallet can sign in, but its payment format is not supported yet.
+              Your picks are saved. Switch accounts in{' '}
+              <a href="/season/?view=account">My Account</a> to continue.
+            </Notice>
           ) : review && reviewed ? (
             <div className="batch-review" aria-label="Review all predictions">
               <h3 ref={reviewHeading} tabIndex={-1}>
@@ -766,9 +805,9 @@ export function BatchCheckout({
                     <button onClick={() => void history.refetch()}>Retry saved payments</button>
                   </Notice>
                 )}
-                {connection && linked.isPending && (
+                {connection && linked.isFetching && !linked.data && (
                   <p className="batch-hint" role="status">
-                    Checking your connected wallet...
+                    <PaymentButtonState variant="wave" label="Checking your connected wallet..." />
                   </p>
                 )}
                 {config.isError && (

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { followMarket, marketHref } from '../../lib/market-route';
 import { useNow } from '../../lib/use-now';
+import { PaymentButtonState } from './payment-progress';
 import {
   acceptsPayment,
   getMarketAvailability,
@@ -56,13 +57,15 @@ export function AvailableMarkets({ onNavigate }: { onNavigate?: () => void }) {
       <div>
         <strong>Play on testnet</strong>
         <p>
-          {catalogue.isError
-            ? 'Payment availability could not be refreshed. Try again before choosing a match.'
-            : catalogue.isPending
-              ? 'Checking available predictions...'
-              : available.length
-                ? 'Pick a side, then continue to payment. Streak covers market setup when your first prediction opens a new market. Wallet review checks availability and every amount.'
-                : 'Open a fixture below to check first-prediction sponsorship. Streak covers setup for eligible new markets; wallet review confirms availability.'}
+          {catalogue.isError ? (
+            'Payment availability could not be refreshed. Try again before choosing a match.'
+          ) : catalogue.isPending ? (
+            <PaymentButtonState variant="wave" label="Checking available predictions..." />
+          ) : available.length ? (
+            'Pick a side, then continue to payment. Streak covers market setup when your first prediction opens a new market. Wallet review checks availability and every amount.'
+          ) : (
+            'Open a fixture below to check first-prediction sponsorship. Streak covers setup for eligible new markets; wallet review confirms availability.'
+          )}
         </p>
       </div>
       {catalogue.isError ? (

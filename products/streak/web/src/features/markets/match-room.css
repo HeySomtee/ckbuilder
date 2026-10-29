@@ -223,7 +223,7 @@
   position: relative;
   margin-top: 16px;
 }
-.chart-plot svg {
+.chart-plot > svg {
   display: block;
   width: 100%;
   overflow: visible;
@@ -302,7 +302,7 @@
 .prediction-chart .chart-empty {
   pointer-events: none;
 }
-.prediction-chart .chart-empty span {
+.prediction-chart .chart-empty > span:not(.cell-loader-host) {
   background: transparent;
   max-width: 90%;
   text-align: center;
@@ -404,7 +404,7 @@
   font-size: 16px;
   letter-spacing: -0.03em;
 }
-.chart-empty span {
+.chart-empty > span:not(.cell-loader-host) {
   color: var(--muted);
   background: var(--canvas);
   padding: 4px 8px;

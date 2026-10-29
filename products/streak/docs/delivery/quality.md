@@ -1,5 +1,12 @@
 # Quality gates and release procedure
 
+28 October Activity coverage adds canonical four-generation history/reorg tests,
+durable relay replay/corruption tests, authenticated read checks, a disposable
+PostgreSQL event/projection suite, and indexed history plus live-claim browser
+journeys. The major gate discovers the new unit tests and explicitly runs
+`scripts/activity-postgres.cjs`. Keep its database isolated; saved page reads must
+remain independent of wallet prompts and chain latency.
+
 The owner initially required the complete gate before every commit and push. On **17 October 2026**, after a small hero update took over an hour because of repeated full hooks and a transport retry, the owner explicitly requested smaller hooks. Local checks now follow the changed paths and reuse successful exact-content evidence. Neither a local pass nor a workflow file proves hosted enforcement; hosted Actions remain paused.
 
 ## Scoped hooks
@@ -102,6 +109,21 @@ Add tests for newly implemented failure and recovery behavior. A new API feature
 PostgreSQL and browser jobs must be required, not optional because they need extra setup. A skipped, unavailable or cancelled required check is not green. Keep timeouts, cleanup and artifact capture, but never solve a failure by removing the assertion, loosening its meaning or broadly ignoring errors.
 
 ## Browser and motion evidence
+
+The shared loading signature adds `scripts/cell-loader-browser.cjs` to the
+mandatory browser lane. It verifies native cell geometry/motion, reduced motion,
+hidden-page suspension, lifecycle cleanup and real pending states in built
+Season and legacy pages. Its explicit `--module-only` development option does
+not qualify as application coverage; the gate always runs the complete script.
+
+The startup browser lane (`scripts/startup-browser.cjs`) serves built assets on
+loopback and holds all API responses. It checks shell readiness without data,
+slow and failed bundles, missing-controller recovery, no-JavaScript links,
+reduced motion, responsive wordmarks, focus and legacy redirects. It cannot
+establish wallet or chain performance. The owner's 29 October correction permits
+a two-second initial brand presentation. Verify ready-shell skip/Escape, blocked
+click-through while covered, independent data startup, and immediate reduced-motion
+and recovery paths. Slow bundle startup must not add another two-second wait.
 
 Review changed journeys at 320px, representative phone and desktop widths, short heights and keyboard/zoom conditions. Test reduced motion and readable no-blur/high-contrast fallbacks. Capture relevant pending, failure and recovery states, not only the happy-path screenshot. Browser artifacts must contain only test data.
 

@@ -35,6 +35,27 @@ The owner approved the Streak UI and architecture on **15 October 2026**, includ
 
 ## Design and motion
 
+Owner approval, 28 October 2026: implement the event-driven wallet Activity index.
+Read its [delivery record](docs/delivery/event-driven-activity.md). Normal history
+reads must not require an active signer or chain scanning. Preserve durable event
+replay and reorg recovery, and revalidate spending against CKB. This supersedes
+the index-pause wording below. Loading integration is covered by the later approval below.
+
+29 October owner approval: apply the refined three-cell loading signature across
+the dapp. Use the shared CellLoader in React and the same public cell-loader
+module in legacy pages. Compact controls use rotating, gently pulsing cells;
+panel progress uses the connected sine wave. Keep meaningful pending labels,
+static reduced-motion support, hidden-tab suspension and immediate cleanup when
+work completes or fails. Animation must never authorize a payment, add an
+artificial delay or imply confirmation before the real operation completes.
+
+Owner approval, 28 October 2026, refined 29 October: use the On form wordmark with a chart-shaped r and three permanent connected cells beneath it. The two-strike splash is only for initial app startup at `/season`. Landing pages must open without a splash or blocked controls, including while scripts load. The owner found immediate app exit too short: show a two-second brand reveal, with Open Streak and Escape to skip once the shell mounts. Mount the shell and start data reads underneath; keep covered controls inert until the reveal exits. Never wait for wallet prompts or chain/API reads. Reduced motion, background tabs and application error recovery bypass the presentation delay. Missing artwork must not hold a ready shell. Route changes must not replay it. Keep missing-bundle retry and ordinary recovery links available. Activity implementation is covered by the later approval above.
+
+29 October Activity correction: failed reads without saved data get one clear retry
+state, not unavailable totals or fabricated zero balances. Preserve labelled
+previous records during an outage. Keep saved-payment and chain recovery available
+as secondary options, and keep retry progress within its existing layout.
+
 Owner priority, 19 October 2026: reliability, measured speed and polished core journeys come before additional features. For chain/wallet changes, measure request counts and latency under delayed and failed reads, not just instant fixtures. Independent data must appear progressively; one unavailable market must not erase or block unrelated verified rows. Keep previous data visibly labelled during refresh, and revalidate actual spend authority before signatures. Wallet restoration may silently reuse an explicitly selected, still-authorized provider/account, but must never prompt, sign, change accounts or bypass revoked access on page load. Disconnect and sign-out must stop restoration.
 
 Pending work needs truthful animated progress, an accessible status, reduced-motion support and a recovery path; do not leave users staring at static Checking text or hide the whole page behind chain reads. Distinguish checking, wallet approval and broadcast/confirmation. Keep selected details and drafts stable across background refresh. Informational notices are compact and dismissible; necessary restrictions remain visible at the affected action. Test real team names/logo fallbacks, centered close controls, keyboard focus, small screens, slow requests and recovery. Document measured improvements and any physical-wallet checks that could not be performed. Passing synthetic tests alone is not evidence of a polished hosted journey.
@@ -48,6 +69,8 @@ Every interaction has appropriate press, focus, pending, success, failure and di
 The owner removed the Genie effect on 16 October. Use immediate slip opening and closing, with reliable focus restoration. Retain reduced motion and reduced transparency support elsewhere. Historical preview motion evidence is archived and does not govern the current application.
 
 ## Security and testing
+
+Wallet compatibility is specific to a journey. A wallet appearing in CCC's chooser does not prove login, sponsored payments or recovery support. Keep MetaMask/Zerion EIP-6963, native CKB and JoyID capability limits explicit. Test delayed provider discovery, reload/navigation, rejection and account changes with isolated adapters. Never describe synthetic providers as physical-extension acceptance. Before enabling a new signature format, verify both its signed server challenge and its binding to the complete address lock; do not trust client-supplied address or delegation metadata.
 
 - Browser code never receives private keys, seed phrases, provider credentials, database URLs or oracle signing material. Session tokens and sensitive inputs do not belong in URLs, localStorage, telemetry or screenshots.
 - Tests use disposable local data, dummy identities and local chain nodes. Never point routine checks at Neon, a deployed service, real wallets, public RPC or production secrets. Live testnet verification is a separate, explicitly scoped operation.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { displayShannons } from '../predictions/draft';
 import type { BatchReview } from './batch-client';
+import { PaymentButtonState } from './payment-progress';
 import './payment-invoice.css';
 
 const money = (value: string | bigint) => `${displayShannons(value)} tCKB`;
@@ -10,11 +11,13 @@ export function PaymentSummary({
   storage,
   review,
   active,
+  loading = false,
 }: {
   principal: bigint | null;
   storage: bigint | null;
   review: BatchReview | null;
   active: boolean;
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const panel = useRef<HTMLDialogElement>(null);
@@ -52,11 +55,17 @@ export function PaymentSummary({
         <span>
           Wallet total{' '}
           <small>
-            {review
-              ? 'Network fee included'
-              : storage === null
-                ? 'Checking storage and fees'
-                : 'Estimate · plus network fee at review'}
+            {review ? (
+              'Network fee included'
+            ) : storage === null ? (
+              loading && active ? (
+                <PaymentButtonState label="Checking storage and fees" />
+              ) : (
+                'Checking storage and fees'
+              )
+            ) : (
+              'Estimate · plus network fee at review'
+            )}
           </small>
         </span>
         <strong>{total === null ? 'Available at review' : money(total)}</strong>
@@ -94,7 +103,17 @@ export function PaymentSummary({
               <dt>
                 Storage deposit <span className="invoice-refundable">Refundable</span>
               </dt>
-              <dd>{storage === null ? 'Checking…' : money(storage)}</dd>
+              <dd>
+                {storage === null ? (
+                  loading && active && open ? (
+                    <PaymentButtonState label="Checking…" />
+                  ) : (
+                    'Checking…'
+                  )
+                ) : (
+                  money(storage)
+                )}
+              </dd>
             </div>
           </dl>
           <p>

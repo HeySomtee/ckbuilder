@@ -1,0 +1,1 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Streak"><defs><mask id="form-cut"><rect width="64" height="64" fill="white"/><path d="M0 30H64M0 43H64" stroke="black" stroke-width="3"/></mask></defs><g fill="#111a16" color="#111a16"><path d="M55 8H21L9 20V30L39 43V47H9V60H43L55 48V37L25 24V21H55Z" mask="url(#form-cut)"/></g></svg>

@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Streak · First whistle preview</title>
+    <link rel="icon" href="assets/mark.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #101713;
+        color: #f1f3ed;
+        --muted: #a2b0a6;
+        --coral: #ff986f;
+        --mint: #b9e982;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+      }
+      button,
+      select {
+        min-height: 44px;
+        border: 1px solid #ffffff26;
+        background: #1c2922;
+        color: inherit;
+        border-radius: 12px;
+        padding: 10px 16px;
+        cursor: pointer;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--coral);
+        outline-offset: 4px;
+      }
+      button:hover {
+        background: #29392e;
+      }
+      .toolbar {
+        max-width: 1220px;
+        margin: auto;
+        padding: 22px 28px;
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .toolbar h1 {
+        font-size: 16px;
+        margin: 0;
+      }
+      .toolbar p {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 6px 0 0;
+      }
+      .controls {
+        margin-left: auto;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .controls label {
+        font-size: 13px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .primary {
+        background: var(--coral);
+        color: #151e18;
+        font-weight: bold;
+        border: 0;
+      }
+      .primary:hover {
+        background: #ffad8d;
+      }
+      .stage {
+        position: relative;
+        overflow: hidden;
+        max-width: 1164px;
+        min-height: 650px;
+        height: calc(100svh - 190px);
+        margin: 0 auto;
+        border-radius: 24px;
+        border: 1px solid #ffffff21;
+        background: #0d1511;
+        isolation: isolate;
+      }
+      .app {
+        padding: 30px;
+        opacity: 0;
+        transition: opacity 0.25s;
+      }
+      .app.ready {
+        opacity: 1;
+      }
+      .app header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 25px;
+        border-bottom: 1px solid #ffffff14;
+      }
+      .app header img {
+        width: 125px;
+      }
+      .badge {
+        font: 11px monospace;
+        color: var(--muted);
+        letter-spacing: 1px;
+      }
+      .app main {
+        max-width: 800px;
+        margin: 70px auto;
+      }
+      .eyebrow {
+        font: 11px monospace;
+        letter-spacing: 2px;
+        color: var(--mint);
+      }
+      .app h2 {
+        font-size: clamp(30px, 5vw, 54px);
+        letter-spacing: -2px;
+        margin: 15px 0;
+      }
+      .app p {
+        color: var(--muted);
+        line-height: 1.7;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        margin-top: 35px;
+      }
+      .card {
+        min-height: 135px;
+        background: linear-gradient(145deg, #243c2c70, #17221c40);
+        border: 1px solid #b6d4bd25;
+        border-radius: 18px;
+        padding: 23px;
+      }
+      .card strong {
+        display: block;
+        margin-bottom: 12px;
+      }
+      .card p {
+        font-size: 13px;
+        margin: 0;
+      }
+      .splash {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(ellipse at 75% 22%, #203d3038, transparent 52%),
+          radial-gradient(ellipse at 13% 88%, #55332424, transparent 55%), #0e1612;
+        transition:
+          opacity 0.22s ease,
+          visibility 0.22s;
+        z-index: 2;
+      }
+      .splash.finished {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      .pitch {
+        position: absolute;
+        width: 560px;
+        height: 560px;
+        border: 1px solid #a9c7af0b;
+        border-radius: 50%;
+        transform: translate(50%, 42%);
+        right: 0;
+        bottom: 0;
+      }
+      .pitch:before {
+        content: '';
+        position: absolute;
+        inset: 55px;
+        border: 1px solid #a9c7af0a;
+        border-radius: 50%;
+      }
+      .identity {
+        position: relative;
+        text-align: center;
+        padding: 30px;
+        max-width: 100%;
+        animation: arrive 0.5s ease both;
+      }
+      .brand {
+        position: relative;
+        width: clamp(190px, 28vw, 264px);
+        margin: auto;
+      }
+      .brand img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .brand:after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, transparent 30%, #fff9 48%, transparent 65%);
+        mask: url('assets/wordmark.svg') center/contain no-repeat;
+        animation: shine 2.8s ease-in-out infinite;
+        background-size: 300% 100%;
+      }
+      .form {
+        display: flex;
+        width: 72px;
+        height: 1px;
+        margin: 22px auto 19px;
+        overflow: hidden;
+        background: #ffffff12;
+      }
+      .form i {
+        height: 1px;
+        width: 28px;
+        background: #b9c9bd;
+        animation: form 1.8s ease-in-out infinite alternate;
+      }
+      .status {
+        font-size: 13px;
+        letter-spacing: 0.2px;
+        color: #abb8ae;
+        min-height: 20px;
+      }
+      .substatus {
+        max-width: 260px;
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--muted);
+        margin: 12px auto 0;
+      }
+      .retry {
+        margin-top: 20px;
+      }
+      .foot {
+        position: absolute;
+        bottom: 27px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font: 10px monospace;
+        letter-spacing: 2px;
+        color: #7e9285;
+      }
+      .notes {
+        max-width: 1164px;
+        margin: 20px auto 28px;
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+        padding: 0 2px;
+      }
+      .notes strong {
+        color: #d7dfd9;
+      }
+      .no-motion *,
+      .no-motion *:before,
+      .no-motion *:after {
+        animation: none !important;
+        transition: none !important;
+      }
+      .no-motion .form i {
+        opacity: 0.7;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @keyframes arrive {
+        from {
+          opacity: 0;
+          transform: translateY(7px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes shine {
+        0%,
+        20% {
+          background-position: 140% 0;
+        }
+        75%,
+        100% {
+          background-position: -50% 0;
+        }
+      }
+      @keyframes form {
+        from {
+          opacity: 0.4;
+          transform: translateX(0);
+        }
+        to {
+          opacity: 0.8;
+          transform: translateX(44px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *:before,
+        *:after {
+          animation: none !important;
+          transition: none !important;
+        }
+        .form i {
+          opacity: 0.7;
+        }
+      }
+      @media (max-width: 650px) {
+        .toolbar {
+          padding: 18px;
+          gap: 18px;
+        }
+        .controls {
+          margin-left: 0;
+          width: 100%;
+        }
+        .controls select {
+          flex: 1;
+          min-width: 0;
+        }
+        .controls label {
+          width: 100%;
+        }
+        .stage {
+          border-radius: 18px;
+          margin: 0 12px;
+          min-height: 490px;
+          height: calc(100svh - 270px);
+        }
+        .notes {
+          padding: 0 18px;
+          display: block;
+        }
+        .notes span {
+          display: block;
+          margin-top: 8px;
+        }
+        .app {
+          padding: 22px;
+        }
+        .app main {
+          margin: 50px auto;
+        }
+        .cards {
+          grid-template-columns: 1fr;
+        }
+        .app h2 {
+          letter-spacing: -1px;
+        }
+        .card {
+          min-height: 110px;
+        }
+        .badge {
+          font-size: 9px;
+        }
+        .brand {
+          width: 208px;
+        }
+      }
+      /* Preview refinement: two cutting strokes and a permanent cell chain beneath the r. */
+      .identity {
+        animation: none;
+        padding: 18px;
+      }
+      .brand {
+        width: clamp(300px, 42vw, 430px);
+        max-width: 100%;
+      }
+      .brand:after {
+        display: none;
+      }
+      .brand img {
+        width: 100%;
+        height: auto;
+      }
+      .status {
+        font-size: 12px;
+        letter-spacing: 0.4px;
+      }
+      .pitch {
+        opacity: 0.45;
+      }
+      .foot {
+        letter-spacing: 1.6px;
+        font-size: 9px;
+      }
+      .identity-strip {
+        max-width: 1164px;
+        margin: 0 auto 30px;
+        display: flex;
+        align-items: center;
+        gap: 35px;
+        padding: 25px 28px;
+        border: 1px solid #ffffff17;
+        border-radius: 18px;
+        flex-wrap: wrap;
+      }
+      .identity-strip .full-logo {
+        width: 210px;
+        max-width: 100%;
+      }
+      .identity-strip .small-logo {
+        width: 115px;
+      }
+      .identity-strip .insignia {
+        width: 32px;
+        height: 32px;
+      }
+      .identity-strip a {
+        margin-left: auto;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        color: var(--coral);
+        font-size: 12px;
+        text-decoration: none;
+      }
+      .identity-strip .label {
+        width: 100%;
+        font: 10px monospace;
+        letter-spacing: 1.5px;
+        color: var(--muted);
+      }
+      .identity-strip.light {
+        background: #f1f3ed;
+      }
+      .identity-strip.light .label {
+        color: #526157;
+      }
+      select {
+        appearance: none;
+        padding-right: 38px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a2b0a6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+        background-position: right 13px center;
+        background-repeat: no-repeat;
+      }
+      @media (max-width: 650px) {
+        .identity {
+          padding: 0;
+          width: 100%;
+        }
+        .brand {
+          width: 100%;
+          max-width: 360px;
+        }
+        .identity-strip {
+          margin: 0 12px 24px;
+          gap: 25px;
+          padding: 22px;
+        }
+        .identity-strip a {
+          margin-left: 0;
+        }
+        .stage {
+          min-height: 470px;
+        }
+        .foot {
+          font-size: 8px;
+          letter-spacing: 1px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .form i {
+          animation: none;
+          opacity: 0.8;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar">
+      <div>
+        <h1>On form. On chain.</h1>
+        <p>Streak startup · interactive design preview</p>
+      </div>
+      <div class="controls">
+        <select id="scenario" aria-label="Preview scenario">
+          <option value="fast">Quick start</option>
+          <option value="slow">Slow connection</option>
+          <option value="error">Connection interrupted</option></select
+        ><button id="replay" class="primary">Replay intro</button
+        ><label><input type="checkbox" id="motion" /> Reduced motion</label>
+      </div>
+    </div>
+    <section class="stage" aria-label="Application startup preview">
+      <div class="app" id="app" inert aria-hidden="true">
+        <header>
+          <img src="assets/wordmark.svg" alt="Streak" /><span class="badge">DESIGN PREVIEW</span>
+        </header>
+        <main>
+          <div class="eyebrow">YOUR TOUCHLINE</div>
+          <h2>You're on the pitch.</h2>
+          <p>
+            The shell opens as soon as it is ready. Matches, scores and wallet information load
+            within their own sections.
+          </p>
+          <div class="cards">
+            <div class="card">
+              <strong>Make your call.</strong>
+              <p>Prediction markets</p>
+            </div>
+            <div class="card">
+              <strong>Play the long game.</strong>
+              <p>Streak Five &amp; Survivor</p>
+            </div>
+          </div>
+        </main>
+      </div>
+      <div class="splash" id="splash">
+        <div class="pitch" aria-hidden="true"></div>
+        <div class="identity">
+          <div class="brand">
+            <img
+              id="animated-logo"
+              src="assets/animated.svg"
+              alt="Streak"
+              width="430"
+              height="110"
+            />
+          </div>
+          <div class="form" id="form" aria-hidden="true"><i></i></div>
+          <div class="status" role="status" aria-live="polite" id="status">
+            Your game is taking shape.
+          </div>
+          <p id="substatus" class="substatus" hidden></p>
+          <button id="retry" class="retry" hidden>Try again</button>
+        </div>
+        <div class="foot">FOOTBALL INSTINCT. ON NERVOS CKB.</div>
+      </div>
+    </section>
+    <div class="notes">
+      <span
+        ><strong>Two strikes. One market line. Every cell counts.</strong><br />The strikes cut the
+        s; a price line draws the r. Three connected cells sit beneath it, permanently part of the
+        logo.</span
+      ><span
+        >Simulated timing only. No wallet, API or payments.<br />Production proposal: never wait for
+        a signature or chain read.</span
+      >
+    </div>
+    <div class="identity-strip" aria-label="Proposed static identity">
+      <span class="label">THE FINAL MARK / THE CHAIN STAYS IN THE WORD</span>
+      <img class="full-logo" src="assets/wordmark.svg" alt="Proposed Streak logo" />
+      <img class="small-logo" src="assets/wordmark.svg" alt="Streak at header size" />
+      <img class="insignia" src="assets/mark.svg" alt="Standalone s insignia" />
+      <a href="assets/wordmark.svg" download="streak-chart-r.svg">Download proposed logo SVG</a>
+    </div>
+    <div class="identity-strip light" aria-label="Light and monochrome logo applications">
+      <span class="label">LIGHT / SINGLE COLOUR</span>
+      <img class="full-logo" src="assets/wordmark-light.svg" alt="Streak on a light background" />
+      <img class="full-logo" src="assets/wordmark-mono.svg" alt="Streak in one colour" />
+    </div>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let timers = [];
+      function later(fn, ms) {
+        timers.push(setTimeout(fn, ms));
+      }
+      function complete() {
+        $('app').classList.add('ready');
+        $('app').inert = false;
+        $('app').removeAttribute('aria-hidden');
+        $('splash').classList.add('finished');
+        if ($('splash').contains(document.activeElement)) $('replay').focus();
+      }
+      function start() {
+        timers.forEach(clearTimeout);
+        timers = [];
+        $('app').classList.remove('ready');
+        $('app').inert = true;
+        $('app').setAttribute('aria-hidden', 'true');
+        $('splash').classList.remove('finished');
+        $('status').textContent = 'Your game is taking shape.';
+        $('substatus').hidden = true;
+        $('retry').hidden = true;
+        $('form').hidden = false;
+        const reduced =
+          $('motion').checked || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        $('animated-logo').src = `assets/${reduced ? 'final' : 'animated'}.svg?play=${Date.now()}`;
+        const mode = $('scenario').value;
+        if (mode === 'fast') later(complete, reduced ? 650 : 2600);
+        else {
+          later(() => {
+            $('status').textContent = 'Still getting things ready…';
+          }, 2200);
+          if (mode === 'slow') later(complete, 6500);
+          else
+            later(() => {
+              $('form').hidden = true;
+              $('status').textContent = 'Let’s try that again.';
+              $('substatus').textContent =
+                'The connection was interrupted. Your saved picks stay where you left them.';
+              $('substatus').hidden = false;
+              $('retry').hidden = false;
+            }, 3500);
+        }
+      }
+      $('replay').addEventListener('click', start);
+      $('scenario').addEventListener('change', start);
+      $('motion').addEventListener('change', () => {
+        document.body.classList.toggle('no-motion', $('motion').checked);
+        start();
+      });
+      $('retry').addEventListener('click', () => {
+        $('scenario').value = 'fast';
+        start();
+      });
+      start();
+    </script>
+  </body>
+</html>

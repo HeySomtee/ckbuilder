@@ -9,6 +9,47 @@ import { ccc } from '@ckb-ccc/core';
 import { FileAuthStorage, tokenHash, CHALLENGE_TTL_MS } from './modules/identity/storage';
 import { postgresConfig } from './infrastructure/postgres-config';
 import { signatureFrom, walletAddressMatches } from './modules/identity/wallet-binding';
+import { createHash, generateKeyPairSync, sign } from 'crypto';
+
+// Ephemeral WebAuthn P-256 credential. No wallet service, RPC or saved key.
+function joyCredential() {
+  const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const jwk = publicKey.export({ format: 'jwk' });
+  const key = Buffer.concat([
+    Buffer.from(jwk.x!, 'base64url'),
+    Buffer.from(jwk.y!, 'base64url'),
+  ]).toString('hex');
+  const identity = JSON.stringify({ keyType: 'main_key', publicKey: key });
+  return {
+    key,
+    identity,
+    proof(challenge: string) {
+      const authenticator = Buffer.alloc(37);
+      authenticator[32] = 5;
+      const clientData = Buffer.from(
+        JSON.stringify({
+          type: 'webauthn.get',
+          challenge: Buffer.from(challenge).toString('base64url'),
+          origin: 'https://testnet.joyid.dev',
+        }),
+      );
+      const signature = sign(
+        'sha256',
+        Buffer.concat([authenticator, createHash('sha256').update(clientData).digest()]),
+        privateKey,
+      );
+      return new ccc.Signature(
+        JSON.stringify({
+          alg: -7,
+          message: Buffer.concat([authenticator, clientData]).toString('base64url'),
+          signature: signature.toString('base64url'),
+        }),
+        identity,
+        ccc.SignerSignType.JoyId,
+      );
+    },
+  };
+}
 
 async function main(): Promise<void> {
   const telegram = {
@@ -126,6 +167,70 @@ async function main(): Promise<void> {
       ccc.hexFrom(require('crypto').randomBytes(32)),
     );
     const address = await signer.getRecommendedAddress();
+    const joy = joyCredential();
+    const joyScript = await client.getKnownScript(ccc.KnownScript.JoyId);
+    const joyLock = ccc.Script.from({
+      codeHash: joyScript.codeHash,
+      hashType: joyScript.hashType,
+      args: `0x0001${ccc.hashCkb(`0x${joy.key}`).slice(2, 42)}`,
+    });
+    const joyAddress = (await ccc.Address.fromScript(joyLock, client)).toString();
+    const joyProof = signatureFrom(joy.proof('binding'))!;
+    // Public credential vector from the pinned @joyid/ckb verify.spec.ts.
+    // This tests address derivation independently of our generated test address.
+    assert.ok(
+      await walletAddressMatches(
+        'ckt1qrfrwcdnvssswdwpn3s9v8fp87emat306ctjwsm3nmlkjg8qyza2cqgqq8n3thvttqfasgrql80e3s5l66lcneyxrsuglhh2',
+        new ccc.Signature(
+          joyProof.signature,
+          JSON.stringify({
+            keyType: 'main_key',
+            publicKey:
+              '93222c01a3514baab677d722b39b3dede3660e9203a729b969f82b98c428d441a32a8094bff3d90827ca326fb88066cf70bae9c67bef8494549315e7d7b152e6',
+          }),
+          ccc.SignerSignType.JoyId,
+        ),
+      ),
+    );
+    assert.ok(joyProof);
+    assert.ok(await ccc.Signer.verifyMessage('binding', joyProof));
+    assert.equal(await ccc.Signer.verifyMessage('different challenge', joyProof), false);
+    assert.ok(await walletAddressMatches(joyAddress, joyProof));
+    assert.equal(await walletAddressMatches(address, joyProof), false);
+    assert.equal(
+      await walletAddressMatches(
+        (await ccc.Address.fromScript(joyLock, new ccc.ClientPublicMainnet())).toString(),
+        joyProof,
+      ),
+      false,
+    );
+    assert.equal(
+      signatureFrom({
+        ...joyProof,
+        identity: JSON.stringify({ publicKey: joy.key.toUpperCase(), keyType: 'main_key' }),
+      })?.identity,
+      joy.identity,
+    );
+    for (const keyType of ['sub_key', 'main_session_key', 'sub_session_key'])
+      assert.equal(
+        signatureFrom({ ...joyProof, identity: JSON.stringify({ keyType, publicKey: joy.key }) }),
+        null,
+      );
+    for (const field of ['challenge', 'pubkey', 'keyType'])
+      assert.equal(
+        signatureFrom({
+          ...joyProof,
+          signature: JSON.stringify({ ...JSON.parse(joyProof.signature), [field]: 'override' }),
+        }),
+        null,
+      );
+    assert.equal(
+      signatureFrom({
+        ...joyProof,
+        signature: JSON.stringify({ ...JSON.parse(joyProof.signature), alg: -257 }),
+      }),
+      null,
+    );
     const otherAddress = await other.getRecommendedAddress();
     const proof = await signer.signMessage('binding');
     assert.ok(signatureFrom(proof));
@@ -235,6 +340,51 @@ async function main(): Promise<void> {
         body: JSON.stringify(body),
       });
     try {
+      const joyNonce = (await (await post('/api/auth/nonce', { address: joyAddress })).json()) as {
+        message: string;
+        challengeId: string;
+      };
+      const joyRequest = {
+        address: joyAddress,
+        challengeId: joyNonce.challengeId,
+        signature: joy.proof(joyNonce.message),
+      };
+      const joyLogin = await post('/api/auth/verify', joyRequest);
+      assert.equal(
+        joyLogin.status,
+        201,
+        'JoyID primary passkey authenticates through the actual HTTP handler',
+      );
+      const joyCookie = joyLogin.headers.get('set-cookie')!.split(';')[0];
+      assert.equal(
+        (await fetch(origin + '/api/me', { headers: { cookie: joyCookie } })).status,
+        200,
+      );
+      assert.equal(
+        (await post('/api/auth/verify', joyRequest)).status,
+        400,
+        'JoyID challenge cannot replay',
+      );
+      const again = (await (await post('/api/auth/nonce', { address: joyAddress })).json()) as {
+        message: string;
+        challengeId: string;
+      };
+      const againProof = joy.proof(again.message);
+      againProof.identity = JSON.stringify({
+        publicKey: joy.key.toUpperCase(),
+        keyType: 'main_key',
+      });
+      assert.equal(
+        (
+          await post('/api/auth/verify', {
+            address: joyAddress,
+            challengeId: again.challengeId,
+            signature: againProof,
+          })
+        ).status,
+        200,
+        'Equivalent JoyID identity reuses the account',
+      );
       const nonceResponse = await post('/api/auth/nonce', { address });
       assert.equal(nonceResponse.status, 200);
       const nonce = (await nonceResponse.json()) as { message: string; challengeId: string };
@@ -251,6 +401,37 @@ async function main(): Promise<void> {
         .headers.get('set-cookie')!
         .split(';')[0];
       assert.equal((await fetch(origin + '/api/me', { headers: { cookie } })).status, 200);
+      const savedActivity = await fetch(origin + '/api/activity?ownerHash=attacker', {
+        headers: { cookie },
+      });
+      assert.equal(savedActivity.status, 200);
+      const savedActivityBody = (await savedActivity.json()) as {
+        ownerHash: string;
+        address: string;
+        available: boolean;
+      };
+      assert.equal(
+        savedActivityBody.address,
+        address,
+        'Activity derives the owner from the verified session',
+      );
+      assert.match(savedActivityBody.ownerHash, /^0x[0-9a-f]{64}$/);
+      assert.notEqual(savedActivityBody.ownerHash, 'attacker');
+      assert.equal(
+        savedActivityBody.available,
+        false,
+        'unconfigured PG is explicit, never a complete empty wallet',
+      );
+      assert.equal((await fetch(origin + '/api/activity')).status, 401);
+      assert.equal(
+        (await fetch(origin + '/api/activity?cursor=invalid', { headers: { cookie } })).status,
+        400,
+      );
+      assert.equal(
+        (await post('/api/activity/refresh', {}, { cookie, origin: 'https://evil.example' }))
+          .status,
+        403,
+      );
       const account = (await (await fetch(origin + '/api/me', { headers: { cookie } })).json()) as {
         user: { telegramAvailable: boolean };
       };

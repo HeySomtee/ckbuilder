@@ -2,30 +2,47 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#171718" />
     <title>Streak — Your game. Your call.</title>
     <meta
       name="description"
       content="Football predictions with live markets, daily streaks and verifiable results. Follow the fixtures and make your call on Nervos CKB."
     />
-    <link rel="icon" type="image/svg+xml" href="/mark.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/on-form-favicon-32.png" />
+    <link rel="icon" type="image/svg+xml" href="/brand/on-form-favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/brand/on-form-touch-180.png" />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/landing.css" />
     <link rel="stylesheet" href="/matchday.css" />
+    <link rel="stylesheet" href="/brand.css" />
+    <link rel="stylesheet" href="/cell-loader.css" />
   </head>
   <body>
     <div id="app">
       <div class="boot-note" role="status">
-        <span class="boot-mark">S</span>Loading Streak…
+        <svg
+          class="cell-loader cell-loader--orbit"
+          viewBox="0 0 40 40"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <g class="cell-orbit">
+            <g class="cell-pulse">
+              <path class="cell-link" d="M22.3 13l4.9 8.5" />
+              <path class="cell-link" d="M25.5 25.5h-11" />
+              <rect class="cell-block home" x="16" y="5" width="8" height="8" rx="1.1" />
+              <rect class="cell-block draw" x="25.5" y="21.5" width="8" height="8" rx="1.1" />
+              <rect class="cell-block away" x="6.5" y="21.5" width="8" height="8" rx="1.1" />
+            </g>
+          </g>
+        </svg>
+        Loading Streak
       </div>
     </div>
     <noscript
-      >Streak needs JavaScript to load football markets. Please enable it in your
-      browser.</noscript
+      >Streak needs JavaScript to load football markets. Please enable it in your browser.</noscript
     >
     <div id="overlay" class="overlay-host" aria-hidden="true"></div>
     <div id="toasts" class="toast-host" aria-live="polite"></div>

@@ -7,6 +7,7 @@ import { outcomes } from './api';
 import type { Market } from './api';
 import { TeamBadge } from '../../components/team-badge';
 import { Icon } from '../../components/icon';
+import { CellLoader } from '../../components/cell-loader';
 import { Notice } from '../../components/notice';
 import { useNow } from '../../lib/use-now';
 import { getEntryAvailability } from '../direct/availability-api';
@@ -65,12 +66,20 @@ export function MarketDetail({
         <button className="quiet" onClick={onBack}>
           Back to markets
         </button>
-        <h1>{detail.isPending ? 'Loading your match...' : 'This market could not be loaded'}</h1>
+        <h1 aria-busy={detail.isPending}>
+          {detail.isPending && <CellLoader variant="wave" />}
+          {detail.isPending ? 'Loading your match...' : 'This market could not be loaded'}
+        </h1>
         {detail.isError && (
           <Notice
             title="Try loading the match again"
             tone="attention"
-            actions={<button onClick={() => void detail.refetch()}>Retry market</button>}
+            actions={
+              <button aria-busy={detail.isFetching} onClick={() => void detail.refetch()}>
+                {detail.isFetching && <CellLoader variant="orbit" />}
+                Retry market
+              </button>
+            }
           >
             {detail.error.message}
           </Notice>
@@ -224,12 +233,18 @@ export function MarketDetail({
               <Notice
                 title="Payment check needs a retry"
                 tone="attention"
-                actions={<button onClick={() => void payment.refetch()}>Check again</button>}
+                actions={
+                  <button aria-busy={payment.isFetching} onClick={() => void payment.refetch()}>
+                    {payment.isFetching && <CellLoader variant="orbit" />}
+                    Check again
+                  </button>
+                }
               >
                 Your slip is safe. We could not check availability for this match.
               </Notice>
             ) : payment.isPending ? (
               <p className="match-availability" role="status">
+                <CellLoader variant="wave" />
                 Checking payment availability...
               </p>
             ) : payment.data?.available ? (
@@ -252,7 +267,12 @@ export function MarketDetail({
                     : 'Payment is temporarily unavailable'
                 }
                 tone="attention"
-                actions={<button onClick={() => void payment.refetch()}>Check again</button>}
+                actions={
+                  <button aria-busy={payment.isFetching} onClick={() => void payment.refetch()}>
+                    {payment.isFetching && <CellLoader variant="orbit" />}
+                    Check again
+                  </button>
+                }
               >
                 You can save your pick while availability refreshes.
               </Notice>

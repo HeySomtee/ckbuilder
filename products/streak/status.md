@@ -1,5 +1,73 @@
 # Streak status
 
+29 October [shared cell loaders implemented](docs/delivery/connected-loading.md)
+across Season, games, payments, Activity, account, startup and retained legacy
+pages. Six motion groups and eight real application loading states pass in
+Chromium/WebKit, including reduced motion and cleanup. Screenshots inspected;
+frontend build, scoped lint and static policies passed. This supersedes the
+preview-only scope below. The final complete local release gate and authorized
+GitHub push remain pending, with hosted CI omitted.
+
+29 October release candidate authorized for GitHub publication with hosted CI
+omitted. Includes the wallet, Activity, branding and startup changes below plus
+the isolated loading-signature preview. Application use of the new loaders and
+hosted/physical-wallet acceptance remain pending. Exact-revision local checks
+are enforced by the release hooks; no deployment success is inferred from a push.
+
+29 October 07:46 UTC: [cell loading refinement](design/loading-signature-review/README.md)
+is available as an isolated preview at port 4199. Circular rotation/pulse and
+horizontal connected-wave examples pass eight Chromium/WebKit groups, responsive
+and reduced-motion checks. Await owner approval before replacing app loaders.
+No application runtime, payment, commit or deployment change in this preview.
+
+29 October 06:03 UTC: local Activity launcher hookup is complete, preserving
+existing accounts and persistent records. All 23 registered markets are indexed.
+Failures show one retry card; cached history stays visible. Landing pages now
+skip the splash entirely; `/season` retains it. Backend types, frontend build/lint,
+disposable PostgreSQL regression, four Activity browser journeys and 58 startup
+groups passed, with independent review. [Activity evidence](docs/delivery/event-driven-activity.md)
+and [startup evidence](docs/delivery/startup-identity.md). No commit, push or hosted
+test; final-candidate verification/publication and linked-cell loader preview
+approval remain pending. This supersedes the local launcher gap below.
+
+29 October splash duration corrected locally: a two-second drawing sequence,
+Open Streak/Escape skip, background shell/data startup and immediate accessibility
+and failure bypasses. All 38 isolated Chromium/WebKit groups, frontend build,
+lint and syntax checks passed at 05:40 UTC; local HTTP delivery is verified.
+[Evidence](docs/delivery/startup-identity.md). The [production test plan](docs/delivery/hosted-acceptance-plan.md)
+now starts after release freeze and selects fresh fixtures then. The missed bets
+remain unperformed. No commit or push. Next development priority is the older
+local launcher's PostgreSQL Activity hookup; linked-cell loaders still await
+preview approval. Preserve earlier publication and physical-wallet acceptance.
+
+28 October fast-start splash correction: the visible first-frame logo and short inert fade now appear on fast local loads while the app remains usable. All 20 focused Chromium/WebKit groups, frontend build, lint and formatting passed at 16:02 UTC. [Evidence](docs/delivery/startup-identity.md). Local assets are updated; publication remains pending. The older local launcher still needs the PostgreSQL Activity startup configuration described in the work tracker.
+
+28 October event-driven Activity complete locally: wallet-indexed PostgreSQL reads, durable public events, canonical recovery and authenticated startup prefetch. All 75 required checks have passing coverage across the major run and scoped follow-ups, with original failures retained. Final browser checks passed at 14:24:04 UTC and independent reviews accepted. [Evidence, configuration and bounds](docs/delivery/event-driven-activity.md). No new Render secret or contract; API and sponsor must restart together when published. No commit, hosted deployment or live transaction. The loading-signature preview and existing physical-wallet/hosted acceptance remain pending.
+
+28 October event-driven Activity implemented locally: [delivery and evidence](docs/delivery/event-driven-activity.md). Durable journal relay, PostgreSQL wallet records, canonical all-owner reconstruction, targeted recovery, authenticated pagination and signer-independent startup prefetch. Focused tests pass and independent reviews accepted after corrections; final major verification is in progress. No commit, push, hosted rollout or live transaction. Preserve earlier publication and physical-wallet acceptance commitments. Linked-block loader replacement still awaits approval.
+
+28 October architecture refinement: [plain-language proposal](docs/architecture/wallet-activity-index.md) now prioritizes event-driven updates from verified payment and settlement changes, with durable delivery and bounded reconciliation as recovery. Source review completed; this is documentation only. Index implementation and site-wide loading-signature integration remain pending approval.
+
+28 October approved logo/splash integrated locally, with the permanent connected-cell wordmark in desktop/mobile headers and a startup screen that never gates on wallet or data reads. Eighteen focused startup browser groups passed; the major gate report records all 72 checks passed at 10:11:39 UTC. PowerShell separately returned wrapper status 1 from a Vite warning; [evidence and limits](docs/delivery/startup-identity.md) retain that distinction. The [production checklist](docs/delivery/hosted-acceptance-plan.md) and [plain-language proposal](docs/architecture/wallet-activity-index.md) are simplified. A separate [linked-block loading preview](design/loading-signature-review/README.md) is ready at port 4199 with passing responsive/reduced-motion checks; site-wide loader replacement awaits approval. The durable index stays paused. No commit, push or hosted update.
+
+28 October logo follow-up: [preview](design/splash-review/README.md) now includes the connected cells permanently beneath the chart-r, with dark, light and single-colour samples. Motion reveals the same static detail. Architecture implementation is paused at the owner's request while they review the proposal. Application branding replacement and publication remain pending; existing local warmup work is preserved.
+
+28 October startup/performance refinement: [new splash and chart-r identity preview](design/splash-review/README.md) is ready at port 4198. [Hosted Markdown plan](docs/delivery/hosted-acceptance-plan.md) explicitly requires production execution. [Bounded Activity warmup](docs/delivery/activity-startup-warmup.md) is implemented locally with eight focused tests, final frontend build/lint and eight browser journeys passed; independent review accepted. It improves reuse for two saved markets, not cold cross-device discovery. [Durable wallet index](docs/architecture/wallet-activity-index.md) and other app-wide performance changes remain proposals. No full major run, contract migration, commit, push or hosted update.
+
+28 October [hosted acceptance plan](docs/delivery/hosted-acceptance-plan.md) prepared from current hosted and official FPL data. Six QA wallets cover real prediction outcomes, auction refunds, Five points/prizes and Survivor progression; no test positions or accounts created. [Animated splash preview](design/splash-review/README.md) runs at port 4198 with passing Chromium/WebKit responsive checks, awaiting approval before integration. Local and hosted market registries currently share no contract descriptors, so same-wallet local history cannot be assumed to appear on hosted. Wallet/branding publication remains pending.
+
+28 October local full-flow testing started: API is running on port 4100 in dummy-game mode with existing test records. Persistent PostgreSQL, payment sponsor, direct settlement loop, ordinary Five rewards and separate test-game rewards are active. Five funding and atomic prediction availability checks passed; settlement passes completed successfully. Real testnet wallet approval and game acceptance remain for the owner. Telegram webhook setup is unavailable. No commit, push or hosted change. Operational evidence: .quality-artifacts/local-full-test-readiness.json.
+
+27 October approved On form branding integrated locally: the complete streak wordmark replaces header/sidebar branding and the matching segmented s supplies browser, touch and compact icons. Build, frontend lint, static checks, 26 Season Chromium/WebKit groups and legacy responsive browser checks passed; desktop/mobile renders inspected and local icon delivery verified. [Asset mapping and evidence](design/brand-review/README.md). This supersedes earlier branding integration-pending entries below. No commit, push or hosted update. Prior wallet changes and physical-wallet acceptance remain separate.
+
+27 October owner selected On form for the Streak identity: complete streak wordmark with its segmented s reused as the standalone insignia. Preview defaults and selection records are updated. Logo direction is decided; actual application integration and deployment remain pending.
+
+27 October logo refinement: the preview's primary logo is now the complete word streak, with the custom mark replacing its initial s. The same s appears alone on favicons and app icons. Wordmarks, contact sheet and export packs were refreshed; responsive Chromium and mobile WebKit checks passed. This updates the design preview only; production integration remains pending.
+
+27 October logo/favicon design preview ready: [three original vector directions](design/brand-review/README.md) at <http://127.0.0.1:4197/>, with custom outlined lettering, light/dark/monochrome lockups, SVG/ICO/PNG icons and downloadable packs. Responsive Chromium and mobile WebKit checks passed; visuals reviewed. Breakaway is the recommended direction. Await owner selection before application integration. No production runtime, commit, push or deployment change in this design task.
+
+27 October wallet fixes implemented locally: visible in-slip login errors and animated stages, MetaMask/Zerion delayed discovery, read-only UTXO Global restoration and strict primary JoyID passkey authentication. REI remains explicit reconnect; JoyID passkey-lock prediction payments remain unsupported and now explain that before review. Independent identity/recovery review accepted. All 71 major checks passed at 11:47:28 UTC, including four wallet and six full checkout journeys. A subsequent helper-text styling adjustment passed the complete static/build lane after correcting its formatting. No commit, push, physical-wallet or hosted acceptance claim. [Scope and evidence](docs/delivery/wallet-compatibility.md).
+
 26 October Week 22 release published: `cfd8dfec20fe186bad1822d58d3eb87a1158e6fe` is pushed to `origin/main`. The exact-candidate commit hook passed all 71 checks at 18:23:53 UTC; push reused its successful receipt for tree `89eb157f315f`. The release includes the Five workspace, local-only game testing, fixture outlooks, Survivor setup and [Week 22 report](../../reports/week-22.md) with labelled screenshots and the new [streakpitch.com](https://streakpitch.com) domain. [DM draft for Neon](../../reports/week-22-dm.md) is prepared, not sent. After publication, the domain returned HTTPS 200 with the matching `index-DWsM8nEv.js` entry bundle and regular API data mode. The served Survivor bundle contains Review setup and the paid-entry explanation. This verifies frontend rollout, not hosted payment or reward acceptance. Evidence: `.quality-artifacts/week22-release-major.json`, `week22-release-commit.log` and `week22-release-push.log`. The owner's unrelated ignore-file change and nested benchmark data are excluded. No hosted CI resumed. Original logo/favicon and the explicit beta limits below remain unfinished.
 
 26 October Survivor setup corrected locally: private drafts have a dedicated review/publish workspace, functional Review setup navigation and explicit paid-entry or expired-schedule guidance. The team board appears after publication. All 71 major checks passed at 12:08:36 UTC, including six responsive create/revisit/publish/join journeys. The local server serves the new frontend after refresh; no API restart, commit, push or deployment. Paid admission and automatic Survivor prize payouts remain unimplemented. [Details and evidence](docs/delivery/survivor-implementation.md).

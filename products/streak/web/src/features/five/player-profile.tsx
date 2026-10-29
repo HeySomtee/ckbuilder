@@ -1,3 +1,4 @@
+import { CellLoader } from '../../components/cell-loader';
 import { gamesDataMode } from '../../lib/games-data';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -39,14 +40,17 @@ export function PlayerProfile({
       </div>
       {query.isPending && (
         <div className="five-loading" role="status">
-          <span className="five-spinner" />
+          <CellLoader variant="wave" />
           Loading player history
         </div>
       )}
       {query.isError && (
         <div className="five-message" role="status">
           History is temporarily unavailable.
-          <button onClick={() => void query.refetch()}>Try again</button>
+          <button aria-busy={query.isFetching} onClick={() => void query.refetch()}>
+            {query.isFetching && <CellLoader variant="orbit" />}
+            Try again
+          </button>
         </div>
       )}
       {p && (

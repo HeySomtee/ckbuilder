@@ -9,21 +9,83 @@
       content="Your football instinct has a place to play. Explore matchweek prediction markets on CKB testnet and discover the next chapter, Streak Five."
     />
     <title>Streak | Your game. Your call.</title>
+    <style>
+      html:not([data-streak-startup='app']) .streak-startup {
+        display: none;
+      }
+    </style>
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/on-form-favicon-32.png" />
+    <link rel="icon" type="image/svg+xml" href="/brand/on-form-favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/brand/on-form-touch-180.png" />
+    <link rel="stylesheet" href="/startup.css" />
+    <link rel="stylesheet" href="/cell-loader.css" />
+    <link
+      rel="preload"
+      as="image"
+      href="/brand/on-form-splash.svg"
+      media="(prefers-reduced-motion: no-preference)"
+    />
     <script src="/entry.js"></script>
   </head>
   <body>
-    <div id="root">
-      <main class="recovery">
-        <h1>Streak is loading.</h1>
-        <p>If this screen does not open, your current account is still available.</p>
+    <div id="streak-startup" class="streak-startup">
+      <div class="streak-startup-content">
+        <picture>
+          <source
+            media="(prefers-reduced-motion: reduce)"
+            srcset="/brand/on-form-splash-final.svg"
+          />
+          <img
+            class="streak-startup-logo"
+            src="/brand/on-form-splash.svg"
+            alt="Streak"
+            width="430"
+            height="110"
+          />
+        </picture>
+        <div id="streak-startup-progress" class="streak-startup-progress" aria-hidden="true"></div>
+        <p
+          id="streak-startup-status"
+          class="streak-startup-status"
+          role="status"
+          aria-live="polite"
+        >
+          Your game is taking shape.
+        </p>
+        <p id="streak-startup-detail" class="streak-startup-detail" hidden></p>
+        <button id="streak-startup-skip" class="streak-startup-skip" type="button" hidden>
+          Open Streak
+        </button>
+        <div id="streak-startup-actions" class="streak-startup-actions">
+          <a id="streak-startup-retry" class="streak-startup-retry" href="">Try again</a>
+          <a href="/index.html#wallet">Open current Wallet</a>
+        </div>
+      </div>
+      <div class="streak-startup-foot">FOOTBALL INSTINCT. ON NERVOS CKB.</div>
+    </div>
+    <div id="root"></div>
+    <main id="streak-landing-recovery" class="streak-startup-fallback">
+      <p role="status">Opening Streak.</p>
+      <p>If this page does not open, try again or open your current wallet.</p>
+      <a href="">Try again</a>
+      <a href="/index.html#wallet">Open current Wallet</a>
+    </main>
+    <noscript>
+      <style>
+        .streak-startup,
+        #streak-landing-recovery {
+          display: none;
+        }
+      </style>
+      <main class="streak-startup-fallback">
+        <h1>Enable JavaScript to open Streak.</h1>
+        <p>This is a CKB testnet experience with no real-money stakes.</p>
         <a href="/index.html#wallet">Open current Wallet</a>
         <a href="/index.html#dashboard">Open current app</a>
       </main>
-    </div>
-    <noscript
-      >Streak needs JavaScript to display fixtures and markets. Enable JavaScript, then reload this
-      page. This is a CKB testnet experience with no real-money stakes.</noscript
-    >
+    </noscript>
+    <script src="/startup.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

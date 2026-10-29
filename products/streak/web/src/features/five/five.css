@@ -471,22 +471,6 @@
   gap: 12px;
   font-size: 13px;
 }
-.five-spinner {
-  display: inline-block;
-  width: 15px;
-  height: 15px;
-  vertical-align: middle;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: five-spin 1s linear infinite;
-  margin-right: 8px;
-}
-@keyframes five-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 .five-admin-bar {
   display: flex;
   align-items: center;
@@ -716,11 +700,6 @@
   }
   .five-prize h2 {
     font-size: 21px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .five-spinner {
-    animation: none;
   }
 }
 @media (forced-colors: active) {
