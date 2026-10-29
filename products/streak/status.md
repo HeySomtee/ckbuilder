@@ -1,5 +1,12 @@
 # Streak status
 
+29 October publication complete: `51d0849` is verified on GitHub `main`. The
+approved shared cell loaders, wallet compatibility, branding/startup and
+event-driven Activity release passed all 76 local gate checks at 15:37:59 UTC.
+Commit and push reused the exact-tree receipt. GitHub Actions were intentionally
+skipped and the commit has no workflow runs. Hosted deployment and physical-wallet
+acceptance remain unverified. Next: use the frozen-candidate production test plan.
+
 29 October [shared cell loaders implemented](docs/delivery/connected-loading.md)
 across Season, games, payments, Activity, account, startup and retained legacy
 pages. Six motion groups and eight real application loading states pass in

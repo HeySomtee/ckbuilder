@@ -1,5 +1,10 @@
 # Streak documentation
 
+29 October publication: `51d0849` is verified on GitHub `main`. Shared cell loaders,
+wallet fixes, branding/startup and event-driven Activity passed all 76 local
+gate checks. Hosted CI was intentionally skipped; hosted and physical-wallet
+acceptance remain next. [Current status](../status.md).
+
 29 October: [shared cell loaders](delivery/connected-loading.md) are implemented
 across the dapp after owner approval. Six motion groups and eight real application
 loading states pass in Chromium/WebKit. Final release verification/publication

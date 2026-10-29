@@ -1,5 +1,15 @@
 # Streak work tracker
 
+29 October release published: `51d0849` is verified on GitHub `main`, including
+the newly approved loaders across the dapp and the earlier wallet, Activity and
+branding/startup work. All 76 exact-tree local checks passed at 15:37:59 UTC;
+commit/push reused that receipt. GitHub Actions skipped with `[skip actions]`;
+zero workflow runs verified. Local logs preserve earlier failed/interrupted runs.
+Implementation and publication are complete. Next: confirm the hosted release,
+then perform the [production acceptance plan](delivery/hosted-acceptance-plan.md)
+with fresh fixtures and physical wallets. No hosted or live-wallet success is
+claimed by the synthetic browser and disposable-chain results.
+
 29 October owner approved the refined loading preview while publication was
 underway. Shared rotating/pulsating cells and connected-wave loaders are now
 implemented across Season, games, payments, Activity, account, startup and
