@@ -11,6 +11,11 @@ export async function connect(element) {
     async request({ method, params }) {
       if (method === 'eth_accounts' || method === 'eth_requestAccounts') return [wallet.address];
       if (method !== 'personal_sign') throw Error('Unexpected synthetic wallet request');
+      if (window.checkoutSignInError !== undefined) {
+        const error = window.checkoutSignInError;
+        delete window.checkoutSignInError;
+        throw error;
+      }
       if (toUtf8String(params[0]).startsWith('CKB transaction:')) await window.checkoutSigning();
       return wallet.signMessage(getBytes(params[0]));
     },

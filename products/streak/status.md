@@ -1,5 +1,21 @@
 # Streak status
 
+30 October Zerion mobile sign-in investigation: the owner sees "No connected
+wallet" in the header despite a visible address/balance. A local candidate renews
+EVM access on explicit sign-in, confirms the server session and surfaces failures
+inside checkout. Four isolated wallet and six checkout journeys pass, with
+independent identity review. All 76 major checks passed at 11:01:09 UTC.
+The owner authorized commit and push for phone testing. Physical Zerion recovery
+and deployment remain unverified. No new Render variable is required.
+See [authentication evidence](docs/delivery/wallet-compatibility.md).
+
+30 October 09:51 Lagos: production acceptance campaign started. `b7511ec` is on
+GitHub main and the hosted frontend entry filenames match its local build.
+Public reads report batch payments enabled, planned evening fixtures available,
+and Five GW9 open/funding available. Physical-wallet submission, settlement,
+prizes and backend revision verification remain pending. See the
+[campaign plan and current checkpoint](docs/delivery/hosted-acceptance-plan.md).
+
 30 October owner authorized GitHub publication of the Five layout/budget changes
 and today's production test plan. Focused browser verification passed; commit
 and push enforce scoped formatting, static policies and frontend checks. Hosted

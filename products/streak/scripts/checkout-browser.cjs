@@ -34,7 +34,7 @@ async function main() {
         const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
         const errors = [], external = [], writes = [];
         let signatures = 0, offers = 0, failMode = false, stalePools = false, releasePools, releaseSubmission, reorg = false, rejectNext = false, rejections = 0, busyReview = true, delayedOffer, holdApproval=false, releaseApproval, sponsorOffline=false;
-        let signedIn = false, authAttempts = 0;
+        let signedIn = false, authAttempts = 0, failNonce = true;
         const poolReady = new Promise(resolve => { releasePools = resolve; });
         await context.exposeBinding('checkoutRpc', async (_source, method, args) => {
           const value=await chain.rpc(method,args);
@@ -67,12 +67,16 @@ async function main() {
             return {fixtureId,state:row?.state === 'funded' ? 'ready' : 'uninitialized', ...(row?.state === 'funded' ? {observedAtMs:Date.now(), totals:['10000000000','0','0'],history:[]} : {})};
           }) });
           }
-          if (url.pathname === '/api/auth/nonce') return json({ message: `Streak sign-in\nOrigin: ${base}\nAddress: ${chain.address}\nNonce: checkout-auth\n`, challengeId: 'checkout-auth' });
+          if (url.pathname === '/api/auth/nonce') {
+            if (failNonce) { failNonce = false; return json({error:''},503); }
+            return json({ message: `Streak sign-in\nOrigin: ${base}\nAddress: ${chain.address}\nNonce: checkout-auth\n`, challengeId: 'checkout-auth' });
+          }
           if (url.pathname === '/api/auth/verify') {
             authAttempts++;
             if (authAttempts === 1) return json({error:'Synthetic sign-in could not be verified.'},400);
             await new Promise(resolve => setTimeout(resolve, 350));
-            signedIn = true;
+            // A successful verify response alone cannot establish a usable session.
+            signedIn = authAttempts >= 3;
             return json({ok:true});
           }
           if (url.pathname === '/api/me') return signedIn ? json({ user: { id: 'checkout-user', walletAddress: chain.address, username: 'Synthetic checkout', telegramConnected: false, telegramAvailable: false, telegramUsername: null } }) : json({error:'Sign in'},401);
@@ -233,13 +237,34 @@ async function main() {
         await page.getByText('Payments are temporarily unavailable',{exact:true}).waitFor({state:'hidden',timeout:12000});
         assert.equal(await page.locator('.slip-title-count').innerText(),'1','Automatic recovery preserves the selected pick.');
         await connect(page.getByRole('button', { name: 'Connect wallet to pay', exact: true }));
-        const slip = page.getByRole('dialog', {name:'Your prediction slip'});
+        const slip = page.getByRole('dialog', {name:'Prediction slip', exact:true});
         await page.locator('dialog[open]').getByText('Sign-in did not finish', {exact:true}).waitFor();
+        await slip.getByText(/Preparing sign-in did not finish/).waitFor().catch(async error => {
+          console.error(await slip.innerText());
+          throw error;
+        });
+        assert.equal(authAttempts,0,'A failed challenge cannot reach verification.');
+        for (const [failure, message] of [
+          [{message:''}, 'Approve sign-in in your wallet did not finish'],
+          ['No connected wallet', 'Your wallet reports no active connection'],
+        ]) {
+          await page.evaluate(error => { window.checkoutSignInError = error; }, failure);
+          await page.getByRole('button', {name:'Sign in to continue', exact:true}).click();
+          await slip.getByText(message, {exact:false}).waitFor();
+          assert.equal(authAttempts,0,'Provider failure cannot reach verification.');
+          assert.equal(signatures,0,'Sign-in failure cannot start a payment.');
+        }
+        await page.screenshot({path:path.join(evidence,`signin-recovery-${name}-${width}.png`)});
+        await page.getByRole('button', {name:'Sign in to continue', exact:true}).click();
         await page.locator('dialog[open]').getByText(/Synthetic sign-in could not be verified/).waitFor();
         await page.getByRole('button', {name:'Sign in to continue', exact:true}).click();
-        await page.getByRole('button', {name:/Verifying sign-in/}).waitFor();
+        await slip.getByText(/Your sign-in session was not retained/).waitFor();
+        assert.equal(await slip.getByRole('button',{name:'Review payment',exact:true}).count(),0);
+        assert.equal(await page.locator('.slip-title-count').innerText(),'1','Failed sign-in preserves the pick.');
+        await page.getByRole('button', {name:'Sign in to continue', exact:true}).click();
+        await slip.getByRole('button', {name:/Verifying sign-in/}).waitFor();
         await page.getByRole('button', {name:'Review payment',exact:true}).waitFor();
-        assert.equal(authAttempts,2);
+        assert.equal(authAttempts,3);
         assert.equal(await page.locator('dialog[open]').count(),1,'Sign-in preserves the slip for separate payment review.');
         assert.equal(signatures, 0, 'Signing in never signs a payment.');
         await page.getByRole('button',{name:'Review payment',exact:true}).click();

@@ -1,5 +1,44 @@
 # Wallet compatibility and sign-in recovery
 
+## 30 October: mobile sign-in recovery
+
+The owner reported a connected address and balance inside Zerion's mobile
+browser, followed by sign-in returning to its button without a signature prompt.
+The header showed "No connected wallet"; the slip showed no explanation. This
+does not establish a Render configuration failure or a confirmed provider cause.
+
+The local candidate renews EVM account access during explicit sign-in, then
+checks that the selected account has not changed before preparing a challenge.
+Silent restoration still performs no permission request or signature. Chooser
+cleanup removes listeners without disconnecting the selected provider.
+
+Successful challenge verification must now be followed by an authenticated
+account read matching that wallet. Only then does the application update its
+session cache. A missing session, blank error, plain provider rejection or
+"No connected wallet" produces a visible message inside checkout. Picks remain
+saved and the header shows the actual sign-in stage.
+
+Four isolated Chromium/WebKit wallet journeys pass, including cached address
+with expired signing access, permission rejection, account replacement during
+permission renewal, navigation, reload and native CKB restoration. All six
+checkout journeys pass blank nonce/provider failures, the reported error text,
+verification failure, a missing session, explicit retry and separate payment.
+The 390px error screenshot was inspected: the message and retry action remain
+visible inside the slip. Independent identity review accepted the final injected
+EVM guard and permission-boundary tests with no blocking findings.
+
+The final `npm run quality:major` passed all 76 checks from 10:21:16 to 11:01:09
+UTC on 30 October. Evidence: `.quality-artifacts/oct30-mobile-auth-major-final.json`
+and its matching log. Earlier focused failures exposed stale test selectors for
+the slip name and shared progress label; both were corrected. The earlier broad
+run was interrupted to narrow renewal to injected EVM providers, preserving
+JoyID's existing popup behavior. Those logs remain; no failed gate was bypassed.
+All providers, accounts and funds in these tests are synthetic. Physical Zerion
+acceptance, publication and deployment remain pending. No new Render setting
+or migration is required by this frontend change.
+
+## Earlier compatibility work
+
 27 October 2026. Local implementation, not a hosted acceptance claim.
 
 Neon reported repeated sign-in, a visible wallet address next to a sign-in button,

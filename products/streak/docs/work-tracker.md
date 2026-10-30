@@ -1,5 +1,45 @@
 # Streak work tracker
 
+30 October publication authorized: commit and push the verified mobile sign-in
+patch and campaign notes with hosted CI skipped. Runtime and regression sources
+are unchanged since the 76-check pass; release-note formatting and static checks
+are verified separately. Preserve the unrelated root ignore-file edit and local
+notes. Next acceptance is Zerion in-app sign-in, navigation and reload after
+Render deploys this candidate, followed by F's payment checks.
+
+30 October mobile authentication blocker: the owner is using Zerion's in-app
+browser. Address/balance appear, but sign-in returns to its button. The slip
+shows no error; the header reports "No connected wallet". Local synthetic checks
+also reproduced blank-error and missing-session silent failures. Candidate work
+renews EVM permission on explicit sign-in, retains account-change guards, checks
+the session after verification and displays nonempty failures inside checkout.
+All four wallet and six checkout journeys pass. Independent identity review
+accepted the final injected-EVM-only renewal guard and failure tests. The final
+major gate passed all 76 checks at 11:01:09 UTC; evidence is retained in
+`.quality-artifacts/oct30-mobile-auth-major-final.json` and its matching log.
+Implementation is local, not committed or deployed. Next: publication and a
+physical Zerion sign-in/reload retry before resuming F's payment tests. Do not
+claim a physical Zerion fix or change Render configuration without evidence.
+Preserve the production campaign and all earlier unfinished acceptance checks.
+
+30 October campaign steering: only MetaMask and Zerion are available. E uses
+another MetaMask address; F uses a distinct Zerion mobile address. Native CKB
+wallet acceptance remains unexercised. First mobile issue: connection succeeds
+but Sign in with wallet remains visible. Source distinguishes connection from
+the signed server challenge/session; the owner confirmed the prompt does not
+appear and supplied the error above. Do not
+label mobile authentication passed or blame hosting without evidence. Preserve
+the release freeze while establishing the failing step.
+
+30 October production campaign begun at 09:51 Lagos. Published commit `b7511ec`
+is verified on GitHub main; its entry asset filenames match the hosted page.
+Read-only public checks confirm batch entry enabled, all three planned evening
+fixtures available, and Five GW9 open with funding enabled and noon 31 October
+lock. No payment, acceptance, settlement or payout is yet proven. Guide the
+owner through Wallet A's three 100 tCKB Home picks first, then B/C opposing
+outcomes and the remaining [production plan](delivery/hosted-acceptance-plan.md).
+Keep feature work frozen unless a blocking defect requires a verified fix.
+
 30 October publication authorized: commit and push the compact Five layout,
 visible budget/save controls and dated production test plan. This release uses
 the CSS/documentation gate; eight focused browser journeys already passed.

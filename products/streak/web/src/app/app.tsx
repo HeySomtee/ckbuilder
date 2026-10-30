@@ -328,10 +328,11 @@ export function App() {
   const login = useMutation({
     mutationFn: () => signIn(setSignInStage),
     retry: false,
-    onSuccess: async () => {
+    onSuccess: async (authenticated) => {
+      await client.cancelQueries({ queryKey: ['account'] });
       client.removeQueries({ queryKey: ['private'] });
       client.removeQueries({ queryKey: ['direct-private'] });
-      await client.invalidateQueries({ queryKey: ['account'] });
+      client.setQueryData(['account'], authenticated);
     },
   });
   const logout = useMutation({
@@ -402,7 +403,7 @@ export function App() {
       ) : (
         <Icon name="wallet" />
       )}
-      {login.isPending ? 'Connecting…' : 'Sign in with wallet'}
+      {login.isPending ? signInStage : 'Sign in with wallet'}
     </button>
   );
   return (

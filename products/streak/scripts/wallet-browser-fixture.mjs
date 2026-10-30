@@ -33,6 +33,7 @@ export async function connectEvm(element, options = {}) {
   // Public, unfunded test identities. Never substitute an application key.
   let wallet = new Wallet(`0x${(options.other ? '22' : (options.keyByte ?? '11')).repeat(32)}`);
   let connected = true;
+  let accessGranted = !options.requireAccess;
   let mode = options.mode ?? 'accept';
   let release;
   const events = new Map();
@@ -40,9 +41,15 @@ export async function connectEvm(element, options = {}) {
   const provider = {
     async request({ method, params }) {
       calls.push(method);
+      if (method === 'eth_requestAccounts') {
+        if (mode === 'reject-access') throw Error('Synthetic wallet access declined.');
+        if (mode === 'change-access') wallet = new Wallet(`0x${'44'.repeat(32)}`);
+        accessGranted = true;
+      }
       if (method === 'eth_accounts' || method === 'eth_requestAccounts')
         return connected ? [wallet.address] : [];
       if (method !== 'personal_sign') throw Error(`Unexpected synthetic wallet request: ${method}`);
+      if (!accessGranted) throw Error('No connected wallet');
       if (mode === 'reject') throw Error('User rejected the synthetic sign-in request.');
       if (mode === 'hold')
         await new Promise((done) => {

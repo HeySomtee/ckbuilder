@@ -165,7 +165,7 @@ async function main() {
               const fixture = await import('/qa-wallet-fixture.js');
               await fixture.connectEvm(document.querySelector('ccc-connector'), options);
             },
-            { keyByte: (0x11 + groups).toString(16), walletName: width === 390 ? 'Zerion' : 'MetaMask', ...options },
+            { keyByte: (0x11 + groups).toString(16), walletName: width === 390 ? 'Zerion' : 'MetaMask', requireAccess: true, ...options },
           );
         }
         try {
@@ -180,6 +180,11 @@ async function main() {
           await signIn.click();
           await choose();
           await signOut.waitFor();
+          assert.equal(
+            await page.evaluate(() => window.syntheticEvm.calls.filter(method => method === 'eth_requestAccounts').length),
+            1,
+            'Explicit sign-in renews provider access even when eth_accounts exposes a cached address.',
+          );
           const address = await page.evaluate(() => window.syntheticEvm.address);
           assert.equal(await page.locator('ccc-connector').count(), 0);
           assert.equal(
@@ -413,6 +418,22 @@ async function main() {
           );
           await signOut.click();
           await signIn.waitFor();
+          const beforePermissionFailure = requests.filter(url => url === '/api/auth/nonce').length;
+          for (const [mode, message] of [
+            ['reject-access', 'Synthetic wallet access declined.'],
+            ['change-access', 'Your wallet account or network changed. Connect again and review your action.'],
+          ]) {
+            await connect.click();
+            await choose({ mode });
+            await disconnect.waitFor();
+            await signIn.click();
+            await page.locator('.notice.error').getByText(message, {exact:true}).waitFor();
+            assert.equal(requests.filter(url => url === '/api/auth/nonce').length, beforePermissionFailure);
+            assert.equal(await page.evaluate(() => window.syntheticEvm.calls.includes('personal_sign')), false,
+              'Access rejection or account replacement must stop before requesting a signature.');
+            if (mode === 'reject-access') await disconnect.click();
+            await connect.waitFor();
+          }
           await signIn.click();
           await choose({ mode: 'hold' });
           await page.waitForFunction(() => window.syntheticEvm.calls.includes('personal_sign'));

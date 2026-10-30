@@ -2,6 +2,19 @@
 
 Use **[streakpitch.com](https://streakpitch.com/season/)**, regular data and **testnet tCKB**. All times are **Lagos (UTC+1)**. Tests are not yet performed. Local review does not count as production acceptance.
 
+**Campaign started, 30 October at 09:51 Lagos.** Read-only preflight: production
+returns HTTP 200; entry asset filenames match the local build of published
+`b7511ec`. Batch payments report enabled and all three target fixtures report
+available. Five GW9 is open with funding available, regular data and the expected
+31 October noon deadline. These checks do not prove settlement or payouts work,
+or independently identify the hosted backend revision. Next: Wallet A's three
+Home picks. No wallet submission or acceptance has been reported yet.
+
+**Current blocker:** F's Zerion in-app browser connects and shows its balance,
+but sign-in reports "No connected wallet". Authentication recovery is being
+tested locally. Do not mark F passed until the deployed fix is retested on the
+phone; no wallet payment is needed to verify sign-in and reload first.
+
 ## 1. Get ready today
 
 - [ ] Review the local Five layout, then approve its push. After deployment, record the Render commit and confirm the new layout on production. Pause feature changes during testing.
@@ -14,8 +27,8 @@ Use **[streakpitch.com](https://streakpitch.com/season/)**, regular data and **t
 | B      | Another MetaMask address; Draw picks; losing sponsor bid        |
 | C      | Zerion; Away picks                                              |
 | D      | Another Zerion address; mixed slip and rejected-signature retry |
-| E      | UTXO Global, or another MetaMask address; games and login       |
-| F      | MetaMask mobile; games, mobile checks and missed Survivor pick  |
+| E      | Another MetaMask address; games and login                       |
+| F      | Zerion mobile, distinct address; mobile flows and missed pick   |
 
 ## 2. Place tonight's predictions by 20:00
 
