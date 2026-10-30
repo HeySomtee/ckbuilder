@@ -1,5 +1,36 @@
 # Five workspace integration
 
+30 October budget correction: the budget and save panel now precedes the pitch
+in a compact two-column card, with missing-player/captain guidance retained.
+Mobile squad/player navigation shows Bank even while browsing players. The
+local API serves the rebuilt assets on port 4100 with regular data; reload an
+already-open page to load the updated CSS. No push has been performed.
+Eight Chromium/WebKit journeys pass at 320, 390, 1276 and 1440px, checking
+first-screen budget visibility, pitch containment, squad saving and tab return.
+Strict frontend build and formatting/static policies also pass.
+
+## 29 October: game-first screen
+
+The compact Five header shares a row with the tabs on desktop. Gameweek and
+deadline use one toolbar; the sponsorship credit follows the builder, with
+bidding and full sponsor details still in Sponsors. Desktop player browsing no
+longer repeats Back to squad. Mobile retains that control and the squad/player
+switch. The mobile wallet address copy remains available in My Account rather
+than taking another header row. The network label stays visible.
+
+At 1276 by 662, the game starts at 164px instead of about 388px in the owner's
+screenshot, leaving 75.2% of the initial viewport below its top edge. At 390 by
+844 it starts at 164px; at 320 by 844, 178px. These measure space for gameplay,
+not a claim that every control fits without scrolling. The pitch scales on
+desktop while preserving four formation rows and 44px controls.
+
+Validation uses the built application and the existing automatic-gameweek
+browser fixture, extended locally to four viewport sizes in Chromium/WebKit.
+The fixture checks geometry, overflow, pitch containment, scouting recovery,
+profiles, captain selection, saving, reload and returning from Sponsors.
+No wallet, provider, production database or funds are used. Evidence is under
+`.quality-artifacts/five-layout/`; publication and hosted acceptance are separate.
+
 26 October 2026. The owner approved the refined interactive workspace and asked
 to implement it before moving on to an original logo and favicon.
 

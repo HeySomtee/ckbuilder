@@ -1,6 +1,202 @@
 .five-page [role='tabpanel'][hidden] {
   display: none;
 }
+/* Game-first layout: reserve the first screen for squad decisions. */
+.workspace:has(.five-page) > .topbar {
+  min-height: 48px;
+  padding-block: 2px;
+}
+.workspace:has(.five-page) > .network-strip {
+  min-height: 20px;
+  padding-block: 2px;
+}
+#main:has(.five-page) {
+  padding-top: 4px;
+}
+.five-page {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 24px;
+}
+.five-page > * {
+  grid-column: 1 / -1;
+}
+.five-page > .five-page-heading {
+  grid-column: 1;
+  margin: 0;
+  gap: 8px;
+}
+.five-page-heading .eyebrow {
+  display: none;
+}
+.five-page .five-page-heading h1 {
+  font-size: 24px;
+  letter-spacing: -1px;
+}
+.five-page > .five-workspace-tabs {
+  grid-column: 2;
+  justify-content: flex-end;
+  margin: 0;
+  border: 0;
+}
+.five-page > .five-round-bar {
+  gap: 12px;
+  padding: 0 0 2px;
+  border-top: 1px solid var(--five-line);
+  flex-wrap: nowrap;
+}
+.five-page .five-round-bar select {
+  min-height: 44px;
+  border-color: transparent;
+  background-color: transparent;
+  padding-left: 0;
+}
+#five-panel-team:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#five-panel-team > .five-sponsor-credit {
+  order: 1;
+  margin: 0;
+}
+.five-page .five-scout > .five-back-squad {
+  display: none;
+}
+.five-page .five-squad {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.five-page .five-budget {
+  order: -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border-color: #b8eb8940;
+  background: #172a20;
+}
+.five-page .five-budget > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin: 0;
+}
+.five-page .five-budget strong {
+  font-size: 23px;
+  color: var(--five-lime);
+}
+.five-page .five-budget > .btn {
+  width: auto;
+  padding-inline: 12px;
+}
+.five-page .five-budget #five-save-hint {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+}
+.five-page .five-budget > small {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+@media (min-width: 761px) {
+  .five-page .five-pitch {
+    height: clamp(320px, calc(100dvh - 390px), 460px);
+    grid-template-rows: repeat(4, minmax(0, 1fr));
+  }
+  .five-page .five-empty {
+    min-height: 60px;
+    margin-top: 0;
+  }
+  .five-page .five-pitch-player .five-jersey {
+    width: 48px;
+    height: 44px;
+  }
+  .five-page .five-player-list {
+    height: clamp(300px, calc(100dvh - 360px), 590px);
+    max-height: none;
+  }
+}
+@media (max-width: 760px) {
+  .workspace:has(.five-page) > .topbar {
+    padding-inline: 12px;
+    gap: 8px;
+  }
+  .workspace:has(.five-page) .account-actions {
+    gap: 6px;
+  }
+  .workspace:has(.five-page) .wallet-nav-summary .wallet-address-copy {
+    display: none;
+  }
+  .workspace:has(.five-page) .topbar .btn {
+    padding-inline: 8px;
+    white-space: nowrap;
+  }
+  .workspace:has(.five-page) .mobile-brand .streak-wordmark {
+    width: 90px;
+  }
+  .five-page {
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 0;
+  }
+  .five-page > .five-page-heading {
+    /* Keep the page heading accessible without repeating the game navigation. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .five-page > .five-workspace-tabs {
+    grid-column: 1;
+    justify-content: space-between;
+  }
+  .five-page > .five-page-heading:has(.five-test-indicator) {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+  }
+  .five-page > .five-round-bar {
+    gap: 6px;
+    font-size: 10px;
+  }
+  .five-page .five-round-bar > span:nth-child(2) {
+    display: none;
+  }
+  .five-page .five-round-bar > span:last-child {
+    width: auto;
+    margin-left: auto;
+    text-align: right;
+  }
+  .five-page .five-round-bar select {
+    max-width: 170px;
+    font-size: 11px;
+  }
+  .five-page .five-builder {
+    gap: 6px;
+  }
+  .five-page .five-builder-toolbar {
+    padding: 0 4px;
+  }
+  .five-page .five-builder-toolbar nav {
+    width: auto;
+    flex: 1;
+  }
+  .five-page .five-builder-toolbar > div {
+    display: flex;
+    padding-inline: 6px;
+  }
+  .five-page .five-scout > .five-back-squad {
+    display: inline-flex;
+    margin-bottom: 0;
+    top: 46px;
+  }
+}
 .five-workspace-tabs {
   display: flex;
   gap: 22px;

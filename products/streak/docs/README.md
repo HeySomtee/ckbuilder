@@ -1,5 +1,10 @@
 # Streak documentation
 
+29 October [Five game-first layout](delivery/five-workspace.md): compact controls
+leave 75.2% of the initial desktop viewport below the game start. Local CSS-only
+implementation and responsive gameplay checks are complete; publication remains
+separate from the earlier release below.
+
 29 October publication: `51d0849` is verified on GitHub `main`. Shared cell loaders,
 wallet fixes, branding/startup and event-driven Activity passed all 76 local
 gate checks. Hosted CI was intentionally skipped; hosted and physical-wallet

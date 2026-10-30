@@ -1,70 +1,76 @@
-# Production test plan: after release freeze
+# Production test plan: Friday, 30 October 2026
 
-Test on **[streakpitch.com](https://streakpitch.com)** with regular data and **testnet tCKB**. These tests are unperformed; the 28 October bets were missed. Finish the agreed development scope, verify and deploy the candidate, then choose fresh fixtures and gameweeks. Record times in **Lagos (UTC+1)**.
+Use **[streakpitch.com](https://streakpitch.com/season/)**, regular data and **testnet tCKB**. All times are **Lagos (UTC+1)**. Tests are not yet performed. Local review does not count as production acceptance.
 
-## Before scheduling
+## 1. Get ready today
 
-- [x] Finish the splash refinement and local PostgreSQL Activity launcher setup. Verified locally on 29 October.
-- [ ] Decide whether the pending linked-cell loading preview belongs in this release.
-- [ ] Pass the final candidate's required checks, deploy it and record the revision. Verify API, sponsor, settlement, Activity and Five rewards operation.
-- [ ] Freeze feature work during acceptance. Fix blocking defects when needed, then repeat affected tests on the replacement revision.
+- [ ] Review the local Five layout, then approve its push. After deployment, record the Render commit and confirm the new layout on production. Pause feature changes during testing.
+- [ ] Confirm hosted payments, settlement, Activity and Five rewards are working. Five currently reports funding available; that does not prove a payout completed.
+- [ ] Prepare six separate wallets/browser profiles with **5,000 tCKB each**. Keep the operator funded for market creation.
 
-## 1. Prepare six wallets
+| Wallet | Use                                                             |
+| ------ | --------------------------------------------------------------- |
+| A      | MetaMask admin; Home picks; sponsor; create Survivor            |
+| B      | Another MetaMask address; Draw picks; losing sponsor bid        |
+| C      | Zerion; Away picks                                              |
+| D      | Another Zerion address; mixed slip and rejected-signature retry |
+| E      | UTXO Global, or another MetaMask address; games and login       |
+| F      | MetaMask mobile; games, mobile checks and missed Survivor pick  |
 
-Use separate addresses/browser profiles. Fund each with **5,000 tCKB**.
+## 2. Place tonight's predictions by 20:00
 
-| Wallet | Role                                                  |
-| ------ | ----------------------------------------------------- |
-| A      | MetaMask admin: Home bets, sponsorship, host Survivor |
-| B      | MetaMask: Draw bets, sponsor refund                   |
-| C      | Zerion: Away bets                                     |
-| D      | Zerion: mixed slip/retry                              |
-| E      | UTXO Global, or another MetaMask address              |
-| F      | MetaMask mobile                                       |
+These fixtures are in the [hosted catalogue](https://streakpitch.com/api/direct/fixtures), checked on 30 October. Recheck that each is open before signing.
 
-The operator pays new-market setup. Planned payments including D: **7,131 tCKB plus fees**. Game entries are free.
+| Match today            | Kickoff | A: 100 Home | B: 100 Draw | C: 100 Away |
+| ---------------------- | ------- | ----------- | ----------- | ----------- |
+| Elversberg vs Mainz    | 20:30   | Elversberg  | Draw        | Mainz       |
+| Villarreal vs Espanyol | 21:00   | Villarreal  | Draw        | Espanyol    |
+| Lille vs Lens          | 21:05   | Lille       | Draw        | Lens        |
 
-## 2. Predictions: test wins and losses
+- [ ] A submits first, then B/C. Each three-pick invoice: **300 stake + 963 refundable storage**, plus fees. Wait for every pick to be accepted.
+- [ ] D: **100 on Elversberg** plus **100 on Chelsea vs Manchester United**, tomorrow at **13:30**. Check the latter has no existing market if testing first-bettor deployment. Reject before signing once, then retry. Invoice: **200 + 642 storage**, plus fees.
+- [ ] Close the slip, navigate, reload and check Activity. Signed payment progress must persist. Never resend an uncertain signed payment.
+- [ ] Check the first result from about **22:30**, later games from **23:00**. After actual settlement, collect a winning return and a losing pick's **321 tCKB storage**, less applicable fees. Leave another claim until tomorrow, reload and collect; duplicate collection must be blocked.
 
-On **each** match: A stakes **100 Home**, B **100 Draw**, C **100 Away**. Submit three picks per wallet; A first.
+All three outcomes give one winner and two losers per normally settled match. Voids do not count as win/loss coverage. Investigate unresolved reporting before **02:30 / 03:00 / 03:05 on 31 October**, respectively, under the six-hour reporting window.
 
-Choose **three open fixtures** after the release is ready. Record their names and kickoffs, use the same matches for A/B/C, and recheck availability before paying.
+Backups today: **Nice vs Rennes** and **Le Havre vs PSG**, both **19:00**, if still open. If tonight's games have closed, use tomorrow's Chelsea vs Manchester United and Manchester City vs Brighton (**16:00**). Kickoffs cross-checked with [LiveScore](https://www.livescore.mobi/football/2026-10-30/?tz=1) and [Lille's announcement](https://www.losc.fr/actualites/2026-10-28/arrete-prefectoral-avant-losc-rcl).
 
-- [ ] Check each three-pick invoice: **300 stake + 963 refundable storage**, plus fees. All picks must become accepted.
-- [ ] Compare B/C's preparation speed with A's.
-- [ ] Optional D: 100 on an existing market and 100 on a new one. Reject/retry once. Invoice: **200 + 642 storage**, plus fees.
-- [ ] Collect a winning return and a loser's **321 storage**. Leave one claim overnight, reload, collect and check duplicate collection is blocked.
+## 3. Save Five teams and sponsor GW9 today
 
-Three accepted outcomes give one winner/two losers on normal settlement. Voids or missing reports may leave cases untested. Investigate unresolved games within the six-hour reporting window from kickoff.
+**Picks and bids close Saturday, 31 October at 12:00 noon**, matching the [official FPL feed](https://fantasy.premierleague.com/api/bootstrap-static/) and [hosted Five round](https://streakpitch.com/api/five). Finish today.
 
-## 3. Streak Five: teams, auction and prizes
+- [ ] All six wallets save five eligible players within **40 credits**, with a captain. A/B use identical squads and captains; others differ. Edit a saved team, use Save changes and reload. Check player info and upcoming fixtures.
+- [ ] A bids **500**, B bids **1,000**, A adds **1,000**. A's total must be **1,500**. Add A's logo, website and description; leave B anonymous. Wait for confirmed bids.
+- [ ] Tomorrow at **12:00**, verify picks/new bids lock. The **12:30 confirmation cutoff** is not extra bidding time.
+- [ ] After auction resolution, absent a higher eligible bid, A wins and B receives **1,000 back**. Verify the refund transaction and approved sponsor display.
+- [ ] During **31 October to 2 November**, check points/captain doubling against the scoring rules. After finalization, verify qualifying awards, collect, reload and check duplicate-payment prevention.
 
-- [ ] Choose an open gameweek and record its official FPL deadline. Save teams early, within 40 credits, with captains. A/B use identical squads; others differ.
-- [ ] A bids **500**, B bids **1,000**, A adds **1,000**. A's combined bid should be **1,500**. Add sponsor details/logo for A; omit B's branding.
-- [ ] Picks and new bids must lock at that deadline. Bid early; confirmation checks can continue during the published reconciliation window.
-- [ ] Without higher eligible bids, A wins and B receives its **1,000 refund**. Verify the wallet transaction and approved sponsor display.
-- [ ] After official results and the round's finalization window, check points/captain doubling and prizes. Collect, reload, check duplicate-payment prevention and automatic next-gameweek opening.
+The hosted round cannot finalize before **4 November at 03:00**, and may wait longer for final provider data. Six entries at top 5% usually produce one qualifying place, plus ties. A/B only test a reward tie if they finish at the qualifying boundary. Check automatic next-gameweek opening; FPL currently lists GW10's deadline as **6 November, 19:30**.
 
-Six entries at the current top-5% rule normally produce one qualifying place, plus ties.
+## 4. Create and join Survivor today
 
-## 4. Survivor: progression and elimination
+Create two **free** competitions: **QA Progression** with complete EPL GW9 and GW10 rounds; **QA Finish** with GW9 only. Save each draft, then publish it to open entries. Select the supplied rounds; deadlines are automatic. GW9's expected lock is **31 October, 13:29**, one minute before the first kickoff. This differs from Five's noon deadline. Verify the displayed deadlines/rules as admin; the public logged-out endpoint intentionally hides available rounds.
 
-Choose a future complete round. Create **QA Progression** with that round and the next; **QA Finish** with the first round only. All wallets join both, free. Record the displayed pick deadlines.
+All six wallets join both:
 
-| Wallet | Pick                              |
-| ------ | --------------------------------- |
-| A / B  | Opposing teams in one fixture     |
-| C / D  | Opposing teams in another fixture |
-| E      | Another eligible team             |
-| F      | Deliberately leave the pick empty |
+| Wallet | GW9 pick                        | Match in Lagos time                |
+| ------ | ------------------------------- | ---------------------------------- |
+| A      | Chelsea                         | 31 Oct, 13:30 vs Manchester United |
+| B      | Manchester United               | Same match, opposing pick          |
+| C      | Manchester City                 | 31 Oct, 16:00 vs Brighton          |
+| D      | Brighton                        | Same match, opposing pick          |
+| E      | Brentford                       | 31 Oct, 16:00 vs Nottingham Forest |
+| F      | Join, deliberately make no pick | Missed-pick elimination            |
 
-- [ ] Verify picks lock at each displayed deadline. Check progression once that round's results are finalized.
-- [ ] Compare survivors, eliminations and F's missed pick with the published rules. Check used teams are disabled. Progression should open its next round when applicable; Finish should record its winners.
+- [ ] Tomorrow at the deadline, verify picks lock. After GW9 results finish, verify survival/elimination and F's missed pick against the rules.
+- [ ] Progression should offer its next round if multiple survivors remain; used teams must be disabled. Finish should declare winner(s). A sole survivor can finish early; an all-picked-teams-lose rescue can change progression. Record the branch that happened.
 
-If every actual pick loses, the rescue rule can advance those pickers. Paid entry and automatic Survivor prize payments are not implemented.
+GW9's last EPL fixture is Newcastle vs Everton on **2 November at 21:00**; the scheduled six-hour result window ends **3 November at 03:00**. Check progression then. Full-round progression is not a same-day test. Fixtures match the [Premier League schedule](https://www.premierleague.com/en/news/4675097/all-380-fixtures-for-season-202627-premier-league-season). Survivor paid entry and automatic prize payouts are not implemented.
 
-## 5. Check and record
+## 5. Keep a short result log
 
-- [ ] Desktop/mobile: navigate, reload and switch accounts. Login, entries and payment progress should persist; private data must not cross accounts. Check wallet warnings on the final domain and record any warning without bypassing it.
+- [ ] Desktop/mobile: navigate, reload and switch wallets. Login and entries should persist; another account's private data must not appear. Check cell loaders, visible failures and retry.
+- [ ] Record issues: **wallet letter, match/page, expected vs actual, screenshot, transaction hash and deployed revision**. Mark unseen branches **Not exercised**.
 
-Record failures with **wallet letter, match/page, expected result, screenshot and transaction hash**. Never resend an uncertain signed payment. Mark unseen cases as **Not exercised**. Local results do not count as production evidence.
+Planned payments including D and the auction: **7,131 tCKB plus fees**, including refundable storage and B's refundable bid. Game entries are free. Today's public read-only checks do not prove any production transaction succeeded.

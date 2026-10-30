@@ -1,5 +1,23 @@
 # Streak status
 
+30 October owner authorized GitHub publication of the Five layout/budget changes
+and today's production test plan. Focused browser verification passed; commit
+and push enforce scoped formatting, static policies and frontend checks. Hosted
+CI stays skipped. Confirm the deployed revision before production acceptance.
+
+30 October local review API is running on port 4100 with regular game data and
+the existing local database. The budget/save panel is now above the Five pitch;
+mobile player browsing also shows Bank. The updated [production test plan](docs/delivery/hosted-acceptance-plan.md)
+uses tonight's verified fixtures and the upcoming GW9 deadlines. Review and
+production tests remain pending; nothing new is pushed. Separate local signer,
+settlement and rewards workers were not started for this layout review.
+
+29 October Five layout correction: compact title/tabs and gameweek controls bring
+the game to 164px from the top at 1276 by 662, leaving 75.2% of the first screen
+for play. Sponsorship credit follows the builder; Sponsors retains bidding and
+details. Mobile retains squad navigation. Local CSS-only work, not yet published.
+See [workspace evidence](docs/delivery/five-workspace.md).
+
 29 October publication complete: `51d0849` is verified on GitHub `main`. The
 approved shared cell loaders, wallet compatibility, branding/startup and
 event-driven Activity release passed all 76 local gate checks at 15:37:59 UTC.

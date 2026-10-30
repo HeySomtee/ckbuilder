@@ -1,5 +1,43 @@
 # Streak work tracker
 
+30 October publication authorized: commit and push the compact Five layout,
+visible budget/save controls and dated production test plan. This release uses
+the CSS/documentation gate; eight focused browser journeys already passed.
+Keep GitHub CI skipped, preserve the unrelated root ignore-file edit, and leave
+local launchers/private state outside Git. Confirm the remote commit after push;
+Render deployment and production acceptance remain separate checks.
+
+30 October local review is running at `http://127.0.0.1:4100/season/?view=five`
+with the existing local database and regular game data. API/page reads return
+200; the local review launcher leaves hosted Telegram registration unchanged.
+This starts the API for layout review, not the separate signing/settlement or
+rewards workers. No production state or wallet payment was changed.
+
+The [production plan](delivery/hosted-acceptance-plan.md) now names tonight's
+Elversberg/Mainz, Villarreal/Espanyol and Lille/Lens fixtures, verified against
+the public hosted catalogue and independent schedules. Official FPL and the
+hosted round confirm GW9 closes 31 October at noon Lagos time. Survivor's
+provider-derived lock is separately 13:29. Six-wallet assignments and dated
+settlement/finalization checks remain unperformed. Owner review precedes push.
+
+30 October follow-up: the owner found the budget hidden below the pitch. The
+budget/save panel now precedes the pitch, with a persistent Bank readout in the
+mobile squad/player toolbar. Strict frontend build, formatting/static checks and
+eight Chromium/WebKit gameplay journeys pass, including first-screen budget
+visibility and pitch containment. Screenshots inspected. Preserve the compact
+game-first layout and all prior commitments. Publication is now authorized above.
+
+29 October Five layout correction implemented locally: the squad/player market
+starts at 164px on a 1276 by 662 viewport, leaving 75.2% of the initial screen
+for play. Compact shell/title/tabs/gameweek controls replace the stacked header;
+sponsorship credit follows the builder, with bidding and details in Sponsors.
+Mobile squad navigation remains intact. Strict frontend build, formatting/static
+policies and eight Chromium/WebKit layout/gameplay journeys pass, including
+selection, captain, save/reload and tab return. Screenshots inspected under
+`.quality-artifacts/five-layout/`. This CSS-only change is not committed or
+published. The published release and pending hosted acceptance below remain
+separate. See [workspace evidence](delivery/five-workspace.md).
+
 29 October release published: `51d0849` is verified on GitHub `main`, including
 the newly approved loaders across the dapp and the earlier wallet, Activity and
 branding/startup work. All 76 exact-tree local checks passed at 15:37:59 UTC;
