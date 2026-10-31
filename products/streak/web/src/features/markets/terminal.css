@@ -69,7 +69,8 @@
   min-width: 0;
 }
 .match-side-column .match-order {
-  position: static;
+  position: relative;
+  top: auto;
 }
 .match-room .market-chart {
   padding: 20px 22px;

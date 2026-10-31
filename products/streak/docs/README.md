@@ -1,5 +1,10 @@
 # Streak documentation
 
+30 October [mobile wallet and payment controls](delivery/mobile-payment-controls.md):
+compact two-row wallet header, closable finished updates and a draggable pending
+payment button that avoids other controls. Local verification is tracked separately
+from publication and physical-phone acceptance.
+
 29 October [Five game-first layout](delivery/five-workspace.md): compact controls
 leave 75.2% of the initial desktop viewport below the game start. Local CSS-only
 implementation and responsive gameplay checks are complete; publication remains

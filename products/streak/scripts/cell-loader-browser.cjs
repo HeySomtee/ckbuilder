@@ -168,7 +168,10 @@ async function geometry(page, selector = 'main') {
 }
 const span = (values) => Math.max(...values) - Math.min(...values);
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-async function samples(page, count = 6, delay = 160, selector) {
+// Connecting links deliberately hold still from 30% to 64% of their 2.4s
+// cycle (816ms). Observe longer than that hold so a valid animation cannot
+// appear frozen simply because the browser starts sampling in that phase.
+async function samples(page, count = 8, delay = 160, selector) {
   const values = [];
   for (let i = 0; i < count; i++) {
     values.push(await geometry(page, selector));
@@ -323,7 +326,7 @@ async function appStates(browser, base, width, name) {
         await f.page.locator('#streak-startup').waitFor({ state: 'detached' });
       }
       await structure(f.page, selector, [legacy ? 'orbit' : 'wave']);
-      moving(await samples(f.page, 5, 160, selector));
+      moving(await samples(f.page, 8, 160, selector));
       assert.ok(
         f.observations.api.includes(legacy ? '/api/me' : '/api/markets'),
         'The real loading UI remains visible while its specific API read is held.',

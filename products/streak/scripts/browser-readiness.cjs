@@ -88,7 +88,9 @@ async function accountReadFinished(page, label = 'Sign in with wallet') {
   await page.waitForFunction(
     (name) =>
       [...document.querySelectorAll('button')].some(
-        (button) => button.textContent.trim() === name && !button.disabled,
+        (button) =>
+          (button.getAttribute('aria-label') || button.textContent.trim()) === name &&
+          !button.disabled,
       ),
     label,
   );

@@ -256,10 +256,16 @@ try {
           isolated: true,
         });
       }
+      // Real child startup deadlines must not compete with the concurrent client suites.
+      const processTest = join(product, 'src/direct-host.test.cjs');
+      run('Direct host process lifecycle regression', ['--test', processTest], {
+        cwd: product,
+        isolated: true,
+      });
       const nodeTests = [
         ...discoverTests(join(product, 'src'), ['.test.mjs', '.test.cjs']),
         ...discoverTests(join(product, 'web'), ['.test.mjs']),
-      ];
+      ].filter((file) => file !== processTest);
       if (!nodeTests.length) throw new Error('Application Node regression tests are required.');
       run('Streak client runtime regression', ['--test', ...nodeTests], {
         cwd: product,

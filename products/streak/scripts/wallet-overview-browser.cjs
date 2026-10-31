@@ -136,7 +136,7 @@ async function main() {
         }
         await connect();
         const overview = page.getByRole('region', { name: 'My Account overview' });
-        await overview.getByText('1,234.00000001 tCKB', { exact: true }).waitFor();
+        await overview.getByText('1,234.00 tCKB', { exact: true }).waitFor();
         const address = await page.evaluate(() => window.syntheticEvm.address);
         await overview.getByRole('button', { name: 'Copy wallet address', exact: true }).click();
         assert.equal(
@@ -148,14 +148,14 @@ async function main() {
         await page.evaluate(async () => (await import('/overview.js')).balanceFailure(true));
         await overview.getByRole('button', { name: 'Refresh balance', exact: true }).click();
         await overview.getByText('Balance unavailable', { exact: true }).waitFor();
-        assert.equal(await overview.getByText('1,234.00000001 tCKB', { exact: true }).count(), 0);
+        assert.equal(await overview.getByText('1,234.00 tCKB', { exact: true }).count(), 0);
         await page.evaluate(async () => {
           const fixture = await import('/overview.js');
           fixture.balanceFailure(false);
           fixture.setCapacity('99900000000');
         });
         await overview.getByRole('button', { name: 'Refresh balance', exact: true }).click();
-        await overview.getByText('999 tCKB', { exact: true }).waitFor();
+        await overview.getByText('999.00 tCKB', { exact: true }).waitFor();
         phase = `${name} ${width}: Telegram connection`;
         account = {
           id: 'owner',
@@ -185,7 +185,11 @@ async function main() {
         account = { ...account, id: 'replacement-owner', username: 'nextfan' };
         await page.evaluate(async () => (await import('/overview.js')).refreshAccount());
         await overview.getByRole('button', { name: 'Connect Telegram', exact: true }).waitFor();
-        assert.equal(await overview.getByRole('link', { name: 'Open Telegram', exact: true }).count(), 0, 'A pending Telegram link never crosses accounts.');
+        assert.equal(
+          await overview.getByRole('link', { name: 'Open Telegram', exact: true }).count(),
+          0,
+          'A pending Telegram link never crosses accounts.',
+        );
         await overview.getByRole('button', { name: 'Connect Telegram', exact: true }).click();
         await overview.getByRole('link', { name: 'Open Telegram', exact: true }).waitFor();
         account = { ...account, telegramConnected: true, telegramUsername: 'streak_fan' };
@@ -215,14 +219,29 @@ async function main() {
           .getByRole('button', { name: 'Connect testnet wallet', exact: true })
           .waitFor();
         assert.equal(await page.locator('ccc-connector').count(), 0);
-        assert.equal(await overview.getByText('999 tCKB', { exact: true }).count(), 0);
+        assert.equal(await overview.getByText('999.00 tCKB', { exact: true }).count(), 0);
         await connect();
-        await overview.getByText('1,234.00000001 tCKB', { exact: true }).waitFor();
+        await overview.getByText('1,234.00 tCKB', { exact: true }).waitFor();
         await page.evaluate(() => window.syntheticEvm.replace());
         await overview
           .getByRole('button', { name: 'Connect testnet wallet', exact: true })
           .waitFor();
-        assert.equal(await overview.getByText('1,234.00000001 tCKB', { exact: true }).count(), 0);
+        assert.equal(await overview.getByText('1,234.00 tCKB', { exact: true }).count(), 0);
+        for (const status of ['resolved', 'discarded']) {
+          await page.evaluate(
+            async (status) => (await import('/overview.js')).showFinishedRecovery(status),
+            status,
+          );
+          const update = page.getByRole('complementary', { name: 'Payment progress' });
+          await update.waitFor();
+          assert.equal(
+            await update.evaluate((el) => el.classList.contains('is-pending')),
+            false,
+            'Finished recovery cannot become a permanent pending blob.',
+          );
+          await update.getByRole('button', { name: 'Dismiss update', exact: true }).click();
+          await update.waitFor({ state: 'hidden' });
+        }
         assert.deepEqual(errors, []);
         assert.deepEqual(external, []);
         assert.ok(

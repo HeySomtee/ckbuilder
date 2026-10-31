@@ -203,7 +203,7 @@ async function main() {
         });
         phase = `${engineName} ${width}: discovery and draft`;
         await reads.goto(base + '/season/?market=m-api-football-900003');
-        await accountReadFinished(page, 'Sign out');
+        await accountReadFinished(page, 'Disconnect');
         await page.getByRole('heading', { name: 'Arsenal vs Chelsea', exact: true }).waitFor();
         await page.getByRole('heading', { name: 'Who takes it?', exact: true }).waitFor();
         assert.equal(requests.includes('/qa-sponsored-fixture.js'), false);
@@ -229,7 +229,7 @@ async function main() {
         await slip.waitFor({ state: 'hidden' });
         // The current slip pays atomically through v4. Older v3 entry/recovery retains its own route.
         await reads.goto(base + '/season/?direct=m-api-football-900003');
-        await accountReadFinished(page, 'Sign out');
+        await accountReadFinished(page, 'Disconnect');
         await page.getByRole('region', { name: 'Open a market with your prediction' }).waitFor();
         await page.getByRole('textbox', { name: 'Contract stake in tCKB' }).fill('125.00000001');
         await page
@@ -319,7 +319,7 @@ async function main() {
           }, rejectFirst);
           await page
             .getByLabel('Wallet summary')
-            .getByText('6,000 tCKB', { exact: true })
+            .getByText('6,000.00 tCKB', { exact: true })
             .waitFor();
         }
         await connect(true);
@@ -412,7 +412,7 @@ async function main() {
         await page.getByRole('button', { name: /Payments & recovery/ }).click();
         await page.getByRole('article', { name: 'Sponsored prediction transaction' }).waitFor();
         await reads.reload();
-        await accountReadFinished(page, 'Sign out');
+        await accountReadFinished(page, 'Disconnect');
         await page.locator('.activity-recovery-options > summary').click();
         await page.getByRole('button', { name: 'Recover from chain', exact: true }).click();
         await connect(false);

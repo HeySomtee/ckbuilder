@@ -1,5 +1,8 @@
 # Production test plan: Friday, 30 October 2026
 
+Historical plan. Use the [31 October FPL-first checklist](hosted-acceptance-2026-10-31.md)
+for today's funded-wallet campaign and noon Five deadline.
+
 Use **[streakpitch.com](https://streakpitch.com/season/)**, regular data and **testnet tCKB**. All times are **Lagos (UTC+1)**. Tests are not yet performed. Local review does not count as production acceptance.
 
 **Campaign started, 30 October at 09:51 Lagos.** Read-only preflight: production
@@ -10,10 +13,12 @@ available. Five GW9 is open with funding available, regular data and the expecte
 or independently identify the hosted backend revision. Next: Wallet A's three
 Home picks. No wallet submission or acceptance has been reported yet.
 
-**Current blocker:** F's Zerion in-app browser connects and shows its balance,
-but sign-in reports "No connected wallet". Authentication recovery is being
-tested locally. Do not mark F passed until the deployed fix is retested on the
-phone; no wallet payment is needed to verify sign-in and reload first.
+**Wallet checkpoint:** The owner confirms Zerion Android sign-in works after
+updating the wallet app. Navigation, reload and payment acceptance remain open.
+A separate Disconnect/account-switching correction is being verified locally;
+after publication, check A to B in MetaMask and C to D in Zerion, then F on
+mobile. The displayed address and private Activity must match the new account.
+Do not mark these checks passed from synthetic browser evidence.
 
 ## 1. Get ready today
 

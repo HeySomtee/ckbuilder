@@ -650,6 +650,7 @@ export function BatchCheckout({
         <PaymentProgress
           operationKey={currentRecord?.hash ?? identityKey}
           stage={stage}
+          terminal={terminal}
           count={currentRecord?.offer.lines.length ?? snapshot.draft.picks.length}
           hidden={active || (!!currentRecord && terminal && dismissedHash === currentRecord.hash)}
           onOpen={onOpen}

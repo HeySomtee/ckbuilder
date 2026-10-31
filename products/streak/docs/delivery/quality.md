@@ -26,6 +26,11 @@ Full tests are retained. Run `npm run quality:major` for major runtime changes a
 
 ## Reproducible setup
 
+The real child-process lifecycle suite runs as its own required step before the
+concurrent client suites. This prevents unrelated Node test processes from
+consuming its startup deadline; its startup, worker and shutdown assertions and
+timeouts remain unchanged. A standalone diagnostic pass is not a release receipt.
+
 Survivor adds the discovered `src/survivor.test.ts` domain suite, `scripts/survivor-postgres.cjs` in the required PostgreSQL lane and `scripts/survivor-browser.cjs` in the browser lane. Database tests create and remove only their own random schema in a loopback `_test` database. Browser tests use synthetic fixtures and the production rule service, without any wallet, provider or chain network calls.
 
 Use the repository-pinned **Node 24.14.0 and npm 11.9.0**, the committed lockfiles and `npm ci`. Root and Streak installs are distinct dependency contexts; follow the root scripts rather than hand-editing installed packages. [npm ci](https://docs.npmjs.com/cli/v11/commands/npm-ci/) is the clean-install contract.

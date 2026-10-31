@@ -466,7 +466,8 @@
   }
   .match-order {
     order: -1;
-    position: static;
+    position: relative;
+    top: auto;
     width: 100%;
   }
   .match-analysis {

@@ -11,10 +11,9 @@ import {
 } from '../../lib/wallet';
 import { directHref, followDirect } from '../../lib/direct-route';
 import { useNow } from '../../lib/use-now';
-import { displayShannons } from '../predictions/draft';
 import { connectTelegram, disconnectTelegram, getAccount } from './api';
 import type { Account, TelegramLink } from './api';
-import { shortWalletAddress } from './data';
+import { displayWalletBalance, shortWalletAddress } from './data';
 import { useWalletBalance } from './wallet-balance';
 import './wallet.css';
 
@@ -71,7 +70,7 @@ function capacityLabel(value: bigint | undefined, failed: boolean, connected: bo
   return failed
     ? 'Balance unavailable'
     : value !== undefined
-      ? `${displayShannons(value)} tCKB`
+      ? `${displayWalletBalance(value)} tCKB`
       : connected
         ? 'Checking balance...'
         : 'Reconnect to view';
@@ -247,6 +246,8 @@ export interface WalletOverviewProps extends WalletProps {
   signInPending?: boolean;
   onActivity: () => void;
   onRecovery: () => void;
+  onDisconnect: () => void;
+  disconnectPending?: boolean;
   busy?: boolean;
 }
 export function WalletOverview({
@@ -256,6 +257,8 @@ export function WalletOverview({
   signInPending = false,
   onActivity,
   onRecovery,
+  onDisconnect,
+  disconnectPending = false,
   busy = false,
 }: WalletOverviewProps) {
   const { wallet, connection, balance, address } = useWalletBalance(account, accountReady);
@@ -296,9 +299,11 @@ export function WalletOverview({
               <button
                 className="quiet wallet-disconnect"
                 disabled={busy}
-                onClick={() => disconnectWallet()}
+                onClick={onDisconnect}
+                aria-busy={disconnectPending}
               >
-                Disconnect wallet
+                {disconnectPending && <CellLoader variant="orbit" />}
+                {disconnectPending ? 'Disconnecting…' : 'Disconnect wallet'}
               </button>
             )}
           </div>

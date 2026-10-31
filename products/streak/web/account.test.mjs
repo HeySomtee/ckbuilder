@@ -4,6 +4,7 @@ import {
   parseAccount,
   parseTelegramLink,
   shortWalletAddress,
+  displayWalletBalance,
 } from './src/features/account/data.ts';
 
 const user = {
@@ -12,6 +13,13 @@ const user = {
   walletAddress: 'ckt1test',
   telegramConnected: false,
 };
+test('Wallet balance displays two decimals rounded down without floating point', () => {
+  assert.equal(displayWalletBalance(0n), '0.00');
+  assert.equal(displayWalletBalance(999_999n), '0.00');
+  assert.equal(displayWalletBalance(123_499_999_999n), '1,234.99');
+  assert.equal(displayWalletBalance(123_400_000_001n), '1,234.00');
+  assert.equal(displayWalletBalance(900719925474099199999999n), '9,007,199,254,740,991.99');
+});
 test('Account Telegram state is explicit and malformed status cannot enable connection', () => {
   assert.deepEqual(parseAccount({ user }), {
     ...user,

@@ -35,6 +35,13 @@ The owner approved the Streak UI and architecture on **15 October 2026**, includ
 
 ## Design and motion
 
+30 October mobile payment correction: pending payment notifications cannot be
+dismissed. Use the shared cell loader in a compact, expandable button on mobile,
+with drag-to-corner placement that avoids the wallet header, navigation, saved
+slip and dialogs. Preserve monitoring while minimized and yield to open modal
+dialogs. Finished or unsent updates can close without deleting recovery records.
+Keep the mobile wallet header in two compact rows with a single-line account action.
+
 Owner approval, 28 October 2026: implement the event-driven wallet Activity index.
 Read its [delivery record](docs/delivery/event-driven-activity.md). Normal history
 reads must not require an active signer or chain scanning. Preserve durable event
@@ -79,6 +86,12 @@ Wallet compatibility is specific to a journey. A wallet appearing in CCC's choos
 - Follow [engineering conventions](docs/engineering/conventions.md) and the [operations runbook](docs/operations/runbook.md). Test failure and recovery paths, including interrupted submissions and restarts, rather than only successful screenshots.
 
 ## Delivery and evidence
+
+Owner exception, 31 October 2026: publish the already prepared wallet/mobile
+release immediately without further automated tests before the Five deadline.
+Skip local commit/push hooks for this release only and record incomplete gate
+coverage honestly. Hosted CI stays skipped. This does not waive later verification
+or change the normal release policy for subsequent work.
 
 Owner correction, 17 October 2026: the hour-long hero release showed that running the full suite before both commit and push is disproportionate for small changes. Use the scoped hook policy above. Preserve all full-suite tests and the explicit major/release commands; do not interpret reduced hook scope as proof that unrun browser or contract lanes passed.
 

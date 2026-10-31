@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCompetitions, getMarkets, outcomes } from '../features/markets/api';
 import type { Market, MarketSort } from '../features/markets/api';
-import { getAccount, signIn, signOut } from '../features/account/api';
+import { getAccount, signIn, disconnectAccount } from '../features/account/api';
 import { WalletOverview, WalletSummary } from '../features/account/wallet-ui';
 import { Icon } from '../components/icon';
 import { DayNavigation, useCalendarToday } from '../features/markets/day-navigation';
@@ -333,19 +333,21 @@ export function App() {
       client.removeQueries({ queryKey: ['private'] });
       client.removeQueries({ queryKey: ['direct-private'] });
       client.setQueryData(['account'], authenticated);
+      logout.reset();
     },
   });
   const logout = useMutation({
-    mutationFn: signOut,
+    mutationFn: () =>
+      disconnectAccount(async () => {
+        await client.cancelQueries({ queryKey: ['account'] });
+        await client.cancelQueries({ queryKey: ['private'] });
+        await client.cancelQueries({ queryKey: ['direct-private'] });
+        client.removeQueries({ queryKey: ['private'] });
+        client.removeQueries({ queryKey: ['direct-private'] });
+        client.setQueryData(['account'], null);
+        login.reset();
+      }),
     retry: false,
-    onSuccess: async () => {
-      await client.cancelQueries({ queryKey: ['account'] });
-      await client.cancelQueries({ queryKey: ['private'] });
-      await client.cancelQueries({ queryKey: ['direct-private'] });
-      client.removeQueries({ queryKey: ['private'] });
-      client.removeQueries({ queryKey: ['direct-private'] });
-      client.setQueryData(['account'], null);
-    },
   });
   const feed = useInfiniteQuery({
     enabled: !marketId && !directRoute && !section,
@@ -381,31 +383,38 @@ export function App() {
     ).values(),
   ].sort((a, b) => a.name.localeCompare(b.name));
   const pools = usePools(markets.map((m) => m.matchId));
-  const accountAction = account.data ? (
-    <button
-      className="quiet"
-      onClick={() => logout.mutate()}
-      disabled={logout.isPending}
-      aria-busy={logout.isPending}
-    >
-      {logout.isPending && <CellLoader variant="orbit" />}
-      {logout.isPending ? 'Signing out…' : 'Sign out'}
-    </button>
-  ) : (
-    <button
-      className="connect"
-      onClick={() => login.mutate()}
-      disabled={login.isPending || account.isPending}
-      aria-busy={login.isPending || account.isPending}
-    >
-      {login.isPending || account.isPending ? (
-        <CellLoader variant="orbit" />
-      ) : (
-        <Icon name="wallet" />
-      )}
-      {login.isPending ? signInStage : 'Sign in with wallet'}
-    </button>
-  );
+  const accountAction =
+    account.data || logout.isPending || logout.isError ? (
+      <button
+        className="quiet"
+        onClick={() => logout.mutate()}
+        disabled={logout.isPending || login.isPending}
+        aria-busy={logout.isPending}
+      >
+        {logout.isPending && <CellLoader variant="orbit" />}
+        {logout.isPending ? 'Disconnecting…' : 'Disconnect'}
+      </button>
+    ) : (
+      <button
+        className="connect"
+        onClick={() => login.mutate()}
+        disabled={login.isPending || logout.isPending || account.isPending}
+        aria-busy={login.isPending || account.isPending}
+        aria-label={login.isPending ? signInStage : 'Sign in with wallet'}
+      >
+        {login.isPending || account.isPending ? (
+          <CellLoader variant="orbit" />
+        ) : (
+          <Icon name="wallet" />
+        )}
+        <span className="account-action-full">
+          {login.isPending ? signInStage : 'Sign in with wallet'}
+        </span>
+        <span className="account-action-mobile" aria-hidden="true">
+          {login.isPending ? 'Signing in…' : 'Sign in'}
+        </span>
+      </button>
+    );
   return (
     <>
       <a className="skip" href="#main">
@@ -467,14 +476,30 @@ export function App() {
         </div>
         <main id="main" tabIndex={-1}>
           {(login.isError || logout.isError || account.isError) && (
-            <div className="notice error" role="alert">
-              {logout.isError
-                ? 'Sign-out failed. Your session may still be active. Please retry.'
-                : (login.error?.message ?? 'Unable to check your session.')}
-              {account.isError && (
-                <button onClick={() => void account.refetch()}>Retry account</button>
-              )}
-            </div>
+            <Notice
+              key={`${login.submittedAt}:${logout.submittedAt}`}
+              title={
+                logout.isError
+                  ? 'Disconnect needs a retry'
+                  : login.isError
+                    ? 'Sign-in was not completed'
+                    : 'Unable to check your session'
+              }
+              tone="attention"
+              dismissible
+              actions={
+                account.isError ? (
+                  <button onClick={() => void account.refetch()}>Retry account</button>
+                ) : undefined
+              }
+            >
+              {logout.isError ? logout.error.message : login.error?.message}
+            </Notice>
+          )}
+          {directRoute !== 'wallet' && wallet.notice?.startsWith('Disconnected from Streak.') && (
+            <p className="notice" role="status">
+              {wallet.notice}
+            </p>
           )}
           {selectionNotice && (
             <p
@@ -495,8 +520,10 @@ export function App() {
                 key={`survivor:${account.data?.id ?? 'public'}:${wallet.revision}`}
                 account={account.data ?? null}
                 accountReady={!account.isPending}
-                onSignIn={() => login.mutate()}
-                signInPending={login.isPending}
+                onSignIn={() => {
+                  if (!logout.isPending) login.mutate();
+                }}
+                signInPending={login.isPending || logout.isPending}
               />
             </Suspense>
           )}
@@ -506,8 +533,10 @@ export function App() {
                 key={`five:${account.data?.id ?? 'public'}`}
                 account={account.data ?? null}
                 accountReady={!account.isPending}
-                onSignIn={() => login.mutate()}
-                signInPending={login.isPending}
+                onSignIn={() => {
+                  if (!logout.isPending) login.mutate();
+                }}
+                signInPending={login.isPending || logout.isPending}
               />
             </Suspense>
           )}
@@ -515,10 +544,15 @@ export function App() {
             <WalletOverview
               account={account.data ?? null}
               accountReady={!account.isPending}
-              onSignIn={() => login.mutate()}
-              signInPending={login.isPending}
+              onSignIn={() => {
+                if (!logout.isPending) login.mutate();
+              }}
+              signInPending={login.isPending || logout.isPending}
               onActivity={navigateActivity}
               onRecovery={navigateActivity}
+              onDisconnect={() => logout.mutate()}
+              disconnectPending={logout.isPending}
+              busy={logout.isPending || login.isPending}
             />
           )}
           {directEntry &&
@@ -803,8 +837,10 @@ export function App() {
         onAddMatches={() => navigateMarket(null)}
         account={account.data ?? null}
         accountReady={!account.isPending}
-        onSignIn={() => login.mutate()}
-        signInPending={login.isPending}
+        onSignIn={() => {
+          if (!logout.isPending) login.mutate();
+        }}
+        signInPending={login.isPending || logout.isPending}
         signInStage={signInStage}
         signInError={login.error?.message}
         accountKey={

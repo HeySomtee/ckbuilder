@@ -1,5 +1,90 @@
 # Streak work tracker
 
+31 October owner override: publish all prepared product fixes immediately and
+defer further automated tests because the Five deadline is approaching. The full
+gate did not finish; its last log stopped during Five browser checks on 30 October.
+Commit/push hooks are explicitly skipped for this release only, with hosted CI
+also skipped. This is not a successful full-gate receipt. Resume full verification
+after the urgent production campaign. All six wallets are funded, per owner.
+At 10:44 Lagos, hosted Five and official FPL both confirmed GW9 closes at noon;
+the round was open with funding available and zero sponsor bids. Use the
+[31 October checklist](delivery/hosted-acceptance-2026-10-31.md), saving every team first.
+
+30 October release-gate follow-up: balance labels required updating the sponsored
+wallet browser expectation to two decimals. Two full reruns then reproduced the
+existing healthy-child startup test failing under concurrent Node test load; its
+isolated suite passed. Run that same process-lifecycle suite as a dedicated gate
+step before concurrent client tests, preserving every assertion and deadline.
+The exact-candidate gate must pass before commit or push. Unrelated `.gitignore`
+and `todo` bytes are temporarily preserved under the ignored
+`.quality-artifacts/oct30-mobile-release-preserved/` directory; restore them after
+the release hooks finish. No production data or signing keys are used by the gate.
+
+30 October publication authorized for the wallet-disconnect and mobile payment
+controls. Include the owner's follow-up: wallet balances show exactly two decimal
+places rounded down, using integer shannons for display while transaction values
+retain full precision. Run the complete local release gate for this candidate,
+commit the intended files and push with hosted CI skipped. Preserve unrelated
+ignore-file changes and private local state. Physical-wallet acceptance remains due.
+
+30 October local review opened on owner request: rebuilt frontend is served at
+`http://127.0.0.1:4100/season/`, verified HTTP 200 and opened in the default
+browser. The existing API was reused; no signing or settlement worker was started.
+Mobile header and draggable pending-payment controls are implemented with
+independent recovery review. Four wallet-header journeys, four wallet-overview
+journeys, two placement tests, frontend build and lint pass. All six final checkout
+journeys and the static lane pass, including WebKit phone drag and no-overflow
+checks. Evidence: `.quality-artifacts/oct30-mobile-tracker-browser-final.log`
+and `.quality-artifacts/oct30-mobile-controls-static.log`. WebKit exposed a decorative card
+border escaping a static container; relative positioning now contains it without
+clipping the page. Full release verification, publication and physical acceptance
+remain separate. See [implementation](delivery/mobile-payment-controls.md).
+
+30 October mobile header and payment notifications requested: use a deliberate
+two-row mobile wallet layout, with a single-line sign-in/disconnect action.
+Provide a real close action on collapsed and expanded failed/successful updates.
+Owner refinement: pending payments cannot be dismissed. On mobile, minimize them
+to a small animated three-cell button that expands when tapped. Further steering:
+make the button draggable to each corner without covering other modal controls.
+Snap inside safe screen bounds and avoid the header, slip dock and navigation;
+temporarily yield to modal dialogs and restore when they close. Keep drafts,
+signed recovery records and background monitoring intact. Make transient sign-in
+errors dismissible too. Verify mobile
+layout, dismissal, new payment/status updates and keyboard behavior before release.
+The verified wallet-switching correction below remains local and uncommitted.
+
+30 October wallet-switching correction completed locally: Season's header and
+My Account share Disconnect, immediately clear identity/private caches and CCC's
+remembered provider, request permission release and select an account on explicit
+reconnect where supported. Failed logout remains suppressed across reloads;
+cancelled account selection cannot reuse the old account. Signed-payment recovery
+is preserved. Independent identity review accepted. All 76 major checks passed
+at 13:59:26 UTC, including supported/unsupported permissions, rejection, stalled
+revocation, server failures and two-account switching in Chromium/WebKit.
+Evidence: `.quality-artifacts/oct30-disconnect-major-final.json` and its log.
+Resume with publication, then physical MetaMask/Zerion/native-wallet switching,
+reload and the existing hosted campaign. No physical switching or hosted fix is
+claimed. Changes remain uncommitted; no new Render setting is needed.
+
+Cleanup checkpoint: stopping the owned disposable `streak-quality-postgres`
+container was approved on retry, but Docker has not returned. The stop command
+remains pending; confirm that container is stopped when Docker responds. Do not
+restart Docker or stop the separate developer database to force cleanup.
+
+30 October physical Zerion retry: the owner reports sign-in now works after
+updating the Zerion Android app. Record this as owner-reported physical success,
+not synthetic evidence or proof of a particular provider bug. Old/new app
+versions were not supplied. No further runtime fix is warranted by this report.
+Next campaign checks are session persistence across navigation/reload, then F's
+payment approval and resulting Activity status; these remain unverified.
+
+30 October physical retry after `916e91e`: MetaMask connects, but Zerion Android's
+in-app browser still reports no active connection. The owner confirmed this is
+a created/imported wallet capable of sending, not a watch-only address. The
+previous patch improved error visibility but did not resolve this physical
+wallet failure. Investigate the specific provider/signing step before another
+runtime change. Preserve working MetaMask behavior and the production campaign.
+
 30 October publication authorized: commit and push the verified mobile sign-in
 patch and campaign notes with hosted CI skipped. Runtime and regression sources
 are unchanged since the 76-check pass; release-note formatting and static checks

@@ -722,9 +722,9 @@ async function main() {
         { name: 'streak_sid', value: await createSession('season-user'), url: base },
       ]);
       await recoveryReads.reload();
-      await page.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Disconnect', exact: true }).waitFor();
       await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
-      await accountReadFinished(page, 'Sign out');
+      await accountReadFinished(page, 'Disconnect');
       await page.route('**/api/logout', (route) =>
         route.fulfill({
           status: 503,
@@ -732,13 +732,15 @@ async function main() {
           body: '{"error":"Unavailable"}',
         }),
       );
-      await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+      await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
       await page
-        .getByText('Sign-out failed. Your session may still be active. Please retry.')
+        .getByText(
+          'Wallet disconnected locally. The server session could not be closed. Retry Disconnect.',
+        )
         .waitFor();
-      await page.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Disconnect', exact: true }).waitFor();
       await page.unroute('**/api/logout');
-      await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+      await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
       await page.getByRole('button', { name: 'Sign in with wallet' }).waitFor();
       // A delayed former filter may not replace the user's newer filter.
       let release;
@@ -795,7 +797,7 @@ async function main() {
             ),
         );
       }, walletAddress);
-      await page.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Disconnect', exact: true }).waitFor();
       assert.equal(await page.locator('ccc-connector').count(), 0);
       let releaseAccount;
       let accountStarted;
@@ -826,14 +828,14 @@ async function main() {
           setTimeout(() => reject(new Error('Account refresh did not start')), 5000),
         ),
       ]);
-      await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+      await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
       await page.getByRole('button', { name: 'Sign in with wallet' }).waitFor();
       releaseAccount();
       await page.unroute('**/api/me');
       await page.clock.resume();
       await page.waitForTimeout(100);
       assert.equal(
-        await page.getByRole('button', { name: 'Sign out', exact: true }).count(),
+        await page.getByRole('button', { name: 'Disconnect', exact: true }).count(),
         0,
         'A late account response cannot revive a signed-out account.',
       );

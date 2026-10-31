@@ -1,4 +1,8 @@
 .payment-progress {
+  --payment-safe-top: env(safe-area-inset-top, 0px);
+  --payment-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --payment-safe-left: env(safe-area-inset-left, 0px);
+  --payment-safe-right: env(safe-area-inset-right, 0px);
   position: fixed;
   left: 196px;
   bottom: 18px;
@@ -16,6 +20,7 @@
   display: none;
 }
 .payment-progress-toggle {
+  min-width: 0;
   width: 100%;
   min-height: 76px;
   display: flex;
@@ -26,6 +31,27 @@
   background: transparent;
   padding: 14px;
   border-radius: 16px;
+}
+.payment-progress-row {
+  display: flex;
+  align-items: center;
+  padding-right: 6px;
+}
+.payment-progress-dismiss {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+}
+.payment-progress-dismiss:hover {
+  color: var(--text);
+  background: #ffffff08;
 }
 .payment-progress-toggle:hover {
   background: #ffffff05;
@@ -124,5 +150,45 @@
     left: 12px;
     bottom: calc(172px + env(safe-area-inset-bottom));
     width: min(390px, calc(100vw - 24px));
+  }
+  .payment-progress.is-pending:not(.is-expanded) {
+    left: auto;
+    right: 16px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+  }
+  .payment-progress.is-pending:not(.is-expanded) .payment-progress-row {
+    padding: 0;
+  }
+  .payment-progress.is-pending:not(.is-expanded) .payment-progress-toggle {
+    touch-action: none;
+    user-select: none;
+    cursor: grab;
+    width: 56px;
+    height: 56px;
+    min-height: 56px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+  .payment-progress.is-pending:not(.is-expanded) .payment-progress-toggle:active {
+    cursor: grabbing;
+  }
+  .payment-progress.is-pending:not(.is-expanded) .payment-orbit {
+    width: 40px;
+    height: 40px;
+    border: 0;
+  }
+  .payment-progress.is-pending:not(.is-expanded) .payment-progress-copy {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .payment-progress.is-pending:not(.is-expanded) .payment-progress-chevron {
+    display: none;
   }
 }

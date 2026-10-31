@@ -2,14 +2,39 @@ import { ApiError, isRecord, request, text } from '../../lib/http';
 import {
   assertActiveWallet,
   assertWalletAccount,
+  blockWalletSelection,
   chooseWallet,
-  disconnectWallet,
+  disconnectSelectedWallet,
   getWalletState,
 } from '../../lib/wallet';
 import { parseAccount, parseTelegramLink } from './data';
 import type { Account, TelegramLink } from './data';
 export type { Account, TelegramLink } from './data';
+const DISCONNECTED_SESSION = 'streak-session-disconnected';
+let sessionDisconnected = false;
+let authBusy = false;
+function isSessionDisconnected(): boolean {
+  try {
+    return sessionDisconnected || localStorage.getItem(DISCONNECTED_SESSION) === '1';
+  } catch {
+    return sessionDisconnected;
+  }
+}
+function suppressSession(disconnected: boolean) {
+  sessionDisconnected = disconnected;
+  try {
+    if (disconnected) localStorage.setItem(DISCONNECTED_SESSION, '1');
+    else localStorage.removeItem(DISCONNECTED_SESSION);
+  } catch {
+    /* Local state still protects this page when storage is unavailable. */
+  }
+}
 export async function getAccount(signal: AbortSignal): Promise<Account | null> {
+  if (isSessionDisconnected()) return null;
+  const account = await readAccount(signal);
+  return isSessionDisconnected() ? null : account;
+}
+async function readAccount(signal: AbortSignal): Promise<Account | null> {
   try {
     const data = await request('/me', signal);
     return parseAccount(data);
@@ -24,17 +49,39 @@ export async function connectTelegram(): Promise<TelegramLink> {
 export async function disconnectTelegram(): Promise<Account> {
   return parseAccount(await request('/integrations/telegram/disconnect', undefined, {}));
 }
-export async function signOut(): Promise<void> {
-  await request('/logout', undefined, {});
-  disconnectWallet('Signed out. Connect your wallet when you are ready.');
+export async function disconnectAccount(onLocalDisconnect?: () => Promise<void>): Promise<void> {
+  if (authBusy) throw Error('Finish or cancel the current wallet request before disconnecting.');
+  authBusy = true;
+  suppressSession(true);
+  blockWalletSelection(true);
+  try {
+    const results = await Promise.allSettled([
+      disconnectSelectedWallet(),
+      request('/logout', undefined, {}),
+      onLocalDisconnect?.(),
+    ]);
+    if (results.some((result) => result.status === 'rejected'))
+      throw Error(
+        'Wallet disconnected locally. The server session could not be closed. Retry Disconnect.',
+      );
+  } finally {
+    blockWalletSelection(false);
+    authBusy = false;
+  }
 }
 export async function signIn(onProgress?: (label: string) => void): Promise<Account> {
+  if (authBusy) throw Error('A wallet connection request is already in progress. Please wait.');
+  authBusy = true;
   let stage = 'Connecting wallet';
   try {
-    return await performSignIn((label) => {
+    // A failed logout cannot restore the old cookie or become a new account.
+    if (isSessionDisconnected()) await request('/logout', undefined, {});
+    const account = await performSignIn((label) => {
       stage = label;
       onProgress?.(label);
     });
+    suppressSession(false);
+    return account;
   } catch (error: unknown) {
     const message =
       error instanceof Error
@@ -49,6 +96,8 @@ export async function signIn(onProgress?: (label: string) => void): Promise<Acco
         'Your wallet reports no active connection. Reconnect this site inside your wallet, then try signing in again.',
       );
     throw new Error(message.trim() || `${stage} did not finish. Please try signing in again.`);
+  } finally {
+    authBusy = false;
   }
 }
 async function performSignIn(onProgress: (label: string) => void): Promise<Account> {
@@ -96,7 +145,7 @@ async function performSignIn(onProgress: (label: string) => void): Promise<Accou
   await assertActiveWallet(connection);
   await request('/auth/verify', undefined, { address, challengeId, signature });
   onProgress('Checking sign-in session');
-  const account = await getAccount(new AbortController().signal);
+  const account = await readAccount(new AbortController().signal);
   if (!account)
     throw new Error(
       'Your sign-in session was not retained. Allow cookies for this site in your wallet browser, then try again.',

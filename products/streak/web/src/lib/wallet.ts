@@ -1,4 +1,5 @@
 import type { ccc } from '@ckb-ccc/connector';
+import { releaseWalletPermission, selectWalletAccount } from './wallet-permissions';
 
 export interface ActiveWallet {
   readonly signer: ccc.Signer;
@@ -14,10 +15,20 @@ interface WalletState {
 // Only a prior explicit selection permits silent restoration. Public metadata
 // is a hint, never proof of account access or permission to sign.
 const REMEMBERED_WALLET = 'streak-wallet-selection-v1';
+const SELECT_ACCOUNT = 'streak-wallet-select-account';
+let selectAccount = false;
+let releasing: Promise<void> | undefined;
+let selectionBlocked = false;
+export function blockWalletSelection(blocked: boolean): void {
+  selectionBlocked = blocked;
+}
 let restoration: Promise<void> | undefined;
 function forgetWallet() {
   try {
     localStorage.removeItem(REMEMBERED_WALLET);
+    // CCC also remembers a provider/signer. Leaving it behind lets a newly
+    // mounted chooser silently reuse the wallet that Streak just disconnected.
+    localStorage.removeItem('ccc-connection-info');
   } catch {
     /* Storage can be disabled. */
   }
@@ -50,9 +61,51 @@ export function disconnectWallet(
   publish(null, notice);
 }
 
+/** User-requested disconnect, separate from automatic account-change invalidation. */
+export async function disconnectSelectedWallet(): Promise<void> {
+  const signer = state.connection?.signer;
+  selectAccount = true;
+  try {
+    localStorage.setItem(SELECT_ACCOUNT, '1');
+  } catch {
+    /* The in-memory flag still prevents reuse in this page. */
+  }
+  disconnectWallet('Wallet disconnected. Choose a wallet to connect again.');
+  if (!signer) return;
+  let revision = state.revision;
+  const pending = releaseWalletPermission(signer).then((notice) => {
+    if (state.revision === revision)
+      publish(null, notice ?? 'Wallet disconnected. Choose a wallet to connect again.');
+  });
+  releasing = pending;
+  void pending.finally(() => {
+    if (releasing === pending) releasing = undefined;
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      pending,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(() => {
+          if (state.revision === revision) {
+            publish(
+              null,
+              'Disconnected from Streak. Your wallet has not finished disconnecting. Close and reopen this page before reconnecting if it remains stuck.',
+            );
+            revision = state.revision;
+          }
+          resolve();
+        }, 5_000);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Restore a prior wallet using read-only APIs. Never request access or sign. */
 export async function restoreWallet(expectedAddress?: string): Promise<void> {
-  if (state.connection || selection) return;
+  if (state.connection || selection || selectionBlocked) return;
   if (restoration) return restoration;
   let hint: { address: string; name: string; until: number; family?: string };
   try {
@@ -188,7 +241,7 @@ export async function assertWalletAccount(
   const account = await ccc.Address.fromString(address, connection.signer.client);
   if (!connected.script.eq(account.script))
     throw Error(
-      'This wallet differs from your signed-in account. Connect that wallet or sign out first.',
+      'This wallet differs from your signed-in account. Disconnect first to switch wallets.',
     );
   await assertActiveWallet(connection);
 }
@@ -246,6 +299,12 @@ async function retainWallet(
 
 /** Reuse an explicitly selected wallet in this page lifetime. Never sign here. */
 export async function chooseWallet(): Promise<ccc.Signer> {
+  if (selectionBlocked)
+    throw Error('Disconnect is still finishing. Please wait before reconnecting.');
+  if (releasing)
+    throw Error(
+      'Your wallet is still disconnecting. Wait a moment, or close and reopen this page before reconnecting.',
+    );
   const current = state.connection;
   if (current) {
     try {
@@ -362,7 +421,19 @@ export async function chooseWallet(): Promise<ccc.Signer> {
       } else document.body.append(element);
       updated();
     });
+    try {
+      selectAccount ||= localStorage.getItem(SELECT_ACCOUNT) === '1';
+    } catch {
+      /* Account selection still works without browser storage. */
+    }
+    if (selectAccount) await selectWalletAccount(signer);
     const retained = await retainWallet(signer, revision);
+    selectAccount = false;
+    try {
+      localStorage.removeItem(SELECT_ACCOUNT);
+    } catch {
+      /* Repeating explicit selection after a reload is safe. */
+    }
     const family =
       signer.type === ccc.SignerType.EVM && 'provider' in signer
         ? 'evm'

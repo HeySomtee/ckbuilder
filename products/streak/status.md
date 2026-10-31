@@ -1,5 +1,37 @@
 # Streak status
 
+31 October urgent release: the owner explicitly deferred further automated tests
+and authorized immediate commit/push of the prepared wallet and mobile controls,
+including balances rounded down to two decimals. The complete release gate remains
+unfinished; no full pass is claimed. Hosted CI remains skipped. Today's priority is
+[saving Five teams and bids before noon Lagos](docs/delivery/hosted-acceptance-2026-10-31.md).
+All six wallets are funded per owner; production submissions remain unverified.
+
+30 October mobile payment controls are implemented locally: compact wallet
+header, dismissible finished updates and a draggable three-cell pending button
+that avoids docks and yields to dialogs. Independent recovery review accepted.
+The local app was rebuilt, returned HTTP 200 and opened in the owner's browser
+at `http://127.0.0.1:4100/season/`. Six checkout journeys, four wallet-header and
+four wallet-overview journeys, placement tests, build, lint and static checks pass.
+Focused verification is recorded in the
+[work tracker](docs/work-tracker.md). No publication or physical-phone acceptance
+is claimed; the complete release gate remains due before commit/push.
+
+30 October wallet-switching correction is local: Season's Disconnect action now
+clears app identity and requests provider permission release, with fresh account
+selection on explicit reconnect. My Account uses the same operation. Failed
+logout cannot restore the previous account after reload. Independent identity
+review found no remaining blockers. All 76 major checks passed at 13:59:26 UTC,
+including expanded disconnect/switching browser cases and recovery suites.
+Implementation is uncommitted; publication and physical wallet switching remain
+pending. See [wallet compatibility](docs/delivery/wallet-compatibility.md).
+
+30 October update: the owner reports Zerion Android sign-in works after updating
+the wallet app. The published `916e91e` patch alone had not resolved the error.
+This is owner-reported physical sign-in success; navigation/reload persistence,
+payment approval and Activity confirmation still require campaign acceptance.
+No additional runtime change was made following this report.
+
 30 October Zerion mobile sign-in investigation: the owner sees "No connected
 wallet" in the header despite a visible address/balance. A local candidate renews
 EVM access on explicit sign-in, confirms the server session and surfaces failures

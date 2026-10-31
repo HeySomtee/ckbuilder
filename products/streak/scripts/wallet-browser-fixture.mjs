@@ -31,7 +31,7 @@ export async function connectNative(element, keyByte) {
 
 export async function connectEvm(element, options = {}) {
   // Public, unfunded test identities. Never substitute an application key.
-  let wallet = new Wallet(`0x${(options.other ? '22' : (options.keyByte ?? '11')).repeat(32)}`);
+  let wallet = new Wallet(`0x${(options.other ? (options.otherKeyByte ?? '22') : (options.keyByte ?? '11')).repeat(32)}`);
   let connected = true;
   let accessGranted = !options.requireAccess;
   let mode = options.mode ?? 'accept';
@@ -41,6 +41,21 @@ export async function connectEvm(element, options = {}) {
   const provider = {
     async request({ method, params }) {
       calls.push(method);
+      if (method === 'wallet_revokePermissions') {
+        if (options.noRevoke) throw Object.assign(Error('Unsupported method'), { code: 4200 });
+        if (options.holdRevoke) await new Promise(done => { window.releaseSyntheticRevoke = done; });
+        connected = false;
+        accessGranted = false;
+        [...(events.get('accountsChanged') ?? [])].forEach(callback => callback([]));
+        return null;
+      }
+      if (method === 'wallet_requestPermissions') {
+        if (options.noPermissions) throw Object.assign(Error('Unsupported method'), { code: -32601 });
+        if (options.rejectPermissions) throw Object.assign(Error('Account selection cancelled.'), { code: 4001 });
+        if (options.selectOther) wallet = new Wallet(`0x${(options.otherKeyByte ?? '22').repeat(32)}`);
+        connected = true;
+        return [{ parentCapability: 'eth_accounts' }];
+      }
       if (method === 'eth_requestAccounts') {
         if (mode === 'reject-access') throw Error('Synthetic wallet access declined.');
         if (mode === 'change-access') wallet = new Wallet(`0x${'44'.repeat(32)}`);
@@ -75,6 +90,12 @@ export async function connectEvm(element, options = {}) {
     calls,
     address,
     evmAddress: wallet.address,
+    reselect: async (nextElement) => {
+      options.selectOther = true;
+      await signer.connect();
+      nextElement.onClose(() => void nextElement.updateSigner(
+        { name: options.walletName ?? 'MetaMask' }, { name: 'Ethereum', signer }));
+    },
     listenerCount: () => [...events.values()].reduce((sum, listeners) => sum + listeners.size, 0),
     accept: () => {
       mode = 'accept';

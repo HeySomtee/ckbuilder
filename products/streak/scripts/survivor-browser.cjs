@@ -354,6 +354,25 @@ async function main() {
             /Pick hidden/,
           );
           await page.getByRole('button', { name: 'Your team board' }).click();
+          if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) {
+            await page.screenshot({
+              path: path.join(out, `${name}-${width}-overflow.png`),
+              fullPage: true,
+            });
+            console.error(
+              'Overflow elements',
+              await page.evaluate(() =>
+                [...document.querySelectorAll('body *')]
+                  .filter((el) => el.getBoundingClientRect().right > innerWidth + 1)
+                  .map((el) => ({
+                    tag: el.tagName,
+                    className: el.className,
+                    right: el.getBoundingClientRect().right,
+                  }))
+                  .slice(0, 20),
+              ),
+            );
+          }
           assert.equal(
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
             true,

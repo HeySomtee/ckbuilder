@@ -303,6 +303,9 @@ button:hover:not(:disabled),
   align-items: center;
   gap: 16px;
 }
+.account-action-mobile {
+  display: none;
+}
 .username {
   max-width: 160px;
   overflow: hidden;
@@ -822,13 +825,78 @@ footer {
     margin-left: 0;
   }
   .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     min-height: 64px;
-    padding: 10px 18px;
+    padding: 8px 18px;
+    gap: 4px 12px;
+  }
+  .account-actions {
+    display: contents;
+  }
+  .account-actions > button {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    max-width: 100%;
+    padding: 10px 12px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .account-action-full {
+    display: none;
+  }
+  .account-action-mobile {
+    display: inline;
+  }
+  .topbar .wallet-nav-summary {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    border-top: 1px solid var(--line);
+    padding-top: 4px;
+    font-size: 11px;
+  }
+  .topbar .wallet-nav-summary > a,
+  .topbar .wallet-nav-reconnect {
+    min-width: 0;
+    min-height: 44px;
+    gap: 6px;
+    font-size: 11px;
+  }
+  .topbar .wallet-nav-summary > a > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topbar .wallet-nav-summary > a > svg {
+    flex-shrink: 0;
+    width: 16px;
+  }
+  .topbar .wallet-address-copy > button {
+    padding: 8px 0 8px 8px;
+    border: 0;
+    background: transparent;
+    font-size: 11px;
+    gap: 6px;
+  }
+  .topbar .wallet-nav-summary > .feedback-card {
+    grid-column: 1 / -1;
   }
   .breadcrumb {
     display: none;
   }
   .mobile-brand {
+    grid-column: 1;
+    grid-row: 1;
     display: flex;
     align-items: center;
     min-height: 44px;

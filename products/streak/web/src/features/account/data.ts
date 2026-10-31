@@ -79,3 +79,9 @@ export function parseTelegramLink(value: unknown, now = Date.now()): TelegramLin
 export function shortWalletAddress(address: string): string {
   return address.length <= 22 ? address : `${address.slice(0, 9)}...${address.slice(-7)}`;
 }
+
+/** Display only: truncate shannons without losing precision through Number. */
+export function displayWalletBalance(shannons: bigint): string {
+  const cents = shannons / 1_000_000n;
+  return `${(cents / 100n).toLocaleString('en-US')}.${(cents % 100n).toString().padStart(2, '0')}`;
+}

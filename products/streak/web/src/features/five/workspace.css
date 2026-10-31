@@ -128,9 +128,6 @@
   .workspace:has(.five-page) .account-actions {
     gap: 6px;
   }
-  .workspace:has(.five-page) .wallet-nav-summary .wallet-address-copy {
-    display: none;
-  }
   .workspace:has(.five-page) .topbar .btn {
     padding-inline: 8px;
     white-space: nowrap;

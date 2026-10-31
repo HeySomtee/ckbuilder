@@ -31,7 +31,7 @@ async function main() {
       browser = await engine.launch();
       for (const width of [1440, 390, 900]) {
         const chain = await batchChain(Date.now() + 7200000, BATCH_MANIFEST.codeDeps, new Wallet(batchOwnerKey).address);
-        const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
+        const context = await browser.newContext({ viewport: { width, height: 900 }, hasTouch: width === 390, reducedMotion: 'reduce', serviceWorkers: 'block' });
         const errors = [], external = [], writes = [];
         let signatures = 0, offers = 0, failMode = false, stalePools = false, releasePools, releaseSubmission, reorg = false, rejectNext = false, rejections = 0, busyReview = true, delayedOffer, holdApproval=false, releaseApproval, sponsorOffline=false;
         let signedIn = false, authAttempts = 0, failNonce = true;
@@ -152,9 +152,6 @@ async function main() {
           assert.ok(dimensions.footer<220 && dimensions.list>300,JSON.stringify(dimensions));
           assert.equal(await page.locator('#slip-picks-panel .batch-transaction').count(),0);
           await page.screenshot({path:path.join(evidence,`compact-slip-${name}-${width}-${count}.png`)});
-          const submitted = page.waitForResponse(response => response.url().endsWith('/api/direct/batch/submit') && response.request().method() === 'POST');
-          // Keep the original promise for assertions, but avoid masking an earlier layout failure during cleanup.
-          void submitted.catch(()=>{});
           holdApproval=true;
           await page.getByRole('button', { name: /^Pay [\d,.]+ tCKB$/ }).click();
           await page.getByRole('button',{name:'Preparing wallet approval',exact:true}).waitFor();
@@ -185,6 +182,100 @@ async function main() {
           const started=Date.now();
           while(!releaseSubmission && Date.now()-started<15000)await new Promise(resolve=>setTimeout(resolve,50));
           assert.ok(releaseSubmission,'Signed submission starts while slip is closed.');
+
+          assert.equal(
+            await tracker.getByRole('button', { name: 'Dismiss update', exact: true }).count(),
+            0,
+            'Pending payments cannot be dismissed.',
+          );
+          await tracker.locator('.payment-progress-toggle').click();
+          await tracker.locator('.payment-progress-details').waitFor();
+          const minimize = tracker
+            .locator('.payment-progress-details')
+            .getByRole('button', { name: 'Minimize payment progress', exact: true });
+          if (width === 900) {
+            await minimize.focus();
+            await page.keyboard.press('Escape');
+          } else await minimize.click();
+          await tracker.locator('.payment-progress-details').waitFor({ state: 'hidden' });
+          assert.equal(
+            await tracker.isVisible(),
+            true,
+            'Minimization keeps pending progress available.',
+          );
+          assert.equal(
+            await tracker
+              .locator('.payment-progress-toggle')
+              .evaluate((el) => el === document.activeElement),
+            true,
+            'Minimize restores focus to the progress button.',
+          );
+          if (width <= 1050) {
+            const blob = await tracker.boundingBox();
+            assert.ok(
+              blob.width <= 60 && blob.height <= 60,
+              'Mobile pending progress is a compact touch target.',
+            );
+            assert.equal(
+              await tracker.locator('.cell-loader--orbit').isVisible(),
+              true,
+              'The pending button retains the shared cell loader.',
+            );
+            await page.screenshot({
+              path: path.join(evidence, `payment-blob-${name}-${width}-${count}.png`),
+            });
+          }
+          assert.equal(
+            signatures,
+            count,
+            'Minimizing pending progress cannot request another signature.',
+          );
+          if (width === 390 && count === 1) {
+            const touch = name === 'chromium' ? await context.newCDPSession(page) : null;
+            async function clearOfControls() {
+              const overlap = await tracker.evaluate(el => {
+                const b = el.getBoundingClientRect();
+                return [...document.querySelectorAll('.topbar, .network-strip, .prediction-dock, .mobile-dock, dialog[open]')]
+                  .filter(e => e.getClientRects().length).some(e => { const r=e.getBoundingClientRect(); return b.left<r.right && b.right>r.left && b.top<r.bottom && b.bottom>r.top; });
+              });
+              assert.equal(overlap,false,'The movable progress button cannot cover other controls.');
+            }
+            for (const [x,y] of [[16,16],[374,16],[16,884],[374,884]]) {
+              const b=await tracker.boundingBox(), start={x:b.x+b.width/2,y:b.y+b.height/2};
+              if(touch) {
+                await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...start,id:1}]});
+                await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y,id:1}]});
+                await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+              } else {
+                await page.mouse.move(start.x,start.y); await page.mouse.down();
+                await page.mouse.move(x,y,{steps:8}); await page.mouse.up();
+              }
+              await page.waitForFunction(() => document.querySelector('.payment-progress-toggle')?.getAttribute('aria-expanded')==='false');
+              await clearOfControls();
+              const placed=await tracker.boundingBox();
+              assert.ok(x<195 ? placed.x<40 : placed.x>280,'Drag snaps to the chosen horizontal corner.');
+              assert.ok(y<450 ? placed.y<450 : placed.y>450,'Drag snaps to the chosen vertical corner.');
+            }
+            await touch?.detach();
+            await tracker.locator('.payment-progress-toggle').focus();
+            await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowUp');
+            await clearOfControls();
+            await page.setViewportSize({width:320,height:640});
+            await page.waitForFunction(() => {const r=document.querySelector('.payment-progress').getBoundingClientRect();return r.right<=320&&r.bottom<=640;});
+            await clearOfControls();
+            await page.getByRole('button',{name:'More pages',exact:true}).click();
+            await tracker.waitFor({state:'hidden'});
+            await page.getByRole('button',{name:'Close navigation',exact:true}).click();
+            await tracker.waitFor();
+            await clearOfControls();
+            await page.setViewportSize({width,height:900});
+            await tracker.locator('.payment-progress-toggle').focus();
+            await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowDown');
+            await clearOfControls();
+            await page.screenshot({path:path.join(evidence,`payment-draggable-${name}-${width}.png`)});
+          }
+          // The synthetic response is held during UI gestures. Start its deadline when released.
+          const submitted = page.waitForResponse(response => response.url().endsWith('/api/direct/batch/submit') && response.request().method() === 'POST');
           releaseSubmission(); releaseSubmission=undefined;
           await submitted;
           console.log('Submitted',name,width,count);
@@ -280,7 +371,7 @@ async function main() {
         await page.getByRole('button', { name: 'Add Away for Barcelona vs Real Madrid', exact: true }).click();
         await page.locator('.prediction-dock').click();
         assert.equal(await page.getByRole('button', { name: 'Reconnect wallet to pay', exact: true }).count(), 0, 'Same-page repeat payment retains the EVM signer.');
-        if(name==='chromium' && width===1440) {
+        {
           await page.getByRole('button',{name:'Review all predictions',exact:true}).click();
           await page.getByRole('heading',{name:'One payment. 2 predictions.',exact:true}).waitFor();
           rejectNext=true;
@@ -290,6 +381,27 @@ async function main() {
           const tracker=page.getByRole('complementary',{name:'Payment progress'});
           await tracker.getByText('Payment not sent',{exact:true}).waitFor();
           assert.equal(chain.submissions.length,1,'Rejected second payment cannot inherit first payment success.');
+          await tracker.locator('.payment-progress-toggle').click();
+          await page.screenshot({
+            path: path.join(evidence, `payment-dismiss-${name}-${width}.png`),
+          });
+          const closeUpdate = tracker.getByRole('button', { name: 'Dismiss update', exact: true });
+          if (width === 900) {
+            await closeUpdate.focus();
+            await page.keyboard.press('Escape');
+          } else await closeUpdate.click();
+          await tracker.waitFor({ state: 'hidden' });
+          assert.equal(
+            await page.locator('.prediction-dock').evaluate((el) => el === document.activeElement),
+            true,
+            'Dismiss restores keyboard focus to the saved draft.',
+          );
+          assert.equal(
+            await page.locator('.slip-title-count').textContent(),
+            '2',
+            'Dismiss preserves both unsent picks.',
+          );
+
           await page.locator('.prediction-dock').click();
         }
         await pay(2);
@@ -330,6 +442,19 @@ async function main() {
         assert.ok(writes.every(url => ['/api/auth/nonce', '/api/auth/verify', '/api/direct/batch/offer', '/api/direct/batch/submit'].includes(url)));
         assert.deepEqual(errors, []);
         assert.deepEqual(external, []);
+        if (!(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))) {
+          await page.screenshot({path:path.join(evidence,`overflow-${name}-${width}.png`)});
+          console.error('Overflow elements',await page.evaluate(() => ({viewport:{width:innerWidth,scroll:document.documentElement.scrollWidth,client:document.documentElement.clientWidth,x:scrollX,visual:visualViewport?.width},elements:[...document.querySelectorAll('body *')].filter(el=>{const r=el.getBoundingClientRect();return r.width&&(r.right>innerWidth||r.left<0);}).slice(0,20).map(el=>({tag:el.tagName,class:el.className,left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,width:el.getBoundingClientRect().width}))})));
+          console.error('Overflow parents',await page.evaluate(() => {
+            const results=[];
+            for(const selector of ['.topbar','.network-strip','#main','.mobile-dock','.payment-progress','body']) {
+              const el=document.querySelector(selector); if(!el)continue;
+              const old=el.style.overflow; el.style.overflow='clip';
+              results.push({selector,width:document.documentElement.scrollWidth});el.style.overflow=old;
+            }
+            return {results,internal:[...document.querySelectorAll('body *')].filter(el=>el.clientWidth&&el.scrollWidth>el.clientWidth).slice(0,18).map(el=>({tag:el.tagName,class:el.className,client:el.clientWidth,scroll:el.scrollWidth}))};
+          }));
+        }
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         console.log(`PASS full app EVM checkout ${name} ${width}: card, detail, inline reconnect, first market creation, mixed repeat payment, historical entry URL and fail-closed routing`);
         await context.close();

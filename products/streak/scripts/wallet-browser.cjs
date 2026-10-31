@@ -150,7 +150,7 @@ async function main() {
         page.on('pageerror', (error) => errors.push(error.message));
         page.on('request', (request) => requests.push(new URL(request.url()).pathname));
         const signIn = page.getByRole('button', { name: 'Sign in with wallet', exact: true });
-        const signOut = page.getByRole('button', { name: 'Sign out', exact: true });
+        const signOut = page.getByRole('button', { name: 'Disconnect', exact: true });
         const connect = page.getByRole('button', { name: 'Connect testnet wallet', exact: true });
         const disconnect = page.getByRole('button', { name: 'Disconnect wallet', exact: true });
         const walletNav = () =>
@@ -165,7 +165,13 @@ async function main() {
               const fixture = await import('/qa-wallet-fixture.js');
               await fixture.connectEvm(document.querySelector('ccc-connector'), options);
             },
-            { keyByte: (0x11 + groups).toString(16), walletName: width === 390 ? 'Zerion' : 'MetaMask', requireAccess: true, ...options },
+            {
+              keyByte: (0x11 + groups).toString(16),
+              otherKeyByte: (0x70 + groups).toString(16),
+              walletName: width === 390 ? 'Zerion' : 'MetaMask',
+              requireAccess: true,
+              ...options,
+            },
           );
         }
         try {
@@ -181,7 +187,11 @@ async function main() {
           await choose();
           await signOut.waitFor();
           assert.equal(
-            await page.evaluate(() => window.syntheticEvm.calls.filter(method => method === 'eth_requestAccounts').length),
+            await page.evaluate(
+              () =>
+                window.syntheticEvm.calls.filter((method) => method === 'eth_requestAccounts')
+                  .length,
+            ),
             1,
             'Explicit sign-in renews provider access even when eth_accounts exposes a cached address.',
           );
@@ -209,9 +219,53 @@ async function main() {
           await disconnect.waitFor();
           const overview = page.getByRole('region', { name: 'My Account overview', exact: true });
           await overview.getByRole('heading', { name: 'My Account', exact: true }).waitFor();
-          await overview.getByText('1,234 tCKB', { exact: true }).waitFor();
+          await overview.getByText('1,234.00 tCKB', { exact: true }).waitFor();
           const summary = page.locator('.wallet-nav-summary');
-          await summary.getByText('1,234 tCKB', { exact: true }).waitFor();
+          await summary.getByText('1,234.00 tCKB', { exact: true }).waitFor();
+          if (width === 390) {
+            for (const mobileWidth of [320, 390]) {
+              await page.setViewportSize({ width: mobileWidth, height: 844 });
+              const layout = await page.locator('.topbar').evaluate((header) => {
+                const box = (selector) =>
+                  header.querySelector(selector).getBoundingClientRect().toJSON();
+                return {
+                  header: header.getBoundingClientRect().toJSON(),
+                  brand: box('.mobile-brand'),
+                  action: box('.account-actions > button'),
+                  summary: box('.wallet-nav-summary'),
+                  address: box('.wallet-address-copy'),
+                  balance: box('.wallet-nav-summary > a'),
+                  overflow: document.documentElement.scrollWidth > innerWidth,
+                };
+              });
+              assert.equal(
+                layout.overflow,
+                false,
+                'Mobile wallet header stays within the viewport.',
+              );
+              assert.ok(layout.header.height <= 120, 'Wallet controls stay in two compact rows.');
+              assert.ok(
+                layout.brand.right <= layout.action.left,
+                'Brand and account action do not overlap.',
+              );
+              assert.ok(
+                layout.summary.top >= layout.action.bottom,
+                'Balance/address occupy the second row.',
+              );
+              assert.ok(
+                layout.balance.right <= layout.address.left,
+                'Balance and copyable address do not overlap.',
+              );
+              await page.screenshot({
+                path: path.join(
+                  __dirname,
+                  '../../../.quality-artifacts/browser',
+                  `wallet-header-${name}-${mobileWidth}.png`,
+                ),
+              });
+            }
+            await page.setViewportSize({ width, height: 900 });
+          }
           assert.equal(
             await summary
               .getByRole('button', { name: 'Copy wallet address' })
@@ -258,6 +312,12 @@ async function main() {
             'Navigation never signs again.',
           );
 
+          await page.evaluate(() =>
+            localStorage.setItem(
+              'ccc-connection-info',
+              JSON.stringify({ walletName: 'Zerion', signerName: 'Ethereum' }),
+            ),
+          );
           await page.route('**/api/logout', (route) =>
             route.fulfill({
               status: 503,
@@ -267,11 +327,36 @@ async function main() {
           );
           await signOut.click();
           await page
-            .getByText('Sign-out failed. Your session may still be active. Please retry.', {
-              exact: true,
-            })
+            .getByText(
+              'Wallet disconnected locally. The server session could not be closed. Retry Disconnect.',
+              {
+                exact: true,
+              },
+            )
             .waitFor();
-          await disconnect.waitFor();
+          await connect.waitFor();
+          assert.equal(
+            await page.getByRole('button', { name: 'Copy wallet address', exact: true }).count(),
+            0,
+            'Failed server logout still clears the old wallet and account from the UI.',
+          );
+          assert.equal(
+            await page.evaluate(() => localStorage.getItem('streak-wallet-selection-v1')),
+            null,
+          );
+          assert.equal(
+            await page.evaluate(() => localStorage.getItem('ccc-connection-info')),
+            null,
+            'The connector must not automatically select the disconnected provider.',
+          );
+          assert.equal(
+            await page.evaluate(
+              () =>
+                window.syntheticEvm.calls.filter((method) => method === 'wallet_revokePermissions')
+                  .length,
+            ),
+            1,
+          );
           await page.unroute('**/api/logout');
           await signOut.click();
           await signIn.waitFor();
@@ -322,38 +407,45 @@ async function main() {
           );
           assert.equal(requests.filter((url) => url === '/api/auth/verify').length, verifies + 1);
           const restoreAddress = await page.evaluate(() => window.syntheticEvm.evmAddress);
-          await context.addInitScript(({address, walletName}) => {
-            const listeners = new Map();
-            window.restoreCalls = [];
-            const provider = {
-              request: async ({ method }) => {
-                window.restoreCalls.push(method);
-                if (method !== 'eth_accounts')
-                  throw Error('Silent restoration must not prompt or sign');
-                return [address];
-              },
-              on: (name, callback) => {
-                if (!listeners.has(name)) listeners.set(name, new Set());
-                listeners.get(name).add(callback);
-              },
-              removeListener: (name, callback) => listeners.get(name)?.delete(callback),
-            };
-            addEventListener('eip6963:requestProvider', () => setTimeout(() =>
-              dispatchEvent(
-                new CustomEvent('eip6963:announceProvider', {
-                  detail: {
-                    info: {
-                      uuid: 'synthetic-restore',
-                      name: walletName,
-                      rdns: 'test.synthetic',
-                      icon: '',
-                    },
-                    provider,
-                  },
-                }),
-              ), 500),
-            );
-          }, {address: restoreAddress, walletName: width === 390 ? 'Zerion' : 'MetaMask'});
+          await context.addInitScript(
+            ({ address, walletName }) => {
+              const listeners = new Map();
+              window.restoreCalls = [];
+              const provider = {
+                request: async ({ method }) => {
+                  window.restoreCalls.push(method);
+                  if (method !== 'eth_accounts')
+                    throw Error('Silent restoration must not prompt or sign');
+                  return [address];
+                },
+                on: (name, callback) => {
+                  if (!listeners.has(name)) listeners.set(name, new Set());
+                  listeners.get(name).add(callback);
+                },
+                removeListener: (name, callback) => listeners.get(name)?.delete(callback),
+              };
+              addEventListener('eip6963:requestProvider', () =>
+                setTimeout(
+                  () =>
+                    dispatchEvent(
+                      new CustomEvent('eip6963:announceProvider', {
+                        detail: {
+                          info: {
+                            uuid: 'synthetic-restore',
+                            name: walletName,
+                            rdns: 'test.synthetic',
+                            icon: '',
+                          },
+                          provider,
+                        },
+                      }),
+                    ),
+                  500,
+                ),
+              );
+            },
+            { address: restoreAddress, walletName: width === 390 ? 'Zerion' : 'MetaMask' },
+          );
           await context.route('https://testnet.ckb.dev/**', (route) => {
             const body = route.request().postDataJSON();
             assert.equal(
@@ -393,44 +485,67 @@ async function main() {
             'Reload does not sign in again',
           );
           await disconnect.click();
-          await connect.waitFor();
-          await connect.click();
-          await choose({ other: true });
-          await page
-            .getByText(
-              'This wallet differs from your signed-in account. Connect that wallet or sign out first.',
-              { exact: true },
-            )
-            .first()
-            .waitFor();
+          await signIn.waitFor();
           await connect.waitFor();
           assert.equal(
-            await overview.getByText('1,234 tCKB', { exact: true }).count(),
+            await page.getByRole('button', { name: 'Copy wallet address', exact: true }).count(),
             0,
-            'A different wallet cannot inherit the signed-in account or its review.',
+          );
+          await signIn.click();
+          await choose({ selectOther: true });
+          await signOut.waitFor();
+          const switched = await overview
+            .getByRole('button', { name: 'Copy wallet address' })
+            .getAttribute('title');
+          assert.notEqual(
+            switched,
+            address,
+            'Explicit account selection replaces the previous wallet.',
+          );
+          assert.ok(
+            await page.evaluate(() =>
+              window.syntheticEvm.calls.includes('wallet_requestPermissions'),
+            ),
+          );
+          const signedInAddress = await page.evaluate(
+            async () => (await (await fetch('/api/me')).json()).user.walletAddress,
           );
           assert.equal(
-            await overview
-              .getByRole('button', { name: 'Copy wallet address' })
-              .getAttribute('title'),
-            address,
-            'The signed-in address stays explicit after a mismatched connection is rejected.',
+            signedInAddress,
+            switched,
+            'The server session belongs to the newly selected account.',
           );
           await signOut.click();
           await signIn.waitFor();
-          const beforePermissionFailure = requests.filter(url => url === '/api/auth/nonce').length;
+          const beforePermissionFailure = requests.filter(
+            (url) => url === '/api/auth/nonce',
+          ).length;
           for (const [mode, message] of [
             ['reject-access', 'Synthetic wallet access declined.'],
-            ['change-access', 'Your wallet account or network changed. Connect again and review your action.'],
+            [
+              'change-access',
+              'Your wallet account or network changed. Connect again and review your action.',
+            ],
           ]) {
             await connect.click();
             await choose({ mode });
             await disconnect.waitFor();
             await signIn.click();
-            await page.locator('.notice.error').getByText(message, {exact:true}).waitFor();
-            assert.equal(requests.filter(url => url === '/api/auth/nonce').length, beforePermissionFailure);
-            assert.equal(await page.evaluate(() => window.syntheticEvm.calls.includes('personal_sign')), false,
-              'Access rejection or account replacement must stop before requesting a signature.');
+            const failure = page.locator('main > .feedback-card').filter({ hasText: message });
+            await failure.getByText(message, { exact: true }).waitFor();
+            await failure
+              .getByRole('button', { name: 'Dismiss notification', exact: true })
+              .click();
+            await failure.waitFor({ state: 'hidden' });
+            assert.equal(
+              requests.filter((url) => url === '/api/auth/nonce').length,
+              beforePermissionFailure,
+            );
+            assert.equal(
+              await page.evaluate(() => window.syntheticEvm.calls.includes('personal_sign')),
+              false,
+              'Access rejection or account replacement must stop before requesting a signature.',
+            );
             if (mode === 'reject-access') await disconnect.click();
             await connect.waitFor();
           }
@@ -444,7 +559,7 @@ async function main() {
           });
           await signIn.waitFor();
           await page
-            .locator('.notice.error')
+            .locator('main > .feedback-card')
             .getByText(
               /^(The connected wallet changed|Your wallet account or network changed)\. Connect again and review your action\.$/,
             )
@@ -456,38 +571,167 @@ async function main() {
           );
           await connect.click();
           await page.locator('ccc-connector').waitFor();
-          await page.evaluate(async (keyByte) => {
-            await (await import('/qa-wallet-fixture.js')).connectNative(document.querySelector('ccc-connector'), keyByte);
-          }, (0x55 + groups).toString(16));
+          await page.evaluate(
+            async (keyByte) => {
+              await (
+                await import('/qa-wallet-fixture.js')
+              ).connectNative(document.querySelector('ccc-connector'), keyByte);
+            },
+            (0x55 + groups).toString(16),
+          );
           await disconnect.waitFor();
           await signIn.click();
           await signOut.waitFor();
           const nativeAddress = await page.evaluate(() => window.syntheticNative.address);
-          const beforeNativeReload = requests.filter(url => url === '/api/auth/verify').length;
+          const beforeNativeReload = requests.filter((url) => url === '/api/auth/verify').length;
           await context.addInitScript((address) => {
             window.nativeRestoreCalls = [];
-            const read = (method, value) => async () => { window.nativeRestoreCalls.push(method); return value; };
-            window.utxoGlobal = { ckbSigner: {
-              getNetwork: read('getNetwork', 'nervos_testnet'), isConnected: read('isConnected', true),
-              getAccount: read('getAccount', [address]),
-              connect: () => { throw Error('Unexpected native permission request'); },
-              signMessage: () => { throw Error('Unexpected native signature'); },
-              switchNetwork: () => { throw Error('Unexpected network change'); },
-              on: () => {}, removeListener: () => {},
-            } };
+            const read = (method, value) => async () => {
+              window.nativeRestoreCalls.push(method);
+              return value;
+            };
+            window.utxoGlobal = {
+              ckbSigner: {
+                getNetwork: read('getNetwork', 'nervos_testnet'),
+                isConnected: read('isConnected', true),
+                getAccount: read('getAccount', [address]),
+                connect: () => {
+                  throw Error('Unexpected native permission request');
+                },
+                signMessage: () => {
+                  throw Error('Unexpected native signature');
+                },
+                switchNetwork: () => {
+                  throw Error('Unexpected network change');
+                },
+                on: () => {},
+                removeListener: () => {},
+              },
+            };
           }, nativeAddress);
           await reads.reload();
           await signOut.waitFor();
           await disconnect.waitFor();
           assert.ok((await page.evaluate(() => window.nativeRestoreCalls)).includes('getAccount'));
-          assert.equal(requests.filter(url => url === '/api/auth/verify').length, beforeNativeReload);
+          assert.equal(
+            requests.filter((url) => url === '/api/auth/verify').length,
+            beforeNativeReload,
+          );
           assert.equal(await page.locator('ccc-connector').count(), 0);
           await signOut.click();
           await signIn.waitFor();
           await reads.reload();
           await connect.waitFor();
-          assert.equal(await page.evaluate(() => localStorage.getItem('streak-wallet-selection-v1')), null);
-          assert.deepEqual(await page.evaluate(() => window.nativeRestoreCalls), [], 'Sign-out prevents silent native restoration.');
+          assert.equal(
+            await page.evaluate(() => localStorage.getItem('streak-wallet-selection-v1')),
+            null,
+          );
+          assert.deepEqual(
+            await page.evaluate(() => window.nativeRestoreCalls),
+            [],
+            'Sign-out prevents silent native restoration.',
+          );
+          // The same still-authorized provider must select the new account after app disconnect.
+          await signIn.click();
+          await choose({
+            noRevoke: true,
+            keyByte: (0x80 + groups).toString(16),
+            otherKeyByte: (0x90 + groups).toString(16),
+          });
+          await signOut.waitFor();
+          const firstAccount = await overview
+            .getByRole('button', { name: 'Copy wallet address' })
+            .getAttribute('title');
+          await signOut.click();
+          await signIn.waitFor();
+          await overview.getByText(/Your wallet kept its site permission/).waitFor();
+          await signIn.click();
+          await page.locator('ccc-connector').waitFor();
+          await page.evaluate(() =>
+            window.syntheticEvm.reselect(document.querySelector('ccc-connector')),
+          );
+          await signOut.waitFor();
+          const nextAccount = await overview
+            .getByRole('button', { name: 'Copy wallet address' })
+            .getAttribute('title');
+          assert.notEqual(
+            nextAccount,
+            firstAccount,
+            'The same provider can select another account without manual site disconnection.',
+          );
+          assert.equal(
+            await page.evaluate(
+              async () => (await (await fetch('/api/me')).json()).user.walletAddress,
+            ),
+            nextAccount,
+          );
+          await signOut.click();
+          await signIn.waitFor();
+          const noncesBeforeCancel = requests.filter((url) => url === '/api/auth/nonce').length;
+          await signIn.click();
+          await choose({ rejectPermissions: true });
+          await page.getByText('Account selection cancelled.', { exact: true }).waitFor();
+          assert.equal(
+            requests.filter((url) => url === '/api/auth/nonce').length,
+            noncesBeforeCancel,
+          );
+          assert.equal(
+            await page.getByRole('button', { name: 'Copy wallet address', exact: true }).count(),
+            0,
+          );
+          await signIn.click();
+          await choose({
+            noPermissions: true,
+            holdRevoke: true,
+            keyByte: (0xa0 + groups).toString(16),
+          });
+          await signOut.waitFor();
+          await signOut.click();
+          await signIn.waitFor();
+          await overview.getByText(/Your wallet has not finished disconnecting/).waitFor();
+          await connect.click();
+          await page.getByText(/Your wallet is still disconnecting\. Wait a moment/).waitFor();
+          assert.equal(
+            await page.locator('ccc-connector').count(),
+            0,
+            'Late revocation must not race a new provider connection.',
+          );
+          await page.evaluate(() => window.releaseSyntheticRevoke());
+          await signIn.click();
+          await choose({ keyByte: (0xb0 + groups).toString(16) });
+          await signOut.waitFor();
+          await page.route('**/api/logout', (route) =>
+            route.fulfill({
+              status: 503,
+              contentType: 'application/json',
+              body: '{"error":"Unavailable"}',
+            }),
+          );
+          await signOut.click();
+          await page
+            .getByText(
+              'Wallet disconnected locally. The server session could not be closed. Retry Disconnect.',
+              { exact: true },
+            )
+            .waitFor();
+          const beforeBlockedReload = requests.filter((url) => url === '/api/me').length;
+          await reads.reload();
+          await signIn.waitFor();
+          assert.equal(
+            await page.getByRole('button', { name: 'Copy wallet address', exact: true }).count(),
+            0,
+          );
+          assert.equal(
+            requests.filter((url) => url === '/api/me').length,
+            beforeBlockedReload,
+            'Failed logout cannot restore the old server identity on reload.',
+          );
+          await page.unroute('**/api/logout');
+          await signIn.click();
+          await choose({ other: true });
+          await signOut.waitFor();
+          await signOut.click();
+          await signIn.waitFor();
           await reads.settled();
           assert.deepEqual(external, []);
           assert.deepEqual(unexpectedWrites, []);

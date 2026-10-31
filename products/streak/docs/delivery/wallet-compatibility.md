@@ -1,5 +1,50 @@
 # Wallet compatibility and sign-in recovery
 
+## 30 October: disconnect and account switching
+
+The owner confirmed Zerion Android sign-in works after updating the wallet app,
+then reported that signing out and choosing another account reused the old one.
+The Season header now uses Disconnect, and My Account uses the same operation.
+It clears the signer, remembered selection and private query caches, closes the
+server session and asks the selected injected provider to revoke `eth_accounts`
+permission. Other signers receive their native disconnect call. Signed payment
+recovery records are retained under their original owner.
+
+Explicit reconnect requests account selection where the wallet supports it.
+Cancellation does not continue with the previous account. Silent restoration
+never requests permission. Unsupported revocation is explained as a local app
+disconnect, not a claim that wallet permission was removed. Native adapters may
+implement disconnect as a no-op; Streak cannot force every wallet's account picker.
+
+Server logout failure keeps the previous session suppressed across reloads and
+requires a successful logout retry before new sign-in. Auth operations serialize
+before changing caches. A provider that leaves revocation pending gets a bounded
+five-second UI wait and a page-reopen recovery message; reconnection remains
+blocked until that request settles, preventing late revocation of a new session.
+
+Independent identity review accepted the implementation after correcting the
+cache-clearing race. Disconnect also removes CCC's remembered connection, so a
+new chooser cannot silently restore the old provider. Mobile account controls
+wrap within the header at 320px.
+
+All 76 `npm run quality:major` checks passed on 30 October, from 13:20:08 to
+13:59:26 UTC. Evidence: `.quality-artifacts/oct30-disconnect-major-final.json`
+and `oct30-disconnect-major.log`. Coverage includes four expanded wallet-switch
+journeys, My Account, logout failure/reload suppression, rejected/unsupported
+permissions, stalled revocation, six checkout journeys, isolated PostgreSQL and
+signed local-chain recovery. All test identities and funds are synthetic.
+
+Earlier failed runs are retained. A 320px header overflow was corrected. The
+motion test now observes beyond the animation's 816ms stationary phase; movement
+assertions and production animation are unchanged. A transient launcher test
+passed on isolated retry and in the final full run. A disk-full build was resolved
+by removing old disposable chain databases while retaining reports and recent
+runs. Formatting failures were corrected before the final pass.
+
+Implementation remains local and uncommitted. Publication is the next step.
+Physical switching on MetaMask, Zerion Android and native CKB wallets remains a
+separate acceptance step. No Render configuration or database migration is needed.
+
 ## 30 October: mobile sign-in recovery
 
 The owner reported a connected address and balance inside Zerion's mobile
