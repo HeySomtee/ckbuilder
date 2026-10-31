@@ -45,6 +45,9 @@ export type FiveRound = {
     leadingShannons: string;
     bidderCount: number;
     ownShannons: string;
+    leadingBidShannons?: string;
+    ownBidShannons?: string;
+    minimumNextShannons?: string;
     ownStatus: string;
   } | null;
   sponsors: {
@@ -206,6 +209,11 @@ export function parseFive(value: unknown): FiveData {
                 leadingShannons: amt(a.leadingShannons),
                 bidderCount: num(a.bidderCount),
                 ownShannons: amt(a.ownShannons),
+                leadingBidShannons: amt(a.leadingBidShannons ?? a.leadingShannons),
+                ownBidShannons: amt(a.ownBidShannons ?? a.ownShannons),
+                ...(a.minimumNextShannons === undefined
+                  ? {}
+                  : { minimumNextShannons: amt(a.minimumNextShannons) }),
                 ownStatus: str(a.ownStatus),
               };
             })(),

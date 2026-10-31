@@ -1,10 +1,18 @@
 import { lockTime } from './timing';
 import { createHash } from 'node:crypto';
 import { ccc } from '@ckb-ccc/core';
-import { amount, FiveError, https, identifier, text, type Sponsor } from './domain';
+import { amount, FiveError, https, identifier, text, type Sponsor, type Round } from './domain';
 import type { Actor } from './service';
 import type { FiveStorage } from './storage';
-import { auctionCutoff, closeAuction, isAuction } from './auction';
+import { auctionCutoff, bidAdmission, closeAuction, isAuction } from './auction';
+
+function checkBid(round: Round, wallet: string, value: string) {
+  if (isAuction(round) && BigInt(value) < bidAdmission(round, wallet).minimum)
+    throw new FiveError(
+      'Your combined bid must exceed the highest bid, including payments confirming. Increase the amount and review again.',
+      409,
+    );
+}
 
 export const CONFIRMATIONS = 24;
 export function marker(round: string, id: string) {
@@ -60,6 +68,7 @@ export class FiveFunding {
         throw new FiveError('Sponsorship is closed for this gameweek.', 409);
       if (BigInt(value) < BigInt(r.terms.minimumShannons))
         throw new FiveError('This contribution is below the gameweek minimum.');
+      checkBid(r, actor.wallet, value);
       if (
         r.sponsors.length >= 200 ||
         r.sponsors.filter((s) => s.accountId === actor.id && s.funding === 'awaiting').length >= 3
@@ -82,6 +91,39 @@ export class FiveFunding {
         destination: this.address,
         tag: marker(roundId, id),
       });
+    });
+  }
+  async revise(actor: NonNullable<Actor>, roundId: string, b: Record<string, unknown>) {
+    const id = identifier(b.sponsorId),
+      value = amount(b.amountShannons);
+    const expectedTag = text(b.expectedTag, 66);
+    if (!/^0x[0-9a-f]{64}$/.test(expectedTag))
+      throw new FiveError('Refresh this contribution before editing.');
+    const nextTag = marker(roundId, `${id}:${expectedTag}:${value}`);
+    await this.store.change(roundId, (round, now) => {
+      const intent = round.sponsors.find(
+        (s) => s.id === id && s.accountId === actor.id && s.wallet === actor.wallet,
+      );
+      if (!intent) throw new FiveError('Contribution not found.', 404);
+      if (intent.signedBytes || intent.funding !== 'awaiting')
+        throw new FiveError(
+          'This payment is already accepted. Follow its status; add a separate top-up to increase your bid.',
+          409,
+        );
+      if (round.state !== 'open' || now >= lockTime(round) || !round.terms.sponsorship)
+        throw new FiveError('Sponsorship is closed for this gameweek.', 409);
+      if (intent.tag === nextTag && intent.amountShannons === value) return;
+      if (intent.tag !== expectedTag)
+        throw new FiveError(
+          'This contribution changed in another tab. Refresh before editing.',
+          409,
+        );
+      if (BigInt(value) < BigInt(round.terms.minimumShannons))
+        throw new FiveError('This contribution is below the gameweek minimum.');
+      checkBid(round, actor.wallet, value);
+      intent.amountShannons = value;
+      // Rotate the marker so every previously signed version stays invalid, even after A -> B -> A.
+      intent.tag = nextTag;
     });
   }
   async validate(s: Sponsor, bytes: string): Promise<ccc.Transaction> {
@@ -179,6 +221,19 @@ export class FiveFunding {
             'The sponsorship deadline has passed. This payment was not submitted.',
             409,
           );
+        if (
+          intent.funding !== 'awaiting' ||
+          intent.wallet !== actor.wallet ||
+          intent.accountId !== actor.id ||
+          intent.tag !== s.tag ||
+          intent.amountShannons !== s.amountShannons ||
+          intent.destination !== s.destination
+        )
+          throw new FiveError(
+            'This contribution changed. Review the current amount before signing again.',
+            409,
+          );
+        checkBid(current, actor.wallet, intent.amountShannons);
         const reserved = current.sponsors
           .filter((s) => s.funding === 'submitted' || s.funding === 'confirmed')
           .reduce((total, s) => total + BigInt(s.amountShannons), BigInt(intent.amountShannons));

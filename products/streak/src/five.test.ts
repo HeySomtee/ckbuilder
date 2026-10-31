@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { ccc } from '@ckb-ccc/core';
 import { FiveFunding } from './modules/five/funding';
+import { bidAdmission } from './modules/five/auction';
 import {
   affordableSquad,
   allocate,
@@ -73,6 +74,7 @@ class MemoryStore implements FiveStorage {
   }
 }
 async function main() {
+  await editableBids();
   await fundingWitnesses();
   const metadataStore = new MemoryStore();
   const metadataRound = newRound('metadata', 'admin', { ...terms, sponsorship: true }, now);
@@ -363,6 +365,135 @@ async function main() {
   await assert.rejects(new FplFiveFeed(false, mock).catalogue(1), /not configured/);
   console.log(
     'Five domain, service, identity, replay, payout boundaries and changed-fixture regression passed.',
+  );
+}
+async function editableBids() {
+  const store = new MemoryStore();
+  const round = newRound(
+    'edits',
+    'admin',
+    {
+      ...terms,
+      sponsorship: true,
+      sponsorshipMode: 'auction',
+    },
+    now,
+  );
+  round.state = 'open';
+  store.rows.set(round.id, round);
+  const client = new ccc.ClientPublicTestnet({ url: 'http://127.0.0.1:1', fallbacks: [] });
+  const script = (byte: string) =>
+    ccc.Script.from({
+      codeHash: '0x' + '11'.repeat(32),
+      hashType: 'type',
+      args: '0x' + byte.repeat(20),
+    });
+  const address = async (byte: string) =>
+    (await ccc.Address.fromScript(script(byte), client)).toString();
+  const owner = { ...actor, wallet: await address('22') };
+  const other = { ...admin, wallet: await address('33') };
+  const funding = new FiveFunding(store, client, await address('44'));
+  const amount = (ckb: number) => (BigInt(ckb) * 100_000_000n).toString();
+  const create = (sponsorId: string, ckb: number) =>
+    funding.intent(owner, round.id, {
+      sponsorId,
+      amountShannons: amount(ckb),
+      display: 'anonymous',
+      custodyAccepted: true,
+    });
+  const read = async (id: string) =>
+    (await store.load(round.id))!.sponsors.find((s) => s.id === id)!;
+  await create('mine', 500);
+  const original = await read('mine');
+  const edit = { sponsorId: 'mine', expectedTag: original.tag, amountShannons: amount(600) };
+  await assert.rejects(funding.revise(other, round.id, edit), /not found/);
+  await funding.revise(owner, round.id, edit);
+  const revised = await read('mine');
+  assert.notEqual(revised.tag, original.tag);
+  await funding.revise(owner, round.id, edit);
+  assert.equal((await read('mine')).tag, revised.tag, 'Lost-response retry is idempotent');
+  await funding.revise(owner, round.id, {
+    ...edit,
+    expectedTag: revised.tag,
+    amountShannons: amount(500),
+  });
+  assert.notEqual(
+    (await read('mine')).tag,
+    original.tag,
+    'Returning to an old amount cannot revive its signature',
+  );
+  await assert.rejects(funding.revise(owner, round.id, edit), /another tab/);
+
+  // Real transaction parsing/dry-run is covered separately. Hold this validation boundary
+  // to reproduce an amendment or competing bid between chain validation and atomic admission.
+  const tx = ccc.Transaction.from({
+    inputs: [{ previousOutput: { txHash: '0x' + '55'.repeat(32), index: 0 } }],
+    outputs: [{ capacity: 50_000_000_000n, lock: script('44') }],
+    outputsData: ['0x'],
+  });
+  let duringValidation: () => Promise<void> = async () => {};
+  funding.validate = async () => {
+    await duringValidation();
+    return tx;
+  };
+  const submit = () =>
+    funding.submit(owner, round.id, { sponsorId: 'mine', signedBytes: ccc.hexFrom(tx.toBytes()) });
+  duringValidation = async () => {
+    await funding.revise(owner, round.id, { ...edit, expectedTag: (await read('mine')).tag });
+  };
+  await assert.rejects(submit(), /contribution changed/);
+  assert.equal((await read('mine')).signedBytes, undefined);
+  duringValidation = async () => {
+    await store.change(round.id, (r) => {
+      r.sponsors.push({
+        ...original,
+        id: 'competitor',
+        wallet: other.wallet,
+        accountId: other.id,
+        funding: 'submitted',
+        amountShannons: amount(700),
+      });
+    });
+  };
+  await assert.rejects(submit(), /must exceed/);
+  const pending = (await store.load(round.id))!;
+  assert.equal(bidAdmission(pending, owner.wallet).highest, 70_000_000_000n);
+  assert.equal(bidAdmission(pending, owner.wallet).own, 0n, 'Unsigned drafts do not set the floor');
+  await assert.rejects(create('equal', 700), /must exceed/);
+  await funding.revise(owner, round.id, {
+    ...edit,
+    expectedTag: (await read('mine')).tag,
+    amountShannons: amount(701),
+  });
+  duringValidation = async () => {};
+  await submit();
+  await assert.rejects(
+    funding.revise(owner, round.id, { ...edit, expectedTag: (await read('mine')).tag }),
+    /already accepted/,
+  );
+  assert.equal(
+    bidAdmission((await store.load(round.id))!, owner.wallet).minimum,
+    10_000_000_000n,
+    'Leader can top up by the round minimum',
+  );
+  await store.change(round.id, (r) => {
+    r.sponsors.find((s) => s.id === 'competitor')!.amountShannons = amount(1000);
+  });
+  await submit();
+  assert.ok((await read('mine')).signedBytes, 'Accepted exact retries survive a later higher bid');
+  await assert.rejects(create('small', 299), /must exceed/);
+  await create('topup', 300);
+  store.now = Date.parse(round.terms.lockAt);
+  await assert.rejects(
+    funding.revise(owner, round.id, {
+      sponsorId: 'topup',
+      expectedTag: (await read('topup')).tag,
+      amountShannons: amount(400),
+    }),
+    /closed/,
+  );
+  console.log(
+    'Editable bids, marker rotation, ownership, pending totals, admission races and exact retries passed.',
   );
 }
 async function fundingWitnesses() {

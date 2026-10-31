@@ -6,6 +6,20 @@ export const AUCTION_GRACE_MS = 30 * 60_000;
 export const isAuction = (round: Round) => round.terms.sponsorshipMode === 'auction';
 export const auctionCutoff = (round: Round) => lockTime(round) + AUCTION_GRACE_MS;
 
+/** Admission includes accepted signatures; awaiting drafts cannot raise the bid floor. */
+export function bidAdmission(round: Round, wallet: string) {
+  const totals = new Map<string, bigint>();
+  for (const sponsor of round.sponsors) {
+    if (!['submitted', 'confirmed'].includes(sponsor.funding)) continue;
+    totals.set(sponsor.wallet, (totals.get(sponsor.wallet) ?? 0n) + BigInt(sponsor.amountShannons));
+  }
+  const own = totals.get(wallet) ?? 0n;
+  const highest = [...totals.values()].reduce((a, b) => (a > b ? a : b), 0n);
+  const minimum = BigInt(round.terms.minimumShannons);
+  const toLead = highest - own + 1n;
+  return { own, highest, minimum: toLead > minimum ? toLead : minimum };
+}
+
 export function auctionBids(round: Round) {
   const groups = new Map<
     string,
@@ -65,6 +79,7 @@ export function auctionView(round: Round, accountId: string | null, now: number)
   const bids = auctionBids(round),
     leader = bids[0];
   const ownWallet = round.sponsors.find((s) => s.accountId === accountId)?.wallet;
+  const admission = bidAdmission(round, ownWallet ?? '');
   const ownPayments = round.sponsors.filter((s) => s.accountId === accountId);
   const paid = ownPayments.some((s) => s.funding === 'confirmed');
   const pending = ownPayments.some((s) => s.funding === 'submitted');
@@ -84,6 +99,9 @@ export function auctionView(round: Round, accountId: string | null, now: number)
     leadingShannons: settled ? round.auction!.amountShannons : (leader?.amount.toString() ?? '0'),
     bidderCount: bids.length,
     ownShannons: own?.amount.toString() ?? '0',
+    leadingBidShannons: admission.highest.toString(),
+    ownBidShannons: admission.own.toString(),
+    minimumNextShannons: admission.minimum.toString(),
     ownStatus: !paid
       ? pending
         ? 'confirming'

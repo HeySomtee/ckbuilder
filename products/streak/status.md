@@ -1,5 +1,16 @@
 # Streak status
 
+31 October sponsorship follow-up: unfinished amounts are editable and reviewed
+payments have a Change amount action. Server amendments rotate the payment marker
+before another signature, preserve accepted payments and reject stale submissions.
+New cumulative bids must exceed the highest submitted or confirmed total. Five
+domain and auction regression suites, frontend TypeScript and build pass;
+independent money/recovery review found no blocker. These are synthetic checks,
+not physical wallet acceptance or a complete release-gate receipt. The urgent
+campaign release continues with the full gate deferred and hosted CI skipped.
+Survivor deadline, remaining-season rounds and creator-funded custodial prizes
+are the next active increment, using the existing testnet rewards wallet as approved.
+
 31 October Five sponsorship fix: legitimate multi-input payments may share a
 single owner-lock witness. The server now accepts that shape and still requires
 successful chain validation before saving a contribution. Focused Five regression

@@ -1,5 +1,15 @@
 # Streak work tracker
 
+31 October owner follow-up in progress: make unfinished Five sponsor amounts
+editable and require new cumulative bids to exceed every admitted bid, including
+payments confirming. Keep accepted payments immutable and exact retries recoverable.
+Also show Survivor deadlines prominently, align new schedules with official FPL
+deadlines, and accept numeric round counts through the remaining season. Creator
+prize funding is requested; clarify contract escrow versus the existing custodial
+testnet rewards wallet before choosing that financial boundary. Existing Survivor
+prizes remain announcements until actual funding is implemented and verified.
+Do not drop the sponsorship correction while extending Survivor.
+
 31 October urgent sponsorship correction: owner reports Zerion succeeds but
 MetaMask returns "Unexpected contribution transaction shape." Five incorrectly
 required a witness per input, although CCC prepares one per shared owner lock.

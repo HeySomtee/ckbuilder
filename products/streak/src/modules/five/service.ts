@@ -317,13 +317,14 @@ export class FiveService {
       await this.store.change(id, (r, now) =>
         saveEntry(r, actor, b.players, b.captain, b.termsHash, now),
       );
-    } else if (b.action === 'sponsor') {
+    } else if (b.action === 'sponsor' || b.action === 'revise-sponsor') {
       if (!this.funding || !this.rewards || !(await this.rewards.active()))
         throw new FiveError(
           'Sponsorship transfers are not activated yet. No payment has been requested.',
           503,
         );
-      await this.funding.intent(actor, id, b);
+      if (b.action === 'revise-sponsor') await this.funding.revise(actor, id, b);
+      else await this.funding.intent(actor, id, b);
     } else if (b.action === 'fund') {
       if (!this.funding)
         throw new FiveError(

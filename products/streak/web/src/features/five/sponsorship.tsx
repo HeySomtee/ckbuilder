@@ -17,12 +17,24 @@ export function Sponsorship({
   onData: (d: FiveData) => void;
 }) {
   const auction = !!round.auction;
-  const existing = round.ownSponsorships.find((s) => s.funding === 'awaiting');
-  const [id] = useState(existing?.id ?? crypto.randomUUID());
+  const [id] = useState(
+    () => round.ownSponsorships.find((s) => s.funding === 'awaiting')?.id ?? crypto.randomUUID(),
+  );
+  const existing = round.ownSponsorships.find((s) => s.id === id);
+  const ownBid = BigInt(round.auction?.ownBidShannons ?? round.auction?.ownShannons ?? '0');
+  const highestBid = BigInt(
+    round.auction?.leadingBidShannons ?? round.auction?.leadingShannons ?? '0',
+  );
+  const contributionMinimum = BigInt(round.terms.minimumShannons);
+  const toLead = highestBid - ownBid + 1n;
+  const minimum = auction && toLead > contributionMinimum ? toLead : contributionMinimum;
   const [value, setValue] = useState(
     existing
       ? money(existing.amountShannons).replaceAll(',', '')
-      : money(round.terms.minimumShannons).replaceAll(',', ''),
+      : money((((minimum + 99_999_999n) / 100_000_000n) * 100_000_000n).toString()).replaceAll(
+          ',',
+          '',
+        ),
   );
   const [named, setNamed] = useState(false),
     [name, setName] = useState(''),
@@ -36,32 +48,76 @@ export function Sponsorship({
   const [prepared, setPrepared] = useState<{
     tx: ccc.Transaction;
     fee: string;
+    tag: string;
     wallet: NonNullable<ReturnType<typeof getWalletState>['connection']>;
   } | null>(null);
   const signed = useRef<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
+  let entered: bigint | null = null;
+  try {
+    entered = BigInt(shannons(value));
+  } catch {
+    /* Keep incomplete typing editable. */
+  }
+  const belowMinimum = entered === null || entered < minimum;
   async function prepare() {
     setError('');
     setStage(auction ? 'Preparing your bid' : 'Preparing your contribution');
     try {
-      const data = existing
-        ? null
-        : await actFive({
-            action: 'sponsor',
+      if (belowMinimum)
+        throw Error(
+          auction
+            ? 'Increase your top-up so your combined bid exceeds the highest bid.'
+            : 'Enter at least the minimum contribution.',
+        );
+      const amountShannons = shannons(value);
+      if (
+        editing &&
+        prepared &&
+        !signed.current &&
+        existing?.amountShannons === amountShannons &&
+        existing.tag === prepared.tag
+      ) {
+        setEditing(false);
+        return;
+      }
+      const revising = !!existing && (existing.amountShannons !== amountShannons || editing);
+      const data = revising
+        ? await actFive({
+            action: 'revise-sponsor',
             id: round.id,
             sponsorId: id,
-            amountShannons: shannons(value),
-            display: named ? 'named' : 'anonymous',
-            name,
-            logo,
-            link,
-            introduction,
-            description,
-            custodyAccepted: accepted,
-          });
-      const intent = existing ?? data?.detail?.ownSponsorships.find((s) => s.id === id);
+            amountShannons,
+            expectedTag: prepared?.tag ?? existing!.tag,
+          })
+        : existing
+          ? null
+          : await actFive({
+              action: 'sponsor',
+              id: round.id,
+              sponsorId: id,
+              amountShannons,
+              display: named ? 'named' : 'anonymous',
+              name,
+              logo,
+              link,
+              introduction,
+              description,
+              custodyAccepted: accepted,
+            });
+      const intent = data?.detail?.ownSponsorships.find((s) => s.id === id) ?? existing;
       if (!intent || !intent.destination.startsWith('ckt1') || !/^0x[0-9a-f]{64}$/.test(intent.tag))
         throw Error('Unable to verify the rewards destination.');
+      if (intent.funding !== 'awaiting' || intent.amountShannons !== amountShannons)
+        throw Error(
+          'This payment changed or is already accepted. Check its status before adding a top-up.',
+        );
+      if (revising) {
+        // Only a confirmed server amendment can invalidate and release the previous local signature.
+        signed.current = null;
+        setPrepared(null);
+      }
       if (data) onData(data);
       setStage('Connecting your wallet');
       const signer = await chooseWallet(),
@@ -106,7 +162,8 @@ export function Sponsorship({
       if (fee < 0n || fee > 10_000_000n)
         throw Error('The network fee is outside the contribution limit.');
       await assertWalletAccount(wallet, account.walletAddress);
-      setPrepared({ tx, fee: fee.toString(), wallet });
+      setPrepared({ tx, fee: fee.toString(), wallet, tag: intent.tag });
+      setEditing(false);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : 'Unable to prepare. Your contribution has not been sent.',
@@ -172,23 +229,34 @@ export function Sponsorship({
           ? 'Win this gameweek’s sponsor spot. Your confirmed top-ups combine into one bid. Only the winning total funds the prize pool.'
           : 'Give this gameweek something extra. Every confirmed contribution goes into its fixed prize pool.'}
       </p>
-      {!prepared ? (
+      {!prepared || editing ? (
         <>
           <label>
             {auction ? 'Add to your bid (tCKB)' : 'Contribution (tCKB)'}
             <input
               inputMode="decimal"
               value={value}
-              disabled={!!existing || !!stage}
+              disabled={!!stage}
               onChange={(e) => setValue(e.target.value)}
             />
           </label>
-          <small>Minimum {money(round.terms.minimumShannons)} tCKB</small>
+          <small>Minimum contribution {money(round.terms.minimumShannons)} tCKB</small>
           {auction && (
             <small>
-              Your funded total: {money(round.auction!.ownShannons)} tCKB. Highest funded total
-              wins; the earliest accepted total wins a tie.
+              Your bid: {money(ownBid.toString())} tCKB. Highest bid: {money(highestBid.toString())}{' '}
+              tCKB, including payments confirming. Your new total must be higher. Minimum next
+              top-up: {money(minimum.toString())} tCKB.
             </small>
+          )}
+          {auction && entered !== null && (
+            <small>Your total after this top-up: {money((ownBid + entered).toString())} tCKB</small>
+          )}
+          {belowMinimum && (
+            <p className="five-message" role="status">
+              {auction
+                ? 'Increase the amount to beat the highest bid and meet the minimum contribution.'
+                : 'Enter at least the minimum contribution.'}
+            </p>
           )}
           {!existing && (
             <>
@@ -284,7 +352,7 @@ export function Sponsorship({
           </div>
           <button
             className="btn primary"
-            disabled={!accepted || !!stage}
+            disabled={!accepted || !!stage || belowMinimum}
             aria-busy={!!stage}
             onClick={() => void prepare()}
           >
@@ -299,6 +367,18 @@ export function Sponsorship({
               'Review contribution'
             )}
           </button>
+          {editing && prepared && (
+            <button
+              className="btn quiet"
+              disabled={!!stage}
+              onClick={() => {
+                setEditing(false);
+                setValue(money(prepared.tx.outputs[0].capacity.toString()).replaceAll(',', ''));
+              }}
+            >
+              Back to saved payment
+            </button>
+          )}
         </>
       ) : (
         <>
@@ -330,6 +410,16 @@ export function Sponsorship({
             ) : (
               'Approve in wallet'
             )}
+          </button>
+          <button
+            className="btn quiet"
+            disabled={!!stage}
+            onClick={() => {
+              setEditing(true);
+              setError('');
+            }}
+          >
+            Change amount
           </button>
         </>
       )}
