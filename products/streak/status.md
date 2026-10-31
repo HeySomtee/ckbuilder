@@ -1,5 +1,10 @@
 # Streak status
 
+31 October publication: runtime commit `162dc06` is verified on GitHub `main`.
+Local hooks and hosted CI were deferred under the owner's urgent release exception;
+the full gate remains incomplete. Render deployment and physical acceptance are
+not yet verified. Follow today's Five-first checklist before noon Lagos.
+
 31 October urgent release: the owner explicitly deferred further automated tests
 and authorized immediate commit/push of the prepared wallet and mobile controls,
 including balances rounded down to two decimals. The complete release gate remains
