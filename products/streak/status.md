@@ -1,5 +1,13 @@
 # Streak status
 
+31 October release verification: committed `948fb1c` after all 77 required checks
+passed in one full gate, completed at 13:38:27 UTC. This includes Survivor creator
+prizes/deadlines and Five's live team with independent next-week picks. The commit
+hook reused the exact staged-tree receipt. Not pushed or deployed; hosted CI stays
+paused. Physical Survivor creator funding, confirmation, refund and winner payout
+acceptance remain outstanding. Local dummy rounds support immediate deadlines.
+The earlier incomplete-gate and uncommitted entries below are historical.
+
 31 October Five now keeps the current locked team visible with updating player
 points, captain scoring and a separate next-gameweek editor. Saved squads do not
 carry over. Focused domain, feed, browser and build checks pass; no publication or

@@ -1,6 +1,6 @@
 # Five current team and next-week picks
 
-31 October 2026. Implemented locally; uncommitted and not deployed.
+31 October 2026. Committed as `948fb1c`; not pushed or deployed.
 
 The default gameweek is the most recently locked published round, including its
 final results until another round locks. The scheduler still opens upcoming
@@ -44,6 +44,8 @@ Evidence: `.quality-artifacts/five-live-browser.log`, `five-live-workspace-brows
 `five-live-games-browser.log`, `five-live-build.log`, `five-live-lint.log` and
 `.quality-artifacts/five-auto/*-live-points.png`.
 
-Preserve the separate pending Survivor wallet acceptance and release work. This
-increment is not a full release-gate receipt or hosted acceptance result. The
-complete gate remains required before publication; no hosted CI was enabled.
+The complete release gate passed all 77 checks at 13:38:27 UTC on 31 October.
+The commit hook reused the exact candidate receipt for tree `d0bf4b7149bf`.
+Evidence: `.quality-artifacts/oct31-release-gate.log`, `all.json` and the hook
+receipt. Preserve the separate pending Survivor physical-wallet acceptance.
+No hosted acceptance or deployment is claimed; hosted CI remains paused.

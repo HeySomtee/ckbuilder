@@ -44,6 +44,12 @@ or undersized wallet from repeatedly delaying later winners.
 
 ## Verification
 
+Final release result, 31 October: all 77 required checks passed in one full run
+at 13:38:27 UTC. Runtime commit `948fb1c` reused the exact-tree hook receipt for
+`d0bf4b7149bf`. Evidence: `.quality-artifacts/oct31-release-gate.log`, `all.json`
+and the hook receipt. Not pushed or deployed. The earlier diagnostic attempts
+below explain the verification history; the full release gate is now complete.
+
 Focused synthetic domain tests cover 30-round schedules, official deadline cutoff,
 creator-only funding, rejection before persistence, exact retries, signed-draft
 immutability, reorg blocking, equal-share conservation and expired-draft refunds.
@@ -73,4 +79,4 @@ Evidence is under `.quality-artifacts/survivor-prizes-major.log`, `browser.json`
 `survivor-prizes-contracts.log`, `survivor-five-devnet.log`,
 `survivor-five-rehearsal.log`, `survivor-final-build.log` and
 `survivor-final-browser.log`. The owner's production checklist was preserved and
-restored byte-for-byte. This increment remains local and uncommitted.
+restored byte-for-byte. Physical wallet and hosted acceptance remain outstanding.

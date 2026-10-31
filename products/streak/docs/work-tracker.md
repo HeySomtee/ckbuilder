@@ -1,11 +1,15 @@
 # Streak work tracker
 
-31 October post-deadline release: the owner authorized committing the combined
-Survivor and Five work with full automated verification restored. Prepare the exact
-candidate and run the complete gate through the commit hook. Preserve the owner's
-checklist and unrelated local files. Hosted CI remains paused; production Survivor
-acceptance is still outstanding. Local dummy rounds can exercise immediate deadlines
-without waiting for the next provider gameweek.
+31 October post-deadline release completed: `948fb1c` commits the combined Survivor
+and Five work. All 77 checks passed in one complete gate through the commit hook,
+from 12:57:59 to 13:38:27 UTC; the commit reused its exact-tree receipt. Source tree:
+`d0bf4b7149bf`. Evidence: `.quality-artifacts/oct31-release-gate.log`, `all.json`
+and the exact-tree hook receipt. The owner's checklist and unrelated files remain
+outside the release. Not pushed or deployed; hosted CI remains paused. Next:
+physical Survivor creator funding, confirmation, refund and winner payout checks,
+then provider-backed competition acceptance. Local dummy rounds can exercise
+immediate deadlines without waiting for the next provider gameweek. Earlier
+uncommitted/incomplete-gate entries below are historical.
 
 31 October Five follow-up implemented locally: the default stays on the most recent
 locked gameweek; its saved squad displays updating player points, captain scoring,
