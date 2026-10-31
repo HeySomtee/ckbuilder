@@ -73,6 +73,7 @@ class MemoryStore implements FiveStorage {
   }
 }
 async function main() {
+  await fundingWitnesses();
   const metadataStore = new MemoryStore();
   const metadataRound = newRound('metadata', 'admin', { ...terms, sponsorship: true }, now);
   metadataRound.state = 'open';
@@ -363,6 +364,94 @@ async function main() {
   console.log(
     'Five domain, service, identity, replay, payout boundaries and changed-fixture regression passed.',
   );
+}
+async function fundingWitnesses() {
+  const store = new MemoryStore();
+  const round = newRound('witnesses', 'admin', { ...terms, sponsorship: true }, now);
+  round.state = 'open';
+  store.rows.set(round.id, round);
+  const client = new ccc.ClientPublicTestnet({ url: 'http://127.0.0.1:1', fallbacks: [] });
+  const owner = ccc.Script.from({
+    codeHash: '0x' + '11'.repeat(32),
+    hashType: 'type',
+    args: '0x' + '22'.repeat(20),
+  });
+  const target = ccc.Script.from({ ...owner, args: '0x' + '33'.repeat(20) });
+  const wallet = (await ccc.Address.fromScript(owner, client)).toString();
+  const funding = new FiveFunding(
+    store,
+    client,
+    (await ccc.Address.fromScript(target, client)).toString(),
+  );
+  const sponsorActor = { ...actor, wallet };
+  await funding.intent(sponsorActor, round.id, {
+    sponsorId: 'group',
+    amountShannons: '10000000000',
+    display: 'anonymous',
+    custodyAccepted: true,
+  });
+  const sponsor = (await store.load(round.id))!.sponsors[0];
+  const cells = [1, 2].map((n) =>
+    ccc.Cell.from({
+      outPoint: { txHash: '0x' + String(n).repeat(64), index: 0 },
+      cellOutput: { capacity: 100_000_000_000n, lock: owner },
+      outputData: '0x',
+    }),
+  );
+  client.getCell = client.getCellLiveNoCache = async (point) =>
+    cells.find((cell) => cell.outPoint.toHex() === ccc.OutPoint.from(point).toHex());
+  const tx = ccc.Transaction.from({
+    inputs: cells.map((cell) => ({ previousOutput: cell.outPoint, since: 0 })),
+    outputs: [
+      { capacity: 10_000_000_000n, lock: target },
+      { capacity: 189_999_999_000n, lock: owner },
+    ],
+    outputsData: [sponsor.tag!, '0x'],
+  });
+  await tx.prepareSighashAllWitness(owner, 85, client);
+  assert.equal(tx.inputs.length, 2);
+  assert.equal(tx.witnesses.length, 1, 'CCC prepares one witness for the shared owner group');
+  // Synthetic signature bytes. The mocked dry-run below tests the authority boundary, not CKB cryptography.
+  tx.setWitnessArgs(0, { lock: '0x' + '44'.repeat(85) });
+  const bytes = ccc.hexFrom(tx.toBytes());
+  let rejectDry = true,
+    checked = '';
+  client.sendTransactionDry = async (candidate) => {
+    checked = ccc.hexFrom(ccc.Transaction.from(candidate).toBytes());
+    if (rejectDry) throw Error('Synthetic chain rejection');
+    return 1n;
+  };
+  const request = { sponsorId: sponsor.id, signedBytes: bytes };
+  await assert.rejects(
+    funding.submit(sponsorActor, round.id, request),
+    /Synthetic chain rejection/,
+  );
+  assert.equal(
+    (await store.load(round.id))!.sponsors[0].signedBytes,
+    undefined,
+    'Rejected dry-run cannot persist funding',
+  );
+  assert.equal(checked, bytes, 'Chain validation receives the exact unpadded bytes');
+  rejectDry = false;
+  await funding.submit(sponsorActor, round.id, request);
+  await funding.submit(sponsorActor, round.id, request);
+  assert.equal(
+    (await store.load(round.id))!.sponsors[0].signedBytes,
+    bytes,
+    'Retries preserve the exact same signed payment',
+  );
+  for (const kind of ['unsigned', 'duplicate', 'change', 'fee'] as const) {
+    const bad = tx.clone();
+    if (kind === 'unsigned') bad.witnesses = [];
+    if (kind === 'duplicate') bad.inputs[1] = bad.inputs[0].clone();
+    if (kind === 'change') bad.outputs[1].lock = target;
+    if (kind === 'fee') bad.outputs[1].capacity -= 10_000_000n;
+    await assert.rejects(
+      funding.validate(sponsor, ccc.hexFrom(bad.toBytes())),
+      /shape|input|Change|fee/,
+    );
+  }
+  console.log('Five grouped-witness validation, mandatory dry-run and exact signed retry passed.');
 }
 main().catch((error) => {
   console.error(error);

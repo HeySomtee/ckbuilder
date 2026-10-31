@@ -101,7 +101,9 @@ export class FiveFunding {
       tx.outputs.length < 1 ||
       tx.outputs.length > 2 ||
       tx.outputsData.length !== tx.outputs.length ||
-      tx.witnesses.length < tx.inputs.length
+      // Same-owner inputs share a lock-group witness; CCC need not pad every input.
+      // Validate signatures through the mandatory chain dry-run below, without changing bytes.
+      tx.witnesses.length < 1
     )
       throw new FiveError('Unexpected contribution transaction shape.');
     const first = tx.outputs[0];

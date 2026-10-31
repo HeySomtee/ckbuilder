@@ -1,5 +1,11 @@
 # Streak status
 
+31 October Five sponsorship fix: legitimate multi-input payments may share a
+single owner-lock witness. The server now accepts that shape and still requires
+successful chain validation before saving a contribution. Focused Five regression
+and independent money/recovery review pass. Full release gate is deferred for the
+urgent campaign; deployed MetaMask retry remains the physical acceptance check.
+
 31 October publication: runtime commit `162dc06` is verified on GitHub `main`.
 Local hooks and hosted CI were deferred under the owner's urgent release exception;
 the full gate remains incomplete. Render deployment and physical acceptance are

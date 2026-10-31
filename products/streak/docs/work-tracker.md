@@ -1,5 +1,17 @@
 # Streak work tracker
 
+31 October urgent sponsorship correction: owner reports Zerion succeeds but
+MetaMask returns "Unexpected contribution transaction shape." Five incorrectly
+required a witness per input, although CCC prepares one per shared owner lock.
+Accept at least one witness while retaining all input/output/fee checks and the
+mandatory chain dry-run. Do not pad or rewrite saved signatures. The focused
+Five suite passes with two same-owner inputs, dry-run rejection before persistence,
+exact-byte retries and invalid transaction rejection. Independent money/recovery
+review found no blocker. Publish this narrow campaign fix with the full release
+gate deferred under the owner's urgent direction; physical MetaMask acceptance
+remains outstanding. Keep the failed panel open and retry its saved contribution
+after deployment, before the noon deadline. Preserve the owner's edits to today's plan.
+
 31 October published: GitHub `main` confirms `162dc061947e65a06f19579726e541a215b5fff5`.
 The reviewed 39-file release includes wallet switching, mobile payment controls,
 two-decimal balances, regression sources, gate scheduling and today's checklist.
