@@ -88,6 +88,8 @@ export type RewardAccount = {
   status: string;
 };
 export type FiveData = {
+  currentRoundId?: string | null;
+  nextRoundId?: string | null;
   testMode?: boolean;
   automation?: { enabled: boolean; state: string; lastSyncedAt: string | null; message: string };
   rewardsAccount: RewardAccount | null;
@@ -262,6 +264,8 @@ export function parseFive(value: unknown): FiveData {
   }
   const reward = d.rewardsAccount == null ? null : obj(d.rewardsAccount);
   return {
+    currentRoundId: d.currentRoundId == null ? null : str(d.currentRoundId, 100),
+    nextRoundId: d.nextRoundId == null ? null : str(d.nextRoundId, 100),
     ...(d.automation === undefined
       ? {}
       : {

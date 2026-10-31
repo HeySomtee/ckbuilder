@@ -1,0 +1,101 @@
+.five-gameweek-actions {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 2px 0 8px;
+}
+.five-gameweek-actions p {
+  margin: 0 auto 0 0;
+  font-size: 12px;
+}
+.five-gameweek-actions strong {
+  color: var(--text);
+}
+.five-live-team {
+  width: 100%;
+  max-width: 900px;
+  margin-inline: auto;
+}
+.five-page .five-live-team .five-pitch {
+  height: clamp(390px, calc(100dvh - 330px), 600px);
+}
+.five-page .five-live-team .five-pitch-player .five-jersey {
+  width: 60px;
+  height: 56px;
+}
+.five-live-team .five-pitch-card header small,
+.five-live-team footer {
+  color: var(--five-muted);
+  font-size: 12px;
+}
+.five-live-total {
+  display: grid;
+  justify-items: end;
+  font-variant-numeric: tabular-nums;
+}
+.five-live-total strong {
+  font-size: clamp(32px, 5vw, 48px);
+  color: var(--five-lime);
+  line-height: 1;
+}
+.five-live-total span {
+  font-size: 11px;
+  margin-top: 4px;
+}
+.five-live-player-points {
+  padding: 3px 9px;
+  border-radius: 5px;
+  background: #d4efb5;
+  color: #122211;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.five-live-player-points[data-pending='true'] {
+  background: #172a20;
+  color: var(--five-muted);
+  font-size: 10px;
+}
+.five-live-captain {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  border-radius: 50%;
+  background: var(--five-lime);
+  color: #122211;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 750;
+}
+.five-live-team footer {
+  display: grid;
+  gap: 6px;
+  padding: 0 18px 18px;
+}
+.five-live-breakdown {
+  padding: 20px;
+}
+.five-live-breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--five-line);
+  font-size: 13px;
+}
+.five-live-breakdown p {
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .five-gameweek-actions p {
+    flex-basis: 100%;
+  }
+  .five-page .five-live-team .five-pitch {
+    height: 410px;
+  }
+}

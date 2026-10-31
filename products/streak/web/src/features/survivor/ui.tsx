@@ -9,6 +9,7 @@ import { CellLoader } from '../../components/cell-loader';
 import { FixtureRun } from '../../components/fixture-run';
 import { actSurvivor, decimalAmount, loadSurvivor, money, toShannons } from './api';
 import type { Competition, SurvivorData, Team } from './api';
+import { PrizeFunding } from './prize-funding';
 import './survivor.css';
 
 const date = (s: string) =>
@@ -63,9 +64,10 @@ function Rulebook({ competition }: { competition?: Competition | null }) {
         </li>
       </ol>
       <p>
-        One entry per account. Free entry does not move funds. Any listed prize is the host's
-        announcement, not an escrowed or claimable balance. Joint winners share the announced prize
-        equally; any smallest-unit remainder stays unallocated until the host arranges awards.
+        One entry per account. Free entry does not move funds.
+        {competition?.prizeStatus === 'announced'
+          ? ' This older competition has a host-announced prize, not a funded balance.'
+          : ' The creator funds any prize into Streak’s dedicated custodial testnet rewards wallet before entries open. Joint winners share equally; any smallest-unit remainder returns to the creator. Cancellation returns the prize. Small balances stay saved until they meet the wallet cell minimum. This is not a smart-contract escrow.'}
       </p>
       {competition && (
         <details>
@@ -121,7 +123,9 @@ export default function SurvivorPage({
   const [tab, setTab] = useState('pick');
   const [chosen, setChosen] = useState('');
   const [notice, setNotice] = useState('');
-  const [dialogMode, setDialogMode] = useState<'rules' | 'join' | 'admin' | 'delete'>('rules');
+  const [dialogMode, setDialogMode] = useState<'rules' | 'join' | 'admin' | 'delete' | 'prize'>(
+    'rules',
+  );
   const [deleteTarget, setDeleteTarget] = useState<Competition | null>(null);
   const [editing, setEditing] = useState<Competition | null>(null);
   const [entryMode, setEntryMode] = useState<'free' | 'paid'>('free');
@@ -229,6 +233,10 @@ export default function SurvivorPage({
     serverNow < Date.parse(round.lockAt) &&
     ['open', 'running'].includes(c?.state ?? '');
   const canPick = open && own?.status === 'active';
+  const needsPrize = !!c && !['announced', 'none', 'confirmed'].includes(c.prizeStatus);
+  const hasPrizePayment =
+    c?.prizeFunding && ['submitted', 'confirmed', 'conflicted'].includes(c.prizeFunding.funding);
+  const [conflictingHash, setConflictingHash] = useState('');
   const busy = action.isPending || query.isError || query.isPending;
   const publishing =
     action.isPending &&
@@ -273,15 +281,21 @@ export default function SurvivorPage({
           prizeShannons: toShannons(String(form.get('prize'))),
           limit: Number(form.get('limit')),
         },
-        roundKeys: form.getAll('round'),
+        roundKeys: selectedRounds,
       });
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Check the competition terms.');
     }
   }
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [selectedRounds, setSelectedRounds] = useState<string[]>([]);
+  const [roundCount, setRoundCount] = useState('1');
   const adminOpen = (existing: Competition | null) => {
     setEditing(existing);
+    const keys =
+      existing?.rounds.map((r) => r.key) ?? data?.slates.slice(0, 1).map((s) => s.key) ?? [];
+    setSelectedRounds(keys);
+    setRoundCount(String(keys.length || 1));
     setEntryMode(existing?.terms.mode ?? 'free');
     setRequestId(crypto.randomUUID());
     setNotice('');
@@ -405,9 +419,21 @@ export default function SurvivorPage({
               <span>Up to {c.terms.limit} players</span>
             </div>
             <div>
-              <small>HOST-ANNOUNCED PRIZE</small>
+              <small>
+                {c.prizeStatus === 'announced' ? 'HOST-ANNOUNCED PRIZE' : 'CREATOR PRIZE'}
+              </small>
               <strong>{money(c.terms.prizeShannons)}</strong>
-              <span>Arranged by you, not held by Streak</span>
+              <span>
+                {c.prizeStatus === 'announced'
+                  ? 'Arranged by you, not held by Streak'
+                  : c.prizeStatus === 'confirmed'
+                    ? 'Funded in the testnet rewards wallet'
+                    : c.prizeStatus === 'submitted'
+                      ? 'Payment confirming'
+                      : c.prizeStatus === 'none'
+                        ? 'No prize'
+                        : 'Fund before opening entries'}
+              </span>
             </div>
             <div>
               <small>FIRST PICK DEADLINE</small>
@@ -439,7 +465,10 @@ export default function SurvivorPage({
               <button
                 className="survivor-primary"
                 disabled={
-                  busy || c.terms.mode !== 'free' || serverNow >= Date.parse(c.rounds[0].lockAt)
+                  busy ||
+                  needsPrize ||
+                  c.terms.mode !== 'free' ||
+                  serverNow >= Date.parse(c.rounds[0].lockAt)
                 }
                 aria-describedby="survivor-publish-help"
                 aria-busy={publishing}
@@ -448,11 +477,51 @@ export default function SurvivorPage({
                 {publishing && <CellLoader variant="orbit" />}
                 {publishing ? 'Publishing competition…' : 'Publish free competition'}
               </button>
-              <button className="quiet" disabled={busy} onClick={() => adminOpen(c)}>
+              {needsPrize && c.isCreator && (
+                <button
+                  className="survivor-primary"
+                  disabled={
+                    busy ||
+                    !data.fundingAvailable ||
+                    c.prizeStatus === 'submitted' ||
+                    c.prizeStatus === 'conflicted' ||
+                    serverNow >= Date.parse(c.rounds[0].lockAt)
+                  }
+                  onClick={() => show('prize')}
+                >
+                  {c.prizeStatus === 'submitted' ? (
+                    <>
+                      <CellLoader variant="orbit" />
+                      Prize confirming
+                    </>
+                  ) : (
+                    'Fund creator prize'
+                  )}
+                </button>
+              )}
+              <button
+                className="quiet"
+                disabled={busy || !!hasPrizePayment}
+                onClick={() => adminOpen(c)}
+              >
                 Edit draft
               </button>
             </div>
           </div>
+          {needsPrize && (
+            <p className="survivor-notice">
+              {data.fundingError ||
+                (c.prizeStatus === 'conflicted'
+                  ? 'This payment was proven to use inputs spent elsewhere. Cancel this draft and create a new one to fund a fresh prize.'
+                  : c.prizeStatus === 'submitted'
+                    ? 'Your signed payment is saved. Wait for 24 chain confirmations, then publish.'
+                    : !c.isCreator
+                      ? 'The creator must sign the prize payment from their wallet.'
+                      : data.fundingAvailable
+                        ? 'Fund the prize first. Publishing becomes available after chain confirmation.'
+                        : 'The rewards worker must be available before funding. Your draft is saved.')}
+            </p>
+          )}
           <details className="survivor-setup-schedule">
             <summary>
               Review {c.rounds.length} scheduled {c.rounds.length === 1 ? 'round' : 'rounds'}
@@ -482,7 +551,7 @@ export default function SurvivorPage({
                 show('delete');
               }}
             >
-              Delete competition
+              {hasPrizePayment ? 'Cancel and refund' : 'Delete competition'}
             </button>
           </div>
         </section>
@@ -521,7 +590,7 @@ export default function SurvivorPage({
                 <strong>{item.terms.name}</strong>
                 <span>
                   {item.terms.mode === 'free' ? 'Free entry' : 'Paid entry · draft only'} ·{' '}
-                  {money(item.terms.prizeShannons)} announced prize
+                  {money(item.terms.prizeShannons)} prize
                 </span>
                 <span className="survivor-competition-link">
                   {item.state === 'draft'
@@ -601,9 +670,17 @@ export default function SurvivorPage({
             <Artwork teams={allTeams} />
             <div className="survivor-stats">
               <div>
-                <small>HOST-ANNOUNCED PRIZE</small>
+                <small>
+                  {c.prizeStatus === 'announced' ? 'HOST-ANNOUNCED PRIZE' : 'FUNDED PRIZE'}
+                </small>
                 <b>{money(c.terms.prizeShannons)}</b>
-                <span>Not escrowed or paid</span>
+                <span>
+                  {c.prizeStatus === 'announced'
+                    ? 'Not escrowed or paid'
+                    : c.prizeStatus === 'confirmed'
+                      ? 'Held in Streak’s testnet rewards wallet'
+                      : 'No funded prize'}
+                </span>
               </div>
               <div>
                 <small>ENTRY</small>
@@ -632,7 +709,7 @@ export default function SurvivorPage({
                       ? 'Round complete'
                       : 'Picks locked'}
                 </b>
-                <span>{date(round.lockAt)}</span>
+                <span>Closes {date(round.lockAt)} · Your local time</span>
               </div>
             </div>
           </section>
@@ -641,7 +718,12 @@ export default function SurvivorPage({
               <strong>
                 {c.state === 'complete' ? 'The final whistle.' : 'Competition update'}
               </strong>
-              <p>{c.reason} Any host award is handled separately from this game result.</p>
+              <p>
+                {c.reason}{' '}
+                {c.prizeStatus === 'announced'
+                  ? 'Any host award is handled separately.'
+                  : 'Funded prizes and refunds are processed by the rewards worker.'}
+              </p>
             </div>
           )}
           <div className="survivor-layout">
@@ -665,6 +747,12 @@ export default function SurvivorPage({
                         ROUND {c.currentRound + 1} · {round.label}
                       </span>
                       <h3>{open ? 'Who keeps you in?' : 'The picks are in.'}</h3>
+                      <p className="survivor-deadline">
+                        <strong>
+                          {open ? 'Pick by' : 'Picks closed'} {date(round.lockAt)}
+                        </strong>
+                        <small>Your local time · Published round deadline</small>
+                      </p>
                       <p>
                         {open
                           ? 'Choose carefully. Today’s safe pick might be next week’s lifeline.'
@@ -905,20 +993,85 @@ export default function SurvivorPage({
           </div>
         </>
       )}
+      {c?.isCreator && c.prizeStatus === 'submitted' && (
+        <details className="survivor-setup-schedule">
+          <summary>Payment stuck after another wallet transaction?</summary>
+          <p>
+            If another confirmed transaction spent the same inputs, provide its hash. The server
+            checks the chain before releasing this payment from recovery.
+          </p>
+          <label>
+            Conflicting transaction hash
+            <input
+              value={conflictingHash}
+              onChange={(e) => setConflictingHash(e.target.value)}
+              maxLength={66}
+            />
+          </label>
+          <button
+            className="quiet"
+            disabled={busy || !/^0x[0-9a-f]{64}$/i.test(conflictingHash)}
+            onClick={() =>
+              action.mutate({ action: 'resolve-prize-conflict', id: c.id, conflictingHash })
+            }
+          >
+            Verify conflicting transaction
+          </button>
+        </details>
+      )}
+      {data?.rewards &&
+        c &&
+        (BigInt(data.rewards.availableShannons) > 0n ||
+          BigInt(data.rewards.pendingShannons) > 0n ||
+          BigInt(data.rewards.paidShannons) > 0n) && (
+          <section className="survivor-notice" aria-label="Testnet rewards">
+            <strong>Your shared Five and Survivor rewards</strong>
+            <p>
+              {money(data.rewards.availableShannons)} ready · {money(data.rewards.pendingShannons)}{' '}
+              confirming · {money(data.rewards.paidShannons)} paid
+            </p>
+            {BigInt(data.rewards.availableShannons) >= BigInt(data.rewards.minimumShannons) ? (
+              <button
+                className="quiet"
+                disabled={
+                  busy || !data.fundingAvailable || BigInt(data.rewards.pendingShannons) > 0n
+                }
+                onClick={() => action.mutate({ action: 'collect-prize', id: c.id })}
+              >
+                Collect saved rewards
+              </button>
+            ) : (
+              <small>
+                Small rewards stay saved until they reach {money(data.rewards.minimumShannons)}.
+              </small>
+            )}
+            {data.rewards.transactionHash && (
+              <a
+                href={`https://pudge.explorer.nervos.org/transaction/${data.rewards.transactionHash}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View latest payout
+              </a>
+            )}
+          </section>
+        )}
       <dialog ref={dialog} className="survivor-dialog" aria-labelledby="survivor-dialog-title">
         <header>
           <div>
             <span className="eyebrow">STREAK SURVIVOR</span>
             <h2 id="survivor-dialog-title">
-              {dialogMode === 'delete'
-                ? 'Delete this competition?'
-                : dialogMode === 'admin'
-                  ? editing
-                    ? 'Edit your draft.'
-                    : 'Create the long game.'
-                  : dialogMode === 'join'
-                    ? 'Your run starts here.'
-                    : 'Simple to play. Hard to last.'}
+              {dialogMode === 'prize'
+                ? 'Fund your competition.'
+                : dialogMode === 'delete'
+                  ? 'Delete this competition?'
+                  : dialogMode === 'admin'
+                    ? editing
+                      ? 'Edit your draft.'
+                      : 'Create the long game.'
+                    : dialogMode === 'join'
+                      ? 'Your run starts here.'
+                      : 'Simple to play. Hard to last.'}
             </h2>
           </div>
           <button aria-label="Close Survivor dialog" onClick={() => dialog.current?.close()}>
@@ -933,6 +1086,16 @@ export default function SurvivorPage({
           )}
           {notice && dialogMode === 'admin' && <p role="status">{notice}</p>}
           {dialogMode === 'rules' && <Rulebook competition={c} />}
+          {dialogMode === 'prize' && c && account && (
+            <PrizeFunding
+              key={`${identity}:${c.id}`}
+              competition={c}
+              account={account}
+              onData={(next) => {
+                if (alive.current) client.setQueryData(key, verifyIdentity(next));
+              }}
+            />
+          )}
           {dialogMode === 'delete' && deleteTarget && data?.admin && (
             <>
               <p>
@@ -941,7 +1104,12 @@ export default function SurvivorPage({
               <p>
                 {deleteTarget.entries.length
                   ? 'This competition has entrants. Their entries and results must be kept, so it cannot be deleted.'
-                  : 'This removes the competition from Streak. It has no entrants. This cannot be undone.'}
+                  : deleteTarget.prizeFunding &&
+                      ['submitted', 'confirmed', 'conflicted'].includes(
+                        deleteTarget.prizeFunding.funding,
+                      )
+                    ? 'Cancel before entrants join. The signed payment remains recoverable; confirmed funds return to the creator. The record is kept.'
+                    : 'This removes the competition from Streak. It has no entrants. This cannot be undone.'}
               </p>
               <div className="survivor-actions">
                 <button className="quiet" onClick={() => dialog.current?.close()}>
@@ -952,10 +1120,28 @@ export default function SurvivorPage({
                     className="survivor-primary"
                     disabled={busy}
                     aria-busy={action.isPending}
-                    onClick={() => action.mutate({ action: 'delete', id: deleteTarget.id })}
+                    onClick={() =>
+                      action.mutate({
+                        action:
+                          deleteTarget.prizeFunding &&
+                          ['submitted', 'confirmed', 'conflicted'].includes(
+                            deleteTarget.prizeFunding.funding,
+                          )
+                            ? 'cancel-prize'
+                            : 'delete',
+                        id: deleteTarget.id,
+                      })
+                    }
                   >
                     {action.isPending && <CellLoader variant="orbit" />}
-                    {action.isPending ? 'Deleting competition…' : 'Confirm deletion'}
+                    {action.isPending
+                      ? 'Saving…'
+                      : deleteTarget.prizeFunding &&
+                          ['submitted', 'confirmed', 'conflicted'].includes(
+                            deleteTarget.prizeFunding.funding,
+                          )
+                        ? 'Confirm cancellation and refund'
+                        : 'Confirm deletion'}
                   </button>
                 )}
               </div>
@@ -1022,7 +1208,7 @@ export default function SurvivorPage({
                   />
                 </label>
                 <label>
-                  Announced prize (tCKB)
+                  Creator-funded prize (tCKB)
                   <input
                     name="prize"
                     inputMode="decimal"
@@ -1045,13 +1231,37 @@ export default function SurvivorPage({
               <p className="survivor-notice">
                 {entryMode === 'paid'
                   ? 'Paid entry cannot open yet. You can save your plans as a draft, or choose free entry to publish now.'
-                  : 'Free entry needs no wallet payment. Any prize is arranged by you separately.'}
+                  : 'Players enter free. Fund any prize from your wallet before publishing. Use zero for a competition without a prize.'}
               </p>
               <fieldset>
                 <legend>Choose your rounds</legend>
+                {data.scheduleError && <p className="survivor-notice">{data.scheduleError}</p>}
+                <label>
+                  Number of rounds
+                  <input
+                    type="number"
+                    min="1"
+                    aria-label="Number of rounds"
+                    max={data.slates.length || 1}
+                    required
+                    value={roundCount}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setRoundCount(value);
+                      const count = Number(value);
+                      if (Number.isInteger(count) && count >= 1 && count <= data.slates.length)
+                        setSelectedRounds(data.slates.slice(0, count).map((s) => s.key));
+                    }}
+                  />
+                  <small>
+                    {data.slates.length} complete upcoming gameweeks available. New rounds use the
+                    official FPL deadline, normally 90 minutes before kickoff.
+                  </small>
+                </label>
                 <p>
                   Choose the complete schedule before opening entries. Each round includes all 20
-                  clubs, with no repeat fixture per club.
+                  clubs, with no repeat fixture per club. Teams cannot be reused. The competition
+                  ends early if survivors have no legal next choice.
                 </p>
                 {!data.slates.length && (
                   <p className="survivor-notice">
@@ -1065,7 +1275,14 @@ export default function SurvivorPage({
                       type="checkbox"
                       name="round"
                       value={s.key}
-                      defaultChecked={editing?.rounds.some((r) => r.key === s.key)}
+                      checked={selectedRounds.includes(s.key)}
+                      onChange={(event) => {
+                        const keys = event.target.checked
+                          ? [...selectedRounds, s.key]
+                          : selectedRounds.filter((key) => key !== s.key);
+                        setSelectedRounds(keys);
+                        setRoundCount(String(keys.length));
+                      }}
                     />
                     <span>
                       <strong>{s.label}</strong>

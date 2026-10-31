@@ -1,5 +1,12 @@
 # Architecture and migration
 
+31 October Survivor creator prizes use the owner-approved dedicated custodial
+testnet rewards wallet. Survivor retains aggregate ownership; a payment adapter
+reuses Five funding, shared input reservations and the payout journal with a disjoint
+credit namespace. Confirmed creator funding gates publication. New schedules use
+official FPL deadlines and a separately cached full EPL season. Existing published
+terms remain fixed. [Implementation](../delivery/survivor-creator-prizes.md).
+
 28 October wallet Activity uses the [event-driven index](../delivery/event-driven-activity.md).
 The operator relays sanitized durable journal observations over authenticated local IPC.
 The API commits deduplicated jobs and PostgreSQL owner records, reads those records

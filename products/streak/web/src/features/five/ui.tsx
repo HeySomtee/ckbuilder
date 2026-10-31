@@ -1,9 +1,11 @@
+import { Jersey, Modal, positions } from './presentation';
+import { LiveTeam } from './live-team';
 import { CellLoader } from '../../components/cell-loader';
 import { GameTestPanel } from '../games-test/panel';
 import { gamesDataMode } from '../../lib/games-data';
-import { useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { FormEvent, ReactNode, RefObject } from 'react';
+import type { FormEvent, RefObject } from 'react';
 import type { Account } from '../account/api';
 import { actFive, loadFive, money, shannons } from './api';
 import type { FiveData, FiveRound, Player } from './api';
@@ -31,65 +33,6 @@ const date = (s: string) =>
     hour: '2-digit',
     minute: '2-digit',
   });
-const positions = ['FWD', 'MID', 'MID', 'DEF', 'GK'];
-function Jersey({ player }: { player: Player }) {
-  const palette = ['#a4c9d9', '#d87b77', '#aca1ce', '#7eaf99', '#d1bb82'];
-  const color =
-    palette[Array.from(player.teamId).reduce((n, c) => n + c.charCodeAt(0), 0) % palette.length];
-  return (
-    <svg className="five-jersey" viewBox="0 0 80 80" aria-hidden="true">
-      <path
-        d="M24 7L7 20 17 38 26 33 23 72Q40 78 57 72L54 33 63 38 73 20 56 7Q40 19 24 7Z"
-        fill={color}
-      />
-      <path d="M24 7Q40 25 56 7" fill="none" stroke="#eef0e8" strokeWidth="3" />
-      <image href="/ckb-mark.png" x="46" y="24" width="9" height="9" />
-      <text x="40" y="51" textAnchor="middle" fill="white" fontSize="12" fontWeight="700">
-        {player.team.slice(0, 3).toUpperCase()}
-      </text>
-    </svg>
-  );
-}
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  const ref = useRef<HTMLDialogElement | null>(null),
-    titleId = useId();
-  useEffect(() => {
-    const origin = document.activeElement;
-    const dialog = ref.current;
-    dialog?.showModal();
-    return () => {
-      dialog?.close();
-      if (origin instanceof HTMLElement && origin.isConnected) origin.focus();
-    };
-  }, []);
-  return (
-    <dialog
-      className="five-dialog"
-      ref={ref}
-      aria-labelledby={titleId}
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-    >
-      <header>
-        <h2 id={titleId}>{title}</h2>
-        <button aria-label="Close" onClick={onClose}>
-          ×
-        </button>
-      </header>
-      {children}
-    </dialog>
-  );
-}
 function Rulebook() {
   return (
     <div className="five-rulebook">
@@ -991,6 +934,17 @@ export default function FivePage({
     }
   };
   const serverNow = data ? Date.parse(data.now) + Math.max(0, clock - query.dataUpdatedAt) : 0;
+  const currentRound = data?.rounds.find((q) => q.id === data.currentRoundId);
+  const nextRound = data?.rounds.find(
+    (q) => q.id === data.nextRoundId && q.state === 'open' && Date.parse(q.lockAt) > serverNow,
+  );
+  const showPoints =
+    !!r && r.state !== 'draft' && (r.state !== 'open' || serverNow >= Date.parse(r.terms.lockAt));
+  const selectTeam = (id: string) => {
+    setSelection(id);
+    setMessage('');
+    setTab('team');
+  };
   return (
     <div
       className="five-page"
@@ -1116,9 +1070,15 @@ export default function FivePage({
         </div>
       )}
       {query.error && (
-        <div className="glass five-empty-state">
-          <h2>Let’s get your team sheet back.</h2>
-          <p>{query.error.message}</p>
+        <div className={r ? 'five-message' : 'glass five-empty-state'} role="status">
+          {r ? (
+            <p>Updates are temporarily unavailable. Showing your last saved team and points.</p>
+          ) : (
+            <>
+              <h2>Let’s get your team sheet back.</h2>
+              <p>{query.error.message}</p>
+            </>
+          )}
           <button className="btn" aria-busy={query.isFetching} onClick={() => void query.refetch()}>
             {query.isFetching && <CellLoader variant="orbit" />}
             Try again
@@ -1162,7 +1122,8 @@ export default function FivePage({
               >
                 {data.rounds.map((q) => (
                   <option key={q.id} value={q.id}>
-                    {q.name} · {q.state}
+                    {q.name} ·{' '}
+                    {q.state === 'open' && Date.parse(q.lockAt) <= serverNow ? 'locked' : q.state}
                   </option>
                 ))}
               </select>
@@ -1171,7 +1132,7 @@ export default function FivePage({
               {r.entries.length} / {r.terms.limit} entries
             </span>
             <span>
-              {r.state === 'open'
+              {r.state === 'open' && !showPoints
                 ? `Pick by ${date(r.terms.lockAt)}`
                 : r.state === 'final'
                   ? 'Final scores'
@@ -1186,22 +1147,74 @@ export default function FivePage({
             aria-labelledby="five-tab-team"
             hidden={tab !== 'team'}
           >
+            <div className="five-gameweek-actions">
+              {showPoints ? (
+                <>
+                  {nextRound ? (
+                    <>
+                      <p>
+                        Next: <strong>{nextRound.name}</strong> · Pick by {date(nextRound.lockAt)}
+                      </p>
+                      <button className="btn primary" onClick={() => selectTeam(nextRound.id)}>
+                        Pick next team
+                      </button>
+                    </>
+                  ) : (
+                    <p>The next team opens when its gameweek is ready.</p>
+                  )}
+                  <button
+                    className="btn"
+                    disabled={query.isFetching}
+                    aria-busy={query.isFetching}
+                    onClick={() => void query.refetch()}
+                  >
+                    {query.isFetching && <CellLoader variant="orbit" />}Refresh points
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p>
+                    Pick your <strong>{r.terms.name}</strong> team. Squads do not carry over.
+                  </p>
+                  {currentRound && currentRound.id !== r.id && (
+                    <button className="btn" onClick={() => selectTeam(currentRound.id)}>
+                      Back to current team
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
             <SponsorCredit round={r} onOpen={() => setTab('sponsors')} />{' '}
-            <Builder
-              squadControl={squadControl}
-              now={serverNow}
-              scoutingAvailable={data.feedAvailable}
-              key={`${identity}:${r.id}`}
-              round={r}
-              pending={mutation.isPending}
-              saving={pendingBody?.action === 'enter'}
-              authenticated={!!account}
-              signInPending={signInPending}
-              onSignIn={onSignIn}
-              onSave={(players, captain) =>
-                actionAsync({ action: 'enter', id: r.id, players, captain, termsHash: r.termsHash })
-              }
-            />
+            {showPoints ? (
+              <LiveTeam
+                key={`${identity}:${r.id}`}
+                round={r}
+                authenticated={!!account}
+                scoutingAvailable={data.feedAvailable}
+              />
+            ) : (
+              <Builder
+                squadControl={squadControl}
+                now={serverNow}
+                scoutingAvailable={data.feedAvailable}
+                key={`${identity}:${r.id}`}
+                round={r}
+                pending={mutation.isPending}
+                saving={pendingBody?.action === 'enter'}
+                authenticated={!!account}
+                signInPending={signInPending}
+                onSignIn={onSignIn}
+                onSave={(players, captain) =>
+                  actionAsync({
+                    action: 'enter',
+                    id: r.id,
+                    players,
+                    captain,
+                    termsHash: r.termsHash,
+                  })
+                }
+              />
+            )}
           </section>
           <section
             id="five-panel-standings"

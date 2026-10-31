@@ -72,6 +72,12 @@ async function main() {
     await assert.rejects(control('five', 'results', r.id), /Close/);
     await control('five', 'close', r.id);
     const firstClose = (await fiveStore.load(r.id)).testClosedAt;
+    assert.equal(
+      (await five.read(owner)).currentRoundId,
+      r.id,
+      'Controlled deadline becomes the current team immediately',
+    );
+    assert.equal((await fiveStore.list()).find((item) => item.id === r.id).lockAt, firstClose);
     await control('five', 'close', r.id);
     assert.equal((await fiveStore.load(r.id)).testClosedAt, firstClose);
     await assert.rejects(
@@ -95,6 +101,19 @@ async function main() {
     );
     await control('five', 'start', 'five2');
     assert.equal((await five.read(owner, 'five2')).detail.state, 'open');
+    assert.equal(
+      (await five.read(owner)).detail.id,
+      r.id,
+      'A new dummy round does not hide the previous team and points',
+    );
+    await fiveStore.change('ordinary', (r) => {
+      r.testClosedAt = firstClose;
+    });
+    assert.equal(
+      (await fiveStore.list()).find((item) => item.id === 'ordinary').lockAt,
+      ordinaryTerms.lockAt,
+      'Ordinary gameweeks ignore synthetic close timestamps',
+    );
     // Hold transaction validation while the admin closes the same database row.
     // Signature verification is stubbed here; devnet tests cover actual signing.
     const payer = {

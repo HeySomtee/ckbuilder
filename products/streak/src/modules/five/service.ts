@@ -253,7 +253,13 @@ export class FiveService {
     const upcoming = all
       .filter((r) => r.state === 'open' && Date.parse(r.lockAt) > now)
       .sort((a, b) => Date.parse(a.lockAt) - Date.parse(b.lockAt));
-    const chosen = selection ? all.find((r) => r.id === selection) : (upcoming[0] ?? all[0]);
+    // Opening next week's editor must not replace the team whose matches are playing.
+    const current = all
+      .filter((r) => ['open', 'final'].includes(r.state) && Date.parse(r.lockAt) <= now)
+      .sort((a, b) => Date.parse(b.lockAt) - Date.parse(a.lockAt))[0];
+    const chosen = selection
+      ? all.find((r) => r.id === selection)
+      : (current ?? upcoming[0] ?? all[0]);
     if (selection && !chosen) throw new FiveError('Gameweek not found.', 404);
     const round = chosen ? await this.store.load(chosen.id) : null;
     const detail = round ? project(round, actor?.id ?? null, admin, now) : null;
@@ -268,6 +274,8 @@ export class FiveService {
       admin,
       viewerId: actor?.id ?? null,
       rounds: all,
+      currentRoundId: current?.id ?? null,
+      nextRoundId: upcoming[0]?.id ?? null,
       feedAvailable: this.feed?.available ?? false,
       fundingAvailable: !!this.funding && !!this.rewards && (await this.rewards.active()),
       rewardsAccount: actor && this.rewards ? await this.rewards.account(actor.wallet) : null,

@@ -558,6 +558,7 @@ export class ApiFootballProvider implements MatchDataProvider {
   private readonly standingsMemo = new TimedMemo<any[]>();
   private readonly headToHeadMemo = new TimedMemo<HeadToHeadInsight[]>();
   private readonly insightMemo = new TimedMemo<ProviderMatchInsights>();
+  private readonly survivorMemo = new TimedMemo<Match[]>();
   private readonly matchdayFeed = new MatchdayFeed(
     (path, params) => this.request(path, params),
     (match) => this.coverageMemo.get(
@@ -593,6 +594,16 @@ export class ApiFootballProvider implements MatchDataProvider {
 
   scheduleFixtures(): Match[] {
     return [...this.fixtures.values()].map(mapApiFixture).sort((a,b)=>a.kickoff.localeCompare(b.kickoff));
+  }
+
+  async survivorFixtures(): Promise<Match[]> {
+    if (!this.apiKey) throw Error('Premier League schedule is unavailable');
+    return this.survivorMemo.get(`survivor-season:${this.season}`, 60 * 60_000, async () => {
+      const fixtures = await this.request('/fixtures', {
+        league: '39', season: String(this.season), timezone: 'UTC',
+      });
+      return fixtures.map(mapApiFixture).sort((a, b) => a.kickoff.localeCompare(b.kickoff));
+    });
   }
 
   scheduleCoverage() { return this.scheduleWindow; }

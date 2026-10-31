@@ -1,5 +1,39 @@
 # Streak work tracker
 
+31 October post-deadline release: the owner authorized committing the combined
+Survivor and Five work with full automated verification restored. Prepare the exact
+candidate and run the complete gate through the commit hook. Preserve the owner's
+checklist and unrelated local files. Hosted CI remains paused; production Survivor
+acceptance is still outstanding. Local dummy rounds can exercise immediate deadlines
+without waiting for the next provider gameweek.
+
+31 October Five follow-up implemented locally: the default stays on the most recent
+locked gameweek; its saved squad displays updating player points, captain scoring,
+provisional/final labels and retained snapshots on refresh failure. Pick next team
+opens an independent editor with its deadline, save/edit and Back to current team.
+Historical selection and existing scoring/deadline rules remain intact. Focused
+domain/feed tests, six workspace journeys, local game-mode checks and six expanded
+Chromium/WebKit journeys pass, with build/lint/static verification. Next: owner
+review, required full release gate and publication. Preserve the separate Survivor
+physical-wallet acceptance below. [Details](delivery/five-live-team.md).
+
+31 October Survivor increment implemented locally: official FPL deadlines on new
+schedules, prominent close time, numeric remaining-season round selection and
+creator-funded custodial testnet prizes. The owner explicitly selected the existing
+rewards wallet. Signed payments freeze draft edits; confirmed backing gates publish;
+terminal outcomes create conserved payouts or refunds. Reuse shared input reservations
+and payout recovery; mismatched reward databases disable funding explicitly.
+Domain, disposable PostgreSQL, complete browser and contract/chain checks pass across
+the major run and documented reruns. Independent review accepted the corrected queue,
+configuration and conflict recovery. The final mobile consent layout was inspected.
+The original major run timed out in the loader suite; its complete rerun passed.
+Five chain/rehearsal fixtures now exercise strict higher bids and exact refunds.
+No single full-release receipt is claimed. Next: physical creator funding,
+confirmation, cancellation refund and winner payout acceptance, then publication
+through the required gate. Owner checklist edits are restored; this increment remains
+uncommitted. [Implementation](delivery/survivor-creator-prizes.md).
+Five's amount-edit and higher-bid correction was pushed as `2839e9e`.
+
 31 October owner follow-up in progress: make unfinished Five sponsor amounts
 editable and require new cumulative bids to exceed every admitted bid, including
 payments confirming. Keep accepted payments immutable and exact retries recoverable.

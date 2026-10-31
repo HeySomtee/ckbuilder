@@ -12,14 +12,14 @@ Aim to finish entries and bids by **11:30**.
 
 ## 1. Save the teams first: 10:45 to 11:10
 
-| Wallet | Device/provider | Five task |
-| --- | --- | --- |
-| A | MetaMask admin | Save five players and a captain; note the squad |
-| B | Second MetaMask address | Copy A's five and captain to exercise equal scoring |
-| C | Zerion | Save a different squad and captain |
-| D | Second Zerion address | Save a squad, change one player, then Save changes |
-| E | Another MetaMask address | Save a different squad; navigate away and return |
-| F | Zerion mobile | Save five and a captain; reload and check they remain |
+| Wallet | Device/provider          | Five task                                             |
+| ------ | ------------------------ | ----------------------------------------------------- |
+| A      | MetaMask admin           | Save five players and a captain; note the squad       |
+| B      | Second MetaMask address  | Copy A's five and captain to exercise equal scoring   |
+| C      | Zerion                   | Save a different squad and captain                    |
+| D      | Second Zerion address    | Save a squad, change one player, then Save changes    |
+| E      | Another MetaMask address | Save a different squad; navigate away and return      |
+| F      | Zerion mobile            | Save five and a captain; reload and check they remain |
 
 - [ ] Use eligible players within **40 credits** and fill all required positions.
 - [ ] Save every wallet's team before spending time on optional UI checks.
@@ -49,15 +49,15 @@ the public funding-enabled flag does not prove payouts work.
 ## 4. Survivor next, then match predictions
 
 - [ ] A creates and publishes **QA Progression** with two available rounds and
-  **QA Finish** with one round. Check the actual displayed lock time before joining.
+      **QA Finish** with one round. Check the actual displayed lock time before joining.
 - [ ] A through E join and select teams; use opposing teams from the same fixtures
-  to cover different outcomes. F joins but deliberately leaves its Survivor pick empty.
-  F must still save a Five team in step 1.
+      to cover different outcomes. F joins but deliberately leaves its Survivor pick empty.
+      F must still save a Five team in step 1.
 - [ ] Recheck today's open Markets. A takes Home, B Draw and C Away on the same
-  available match, **100 tCKB each**, to cover every normal result. Budget each pick
-  at **100 stake + 321 refundable storage**, plus fees. Voids do not cover win/loss.
+      available match, **100 tCKB each**, to cover every normal result. Budget each pick
+      at **100 stake + 321 refundable storage**, plus fees. Voids do not cover win/loss.
 - [ ] D rejects an unsigned payment once, then retries. Check pending progress,
-  mobile minimization and Activity after confirmation.
+      mobile minimization and Activity after confirmation.
 
 ## 5. Follow through
 
@@ -65,7 +65,7 @@ the public funding-enabled flag does not prove payouts work.
 - [ ] After settlement: collect a winning return and a losing pick's storage refund.
 - [ ] After Survivor results: check elimination, F's missed pick, progression and disabled used teams.
 - [ ] Five cannot finalize before **Wednesday, 4 November at 03:00** and may await
-  final provider data. Then verify awards, ties if qualifying, and no duplicate payment.
+      final provider data. Then verify awards, ties if qualifying, and no duplicate payment.
 
 Log only: **wallet, action, result, screenshot/hash**. Record the deployed revision.
 Two identical teams test equal scoring; they only test a reward tie if they qualify.

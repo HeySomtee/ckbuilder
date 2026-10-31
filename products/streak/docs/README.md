@@ -1,5 +1,13 @@
 # Streak documentation
 
+31 October [Five current team and next-week picks](delivery/five-live-team.md):
+keep locked squads and updating player points visible, with an explicit next-week
+editor. Local implementation and verification are tracked separately from release.
+
+31 October [Survivor creator prizes and season scheduling](delivery/survivor-creator-prizes.md):
+official FPL deadlines, numeric round selection and confirmed creator funding through
+the existing custodial testnet rewards wallet. Local verification is in progress.
+
 30 October [mobile wallet and payment controls](delivery/mobile-payment-controls.md):
 compact two-row wallet header, closable finished updates and a draggable pending
 payment button that avoids other controls. Local verification is tracked separately

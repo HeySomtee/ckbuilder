@@ -2,6 +2,7 @@ import type { Match } from '../../types';
 import type { FixtureObservation, LiveResult } from '../../providers/types';
 import {
   advance,
+  cancel,
   createCompetition,
   join,
   observe,
@@ -16,6 +17,7 @@ import {
   type Team,
 } from './domain';
 import type { SurvivorStorage } from './storage';
+import type { SurvivorPrizes } from './prizes';
 
 export type Actor = { id: string; name: string; wallet: string } | null;
 const object = (body: unknown): Record<string, unknown> => {
@@ -29,7 +31,11 @@ const identifier = (value: unknown) => {
   return value;
 };
 /** A complete API-Football EPL slate, never an admin-picked subset of clubs. */
-export function eligibleSlates(matches: Match[], now: number): Slate[] {
+export function eligibleSlates(
+  matches: Match[],
+  now: number,
+  deadlines?: ReadonlyMap<number, string>,
+): Slate[] {
   const groups = new Map<string, Match[]>();
   for (const match of matches) {
     if (
@@ -66,11 +72,14 @@ export function eligibleSlates(matches: Match[], now: number): Slate[] {
     fixtures.sort((a, b) => a.kickoff.localeCompare(b.kickoff) || a.id.localeCompare(b.id));
     const start = Date.parse(fixtures[0].kickoff),
       end = Date.parse(fixtures[9].kickoff);
-    if (start - 60_000 <= now || end - start > 7 * 86_400_000) continue;
+    const gameweek = Number(fixtures[0].matchday?.match(/(\d+)$/)?.[1]);
+    const lock = deadlines ? Date.parse(deadlines.get(gameweek) ?? '') : start - 90 * 60_000;
+    if (!Number.isFinite(lock) || lock <= now || lock >= start || end - start > 7 * 86_400_000)
+      continue;
     slates.push({
       key,
       label: fixtures[0].matchday!,
-      lockAt: new Date(start - 60_000).toISOString(),
+      lockAt: new Date(lock).toISOString(),
       resolveAt: new Date(end + 6 * 3_600_000).toISOString(),
       fixtures: fixtures.map((f) => ({
         id: f.id,
@@ -80,7 +89,7 @@ export function eligibleSlates(matches: Match[], now: number): Slate[] {
       })),
     });
   }
-  return slates.sort((a, b) => a.lockAt.localeCompare(b.lockAt)).slice(0, 10);
+  return slates.sort((a, b) => a.lockAt.localeCompare(b.lockAt)).slice(0, 38);
 }
 export function confirmedResults(raw: Record<string, LiveResult>): Record<string, Result> {
   const out: Record<string, Result> = {};
@@ -109,15 +118,19 @@ export class SurvivorService {
   constructor(
     private readonly storage: SurvivorStorage,
     private readonly adminWallets: readonly string[],
-    private readonly fixtures: () => Match[],
+    private readonly fixtures: () => Match[] | Promise<Match[]>,
     private readonly observations: () => Record<
       string,
       FixtureObservation | FixtureObservation[]
     > = () => ({}),
     private readonly testing = false,
+    private readonly deadlines?: () => Promise<ReadonlyMap<number, string>>,
+    private readonly prizes?: SurvivorPrizes,
+    private readonly prizeConfigurationError = '',
   ) {}
-  private slates(now: number) {
-    return eligibleSlates(this.fixtures(), now).map((slate) =>
+  private async slates(now: number) {
+    const [matches, deadlines] = await Promise.all([this.fixtures(), this.deadlines?.()]);
+    return eligibleSlates(matches, now, deadlines).map((slate) =>
       this.testing ? { ...slate, testingPolicy: 'admin-controlled-v1' as const } : slate,
     );
   }
@@ -148,11 +161,27 @@ export class SurvivorService {
       .sort((a, b) => priority[a.state] - priority[b.state]);
     const selected = selection ? competitions.find((c) => c.id === selection) : competitions[0];
     const full = selected ? await this.storage.load(selected.id) : null;
+    let slates: Slate[] = [],
+      scheduleError = '';
+    if (this.isAdmin(actor))
+      try {
+        slates = await this.slates(now);
+      } catch {
+        scheduleError =
+          'Upcoming gameweeks are temporarily unavailable. Saved competitions remain available.';
+      }
     return {
       now: new Date(now).toISOString(),
       viewerId: actor?.id ?? null,
       admin: this.isAdmin(actor),
-      slates: this.isAdmin(actor) ? this.slates(now) : [],
+      slates,
+      scheduleError,
+      fundingAvailable: this.prizes ? await this.prizes.rewards.active().catch(() => false) : false,
+      fundingError: this.isAdmin(actor) ? this.prizeConfigurationError : '',
+      rewards:
+        actor && this.prizes
+          ? await this.prizes.rewards.account(actor.wallet).catch(() => null)
+          : null,
       competitions: competitions.map((c) => ({
         id: c.id,
         state: c.state,
@@ -172,14 +201,14 @@ export class SurvivorService {
       if (
         !Array.isArray(body.roundKeys) ||
         !body.roundKeys.length ||
-        body.roundKeys.length > 10 ||
+        body.roundKeys.length > 38 ||
         body.roundKeys.some((k) => typeof k !== 'string')
       )
         throw new SurvivorError('Choose the published round schedule.');
       const keys = body.roundKeys as string[];
       if (new Set(keys).size !== keys.length)
         throw new SurvivorError('Each round can be selected once.');
-      const available = this.slates(Date.now());
+      const available = await this.slates(Date.now());
       const slates = keys.map((key) => {
         const slate = available.find((s) => s.key === key);
         if (!slate)
@@ -191,7 +220,7 @@ export class SurvivorService {
       });
       slates.sort((a, b) => a.lockAt.localeCompare(b.lockAt));
       const revalidate = (now: number) => {
-        const fresh = this.slates(now);
+        const fresh = available.filter((s) => Date.parse(s.lockAt) > now);
         if (
           slates.some(
             (s) => JSON.stringify(fresh.find((f) => f.key === s.key)) !== JSON.stringify(s),
@@ -205,26 +234,100 @@ export class SurvivorService {
       };
       if (body.action === 'create')
         await this.storage.create(id, actor.id, (now) =>
-          createCompetition(id, actor.id, terms, revalidate(now), now),
+          createCompetition(id, actor.id, terms, revalidate(now), now, actor.wallet),
         );
       else
         await this.storage.change(id, (c, now) => {
           if (c.state !== 'draft' || c.entries.length)
             throw new SurvivorError('Published terms cannot be edited.', 409);
-          Object.assign(c, createCompetition(c.id, c.creator, terms, revalidate(now), now));
+          if (c.prizeFunding?.signedBytes)
+            throw new SurvivorError(
+              'A funded draft cannot be edited. Cancel it to return the prize, then create a new competition.',
+              409,
+            );
+          if (!c.creatorWallet && c.creator !== actor.id)
+            throw new SurvivorError(
+              'The original creator must update this older draft before funding.',
+              403,
+            );
+          const replacement = createCompetition(
+            c.id,
+            c.creator,
+            terms,
+            revalidate(now),
+            now,
+            c.creatorWallet ?? actor.wallet,
+          );
+          delete c.prizeFunding;
+          Object.assign(c, replacement);
         });
     } else if (body.action === 'delete') {
       this.admin(actor);
+      const existing = await this.storage.load(id);
+      if (existing?.prizeFunding?.signedBytes)
+        throw new SurvivorError(
+          'Use Cancel and refund to retain the funded competition record.',
+          409,
+        );
       await this.storage.remove(id);
       return this.read(actor);
     } else if (body.action === 'publish') {
       this.admin(actor);
-      await this.storage.change(id, (c, now) => publish(c, now));
+      const candidate = await this.storage.load(id);
+      if (candidate?.fundingPolicy && BigInt(candidate.terms.prizeShannons) > 0n) {
+        if (!this.prizes) throw new SurvivorError('Prize funding is not configured.', 503);
+        await this.prizes.verify(id);
+      }
+      await this.storage.change(id, (c, now) => {
+        if (
+          c.termsHash !== candidate?.termsHash ||
+          c.prizeFunding?.transactionHash !== candidate?.prizeFunding?.transactionHash
+        )
+          throw new SurvivorError('The competition changed. Review it before publishing.', 409);
+        publish(c, now);
+      });
+    } else if (body.action === 'prepare-prize' || body.action === 'fund-prize') {
+      this.admin(actor);
+      if (!this.prizes)
+        throw new SurvivorError(
+          this.prizeConfigurationError || 'Prize funding is not configured.',
+          503,
+        );
+      if (body.action === 'prepare-prize')
+        await this.prizes.prepare(actor, id, body.custodyAccepted);
+      else await this.prizes.submit(actor, id, body.sponsorId, body.signedBytes);
+    } else if (body.action === 'resolve-prize-conflict') {
+      this.admin(actor);
+      if (!this.prizes) throw new SurvivorError('Prize funding is not configured.', 503);
+      const c = await this.storage.load(id);
+      if (!c || c.creator !== actor.id || c.creatorWallet !== actor.wallet)
+        throw new SurvivorError('Only the creator can recover this payment.', 403);
+      await this.prizes.funding.resolveConflict(actor, `survivor.${id}`, {
+        sponsorId: c.prizeFunding?.id,
+        conflictingHash: body.conflictingHash,
+      });
+    } else if (body.action === 'cancel-prize') {
+      this.admin(actor);
+      await this.storage.change(id, (c, now) => {
+        if (c.state === 'cancelled') return;
+        if (c.entries.length || !['draft', 'open'].includes(c.state))
+          throw new SurvivorError('Competitions with entrants retain their published rules.', 409);
+        cancel(
+          c,
+          now,
+          'Creator prize cancelled before entrants joined. Confirmed funds return to the creator.',
+        );
+      });
+    } else if (body.action === 'collect-prize') {
+      if (!this.prizes) throw new SurvivorError('Prize delivery is not configured.', 503);
+      await this.prizes.rewards.request(actor.wallet);
     } else if (body.action === 'join') {
       if (typeof body.termsHash !== 'string')
         throw new SurvivorError('Review the competition terms first.');
       const hash = body.termsHash;
-      await this.storage.change(id, (c, now) => join(c, actor.id, actor.name, hash, now));
+      await this.storage.change(id, (c, now) =>
+        join(c, actor.id, actor.name, hash, now, actor.wallet),
+      );
     } else if (body.action === 'pick') {
       const teamId = identifier(body.teamId);
       if (!Number.isInteger(body.round)) throw new SurvivorError('Choose the current round.');

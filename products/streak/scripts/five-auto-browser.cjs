@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium, webkit } = require('playwright');
 const { FiveService } = require('../dist/modules/five/service');
-const { parseTerms } = require('../dist/modules/five/domain');
+const { parseTerms, newRound } = require('../dist/modules/five/domain');
 class Store {
   rows = new Map();
   async clock() {
@@ -186,7 +186,8 @@ async function main() {
             failScout = true,
             failSchedule = true,
             scheduleCalls = 0,
-            profileCalls = 0;
+            profileCalls = 0,
+            failRead = false;
           const errors = [],
             external = [];
           await context.route('**/*', async (route) => {
@@ -223,6 +224,8 @@ async function main() {
                   if (failProfile) return json({ error: 'Synthetic history interruption' }, 503);
                   return json(await service.player(Number(url.searchParams.get('player'))));
                 }
+                if (failRead && req.method() === 'GET')
+                  return json({ error: 'Synthetic live score outage' }, 503);
                 return json(
                   req.method() === 'POST'
                     ? await service.action(actor, req.postDataJSON())
@@ -238,6 +241,7 @@ async function main() {
           });
           await context.routeWebSocket('**/*', (s) => s.close());
           const page = await context.newPage();
+          await page.clock.install();
           page.on('pageerror', (e) => errors.push(e.message));
           await page.goto(origin + '/season/?view=five');
           await page.getByRole('heading', { name: 'Streak Five.', exact: true }).waitFor();
@@ -349,6 +353,119 @@ async function main() {
             path: path.join(out, `${name}-${width}-squad.png`),
             fullPage: true,
           });
+          // The scheduler opens another week while the saved squad's matches are playing.
+          const activeId = 'fpl-2030-8',
+            nextId = 'fpl-2030-9';
+          await store.change(activeId, (r) => {
+            r.terms.lockAt = new Date(Date.now() - 1000).toISOString();
+            r.scores = {
+              1: { points: 2, lines: [{ label: 'Appearance', points: 2 }] },
+              3: { points: 5, lines: [{ label: 'Goal', points: 5 }] },
+              4: { points: -1, lines: [{ label: 'Yellow card', points: -1 }] },
+            };
+            r.scoresAt = new Date().toISOString();
+            r.scoreRevision = 1;
+          });
+          await store.create(nextId, 'fpl-scheduler', (time) => {
+            const r = newRound(
+              nextId,
+              'fpl-scheduler',
+              {
+                ...terms,
+                name: 'Gameweek 9',
+                lockAt: new Date(time + 7 * 86400000).toISOString(),
+                finalizeAfter: new Date(time + 10 * 86400000).toISOString(),
+              },
+              time,
+            );
+            r.state = 'open';
+            return r;
+          });
+          await page.reload();
+          await page.locator('.five-live-total strong').filter({ hasText: /^11$/ }).waitFor();
+          assert.equal(await page.getByLabel('Gameweek', { exact: true }).inputValue(), activeId);
+          assert.equal(await page.locator('.five-live-team .five-pitch-player').count(), 5);
+          assert.equal(
+            await page.locator('.five-live-player-points[data-pending="true"]').count(),
+            2,
+          );
+          assert.equal(
+            await page.getByRole('button', { name: 'Remove Keeper', exact: true }).count(),
+            0,
+          );
+          await page
+            .getByRole('button', { name: 'View Creator gameweek points', exact: true })
+            .click();
+          await dialog.getByRole('heading', { name: '10 points · Captain ×2' }).waitFor();
+          await page.keyboard.press('Escape');
+          await store.change(activeId, (r) => {
+            r.scores['3'] = {
+              points: 7,
+              lines: [
+                { label: 'Appearance', points: 2 },
+                { label: 'Goal', points: 5 },
+              ],
+            };
+            r.scoreRevision++;
+          });
+          await page.clock.fastForward(31000);
+          await page.locator('.five-live-total strong').filter({ hasText: /^15$/ }).waitFor();
+          assert.equal(
+            await page.getByLabel('Gameweek', { exact: true }).inputValue(),
+            activeId,
+            'Refresh never sends the player into next week',
+          );
+          failRead = true;
+          await page.getByRole('button', { name: 'Refresh points', exact: true }).click();
+          await page
+            .getByText(
+              'Updates are temporarily unavailable. Showing your last saved team and points.',
+              { exact: true },
+            )
+            .waitFor();
+          assert.equal(await page.locator('.five-live-total strong').innerText(), '15');
+          failRead = false;
+          await page.getByRole('button', { name: 'Try again', exact: true }).click();
+          await page.getByRole('button', { name: 'Pick next team', exact: true }).click();
+          await page
+            .getByText('Pick 5 more players to complete your five.', { exact: true })
+            .waitFor();
+          assert.equal(await page.getByLabel('Gameweek', { exact: true }).inputValue(), nextId);
+          assert.equal(
+            await page.locator('.five-pitch-player').count(),
+            0,
+            'No previous squad is copied',
+          );
+          if (width <= 760)
+            await page.getByRole('button', { name: 'Players', exact: true }).click();
+          for (const p of players.slice(0, 5))
+            await page.getByRole('button', { name: `Add ${p.name}`, exact: true }).click();
+          if (width <= 760) await page.getByRole('button', { name: /My five/ }).click();
+          await page.getByRole('button', { name: 'Captain Keeper', exact: true }).click();
+          await page.getByRole('button', { name: 'Review your five', exact: true }).click();
+          await dialog.getByRole('button', { name: 'Save my five', exact: true }).click();
+          await page.getByText('All changes saved.', { exact: true }).waitFor();
+          await page.getByRole('button', { name: 'Captain Defender', exact: true }).click();
+          await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+          await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+          await page.getByText('All changes saved.', { exact: true }).waitFor();
+          assert.equal(store.rows.get(nextId).entries[0].captain, '2');
+          assert.equal(store.rows.get(activeId).entries[0].captain, '3');
+          await page.getByRole('button', { name: 'Back to current team', exact: true }).click();
+          await page.locator('.five-live-total strong').filter({ hasText: /^15$/ }).waitFor();
+          await page.reload();
+          await page.locator('.five-live-total strong').filter({ hasText: /^15$/ }).waitFor();
+          assert.equal(
+            await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+            false,
+          );
+          await page.screenshot({
+            path: path.join(out, `${name}-${width}-live-points.png`),
+            fullPage: true,
+          });
+          console.log(
+            `PASS Five ${name} ${width}: current team, automatic partial points, outage recovery, independent next squad and saved edits.`,
+          );
           assert.deepEqual(errors, []);
           assert.deepEqual(external, []);
           await context.close();

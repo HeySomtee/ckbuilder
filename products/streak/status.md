@@ -1,5 +1,18 @@
 # Streak status
 
+31 October Five now keeps the current locked team visible with updating player
+points, captain scoring and a separate next-gameweek editor. Saved squads do not
+carry over. Focused domain, feed, browser and build checks pass; no publication or
+full release receipt is claimed. [Details](docs/delivery/five-live-team.md).
+
+31 October Survivor deadline, full-season scheduling and creator-funded prizes are
+implemented locally. The approved funding model is the existing custodial testnet
+rewards wallet. Domain, disposable PostgreSQL, complete browser and contract/chain
+checks pass across the major run and documented reruns. Independent money/recovery
+review accepted. No single successful full-release receipt or hosted wallet acceptance
+is claimed; this increment is uncommitted. [Details](docs/delivery/survivor-creator-prizes.md).
+Five's editable bids and strict higher-total rule are pushed as `2839e9e`.
+
 31 October sponsorship follow-up: unfinished amounts are editable and reviewed
 payments have a Change amount action. Server amendments rotate the payment marker
 before another signature, preserve accepted payments and reject stale submissions.

@@ -12,11 +12,13 @@ export function PlayerProfile({
   selected,
   canSelect,
   onSelect,
+  readOnly = false,
 }: {
   player: Player;
   selected: boolean;
   canSelect: boolean;
   onSelect: () => void;
+  readOnly?: boolean;
 }) {
   const [tab, setTab] = useState('history');
   const query = useQuery({
@@ -170,9 +172,15 @@ export function PlayerProfile({
           </div>
         </>
       )}
-      <button className="btn primary five-profile-select" disabled={!canSelect} onClick={onSelect}>
-        {selected ? 'Remove from my five' : 'Add to my five'}
-      </button>
+      {!readOnly && (
+        <button
+          className="btn primary five-profile-select"
+          disabled={!canSelect}
+          onClick={onSelect}
+        >
+          {selected ? 'Remove from my five' : 'Add to my five'}
+        </button>
+      )}
     </div>
   );
 }

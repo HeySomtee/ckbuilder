@@ -166,7 +166,19 @@ async function progression() {
   catalogueUnavailable = false;
   await svc.progress();
   assert.ok(store.rows.has('fpl-2030-2'));
-  assert.equal((await svc.read(null)).detail!.id, 'fpl-2030-2');
+  const live = await svc.read(actor);
+  assert.equal(live.detail!.id, id, 'Opening another gameweek retains the active saved team');
+  assert.equal(live.currentRoundId, id);
+  assert.equal(live.nextRoundId, 'fpl-2030-2');
+  assert.equal(live.detail!.entries[0].players!.length, 5);
+  const next = await svc.read(actor, live.nextRoundId!);
+  assert.equal(next.detail!.ownId, null, 'Squads never carry into the next editor');
+  assert.equal(next.detail!.id, 'fpl-2030-2');
+  assert.equal(
+    next.currentRoundId,
+    id,
+    'Explicit next selection retains a current-team destination',
+  );
   // Simulate PostgreSQL jsonb changing property order on both levels.
   const row = store.rows.get(id)!;
   row.rawStats = Object.fromEntries(
@@ -189,6 +201,16 @@ async function progression() {
   store.now = start + 57 * hour;
   season.events[0].finished = true;
   await svc.progress();
+  assert.equal(
+    (await svc.read(actor)).currentRoundId,
+    'fpl-2030-2',
+    'Latest locked gameweek becomes current',
+  );
+  assert.equal(
+    (await svc.read(actor, id)).detail!.id,
+    id,
+    'Earlier teams remain available explicitly',
+  );
   assert.equal(
     store.rows.get(id)!.state,
     'open',

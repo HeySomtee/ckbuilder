@@ -274,15 +274,19 @@ async function main() {
     await store.change('auction', (r) => {
       r.state = 'open';
     });
-    async function auctionPayment(who, whoActor, id) {
-      await funding.intent(whoActor, 'auction', { ...intent, sponsorId: id });
+    async function auctionPayment(who, whoActor, id, amount = 100n * h.CKB) {
+      await funding.intent(whoActor, 'auction', {
+        ...intent,
+        sponsorId: id,
+        amountShannons: amount.toString(),
+      });
       const s = (await store.load('auction')).sponsors.find((s) => s.id === id);
       const tx = await who.signer.signTransaction(
         ccc.Transaction.from({
           inputs: [{ previousOutput: who.fund.outPoint }],
           outputs: [
-            { lock: h.admin.lock, capacity: 100n * h.CKB },
-            { lock: who.lock, capacity: who.fund.output.capacity - 100n * h.CKB - 10000n },
+            { lock: h.admin.lock, capacity: amount },
+            { lock: who.lock, capacity: who.fund.output.capacity - amount - 10000n },
           ],
           outputsData: [s.tag, '0x'],
         }),
@@ -297,7 +301,24 @@ async function main() {
       await funding.reconcile('auction');
     }
     await auctionPayment(h.owner, actor, 'first');
-    await auctionPayment(rival, { id: 'rival', name: 'Rival', wallet: rivalWallet }, 'second');
+    const rivalActor = { id: 'rival', name: 'Rival', wallet: rivalWallet };
+    await assert.rejects(
+      () => funding.intent(rivalActor, 'auction', { ...intent, sponsorId: 'equal-bid' }),
+      /combined bid must exceed/,
+    );
+    await auctionPayment(rival, rivalActor, 'second', 150n * h.CKB);
+    const thirdWallet = await new ccc.SignerCkbPrivateKey(
+      client,
+      '0x' + '44'.repeat(32),
+    ).getRecommendedAddress();
+    await assert.rejects(
+      () =>
+        funding.intent({ id: 'third', name: 'Third', wallet: thirdWallet }, 'auction', {
+          ...intent,
+          sponsorId: 'lower-bid',
+        }),
+      /combined bid must exceed/,
+    );
     await auctionPayment(h.owner, actor, 'topup');
     r = await store.load('auction');
     assert.deepEqual(
@@ -344,7 +365,7 @@ async function main() {
     const refund = ccc.Transaction.fromBytes(auctionJournal[0].signed_bytes);
     assert.equal(
       refund.outputs[0].capacity,
-      100n * h.CKB,
+      150n * h.CKB,
       'Refund excludes unrelated prize credits',
     );
     assert.ok(refund.outputs[0].lock.eq(rivalLock));

@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { assertGameScope } from '../games-test/scope';
 import { FiveError, type Round } from './domain';
+import { TEST_TIMING_POLICY } from './timing';
 export type Summary = Pick<Round, 'id' | 'state' | 'createdAt'> & { name: string; lockAt: string };
 export interface FiveStorage {
   clock(): Promise<number>;
@@ -47,10 +48,20 @@ export class PgFiveStorage implements FiveStorage {
   }
   async list(): Promise<Summary[]> {
     await this.init();
-    const rows = await this.pool.query<{ data: Summary }>(`SELECT jsonb_build_object(
+    const rows = await this.pool.query<{ data: Summary & { testClosedAt: string | null } }>(
+      `SELECT jsonb_build_object(
       'id',id,'state',data->>'state','createdAt',created_at,'name',data->'terms'->>'name',
-      'lockAt',data->'terms'->>'lockAt') AS data FROM streak_five_rounds ORDER BY created_at DESC LIMIT 100`);
-    return rows.rows.map((r) => r.data);
+      'lockAt',data->'terms'->>'lockAt',
+      'testClosedAt',CASE WHEN data->'terms'->>'testingPolicy'=$1 THEN data->>'testClosedAt' END
+      ) AS data FROM streak_five_rounds ORDER BY created_at DESC LIMIT 100`,
+      [TEST_TIMING_POLICY],
+    );
+    return rows.rows.map(({ data: { testClosedAt, ...summary } }) => ({
+      ...summary,
+      lockAt: testClosedAt
+        ? new Date(Math.min(Date.parse(summary.lockAt), Date.parse(testClosedAt))).toISOString()
+        : summary.lockAt,
+    }));
   }
   async load(id: string) {
     await this.init();

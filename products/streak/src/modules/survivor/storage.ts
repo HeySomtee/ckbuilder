@@ -7,14 +7,19 @@ export interface SurvivorStorage {
   list(): Promise<CompetitionSummary[]>;
   load(id: string): Promise<Competition | null>;
   create(id: string, creator: string, build: (now: number) => Competition): Promise<Competition>;
-  change(id: string, mutate: (competition: Competition, now: number) => void): Promise<Competition>;
+  change(
+    id: string,
+    mutate: (competition: Competition, now: number) => void,
+    reservation?: { intent: string; outpoints: string[] },
+  ): Promise<Competition>;
   remove(id: string): Promise<void>;
 }
 const schema = `CREATE TABLE IF NOT EXISTS streak_survivor_competitions (
   id text PRIMARY KEY, creator text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
   state text NOT NULL, data jsonb NOT NULL
 ); ALTER TABLE streak_survivor_competitions ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
-CREATE INDEX IF NOT EXISTS streak_survivor_state ON streak_survivor_competitions(state, created_at DESC);`;
+CREATE INDEX IF NOT EXISTS streak_survivor_state ON streak_survivor_competitions(state, created_at DESC);
+CREATE TABLE IF NOT EXISTS streak_five_funding_inputs(outpoint text PRIMARY KEY,intent text NOT NULL);`;
 export class PgSurvivorStorage implements SurvivorStorage {
   private ready?: Promise<void>;
   constructor(
@@ -89,7 +94,11 @@ export class PgSurvivorStorage implements SurvivorStorage {
       client.release();
     }
   }
-  async change(id: string, mutate: (competition: Competition, now: number) => void) {
+  async change(
+    id: string,
+    mutate: (competition: Competition, now: number) => void,
+    reservation?: { intent: string; outpoints: string[] },
+  ) {
     await this.init();
     const client = await this.pool.connect();
     try {
@@ -102,6 +111,22 @@ export class PgSurvivorStorage implements SurvivorStorage {
       if (!row.rows[0]) throw new SurvivorError('Competition not found.', 404);
       const data = row.rows[0].data,
         before = JSON.stringify(data);
+      if (reservation)
+        for (const outpoint of [...reservation.outpoints].sort()) {
+          await client.query(
+            'INSERT INTO streak_five_funding_inputs(outpoint,intent) VALUES($1,$2) ON CONFLICT DO NOTHING',
+            [outpoint, reservation.intent],
+          );
+          const old = await client.query<{ intent: string }>(
+            'SELECT intent FROM streak_five_funding_inputs WHERE outpoint=$1',
+            [outpoint],
+          );
+          if (old.rows[0].intent !== reservation.intent)
+            throw new SurvivorError(
+              'Another reward payment uses these inputs. Wait for confirmation.',
+              409,
+            );
+        }
       const time = await client.query<{ now: Date }>('SELECT clock_timestamp() AS now');
       mutate(data, time.rows[0].now.getTime());
       const after = JSON.stringify(data);
@@ -131,6 +156,11 @@ export class PgSurvivorStorage implements SurvivorStorage {
       );
       if (!row.rows[0]) throw new SurvivorError('Competition not found.', 404);
       if (!row.rows[0].deleted_at) {
+        if (row.rows[0].data.prizeFunding?.signedBytes)
+          throw new SurvivorError(
+            'A funded competition must retain its prize and refund records.',
+            409,
+          );
         if (row.rows[0].data.entries.length)
           throw new SurvivorError(
             'This competition has entrants. Their entries and results must be kept.',

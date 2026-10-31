@@ -5,6 +5,11 @@ import { SurvivorService } from './service';
 import { SurvivorError } from './domain';
 import { Pool } from 'pg';
 import { postgresConfig } from '../../infrastructure/postgres-config';
+import { FplFiveFeed } from '../five/feed';
+import { ccc } from '@ckb-ccc/core';
+import { FiveRewards } from '../five/rewards';
+import { SurvivorPrizes } from './prizes';
+import { sharedPrizeDatabase } from './config';
 
 let service: SurvivorService | undefined;
 export function survivorService() {
@@ -15,6 +20,7 @@ export function survivorService() {
       503,
     );
   if (!service) {
+    const fpl = new FplFiveFeed(process.env.STREAK_FIVE_FPL_ENABLED === '1');
     const admins = (process.env.STREAK_SURVIVOR_ADMIN_WALLETS ?? '')
       .split(',')
       .map((s) => s.trim())
@@ -33,14 +39,41 @@ export function survivorService() {
       : getPool();
     if (dedicatedDatabase)
       pool.on('error', () => console.warn('[survivor] database connection interrupted'));
+    const storage = new PgSurvivorStorage(pool);
+    const address = process.env.STREAK_FIVE_REWARDS_ADDRESS;
+    const shared = sharedPrizeDatabase(process.env);
+    const prizes =
+      address && shared
+        ? new SurvivorPrizes(
+            storage,
+            new FiveRewards(
+              pool,
+              new ccc.ClientPublicTestnet({
+                url: 'https://testnet.ckb.dev/',
+                fallbacks: [],
+                timeout: 10000,
+                maxConcurrent: 2,
+              }),
+              address,
+            ),
+          )
+        : undefined;
     service = new SurvivorService(
-      new PgSurvivorStorage(pool),
+      storage,
       admins,
       () =>
         provider.id === 'football'
-          ? (provider.scheduleFixtures?.() ?? provider.loadFixtures())
+          ? (provider.survivorFixtures?.() ??
+            provider.scheduleFixtures?.() ??
+            provider.loadFixtures())
           : [],
       () => provider.fixtureObservationHistory?.() ?? provider.fixtureObservations?.() ?? {},
+      false,
+      async () => new Map((await fpl.season()).events.map((e) => [e.id, e.deadline])),
+      prizes,
+      address && !shared
+        ? 'Creator prizes require Survivor and Five rewards to use the same database. Existing competitions remain available.'
+        : '',
     );
   }
   return service;

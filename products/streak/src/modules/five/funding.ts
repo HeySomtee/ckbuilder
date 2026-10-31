@@ -208,6 +208,7 @@ export class FiveFunding {
       roundId,
       (current, now) => {
         const intent = current.sponsors.find((s) => s.id === id)!;
+        if (!intent) throw new FiveError('This payment draft changed. Review it again.', 409);
         if (intent.signedBytes) {
           if (intent.transactionHash !== tx.hash())
             throw new FiveError(

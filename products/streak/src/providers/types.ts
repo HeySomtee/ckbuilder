@@ -109,6 +109,8 @@ export interface MatchDataProvider {
   loadFixtures(): Match[];
   /** Read-only schedule including finished/postponed fixtures never admitted to a pool. */
   scheduleFixtures?(): Match[];
+  /** Full EPL season for Survivor planning, fetched outside database locks. */
+  survivorFixtures?(): Promise<Match[]>;
   scheduleCoverage?(): { from: string; to: string; complete: boolean } | null;
   /** Current results keyed by match id. `{}` when nothing to report. */
   fetchResults(): Promise<Record<string, LiveResult>>;

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { Sponsor } from '../five/domain';
 
 export const RULE_VERSION = 'survivor-free-v1';
 export class SurvivorError extends Error {
@@ -42,6 +43,7 @@ export type Pick = {
 };
 export type Entry = {
   accountId: string;
+  wallet?: string;
   publicId: string;
   name: string;
   joinedAt: string;
@@ -67,6 +69,11 @@ export type Terms = {
   limit: number;
 };
 export type Competition = {
+  fundingPolicy?: 'creator-custody-v1';
+  creatorWallet?: string;
+  fundingRevision?: number;
+  fundingIntentId?: string;
+  prizeFunding?: Sponsor;
   v: 1;
   id: string;
   creator: string;
@@ -129,8 +136,8 @@ export function parseTerms(value: unknown): Terms {
   };
 }
 function validateSchedule(slates: Slate[], now: number) {
-  if (!slates.length || slates.length > 10)
-    fail('Choose one to ten complete Premier League rounds.');
+  if (!slates.length || slates.length > 38)
+    fail('Choose between one and the remaining Premier League gameweeks (at most 38).');
   let previousEnd = now;
   const fixtures = new Set<string>();
   for (const slate of slates) {
@@ -168,9 +175,18 @@ export function createCompetition(
   terms: Terms,
   slates: Slate[],
   now: number,
+  creatorWallet?: string,
 ): Competition {
   validateSchedule(slates, now);
   return {
+    ...(creatorWallet
+      ? {
+          fundingPolicy: 'creator-custody-v1' as const,
+          creatorWallet,
+          fundingRevision: 0,
+          fundingIntentId: randomUUID(),
+        }
+      : {}),
     v: 1,
     id,
     creator,
@@ -178,7 +194,14 @@ export function createCompetition(
     terms,
     ruleVersion: RULE_VERSION,
     termsHash: createHash('sha256')
-      .update(JSON.stringify({ terms, slates, rule: RULE_VERSION }))
+      .update(
+        JSON.stringify({
+          terms,
+          slates,
+          rule: RULE_VERSION,
+          ...(creatorWallet ? { prizePolicy: 'creator-custody-v1', creatorWallet } : {}),
+        }),
+      )
       .digest('hex'),
     state: 'draft',
     rounds: slates.map((s) => ({
@@ -201,6 +224,15 @@ export function publish(c: Competition, now: number) {
       409,
     );
   validateSchedule(c.rounds, now);
+  if (
+    c.fundingPolicy &&
+    BigInt(c.terms.prizeShannons) > 0n &&
+    c.prizeFunding?.funding !== 'confirmed'
+  )
+    throw new SurvivorError(
+      'Fund the creator prize and wait for confirmation before opening entries.',
+      409,
+    );
   c.state = 'open';
   c.audit.push({ at: stamp(now), action: 'published' });
 }
@@ -210,6 +242,7 @@ export function join(
   name: string,
   termsHash: string,
   now: number,
+  wallet?: string,
 ) {
   if (c.entries.some((e) => e.accountId === accountId)) return;
   if (c.state !== 'open' || now >= lockTime(c.rounds[0]))
@@ -217,9 +250,12 @@ export function join(
   if (termsHash !== c.termsHash)
     throw new SurvivorError('The terms changed. Review this competition again.', 409);
   if (c.terms.mode !== 'free') throw new SurvivorError('Paid admission is not enabled.', 409);
+  if (c.fundingPolicy && !wallet)
+    throw new SurvivorError('Sign in with a wallet to receive any prize.', 401);
   if (c.entries.length >= c.terms.limit) throw new SurvivorError('This competition is full.', 409);
   c.entries.push({
     accountId,
+    ...(wallet ? { wallet } : {}),
     publicId: randomUUID(),
     name: name.slice(0, 40),
     joinedAt: stamp(now),
@@ -311,7 +347,7 @@ function complete(c: Competition, now: number, reason: string) {
   for (const entry of c.entries) if (entry.status === 'active') entry.status = 'winner';
   c.audit.push({ at: stamp(now), action: 'completed', round: c.currentRound });
 }
-function cancel(c: Competition, now: number, reason: string) {
+export function cancel(c: Competition, now: number, reason: string) {
   c.state = 'cancelled';
   c.reason = reason;
   c.audit.push({ at: stamp(now), action: 'cancelled', round: c.currentRound });
@@ -432,7 +468,23 @@ export function project(c: Competition, accountId: string | null, now: number) {
     state: c.state,
     reason: c.reason,
     currentRound: c.currentRound,
-    prizeStatus: 'announced' as const,
+    prizeStatus: !c.fundingPolicy
+      ? 'announced'
+      : c.terms.prizeShannons === '0'
+        ? 'none'
+        : (c.prizeFunding?.funding ?? 'unfunded'),
+    isCreator: c.creator === accountId,
+    prizeFunding:
+      c.creator === accountId && c.prizeFunding
+        ? {
+            id: c.prizeFunding.id,
+            amountShannons: c.prizeFunding.amountShannons,
+            funding: c.prizeFunding.funding,
+            destination: c.prizeFunding.destination,
+            tag: c.prizeFunding.tag,
+            transactionHash: c.prizeFunding.transactionHash,
+          }
+        : null,
     rounds: c.rounds.map((r) => ({
       ...r,
       lockAt: stamp(lockTime(r)),

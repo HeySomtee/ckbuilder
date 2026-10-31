@@ -793,6 +793,19 @@
 .survivor-rulebook ol {
   padding-left: 18px;
 }
+.survivor-custody-acceptance {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  margin: 16px 0;
+  cursor: pointer;
+}
+.survivor-custody-acceptance input {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  accent-color: var(--mint);
+}
 .survivor-rulebook li {
   padding-left: 5px;
   margin: 10px 0;
@@ -1039,4 +1052,11 @@
   .survivor-art {
     display: none;
   }
+}
+.survivor-deadline {
+  display: grid;
+  gap: 0.3rem;
+}
+.survivor-deadline strong {
+  color: var(--accent, #b4df7f);
 }

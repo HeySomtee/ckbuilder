@@ -7,6 +7,8 @@ import { FiveFunding } from './funding';
 import { FiveRewards } from './rewards';
 import { testConfig, testPool } from '../games-test/runtime';
 import { bindTestWallet } from '../games-test/scope';
+import { PgSurvivorStorage } from '../survivor/storage';
+import { SurvivorPrizes } from '../survivor/prizes';
 
 /** Dedicated process: no legacy or prediction signing material, no .env loading. */
 async function main() {
@@ -45,6 +47,9 @@ async function main() {
     throw Error('Dedicated Five rewards address does not match signer');
   const funding = new FiveFunding(store, client, address),
     rewards = new FiveRewards(pool, client, address, testing);
+  const survivorStore = new PgSurvivorStorage(pool, testing);
+  const survivor = new SurvivorPrizes(survivorStore, rewards);
+  let survivorCursor = 0;
   let stopped = false,
     cursor = 0;
   const credited = new Map<string, number>();
@@ -73,7 +78,22 @@ async function main() {
             console.warn('[five-rewards] gameweek refresh deferred');
           }
         }
-        await rewards.tick(signer, (id) => funding.verifyConfirmed(id));
+        const competitions = await survivorStore.list();
+        const survivorBatch = [
+          ...competitions.slice(survivorCursor),
+          ...competitions.slice(0, survivorCursor),
+        ].slice(0, 4);
+        survivorCursor = (survivorCursor + survivorBatch.length) % Math.max(competitions.length, 1);
+        for (const c of survivorBatch) {
+          try {
+            await survivor.tick(c.id);
+          } catch {
+            console.warn('[survivor-prizes] delivery deferred; saved payments retained');
+          }
+        }
+        await rewards.tick(signer, (id) =>
+          id.startsWith('survivor.') ? survivor.verify(id.slice(9)) : funding.verifyConfirmed(id),
+        );
         await rewards.heartbeat();
       } catch {
         console.warn('[five-rewards] delivery paused; saved transactions retained for retry');

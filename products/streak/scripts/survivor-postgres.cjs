@@ -153,6 +153,35 @@ async function main() {
       advance(c, {}, time);
     });
     const finished = JSON.stringify(await store.load('race'));
+    await store.change('race', () => {}, {
+      intent: 'survivor.race:prize',
+      outpoints: ['synthetic-shared-input'],
+    });
+    await assert.rejects(
+      store.change('race', () => {}, {
+        intent: 'five-round:sponsor',
+        outpoints: ['synthetic-shared-input'],
+      }),
+      /Another reward payment/,
+    );
+    await assert.rejects(
+      store.change(
+        'race',
+        () => {
+          throw Error('abort funding');
+        },
+        { intent: 'survivor.race:prize', outpoints: ['synthetic-rollback-input'] },
+      ),
+      /abort funding/,
+    );
+    assert.equal(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS n FROM streak_five_funding_inputs WHERE outpoint='synthetic-rollback-input'",
+        )
+      ).rows[0].n,
+      0,
+    );
     await restarted.change('race', (c, time) => advance(c, {}, time));
     assert.equal(
       JSON.stringify(await restarted.load('race')),

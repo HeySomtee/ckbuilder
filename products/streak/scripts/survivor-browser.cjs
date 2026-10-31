@@ -89,7 +89,7 @@ async function main() {
             status: 'scheduled',
             competition: { id: '39' },
             oracle: { provider: 'api-football' },
-            matchday: 'Regular Season - 10',
+            matchday: 'Regular Season - 9',
             home: {
               id: `team-${i * 2}`,
               name: i === 0 ? 'Manchester City' : `Home Club ${i}`,
@@ -102,8 +102,19 @@ async function main() {
             },
           }));
           const actor = { id: 'admin', name: 'Somtee', wallet: 'synthetic-admin' };
+          const firstWeek = [...fixtures];
+          for (let week = 1; week < 30; week++)
+            fixtures.push(
+              ...firstWeek.map((f) => ({
+                ...f,
+                id: `week-${week}-${f.id}`,
+                matchday: `Regular Season - ${week + 9}`,
+                kickoff: new Date(Date.parse(f.kickoff) + week * 7 * 86400000).toISOString(),
+              })),
+            );
           const service = new SurvivorService(store, ['synthetic-admin'], () => fixtures);
           let failRead = false;
+          let showFunding = false;
           let holdPick = false,
             releasePick,
             sawPick;
@@ -143,6 +154,7 @@ async function main() {
                   req.method() === 'POST'
                     ? await service.action(actor, req.postDataJSON())
                     : await service.read(actor, url.searchParams.get('competition') || undefined);
+                if (showFunding) payload.fundingAvailable = true; // UI capability only; no signer/chain transport is mocked here.
                 if (
                   holdCreate &&
                   req.method() === 'POST' &&
@@ -178,7 +190,8 @@ async function main() {
           await page.getByRole('button', { name: 'Create competition' }).click();
           let dialog = page.getByRole('dialog');
           await dialog.getByLabel('Competition name').fill('Disposable draft');
-          await dialog.getByRole('checkbox').first().check();
+          await dialog.getByLabel('Number of rounds', { exact: true }).fill('30');
+          assert.equal(await dialog.locator('input[name="round"]:checked').count(), 30);
           await dialog.getByRole('button', { name: 'Save draft' }).click();
           await page.getByRole('region', { name: 'Set up Disposable draft' }).waitFor();
           assert.equal(
@@ -187,6 +200,7 @@ async function main() {
             'Draft has no inactive game board',
           );
           const draft = [...store.rows.values()][0];
+          assert.equal(draft.rounds.length, 30);
           const originalLock = draft.rounds[0].lockAt;
           draft.rounds[0].lockAt = new Date(Date.now() - 1000).toISOString();
           await page.reload();
@@ -341,7 +355,7 @@ async function main() {
           await page.getByRole('button', { name: 'Pick saved', exact: true }).waitFor();
           Object.assign(c, await store.load(c.id));
           store.rows.set(c.id, c);
-          join(c, 'second', 'Second player', c.termsHash, Date.now());
+          join(c, 'second', 'Second player', c.termsHash, Date.now(), 'synthetic-second-wallet');
           savePick(c, 'second', 0, 'team-1', Date.now());
           await page.reload();
           await page.getByRole('button', { name: 'Survivor board', exact: true }).click();
@@ -422,6 +436,63 @@ async function main() {
           await dialog.waitFor();
           await page.keyboard.press('Escape');
           assert.equal(await dialog.isVisible(), false);
+          showFunding = true;
+          await page.getByRole('button', { name: 'Create competition', exact: true }).click();
+          await dialog.getByLabel('Competition name').fill('Creator prize UI');
+          await dialog.getByLabel('Creator-funded prize (tCKB)', { exact: true }).fill('200');
+          await dialog.getByRole('button', { name: 'Save draft' }).click();
+          await page.getByRole('region', { name: 'Set up Creator prize UI' }).waitFor();
+          assert.equal(
+            await page.getByRole('button', { name: 'Publish free competition' }).isDisabled(),
+            true,
+          );
+          await page.getByRole('button', { name: 'Fund creator prize', exact: true }).click();
+          await dialog.getByText(/This is custodial funding/).waitFor();
+          assert.equal(
+            await dialog.getByRole('button', { name: 'Review prize payment' }).isDisabled(),
+            true,
+          );
+          await dialog
+            .getByLabel('I accept testnet rewards-wallet custody and the payout rules')
+            .check();
+          assert.equal(
+            await dialog.getByRole('button', { name: 'Review prize payment' }).isEnabled(),
+            true,
+          );
+          await page.screenshot({
+            path: path.join(out, `${name}-${width}-creator-prize.png`),
+            fullPage: true,
+          });
+          await page.keyboard.press('Escape');
+          const prizeDraft = [...store.rows.values()].find(
+            (r) => r.terms.name === 'Creator prize UI',
+          );
+          prizeDraft.prizeFunding = {
+            id: prizeDraft.fundingIntentId,
+            accountId: actor.id,
+            wallet: actor.wallet,
+            amountShannons: prizeDraft.terms.prizeShannons,
+            funding: 'submitted',
+            destination: 'ckt1synthetic',
+            tag: '0x' + '11'.repeat(32),
+            transactionHash: '0x' + '22'.repeat(32),
+          };
+          prizeDraft.state = 'cancelled';
+          await page.reload();
+          await page
+            .getByText('Payment stuck after another wallet transaction?', { exact: true })
+            .click();
+          assert.equal(
+            await page.getByRole('button', { name: 'Verify conflicting transaction' }).isDisabled(),
+            true,
+          );
+          await page
+            .getByLabel('Conflicting transaction hash', { exact: true })
+            .fill('0x' + '33'.repeat(32));
+          assert.equal(
+            await page.getByRole('button', { name: 'Verify conflicting transaction' }).isEnabled(),
+            true,
+          );
           assert.deepEqual(errors, []);
           assert.deepEqual(external, []);
           await context.close();

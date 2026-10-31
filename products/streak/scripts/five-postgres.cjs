@@ -167,6 +167,68 @@ async function main() {
       'ckt1synthetic',
     );
     await rewards.init();
+    const survivorAward = newRound('survivor.queue', 'creator', terms, Date.now());
+    survivorAward.state = 'final';
+    survivorAward.entries = [
+      {
+        accountId: 'dust',
+        publicId: 'dust',
+        wallet: 'aaa-dust',
+        name: '',
+        players: [],
+        captain: '',
+        savedAt: new Date().toISOString(),
+      },
+      {
+        accountId: 'winner',
+        publicId: 'winner',
+        wallet: 'zzz-winner',
+        name: '',
+        players: [],
+        captain: '',
+        savedAt: new Date().toISOString(),
+      },
+    ];
+    survivorAward.rewards = { dust: '1', winner: '10000000000' };
+    await rewards.credit(survivorAward, true);
+    await pool.query("DELETE FROM streak_five_claim_requests WHERE wallet='aaa-dust'");
+    for (let repeat = 0; repeat < 3; repeat++) await rewards.credit(survivorAward, true);
+    assert.equal(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS n FROM streak_five_claim_requests WHERE wallet='aaa-dust'",
+        )
+      ).rows[0].n,
+      0,
+      'Repeated Survivor credits never requeue the consumed dust recipient ahead of a winner',
+    );
+    assert.equal(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS n FROM streak_five_claim_requests WHERE wallet='zzz-winner'",
+        )
+      ).rows[0].n,
+      1,
+    );
+    assert.equal(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS n FROM streak_five_credits WHERE starts_with(id,'survivor.queue:')",
+        )
+      ).rows[0].n,
+      2,
+    );
+    await pool.query("DELETE FROM streak_five_claim_requests WHERE wallet='zzz-winner'");
+    await rewards.credit(survivorAward, true);
+    assert.equal(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS n FROM streak_five_claim_requests WHERE wallet='zzz-winner'",
+        )
+      ).rows[0].n,
+      0,
+      'Paid/consumed awards are not queued forever',
+    );
     const refundRound = newRound(
       'refund-race',
       'admin',

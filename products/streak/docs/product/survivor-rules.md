@@ -1,5 +1,12 @@
 # Streak Survivor: rules and creation proposal
 
+31 October update: the owner approved creator-funded prizes through the existing
+custodial testnet rewards wallet. New competitions require confirmed funding before
+publication, use official FPL deadlines and allow up to the remaining complete
+season rounds. Winners share equally; cancellation and smallest-unit remainder
+return to the creator. Old published announcements remain unchanged. This supersedes
+the prize-funding proposal below. [Current rules and recovery](../delivery/survivor-creator-prizes.md).
+
 19 October 2026. The owner approved the interactive design and requested implementation. **Only the configured admin creates competitions, chooses free or fee-gated entry and sets the prize**. The [implementation record](../delivery/survivor-implementation.md) defines the local free-entry rules and verification. It supersedes the unresolved scheduling and correction choices in the original proposal below: all rounds are pinned before publication, results finalize six hours after the round's last kickoff, changed fixtures void, and later impossible slates or missed opening after service recovery produce joint winners. Fee-gated drafts remain unpublished until their separate funding/refund mechanism exists. No actual fee or prize budget has been authorized.
 
 ## The game

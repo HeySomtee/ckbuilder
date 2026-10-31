@@ -1,5 +1,9 @@
 # Streak Survivor implementation
 
+31 October update: [creator prizes and season scheduling](survivor-creator-prizes.md)
+supersede the original ten-round, one-minute cutoff and announcement-only prize
+implementation below for newly created competitions. Existing published terms remain fixed.
+
 ## 26 October draft setup correction
 
 The owner reported that Continue setup appeared unfinished. It previously only selected a draft, while publication lived inside the game hero and the draft displayed an unusable team board. Drafts now open a dedicated host workspace before the competition list. Creation and Review setup focus that workspace. The review shows entry terms, announced prize, first deadline and expandable schedule, with explicit Publish free competition and Edit draft actions. The game board appears after publication, when the existing free-entry review becomes available.

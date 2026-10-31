@@ -9,6 +9,7 @@ const { TestGameControls } = require('../dist/modules/games-test/runtime');
 const { DummyFiveFeed, sampleFixtures, samplePlayers } = require('../dist/modules/games-test/data');
 const { FiveService } = require('../dist/modules/five/service');
 const { FiveFunding } = require('../dist/modules/five/funding');
+const { lockTime } = require('../dist/modules/five/timing');
 const { SurvivorService } = require('../dist/modules/survivor/service');
 class Store {
   rows = new Map();
@@ -20,7 +21,7 @@ class Store {
       id: r.id,
       name: r.terms.name,
       terms: r.terms,
-      lockAt: r.terms.lockAt,
+      lockAt: r.rounds ? r.terms.lockAt : new Date(lockTime(r)).toISOString(),
       state: r.state,
       createdAt: r.createdAt,
     }));

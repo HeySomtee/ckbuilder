@@ -129,10 +129,10 @@ async function main() {
       busy = false,
       error = '',
       message = 'Two demo squads are saved. Start with Alice’s bid.';
-    async function bid(who, actor, id) {
+    async function bid(who, actor, id, amount = 100n) {
       await funding.intent(actor, 'rehearsal', {
         sponsorId: id,
-        amountShannons: '10000000000',
+        amountShannons: String(amount * h.CKB),
         display: 'anonymous',
         custodyAccepted: true,
       });
@@ -141,8 +141,8 @@ async function main() {
         ccc.Transaction.from({
           inputs: [{ previousOutput: who.fund.outPoint }],
           outputs: [
-            { lock: h.admin.lock, capacity: 100n * h.CKB },
-            { lock: who.lock, capacity: who.fund.output.capacity - 100n * h.CKB - 10000n },
+            { lock: h.admin.lock, capacity: amount * h.CKB },
+            { lock: who.lock, capacity: who.fund.output.capacity - amount * h.CKB - 10000n },
           ],
           outputsData: [sponsor.tag, '0x'],
         }),
@@ -155,7 +155,7 @@ async function main() {
       await h.commit(who, tx, true);
       await h.mine(24);
       await funding.reconcile('rehearsal');
-      hashes.push({ label: `${actor.name}: 100 demo CKB bid`, hash: tx.hash() });
+      hashes.push({ label: `${actor.name}: ${amount} demo CKB bid`, hash: tx.hash() });
     }
     async function deliver(wallet, amount, label) {
       await rewards.tick(h.admin.signer, (id) => funding.verifyConfirmed(id));
@@ -184,10 +184,10 @@ async function main() {
         },
       ],
       [
-        'Place Bob’s 100 bid',
+        'Place Bob’s 150 bid',
         async () => {
-          await bid(bob, bobActor, 'bob-first');
-          return 'Both bid 100. Alice leads because she funded first.';
+          await bid(bob, bobActor, 'bob-first', 150n);
+          return 'Bob leads with 150 demo CKB. New bids must exceed the leader.';
         },
       ],
       [
@@ -227,8 +227,8 @@ async function main() {
           const round = await store.load('rehearsal');
           assert.equal(round.auction.winnerWallet, aliceWallet);
           await rewards.credit(round);
-          await deliver(bobWallet, 100n, 'Bob: automatic losing-bid refund');
-          return 'Bids and picks are locked. Alice wins the sponsor slot; Bob’s full 100 refund is confirmed.';
+          await deliver(bobWallet, 150n, 'Bob: automatic losing-bid refund');
+          return 'Bids and picks are locked. Alice wins the sponsor slot; Bob’s full 150 refund is confirmed.';
         },
       ],
       [

@@ -27,6 +27,16 @@ export type Entry = {
   missedRound?: number;
 };
 export type Competition = {
+  prizeStatus: string;
+  isCreator: boolean;
+  prizeFunding: {
+    id: string;
+    amountShannons: string;
+    funding: string;
+    destination: string;
+    tag: string;
+    transactionHash: string;
+  } | null;
   id: string;
   terms: Terms;
   state: string;
@@ -42,6 +52,17 @@ export type Competition = {
   entries: Entry[];
 };
 export type SurvivorData = {
+  fundingAvailable: boolean;
+  fundingError: string;
+  scheduleError: string;
+  rewards: {
+    availableShannons: string;
+    pendingShannons: string;
+    paidShannons: string;
+    minimumShannons: string;
+    status: string;
+    transactionHash: string;
+  } | null;
   testMode?: boolean;
   now: string;
   viewerId: string | null;
@@ -65,7 +86,7 @@ const date = (v: unknown) => {
   return Number.isFinite(Date.parse(s)) ? s : bad();
 };
 const amount = (v: unknown) => {
-  const s = str(v, 16);
+  const s = str(v, 30);
   return /^(0|[1-9]\d*)$/.test(s) ? s : bad();
 };
 function terms(value: unknown): Terms {
@@ -103,7 +124,7 @@ function slate(value: unknown): Slate {
 }
 function detail(value: unknown): Competition {
   const c = obj(value);
-  const rounds = arr(c.rounds, 10).map((value) => {
+  const rounds = arr(c.rounds, 38).map((value) => {
     const r = obj(value),
       results: Competition['rounds'][number]['results'] = {};
     for (const [id, value] of Object.entries(obj(r.results))) {
@@ -125,7 +146,7 @@ function detail(value: unknown): Competition {
     const e = obj(value),
       picks: Record<string, Pick> = {};
     for (const [index, value] of Object.entries(obj(e.picks))) {
-      if (!/^\d$/.test(index)) bad();
+      if (!/^(0|[1-9]\d?)$/.test(index) || Number(index) >= rounds.length) bad();
       const p = obj(value);
       picks[index] = {
         teamId: str(p.teamId),
@@ -140,15 +161,39 @@ function detail(value: unknown): Competition {
       id: str(e.id),
       name: str(e.name, 40),
       status: choice(e.status, ['active', 'out', 'winner']),
-      used: arr(e.used, 10).map((v) => str(v)),
+      used: arr(e.used, 20).map((v) => str(v)),
       picks,
-      ...(e.missedRound === undefined ? {} : { missedRound: num(e.missedRound, 9) }),
+      ...(e.missedRound === undefined ? {} : { missedRound: num(e.missedRound, 37) }),
     };
   });
-  const currentRound = num(c.currentRound, 9);
+  const currentRound = num(c.currentRound, 37);
   if (!rounds[currentRound]) bad();
   return {
     id: str(c.id),
+    prizeStatus: choice(c.prizeStatus ?? 'announced', [
+      'announced',
+      'none',
+      'unfunded',
+      'awaiting',
+      'submitted',
+      'confirmed',
+      'conflicted',
+    ]),
+    isCreator: c.isCreator === true,
+    prizeFunding:
+      c.prizeFunding == null
+        ? null
+        : (() => {
+            const p = obj(c.prizeFunding);
+            return {
+              id: str(p.id),
+              amountShannons: amount(p.amountShannons),
+              funding: choice(p.funding, ['awaiting', 'submitted', 'confirmed', 'conflicted']),
+              destination: str(p.destination, 300),
+              tag: str(p.tag),
+              transactionHash: str(p.transactionHash ?? ''),
+            };
+          })(),
     terms: terms(c.terms),
     termsHash: str(c.termsHash),
     state: choice(c.state, ['draft', 'open', 'running', 'complete', 'cancelled']),
@@ -164,10 +209,27 @@ export function parseSurvivor(value: unknown): SurvivorData {
   if (typeof data.admin !== 'boolean') bad();
   return {
     testMode: data.testMode === true,
+    fundingAvailable: data.fundingAvailable === true,
+    fundingError: str(data.fundingError ?? '', 300),
+    scheduleError: str(data.scheduleError ?? '', 300),
+    rewards:
+      data.rewards == null
+        ? null
+        : (() => {
+            const r = obj(data.rewards);
+            return {
+              availableShannons: amount(r.availableShannons),
+              pendingShannons: amount(r.pendingShannons),
+              paidShannons: amount(r.paidShannons),
+              minimumShannons: amount(r.minimumShannons),
+              status: str(r.status),
+              transactionHash: str(r.transactionHash),
+            };
+          })(),
     now: date(data.now),
     viewerId: data.viewerId === null ? null : str(data.viewerId),
     admin: data.admin as boolean,
-    slates: arr(data.slates, 10).map(slate),
+    slates: arr(data.slates, 38).map(slate),
     competitions: arr(data.competitions, 100).map((value) => {
       const c = obj(value);
       return {

@@ -69,7 +69,7 @@ export class FiveRewards {
       [this.address],
     );
   }
-  async credit(round: Round) {
+  async credit(round: Round, automatic = false) {
     const auction = isAuction(round);
     if (round.state !== 'final' && round.state !== 'cancelled' && !(auction && round.auction))
       return;
@@ -92,6 +92,23 @@ export class FiveRewards {
     const connection = await this.pool.connect();
     try {
       await connection.query('BEGIN');
+      // Queue automatic payouts only when introducing a credit. Repeated delivery of
+      // immutable awards must not requeue paid/dust wallets ahead of other winners.
+      const existing = automatic
+        ? await connection.query<{ id: string }>(
+            'SELECT id FROM streak_five_credits WHERE id=ANY($1::text[])',
+            [rows.map((row) => row.id)],
+          )
+        : null;
+      const savedIds = new Set(existing?.rows.map((row) => row.id));
+      if (automatic)
+        for (const wallet of [
+          ...new Set(rows.filter((row) => !savedIds.has(row.id)).map((row) => row.wallet)),
+        ].sort())
+          await connection.query(
+            'INSERT INTO streak_five_claim_requests(wallet,refund_only) VALUES($1,false) ON CONFLICT(wallet) DO UPDATE SET refund_only=false',
+            [wallet],
+          );
       // Serialize refund producers with the consumer before inserting credits.
       // A producer racing deletion must leave a fresh queued request behind.
       if (auction)

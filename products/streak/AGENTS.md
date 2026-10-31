@@ -17,6 +17,13 @@ The owner approved the Streak UI and architecture on **15 October 2026**, includ
 
 ## Product and trust boundaries
 
+31 October owner approval: new Survivor creator prizes use the existing dedicated
+custodial testnet rewards wallet, not a new escrow contract. Require exact creator
+funding and canonical confirmation before publishing a positive prize. Preserve
+signed funding, cancellation refunds, shared input reservations and payout journals.
+Never relabel an older announced prize as funded. Five and Survivor prize delivery
+require the same database role/schema. [Rules and evidence](docs/delivery/survivor-creator-prizes.md).
+
 - Legacy balances use a custodial treasury-backed ledger. The Season app integrates direct testnet market positions with separate claims. Keep legacy liabilities and withdrawals separate from those positions; wallet login alone does not change custody.
 - The Week 20 Rust lab at `../../src/week20/contract-lab` retains its independent historical demo. The app's later versioned contracts and direct modules integrate bounded market and claim rules. Local integration and public payments do not establish hosted operator readiness.
 - The approved target gives CKB authority over new prediction funds and claims. The configured football oracle remains trusted for results. PostgreSQL owns identity, fantasy competition state and read models. A read model is never an entitlement to spend a cell.
@@ -34,6 +41,13 @@ The owner approved the Streak UI and architecture on **15 October 2026**, includ
 - Keep TypeScript strict. Validate untrusted data and narrow `unknown`; avoid unchecked casts, catch-and-ignore errors and unexplained suppressions. Pin reviewed dependencies and update the lockfile together.
 
 ## Design and motion
+
+31 October Five correction: after the deadline, keep the saved current gameweek
+team and its updating player points as the default view. Next-team selection is
+an explicit action with a separate deadline and independently saved squad. Never
+present unsaved edits as the locked team, copy squads into a new week, treat missing
+points as a confirmed zero, or call provisional scores final. Keep earlier weeks
+available and retain labelled saved points when refresh fails.
 
 30 October mobile payment correction: pending payment notifications cannot be
 dismissed. Use the shared cell loader in a compact, expandable button on mobile,

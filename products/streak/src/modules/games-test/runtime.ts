@@ -9,6 +9,7 @@ import { PgFiveStorage } from '../five/storage';
 import { lockTime, TEST_TIMING_POLICY } from '../five/timing';
 import { PgSurvivorStorage } from '../survivor/storage';
 import { SurvivorService } from '../survivor/service';
+import { SurvivorPrizes } from '../survivor/prizes';
 import { advance, lockTime as survivorLockTime, type Result } from '../survivor/domain';
 import { DummyFiveFeed, sampleFixtures } from './data';
 import { bindTestWallet, TEST_SCHEMA } from './scope';
@@ -209,6 +210,8 @@ export function testGames() {
         () => fixtures,
         () => ({}),
         true,
+        undefined,
+        new SurvivorPrizes(survivorStore, rewards),
       );
       return new TestGameControls(store, survivorStore, feed, five, survivor, funding);
     } catch (error) {
