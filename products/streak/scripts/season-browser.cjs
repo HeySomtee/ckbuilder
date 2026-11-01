@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { chromium, webkit } = require('playwright');
+const { chooseOption, openSelect } = require('./browser-select.cjs');
 const { observeReads, accountReadFinished } = require('./browser-readiness.cjs');
 
 async function main() {
@@ -118,6 +119,7 @@ async function main() {
       for (const width of [320, 390, 1440]) {
         const context = await browser.newContext({
           viewport: { width, height: 900 },
+          hasTouch: width <= 390,
           serviceWorkers: 'block',
           reducedMotion: 'reduce',
         });
@@ -274,9 +276,17 @@ async function main() {
         await page.getByRole('link', { name: 'Explore the markets', exact: true }).click();
         await page.waitForURL('**/season/');
         await page.locator('.fixture-calendar').waitFor();
-        await page.waitForFunction(() =>
-          document.querySelector('[aria-label="Filter by league"] option[value="ucl"]'),
+        const initialLeague = await openSelect(page, 'Filter by league', { touch: width <= 390 });
+        await initialLeague.menu
+          .getByRole('option', { name: 'UEFA Champions League', exact: true })
+          .waitFor();
+        await page.keyboard.press('End');
+        await page.keyboard.press('Escape');
+        assert.equal(
+          await initialLeague.trigger.evaluate((el) => el === document.activeElement),
+          true,
         );
+        assert.match(await initialLeague.trigger.innerText(), /All leagues/);
         const chooseWeekend = async () => {
           await page.getByRole('button', { name: 'Choose fixture date' }).click();
           await page.getByRole('button', { name: 'Weekend', exact: true }).click();
@@ -433,25 +443,32 @@ async function main() {
         assert.equal(await page.locator('.market-card').count(), 1);
         await chooseWeekend();
         await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
-        await page.getByRole('combobox', { name: 'Filter by league' }).selectOption('ucl');
+        await chooseOption(page, 'Filter by league', 'UEFA Champions League', {
+          touch: width <= 390,
+        });
         await page.getByRole('heading', { name: 'Home 25', exact: true }).waitFor();
         assert.equal(
           await page.locator('.market-card').count(),
           1,
           'League filtering reaches fixtures beyond page one',
         );
+        const availableLeagues = await openSelect(page, 'Filter by league', {
+          touch: width <= 390,
+        });
         assert.equal(
-          await page.getByRole('combobox', { name: 'Filter by league' }).locator('option').count(),
+          await availableLeagues.menu.getByRole('option').count(),
           3,
           'Other leagues stay available',
         );
+        await page.getByRole('textbox', { name: 'Search teams or competitions' }).click();
+        await availableLeagues.menu.waitFor({ state: 'hidden' });
         await page.getByRole('textbox', { name: 'Search teams or competitions' }).fill('Arsenal');
         await page.getByRole('heading', { name: 'No matching fixtures' }).waitFor();
         await page.getByRole('button', { name: 'Browse all fixtures' }).click();
         await page.getByRole('heading', { name: 'Arsenal', exact: true }).waitFor();
-        assert.equal(
-          await page.getByRole('combobox', { name: 'Filter by league' }).inputValue(),
-          '',
+        assert.match(
+          await page.getByRole('combobox', { name: 'Filter by league' }).innerText(),
+          /All leagues/,
         );
         await page.getByRole('textbox', { name: 'Search teams or competitions' }).fill('Arsenal');
         await page.waitForFunction(() => document.querySelectorAll('.market-card').length === 1);
@@ -535,13 +552,13 @@ async function main() {
           .getByRole('heading', { name: 'Barcelona', exact: true })
           .waitFor();
         await accountReadFinished(livePage);
-        await livePage.getByRole('combobox', { name: 'Sort by' }).selectOption('kickoff');
+        await chooseOption(livePage, 'Sort fixtures', 'Kickoff time');
         await livePage
           .locator('.market-card')
           .first()
           .getByRole('heading', { name: 'Arsenal', exact: true })
           .waitFor();
-        await livePage.getByRole('combobox', { name: 'Sort by' }).selectOption('featured');
+        await chooseOption(livePage, 'Sort fixtures', 'Big games first');
         await livePage
           .locator('.market-card')
           .first()

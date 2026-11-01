@@ -1,4 +1,4 @@
-/* Keep native selection behavior with a consistent inset indicator. */
+/* Native fallback controls retain an inset indicator until enhanced. */
 select:not([multiple]):not([size]) {
   appearance: none;
   -webkit-appearance: none;
@@ -7,6 +7,180 @@ select:not([multiple]):not([size]) {
   background-position: right 12px center;
   background-size: 14px 14px;
   background-repeat: no-repeat;
+}
+
+/* The same in-page chooser serves React and retained legacy pages. */
+.streak-select {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  vertical-align: middle;
+}
+.streak-select--compact {
+  width: auto;
+  max-width: min(100%, 220px);
+}
+:root .streak-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong, #ffffff28);
+  border-radius: 11px;
+  background: linear-gradient(135deg, #ffffff07, #ffffff02), var(--surface, #1a1e1c);
+  color: var(--text, #f1f3ed);
+  font: 500 13px/1.35 var(--font, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: start;
+  box-shadow: inset 0 1px 0 #ffffff05;
+  cursor: pointer;
+}
+:root .streak-select-trigger:hover:not(:disabled),
+:root .streak-select-trigger[aria-expanded='true'] {
+  border-color: #aec4b65c;
+  background: linear-gradient(135deg, #ffffff0b, #ffffff03), var(--surface, #1a1e1c);
+}
+:root .streak-select-trigger:focus-visible {
+  outline: 2px solid var(--mint, #b9ed8a);
+  outline-offset: 3px;
+}
+:root .streak-select-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.streak-select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.streak-select-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted, #a4aea7);
+  transition: transform 120ms ease;
+}
+.streak-select-chevron svg,
+svg.streak-select-chevron {
+  width: 14px;
+  height: 14px;
+}
+[aria-expanded='true'] > .streak-select-chevron {
+  transform: rotate(180deg);
+}
+.streak-select-menu {
+  position: fixed;
+  z-index: 2000;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 5px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid #b9d2c43d;
+  border-radius: 13px;
+  background: #18211ef5;
+  color: var(--text, #f1f3ed);
+  box-shadow:
+    0 12px 32px #0005,
+    inset 0 1px 0 #ffffff0a;
+  backdrop-filter: blur(12px);
+  font: 500 13px/1.35 var(--font, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: start;
+  scrollbar-width: thin;
+}
+.streak-select-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 10px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.streak-select-option-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.streak-select-option[data-active='true'] {
+  background: #ffffff0b;
+  border-color: #ffffff17;
+}
+.streak-select-option[aria-selected='true'] {
+  color: var(--mint, #b9ed8a);
+  background: #b9ed8a0b;
+}
+.streak-select-option[aria-selected='true'][data-active='true'] {
+  border-color: #b9ed8a40;
+}
+.streak-select-option[aria-disabled='true'] {
+  color: #849088;
+  cursor: not-allowed;
+}
+.streak-select-check {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  visibility: hidden;
+}
+[aria-selected='true'] > .streak-select-check {
+  visibility: visible;
+}
+.streak-select-empty {
+  padding: 14px 10px;
+  color: var(--muted, #a4aea7);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .streak-select-menu {
+    background: #18211e;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .streak-select-chevron {
+    transition: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .streak-select-menu {
+    background: #18211e;
+    backdrop-filter: none;
+  }
+}
+@media (forced-colors: active) {
+  :root .streak-select-trigger,
+  .streak-select-menu {
+    color: ButtonText;
+    background: Canvas;
+    border: 1px solid ButtonText;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+  .streak-select-option[data-active='true'] {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+  .streak-select-option[aria-selected='true'] {
+    color: HighlightText;
+    background: Highlight;
+  }
+  .streak-select-option[aria-disabled='true'] {
+    color: GrayText;
+  }
 }
 select:not([multiple]):not([size]):dir(rtl) {
   background-position: left 12px center;

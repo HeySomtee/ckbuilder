@@ -99,6 +99,10 @@ function buildProduct() {
 
 async function browserChecks() {
   buildProduct();
+  run('Shared dropdown browser regression', [join(product, 'scripts/select-browser.cjs')], {
+    cwd: product,
+    isolated: true,
+  });
   run('Startup splash and bundle recovery', [join(product, 'scripts/startup-browser.cjs')], {
     cwd: product,
     isolated: true,

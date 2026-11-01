@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const { chromium, webkit } = require('playwright');
+const { chooseOption, openSelect } = require('./browser-select.cjs');
 const { SurvivorService } = require('../dist/modules/survivor/service');
 const { join, savePick, advance } = require('../dist/modules/survivor/domain');
 class MemoryStore {
@@ -77,6 +78,7 @@ async function main() {
           [1440, 900],
         ]) {
           const context = await browser.newContext({
+            hasTouch: width <= 390,
             viewport: { width, height },
             reducedMotion: 'reduce',
             serviceWorkers: 'block',
@@ -223,7 +225,19 @@ async function main() {
           assert.equal(store.rows.size, 0);
           await page.getByRole('button', { name: 'Create competition' }).click();
           await dialog.getByLabel('Competition name').fill('The long game');
-          await dialog.getByLabel('Entry mode', { exact: true }).selectOption('paid');
+          const entryMode = (await openSelect(page, 'Entry mode')).trigger;
+          await page.screenshot({ path: path.join(out, `${name}-${width}-entry-mode-menu.png`) });
+          await page.keyboard.press('End');
+          await page.keyboard.press('Escape');
+          assert.equal(
+            await dialog.isVisible(),
+            true,
+            'Dropdown Escape keeps its parent dialog open.',
+          );
+          assert.equal(await entryMode.evaluate((el) => el === document.activeElement), true);
+          assert.match(await entryMode.innerText(), /Free entry/);
+          await chooseOption(page, 'Entry mode', 'Paid entry (draft only)');
+          assert.equal(await dialog.isVisible(), true);
           await dialog.getByRole('checkbox').first().check();
           await page.screenshot({ path: path.join(out, `${name}-${width}-admin.png`) });
           await dialog.getByRole('button', { name: 'Save draft' }).click();
@@ -244,7 +258,7 @@ async function main() {
             fullPage: true,
           });
           await page.getByRole('button', { name: 'Edit draft' }).click();
-          await dialog.getByLabel('Entry mode', { exact: true }).selectOption('free');
+          await chooseOption(page, 'Entry mode', 'Free entry');
           assert.equal(
             await dialog.getByLabel('Entry fee (tCKB)', { exact: true }).isEnabled(),
             false,

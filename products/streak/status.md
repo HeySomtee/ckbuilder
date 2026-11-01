@@ -1,5 +1,7 @@
 # Streak status
 
+1 November dropdown correction: compact in-page controls replace native pickers across Season and retained pages, with shared glass styling and 44px touch targets. The 16-journey Chromium/WebKit matrix and focused Five/Survivor flows pass. The final publication commit records exact-tree release validation; physical Zerion Android acceptance remains separate. See [implementation](docs/delivery/in-page-selects.md).
+
 1 November release scope now also includes readable pending-button loaders across
 React and legacy pages. Shared CSS removes compounded dimming while preserving
 disabled actions and inactive-control styling. Contrast/interaction browser checks

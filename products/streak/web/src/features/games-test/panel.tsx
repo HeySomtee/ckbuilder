@@ -1,4 +1,5 @@
 import { CellLoader } from '../../components/cell-loader';
+import { Select } from '../../components/select';
 import { useState } from 'react';
 import { gamesDataMode } from '../../lib/games-data';
 import './panel.css';
@@ -67,13 +68,19 @@ export function GameTestPanel({
               {game === 'survivor' && (
                 <label>
                   Result scenario
-                  <select value={scenario} onChange={(e) => setScenario(e.target.value)}>
-                    <option value="mixed">Mixed results</option>
-                    <option value="home">Home teams win</option>
-                    <option value="away">Away teams win</option>
-                    <option value="draw">All draws</option>
-                    <option value="void">All fixtures void</option>
-                  </select>
+                  <Select
+                    aria-label="Result scenario"
+                    value={scenario}
+                    onChange={setScenario}
+                    disabled={busy}
+                    options={[
+                      { value: 'mixed', label: 'Mixed results' },
+                      { value: 'home', label: 'Home teams win' },
+                      { value: 'away', label: 'Away teams win' },
+                      { value: 'draw', label: 'All draws' },
+                      { value: 'void', label: 'All fixtures void' },
+                    ]}
+                  />
                 </label>
               )}
               <button

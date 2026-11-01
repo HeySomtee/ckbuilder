@@ -1,6 +1,7 @@
 import { Jersey, Modal, positions } from './presentation';
 import { LiveTeam } from './live-team';
 import { CellLoader } from '../../components/cell-loader';
+import { Select } from '../../components/select';
 import { GameTestPanel } from '../games-test/panel';
 import { gamesDataMode } from '../../lib/games-data';
 import { useEffect, useImperativeHandle, useRef, useState } from 'react';
@@ -477,14 +478,20 @@ function Builder({
               </button>
             ))}
           </div>
-          <select aria-label="Sort players" value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="form">Highest form</option>
-            <option value="points">Total points</option>
-            <option value="in">Transfers in</option>
-            <option value="out">Transfers out</option>
-            <option value="price">Lowest price</option>
-            <option value="name">Name</option>
-          </select>
+          <Select
+            className="streak-select--compact"
+            aria-label="Sort players"
+            value={sort}
+            onChange={setSort}
+            options={[
+              { value: 'form', label: 'Highest form' },
+              { value: 'points', label: 'Total points' },
+              { value: 'in', label: 'Transfers in' },
+              { value: 'out', label: 'Transfers out' },
+              { value: 'price', label: 'Lowest price' },
+              { value: 'name', label: 'Name' },
+            ]}
+          />
         </div>
         {scout.isPending && scoutingAvailable && (
           <p className="five-scout-status" role="status">
@@ -717,13 +724,17 @@ function Admin({
             {sponsorship && (
               <label>
                 Sponsorship format
-                <select
+                <Select
+                  aria-label="Sponsorship format"
                   value={sponsorshipMode}
-                  onChange={(e) => setSponsorshipMode(e.target.value as 'community' | 'auction')}
-                >
-                  <option value="auction">Highest bidder wins</option>
-                  <option value="community">Shared community contributions</option>
-                </select>
+                  onChange={(value) =>
+                    setSponsorshipMode(value === 'community' ? 'community' : 'auction')
+                  }
+                  options={[
+                    { value: 'auction', label: 'Highest bidder wins' },
+                    { value: 'community', label: 'Shared community contributions' },
+                  ]}
+                />
               </label>
             )}
             <label>
@@ -1112,21 +1123,19 @@ export default function FivePage({
           <div className="five-round-bar">
             <label>
               <span className="sr-only">Gameweek</span>
-              <select
+              <Select
+                className="streak-select--compact"
                 aria-label="Gameweek"
                 value={r.id}
-                onChange={(e) => {
-                  setSelection(e.target.value);
+                onChange={(value) => {
+                  setSelection(value);
                   setMessage('');
                 }}
-              >
-                {data.rounds.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.name} ·{' '}
-                    {q.state === 'open' && Date.parse(q.lockAt) <= serverNow ? 'locked' : q.state}
-                  </option>
-                ))}
-              </select>
+                options={data.rounds.map((q) => ({
+                  value: q.id,
+                  label: `${q.name} · ${q.state === 'open' && Date.parse(q.lockAt) <= serverNow ? 'locked' : q.state}`,
+                }))}
+              />
             </label>
             <span>
               {r.entries.length} / {r.terms.limit} entries

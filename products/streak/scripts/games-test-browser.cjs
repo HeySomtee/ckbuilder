@@ -4,6 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium, webkit } = require('playwright');
+const { chooseOption } = require('./browser-select.cjs');
 const { ccc } = require('@ckb-ccc/core');
 const { TestGameControls } = require('../dist/modules/games-test/runtime');
 const { DummyFiveFeed, sampleFixtures, samplePlayers } = require('../dist/modules/games-test/data');
@@ -94,6 +95,7 @@ async function main() {
         for (const width of [390, 1440]) {
           servedMode = 'test';
           const context = await browser.newContext({
+            hasTouch: width <= 390,
             viewport: { width, height: 900 },
             reducedMotion: 'reduce',
             serviceWorkers: 'block',
@@ -276,7 +278,7 @@ async function main() {
           await survivor.action(second, { action: 'join', id: c.id, termsHash: c.termsHash });
           await survivor.action(second, { action: 'pick', id: c.id, round: 0, teamId: '1' });
           await page.getByRole('button', { name: 'Close picks now', exact: true }).click();
-          await page.getByLabel('Result scenario').selectOption('home');
+          await chooseOption(page, 'Result scenario', 'Home teams win');
           const nextRoundResponse = page.waitForResponse(
             (r) => r.url().includes('/api/survivor') && r.request().method() === 'POST',
           );

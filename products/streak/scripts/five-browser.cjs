@@ -4,6 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium, webkit } = require('playwright');
+const { chooseOption } = require('./browser-select.cjs');
 const { FiveService } = require('../dist/modules/five/service');
 const { newRound, parseTerms } = require('../dist/modules/five/domain');
 const { closeAuction } = require('../dist/modules/five/auction');
@@ -77,6 +78,7 @@ async function main() {
       try {
         for (const width of [320, 390, 1440]) {
           const context = await browser.newContext({
+            hasTouch: width <= 390,
             viewport: { width, height: 900 },
             reducedMotion: 'reduce',
             serviceWorkers: 'block',
@@ -174,9 +176,12 @@ async function main() {
           await page.getByRole('button', { name: 'Manage draft', exact: true }).click();
           await dialog.getByLabel('Winning percentage').fill('5');
           await dialog.getByLabel('Allow community sponsorship').check();
+          await chooseOption(page, 'Sponsorship format', 'Highest bidder wins');
+          await chooseOption(page, 'Sponsorship format', 'Shared community contributions');
           await dialog.getByLabel('Minimum contribution (tCKB)').fill('500');
           await dialog.getByRole('button', { name: 'Save settings' }).click();
           await page.getByRole('button', { name: 'Publish gameweek', exact: true }).click();
+          assert.equal([...store.rows.values()][0].terms.sponsorshipMode, 'community');
           await page.getByRole('tab', { name: 'My five', exact: true }).click();
           if (width <= 760)
             await page.getByRole('button', { name: 'Players', exact: true }).click();
@@ -249,6 +254,7 @@ async function main() {
           await page.screenshot({ path: path.join(out, `${name}-${width}.png`), fullPage: true });
           const auctionTerms = parseTerms({
             ...terms,
+            name: 'Auction Five',
             sponsorship: true,
             sponsorshipMode: 'auction',
             lockAt: new Date(Date.now() + 300000).toISOString(),
@@ -329,11 +335,11 @@ async function main() {
             assert.equal(closeAuction(r, time), true);
           });
           // Explicit selection keeps the closed auction visible instead of the other open round.
-          await page.getByLabel('Gameweek', { exact: true }).selectOption('auction-ui');
+          await chooseOption(page, 'Gameweek', /Auction Five/);
           await page.reload();
           await page.getByRole('tab', { name: 'Sponsors', exact: true }).click();
           // Reload resets selection; choose it again through the public gameweek selector.
-          await page.getByLabel('Gameweek', { exact: true }).selectOption('auction-ui');
+          await chooseOption(page, 'Gameweek', /Auction Five/);
           await page.getByText('You won the sponsor spot', { exact: true }).waitFor();
           await page
             .locator('.five-sponsor-showcase')

@@ -6,6 +6,7 @@ import type { FormEvent } from 'react';
 import type { Account } from '../account/api';
 import { Icon } from '../../components/icon';
 import { CellLoader } from '../../components/cell-loader';
+import { Select } from '../../components/select';
 import { FixtureRun } from '../../components/fixture-run';
 import { actSurvivor, decimalAmount, loadSurvivor, money, toShannons } from './api';
 import type { Competition, SurvivorData, Team } from './api';
@@ -1239,17 +1240,16 @@ export default function SurvivorPage({
               <div className="survivor-form-grid">
                 <label>
                   Entry
-                  <select
+                  <Select
                     aria-label="Entry mode"
                     name="mode"
                     value={entryMode}
-                    onChange={(event) =>
-                      setEntryMode(event.target.value === 'paid' ? 'paid' : 'free')
-                    }
-                  >
-                    <option value="free">Free entry</option>
-                    <option value="paid">Paid entry (draft only)</option>
-                  </select>
+                    onChange={(value) => setEntryMode(value === 'paid' ? 'paid' : 'free')}
+                    options={[
+                      { value: 'free', label: 'Free entry' },
+                      { value: 'paid', label: 'Paid entry (draft only)' },
+                    ]}
+                  />
                 </label>
                 <label>
                   Entry fee (tCKB)

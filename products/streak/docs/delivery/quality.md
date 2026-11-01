@@ -115,6 +115,12 @@ PostgreSQL and browser jobs must be required, not optional because they need ext
 
 ## Browser and motion evidence
 
+The shared dropdown lane (`scripts/select-browser.cjs`) checks actual React and
+retained-page controls with touch, keyboard, dialog focus, dynamic choices and
+viewport constraints. Feature browser journeys select visible options through
+the control, rather than setting a hidden native select value. It establishes
+browser behavior with isolated fixtures, not physical Zerion app acceptance.
+
 The shared loading signature adds `scripts/cell-loader-browser.cjs` to the
 mandatory browser lane. It verifies native cell geometry/motion, reduced motion,
 hidden-page suspension, lifecycle cleanup and real pending states in built

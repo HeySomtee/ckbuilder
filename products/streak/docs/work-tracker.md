@@ -1,5 +1,7 @@
 # Streak work tracker
 
+1 November dropdown follow-up: implemented all seven Season selectors and three retained-page filters using in-page menus, compact text and shared glass styling. Browser findings fixed touch selection inside dialogs, WebKit trigger focus, duplicate keyboard clicks and ancestor scrolling. The 16-journey shared matrix and focused Five/Survivor flows pass; the final exact-tree gate also covers the last CSS fallback and legacy typeahead reset. Independent interaction review accepted. Preserve the pending Survivor/loading publication and earlier hosted acceptance commitments. Physical Zerion verification remains separate. Final gate and publication evidence belong to the release commit.
+
 1 November added release scope: fix faded cells in disabled/pending buttons through
 the shared React/legacy stylesheet. Actual-style contrast and native-disabled
 interaction checks passed across Chromium/WebKit at 390/1440px; lowest measured

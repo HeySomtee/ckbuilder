@@ -4,6 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium, webkit } = require('playwright');
+const { chooseOption, openSelect } = require('./browser-select.cjs');
 const { FiveService } = require('../dist/modules/five/service');
 const { parseTerms, newRound } = require('../dist/modules/five/domain');
 class Store {
@@ -74,6 +75,7 @@ async function main() {
       try {
         for (const width of [320, 390, 1440]) {
           const context = await browser.newContext({
+            hasTouch: width <= 390,
             viewport: { width, height: 1000 },
             reducedMotion: 'reduce',
             serviceWorkers: 'block',
@@ -251,8 +253,8 @@ async function main() {
           );
           try {
             assert.match(
-              await page.getByLabel('Gameweek', { exact: true }).inputValue(),
-              /fpl-2030-8/,
+              await page.getByRole('combobox', { name: 'Gameweek', exact: true }).innerText(),
+              /Gameweek 8/,
             );
           } catch (error) {
             console.error(await page.locator('.five-page').innerText());
@@ -273,12 +275,15 @@ async function main() {
             .locator('.five-stat[data-label="Form"]')
             .filter({ hasText: /^7\.0$/ })
             .waitFor();
-          await page.getByLabel('Sort players').selectOption('in');
+          await openSelect(page, 'Sort players');
+          await page.screenshot({ path: path.join(out, `${name}-${width}-player-sort-menu.png`) });
+          await page.keyboard.press('Escape');
+          await chooseOption(page, 'Sort players', 'Transfers in');
           assert.match(
             await page.locator('.five-player-info').first().getAttribute('aria-label'),
             /Reserve/,
           );
-          await page.getByLabel('Sort players').selectOption('form');
+          await chooseOption(page, 'Sort players', 'Highest form');
           const readableName = page.locator('.five-player-info strong').first();
           await page.getByRole('button', { name: 'Retry fixtures', exact: true }).waitFor();
           failSchedule = false;
@@ -383,7 +388,10 @@ async function main() {
           });
           await page.reload();
           await page.locator('.five-live-total strong').filter({ hasText: /^11$/ }).waitFor();
-          assert.equal(await page.getByLabel('Gameweek', { exact: true }).inputValue(), activeId);
+          assert.match(
+            await page.getByRole('combobox', { name: 'Gameweek', exact: true }).innerText(),
+            /Gameweek 8/,
+          );
           assert.equal(await page.locator('.five-live-team .five-pitch-player').count(), 5);
           assert.equal(
             await page.locator('.five-live-player-points[data-pending="true"]').count(),
@@ -410,9 +418,9 @@ async function main() {
           });
           await page.clock.fastForward(31000);
           await page.locator('.five-live-total strong').filter({ hasText: /^15$/ }).waitFor();
-          assert.equal(
-            await page.getByLabel('Gameweek', { exact: true }).inputValue(),
-            activeId,
+          assert.match(
+            await page.getByRole('combobox', { name: 'Gameweek', exact: true }).innerText(),
+            /Gameweek 8/,
             'Refresh never sends the player into next week',
           );
           failRead = true;
@@ -430,7 +438,10 @@ async function main() {
           await page
             .getByText('Pick 5 more players to complete your five.', { exact: true })
             .waitFor();
-          assert.equal(await page.getByLabel('Gameweek', { exact: true }).inputValue(), nextId);
+          assert.match(
+            await page.getByRole('combobox', { name: 'Gameweek', exact: true }).innerText(),
+            /Gameweek 9/,
+          );
           assert.equal(
             await page.locator('.five-pitch-player').count(),
             0,

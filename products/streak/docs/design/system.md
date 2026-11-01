@@ -1,5 +1,13 @@
 # Streak design and interaction system
 
+1 November dropdown correction supersedes the native-picker direction below:
+single-choice fields use compact, in-page listboxes so wallet browsers do not
+need to open platform pickers. Use 13px system text, restrained glass, a clear
+selected check and the existing SVG chevron. Retain 44px touch targets, visible
+focus, keyboard/typeahead navigation, disabled choices and viewport-safe scrolling.
+Menus inside dialogs preserve the parent focus boundary. Reduced transparency
+and forced-colours modes retain an opaque, readable surface.
+
 29 October approved loading signature: use three linked square cells throughout
 the app. Compact controls rotate the cells with a gentle pulse; wider loading
 states use the connected sine wave. Consume `CellLoader` in React and the shared

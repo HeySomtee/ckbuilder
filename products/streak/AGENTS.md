@@ -49,6 +49,12 @@ require the same database role/schema. [Rules and evidence](docs/delivery/surviv
 
 ## Design and motion
 
+1 November dropdown correction: single-choice fields use compact in-page menus
+with subtle glass and proper SVG indicators. Do not rely on wallet webviews
+opening native select popups. Preserve meaningful labels, selected values,
+44px touch targets, keyboard/typeahead navigation, disabled options, Escape and
+focus restoration. Menus in dialogs must stay within the dialog's focus boundary.
+
 1 November pending-button visibility: disabled controls performing work must keep
 the three-cell loader readable. Do not fade the whole pending control and its
 animation together. Retain native disabled behavior, normal inactive styling for

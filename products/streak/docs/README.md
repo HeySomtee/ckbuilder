@@ -1,5 +1,7 @@
 # Streak documentation
 
+1 November [in-page dropdowns](delivery/in-page-selects.md): compact glass menus replace native pickers across Season and retained pages. Touch, keyboard, dialog focus and feature values use shared browser coverage. Physical Zerion acceptance remains separate.
+
 1 November [pending-loader visibility](delivery/connected-loading.md): shared
 React/legacy button styles preserve readable cells without enabling disabled
 actions. Included in the Survivor/Five release candidate and browser verification.

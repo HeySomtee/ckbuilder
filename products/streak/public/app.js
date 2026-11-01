@@ -13,8 +13,10 @@
 import { createApiClient, createPoller } from "./runtime.js";
 import { createMatchdayView } from "./matchday.js";
 import { cellLoaderMarkup, observeCellLoaders } from "./cell-loader.js";
+import { observeSelectControls } from "./select-controls.js";
 
 observeCellLoaders(document.body);
+observeSelectControls(document.body);
 
 // Reading a ledger never needs the wallet SDK. Load its remote dependency graph
 // only when the user connects or signs, keeping startup independent of the CDN.
@@ -1143,13 +1145,13 @@ async function renderMarkets(r) {
       <h1>Markets</h1>
       <span class="sub"></span>
       <div class="right">
-        <select class="input" id="flt" aria-label="Market state" style="width:auto;font-size:11px">
+        <select data-streak-select class="input" id="flt" aria-label="Market state" style="width:auto;font-size:11px">
           <option value="">All states</option>
           <option value="open" selected>Open</option>
           <option value="closed">Closed</option>
           <option value="resolved">Resolved</option>
         </select>
-        <select class="input" id="cmp-flt" aria-label="Competition" style="width:auto;font-size:11px">
+        <select data-streak-select class="input" id="cmp-flt" aria-label="Competition" style="width:auto;font-size:11px">
           <option value="">All competitions</option>
           ${competitionOptions(competitions)}
         </select>
@@ -2636,7 +2638,7 @@ async function renderFixtures() {
         <h1>Schedule</h1>
         <span class="sub">${visible.length} fixtures</span>
         <div class="right">
-          <select class="input" id="fixture-cmp" aria-label="Competition" style="width:auto;font-size:11px">
+          <select data-streak-select class="input" id="fixture-cmp" aria-label="Competition" style="width:auto;font-size:11px">
             <option value="">All competitions</option>
             ${competitionOptions(competitions, selectedCompetition)}
           </select>

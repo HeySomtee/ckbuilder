@@ -395,7 +395,7 @@ async function main() {
     await page.evaluate(() => {
       location.hash = "#/markets";
     });
-    await page.locator("#flt").waitFor();
+    await page.getByRole("combobox", { name: "Market state", exact: true }).waitFor();
     await page.waitForTimeout(500);
     assert.equal(await page.locator("#view h1").innerText(), "Markets");
     await page.setViewportSize({ width: 390, height: 844 });
@@ -414,7 +414,7 @@ async function main() {
       "Closing navigation restores focus to its trigger",
     );
     await page.locator('#mobile-dock a[data-route="markets"]').click();
-    await page.locator("#flt").waitFor();
+    await page.getByRole("combobox", { name: "Market state", exact: true }).waitFor();
     assert.equal(
       await page
         .locator('#mobile-dock a[data-route="markets"]')

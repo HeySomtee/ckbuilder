@@ -23,6 +23,7 @@ import { getAtomicEntryEnabled } from '../features/direct/availability-api';
 import { Notice } from '../components/notice';
 import { BusyState } from '../components/busy-state';
 import { CellLoader } from '../components/cell-loader';
+import { Select } from '../components/select';
 import { poolLabel } from '../features/markets/pools';
 import { usePools } from '../features/markets/use-pools';
 import { fixtureLabel, settlementLabel } from '../features/markets/status';
@@ -670,27 +671,27 @@ export function App() {
               <label className="fixture-sort fixture-league">
                 League
                 {!competitions.length && leagueFeed.isPending && <CellLoader variant="orbit" />}
-                <select
+                <Select
+                  className="streak-select--compact"
                   aria-label="Filter by league"
                   value={competition}
-                  onChange={(event) => setCompetition(event.target.value)}
-                >
-                  <option value="">
-                    {!competitions.length && leagueFeed.isPending
-                      ? 'Loading leagues…'
-                      : !competitions.length && leagueFeed.isError
-                        ? 'Leagues unavailable'
-                        : 'All leagues'}
-                  </option>
-                  {competition && !competitions.some((item) => item.id === competition) && (
-                    <option value={competition}>Selected league</option>
-                  )}
-                  {competitions.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setCompetition}
+                  options={[
+                    {
+                      value: '',
+                      label:
+                        !competitions.length && leagueFeed.isPending
+                          ? 'Loading leagues…'
+                          : !competitions.length && leagueFeed.isError
+                            ? 'Leagues unavailable'
+                            : 'All leagues',
+                    },
+                    ...(competition && !competitions.some((item) => item.id === competition)
+                      ? [{ value: competition, label: 'Selected league' }]
+                      : []),
+                    ...competitions.map((item) => ({ value: item.id, label: item.name })),
+                  ]}
+                />
                 {leagueFeed.isError && competitions.length === 0 && (
                   <button
                     className="quiet"
@@ -704,15 +705,16 @@ export function App() {
               </label>
               <label className="fixture-sort">
                 Sort by
-                <select
+                <Select
+                  className="streak-select--compact"
+                  aria-label="Sort fixtures"
                   value={sort}
-                  onChange={(event) =>
-                    setSort(event.target.value === 'kickoff' ? 'kickoff' : 'featured')
-                  }
-                >
-                  <option value="featured">Big games first</option>
-                  <option value="kickoff">Kickoff time</option>
-                </select>
+                  onChange={(value) => setSort(value === 'kickoff' ? 'kickoff' : 'featured')}
+                  options={[
+                    { value: 'featured', label: 'Big games first' },
+                    { value: 'kickoff', label: 'Kickoff time' },
+                  ]}
+                />
               </label>
               <span>
                 {count === undefined

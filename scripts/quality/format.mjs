@@ -11,6 +11,9 @@ const files = repositoryFiles().filter(
     ) ||
     /^products\/streak\/(?:src\/(?:modules\/activity\/.*\.ts|activity[a-z-]*\.test\.ts)|scripts\/activity-[a-z-]+\.cjs|shared\/activity-wire\.d\.ts)$/.test(
       file,
+    ) ||
+    /^products\/streak\/(?:scripts\/(?:browser-select\.cjs|select-browser\.cjs|select-browser-fixture\.tsx)|public\/select-controls\.(?:js|css))$/.test(
+      file,
     ),
 );
 if (!files.length) throw new Error('No foundation files found for formatting.');
