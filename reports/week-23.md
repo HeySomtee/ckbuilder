@@ -12,7 +12,7 @@ Previously, opening Activity could trigger market-by-market chain discovery. The
 
 I moved the normal read path to **wallet-indexed records in PostgreSQL**. Payment and market-lifecycle events update those records. When a market changes, one canonical reconstruction updates its participants together. The page reads the saved result, and sign-in starts prefetching before the user opens Activity. Reading history no longer needs an active wallet signer.
 
-Why not put everyone's positions in one central contract? On CKB, updating shared mutable state means spending and replacing its cell. A single tracking cell would make unrelated users compete to update it. Streak keeps independent market, deposit and claim cells, with shared scripts enforcing their rules. The database makes discovery fast; **it cannot authorize a withdrawal**.
+Why not track everyone's positions in one shared mutable cell? Updating that cell means spending and replacing it, so unrelated transactions would compete to consume the same input. Sharing script code does not create that contention. Streak uses shared Rust scripts to enforce the rules of separate market, deposit and claim cells. The database makes discovery fast; **it cannot authorize a withdrawal**.
 
 That distinction matters throughout settlement. A submitted payment is not yet an accepted bet. A reported result is not yet a funded claim. Collection still checks live cells, ownership, amounts and fees. Refund and payout recovery keep their signed transaction records, so a refreshed screen cannot silently turn an uncertain payment into another payment.
 

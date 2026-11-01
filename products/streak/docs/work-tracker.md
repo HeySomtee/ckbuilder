@@ -1,5 +1,10 @@
 # Streak work tracker
 
+1 November owner requested an immediate Week 23 terminology correction and push
+without checks. The report now distinguishes contention on one shared mutable
+tracking cell from reuse of shared script code. This is prose only; preserve
+unrelated report edits. No verification is claimed for this correction.
+
 1 November owner requested publication after local acceptance. Runtime `cf81620`
 is pushed to GitHub main, including the approved mobile-only filters and button-free
 intro. All 79 checks passed in one full run, 07:32:05 to 08:17:57 UTC, Node 24.14.0.
