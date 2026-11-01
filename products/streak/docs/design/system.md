@@ -1,5 +1,12 @@
 # Streak design and interaction system
 
+1 November approved mobile market controls: group the status tabs, search and
+side-by-side league/sort selectors in one compact glass panel. Keep field names
+accessible, 44px touch targets, readable small text and fixture metadata outside
+the panel. The startup splash now contains only the logo animation. Visible skip
+and recovery actions do not belong inside the intro; use separate bounded recovery
+for real loading failures. This supersedes the earlier visible skip-button policy.
+
 1 November dropdown correction supersedes the native-picker direction below:
 single-choice fields use compact, in-page listboxes so wallet browsers do not
 need to open platform pickers. Use 13px system text, restrained glass, a clear

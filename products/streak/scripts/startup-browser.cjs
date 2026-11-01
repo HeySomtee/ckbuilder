@@ -180,6 +180,7 @@ async function fixture(browser, base, options = {}) {
     },
   );
   const bundle = deferred();
+  const controller = deferred();
   const logo = deferred();
   const api = deferred();
   const apiObserved = deferred();
@@ -199,6 +200,8 @@ async function fixture(browser, base, options = {}) {
       observations.apiCompleted++;
       return route.abort();
     }
+    if (options.holdController && url.pathname === '/startup.js') await controller.promise;
+    if (options.missingEntry && url.pathname === '/entry.js') return route.abort();
     if (options.missingStartupCss && url.pathname === '/startup.css') return route.abort();
     if (options.missingController && url.pathname === '/startup.js') return route.abort();
     if (options.failingController && url.pathname === '/startup.js')
@@ -224,6 +227,9 @@ async function fixture(browser, base, options = {}) {
     page,
     observations,
     apiObserved: apiObserved.promise,
+    releaseController() {
+      controller.resolve();
+    },
     releaseLogo() {
       logo.resolve();
     },
@@ -233,6 +239,7 @@ async function fixture(browser, base, options = {}) {
       bundle.resolve();
     },
     async close() {
+      controller.resolve();
       bundle.resolve();
       logo.resolve();
       api.resolve();
@@ -377,6 +384,88 @@ async function main() {
           }
         }
 
+        for (const pathname of ['/season/', '/']) {
+          const f = await fixture(browser, base, { holdController: true });
+          try {
+            await f.page.goto(base + pathname, { waitUntil: 'commit' });
+            await f.page.locator('#streak-landing-recovery').waitFor({ state: 'attached' });
+            // Both markup and recovery are present before the delayed controller.
+            await f.page.waitForTimeout(500);
+            assert.equal(
+              await f.page.locator('#streak-startup-actions').isVisible(),
+              false,
+              'No first-paint recovery flash.',
+            );
+            assert.equal(
+              await f.page.locator('#streak-startup button, #streak-startup a').count(),
+              0,
+            );
+            f.releaseController();
+            await f.page.waitForFunction(
+              () => document.documentElement.dataset.streakController === 'ready',
+            );
+            await f.page.evaluate(() =>
+              window.dispatchEvent(
+                new ErrorEvent('error', {
+                  filename: 'https://wallet.invalid/injected.js',
+                  message: 'Unrelated injected script',
+                }),
+              ),
+            );
+            assert.equal(
+              await f.page.locator('#streak-startup-actions').isVisible(),
+              false,
+              'Unrelated errors do not show recovery.',
+            );
+            f.release();
+            await mounted(f);
+            groups++;
+          } finally {
+            await f.close();
+          }
+        }
+        const missingScripts = await fixture(browser, base, {
+          missingController: true,
+          missingEntry: true,
+          missingStartupCss: true,
+          failBundle: true,
+          holdBundle: false,
+        });
+        try {
+          await missingScripts.page.goto(base + '/season/', { waitUntil: 'commit' });
+          await missingScripts.page.waitForTimeout(300);
+          assert.equal(
+            await missingScripts.page.locator('#streak-startup-actions').isVisible(),
+            false,
+          );
+          await missingScripts.page.locator('#streak-startup-retry').waitFor();
+          assert.equal(await missingScripts.page.locator('#streak-startup').isVisible(), false);
+          groups++;
+        } finally {
+          await missingScripts.close();
+        }
+
+        const lateController = await fixture(browser, base, { holdController: true });
+        try {
+          await lateController.page.goto(base + '/season/', { waitUntil: 'commit' });
+          await lateController.page.locator('#streak-startup-retry').waitFor();
+          lateController.releaseController();
+          await lateController.page.waitForFunction(
+            () => document.documentElement.dataset.streakController === 'ready',
+          );
+          assert.equal(
+            await lateController.page.locator('#streak-startup-retry').isVisible(),
+            true,
+            'A late controller cannot take away visible recovery.',
+          );
+          assert.equal(await lateController.page.locator('#streak-startup').isVisible(), false);
+          lateController.release();
+          await mounted(lateController, { maximumAfterReady: 500 });
+          groups++;
+        } finally {
+          await lateController.close();
+        }
+
         const fast = await fixture(browser, base, {
           width: 390,
           holdBundle: false,
@@ -391,12 +480,16 @@ async function main() {
           assert.equal(
             ready.inert,
             false,
-            'The presentation must retain its accessible skip button.',
+            'The logo presentation remains available to assistive technology.',
           );
           assert.equal(ready.hiddenFromAssistiveTech, false);
           assert.equal(ready.pointerReachesShell, false);
           assert.equal(ready.keyboardReachesShell, false);
-          await fast.page.getByRole('button', { name: 'Open Streak', exact: true }).waitFor();
+          assert.equal(
+            await fast.page.locator('#streak-startup button, #streak-startup a').count(),
+            0,
+            'The intro has no visible or hidden actions.',
+          );
           const navLink = fast.page.locator('#root nav a:visible').first();
           const box = await navLink.boundingBox();
           await fast.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
@@ -424,23 +517,23 @@ async function main() {
           await fast.close();
         }
 
-        for (const exitWith of ['button', 'Escape']) {
+        {
           const f = await fixture(browser, base, { holdBundle: false });
           try {
             await f.page.goto(base + '/season/', { waitUntil: 'commit' });
             await shellReady(f);
-            const skip = f.page.getByRole('button', { name: 'Open Streak', exact: true });
-            await f.page.keyboard.press('Tab');
-            assert.equal(await skip.evaluate((n) => document.activeElement === n), true);
+            assert.equal(
+              await f.page.locator('#streak-startup button, #streak-startup a').count(),
+              0,
+            );
             const exitRequestedAt = await f.page.evaluate(() => performance.now());
-            if (exitWith === 'button') await f.page.keyboard.press('Enter');
-            else await f.page.keyboard.press('Escape');
+            await f.page.keyboard.press('Escape');
             const probe = await removed(f);
             assert.ok(
               probe.exiting.at - exitRequestedAt < 400,
               'Skip must immediately release input.',
             );
-            assert.equal(await f.page.evaluate(() => document.activeElement.id), 'root');
+            assert.equal(await f.page.locator('#root').evaluate((n) => n.inert), false);
             assert.equal(f.observations.apiCompleted, 0);
             assert.deepEqual(f.observations.errors, []);
             groups++;
@@ -489,11 +582,15 @@ async function main() {
         try {
           await failed.page.goto(base + '/season/', { waitUntil: 'commit' });
           await failed.page.waitForFunction(
-            () => document.getElementById('streak-startup-actions')?.hidden === true,
+            () => document.documentElement.dataset.streakController === 'ready',
           );
           failed.release();
           await failed.page.locator('#streak-startup-actions').waitFor();
-          assert.equal(await failed.page.locator('#streak-startup-progress').isVisible(), false);
+          assert.equal(
+            await failed.page.locator('#streak-startup').isVisible(),
+            false,
+            'Errors use a separate screen, not buttons on the intro.',
+          );
           assert.equal(
             await failed.page
               .getByRole('link', { name: 'Open current Wallet', exact: true })
@@ -556,10 +653,8 @@ async function main() {
               ?.currentSrc.endsWith('/brand/on-form-splash-final.svg'),
           );
           assert.equal(
-            await reduced.page
-              .locator('#streak-startup-progress')
-              .evaluate((n) => getComputedStyle(n, '::after').animationName),
-            'none',
+            await reduced.page.locator('#streak-startup button, #streak-startup a').count(),
+            0,
           );
           reduced.release();
           await mounted(reduced, { maximumAfterReady: 500 });
@@ -663,8 +758,7 @@ async function main() {
         try {
           await failedLanding.page.goto(base + '/', { waitUntil: 'commit' });
           await failedLanding.page
-            .getByRole('status')
-            .filter({ hasText: 'Let’s get you back in.' })
+            .getByRole('heading', { name: 'Let’s get you back in.', exact: true })
             .waitFor();
           assert.equal(await failedLanding.page.locator('#streak-startup').count(), 0);
           assert.equal(await failedLanding.page.locator('#root').evaluate((n) => n.inert), false);
@@ -706,7 +800,7 @@ async function main() {
           await legacy.close();
         }
         console.log(
-          `${engineName}: application-only startup, landing first frames and recovery, background shell/data, blocked click-through, skip/Escape focus, bounded exit, slow/missing logo, navigation, retry, missing/crashed controller, reduced motion, hidden document, render recovery, no-JavaScript and legacy redirects passed`,
+          `${engineName}: application-only startup, landing first frames and recovery, background shell/data, blocked click-through, button-free intro/Escape, bounded exit, slow/missing logo, navigation, retry, missing/crashed controller, reduced motion, hidden document, render recovery, no-JavaScript and legacy redirects passed`,
         );
       } finally {
         await browser.close();

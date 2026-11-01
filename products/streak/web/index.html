@@ -13,6 +13,38 @@
       html:not([data-streak-startup='app']) .streak-startup {
         display: none;
       }
+      /* Invisible before external CSS/JS. A CSS watchdog preserves recovery
+         when the startup controller itself cannot load. */
+      #streak-landing-recovery {
+        position: fixed;
+        inset: 0;
+        z-index: 101;
+        overflow: auto;
+        visibility: hidden;
+        background: #0e1612;
+        color: #f1f3ed;
+        animation: streak-recovery-reveal 0s 10s forwards;
+      }
+      html:not([data-streak-controller='ready']) .streak-startup {
+        animation: streak-recovery-hide 0s 10s forwards;
+      }
+      html[data-streak-controller='ready'] #streak-landing-recovery {
+        animation: none;
+      }
+      html #streak-landing-recovery[data-visible='true'] {
+        visibility: visible;
+        animation: none;
+      }
+      @keyframes streak-recovery-reveal {
+        to {
+          visibility: visible;
+        }
+      }
+      @keyframes streak-recovery-hide {
+        to {
+          visibility: hidden;
+        }
+      }
     </style>
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32" />
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/on-form-favicon-32.png" />
@@ -44,32 +76,20 @@
             height="110"
           />
         </picture>
-        <div id="streak-startup-progress" class="streak-startup-progress" aria-hidden="true"></div>
-        <p
-          id="streak-startup-status"
-          class="streak-startup-status"
-          role="status"
-          aria-live="polite"
-        >
-          Your game is taking shape.
+      </div>
+    </div>
+    <div id="root"></div>
+    <main id="streak-landing-recovery" class="streak-startup-fallback">
+      <div class="streak-recovery-content">
+        <h1 id="streak-recovery-title">Taking longer than expected.</h1>
+        <p id="streak-recovery-detail" role="status">
+          You can retry loading Streak or open your current wallet.
         </p>
-        <p id="streak-startup-detail" class="streak-startup-detail" hidden></p>
-        <button id="streak-startup-skip" class="streak-startup-skip" type="button" hidden>
-          Open Streak
-        </button>
         <div id="streak-startup-actions" class="streak-startup-actions">
           <a id="streak-startup-retry" class="streak-startup-retry" href="">Try again</a>
           <a href="/index.html#wallet">Open current Wallet</a>
         </div>
       </div>
-      <div class="streak-startup-foot">FOOTBALL INSTINCT. ON NERVOS CKB.</div>
-    </div>
-    <div id="root"></div>
-    <main id="streak-landing-recovery" class="streak-startup-fallback">
-      <p role="status">Opening Streak.</p>
-      <p>If this page does not open, try again or open your current wallet.</p>
-      <a href="">Try again</a>
-      <a href="/index.html#wallet">Open current Wallet</a>
     </main>
     <noscript>
       <style>

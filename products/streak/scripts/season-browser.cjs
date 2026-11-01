@@ -287,6 +287,43 @@ async function main() {
           true,
         );
         assert.match(await initialLeague.trigger.innerText(), /All leagues/);
+        const toolbar = await page.locator('.fixture-toolbar').boundingBox();
+        const selectors = await page.locator('.fixture-toolbar .streak-select-trigger').all();
+        assert.equal(selectors.length, 2);
+        for (const selector of selectors) {
+          const bounds = await selector.boundingBox();
+          assert.ok(bounds.height >= 44 && bounds.x >= 0 && bounds.x + bounds.width <= width);
+        }
+        if (width <= 390) {
+          const first = await selectors[0].boundingBox(),
+            second = await selectors[1].boundingBox();
+          assert.ok(
+            second.y + second.height - toolbar.y + 6 <= 170,
+            'Mobile filters stay compact.',
+          );
+          assert.ok(Math.abs(first.y - second.y) < 2, 'League and sort share one row.');
+          assert.equal(await page.locator('.fixture-toolbar .filters button').count(), 4);
+        } else {
+          assert.equal(
+            await page.locator('.fixture-toolbar').evaluate((el) => getComputedStyle(el).display),
+            'contents',
+            'Desktop keeps its original ungrouped controls.',
+          );
+          assert.equal(
+            await page
+              .locator('.fixture-control-label')
+              .first()
+              .evaluate((el) => getComputedStyle(el).position),
+            'static',
+          );
+          assert.equal(
+            await page
+              .locator('.filters button')
+              .first()
+              .evaluate((el) => getComputedStyle(el).borderRadius),
+            '40px',
+          );
+        }
         const chooseWeekend = async () => {
           await page.getByRole('button', { name: 'Choose fixture date' }).click();
           await page.getByRole('button', { name: 'Weekend', exact: true }).click();
@@ -472,6 +509,21 @@ async function main() {
         );
         await page.getByRole('textbox', { name: 'Search teams or competitions' }).fill('Arsenal');
         await page.waitForFunction(() => document.querySelectorAll('.market-card').length === 1);
+        if (width <= 390) {
+          await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+          assert.equal(
+            await page.getByRole('textbox', { name: 'Search teams or competitions' }).inputValue(),
+            '',
+          );
+          assert.equal(
+            await page
+              .getByRole('textbox', { name: 'Search teams or competitions' })
+              .evaluate((node) => document.activeElement === node),
+            true,
+          );
+          await page.getByRole('textbox', { name: 'Search teams or competitions' }).fill('Arsenal');
+          await page.waitForFunction(() => document.querySelectorAll('.market-card').length === 1);
+        }
         await page.evaluate(() => {
           document.activeElement.blur();
           window.scrollTo(0, 0);
@@ -637,8 +689,8 @@ async function main() {
       // Recovery must work without loading the new application's JavaScript.
       await page.route('**/season/assets/*.js', (route) => route.abort());
       await recoveryReads.goto(base + '/');
-      await page.getByRole('status').filter({ hasText: 'Let’s get you back in.' }).waitFor();
-      assert.equal(await page.locator('#streak-startup-progress').isVisible(), false);
+      await page.getByRole('heading', { name: 'Let’s get you back in.', exact: true }).waitFor();
+      assert.equal(await page.locator('#streak-startup').isVisible(), false);
       await page.getByRole('link', { name: 'Open current Wallet', exact: true }).click();
       await page.waitForURL('**/index.html#wallet');
       await page.locator('#connect-top').waitFor();

@@ -639,97 +639,112 @@ export function App() {
                 }}
               />
             )}
-            <div className="market-tools">
-              <div className="filters" role="group" aria-label="Market status">
-                {[
-                  ['all', 'All fixtures'],
-                  ['open', 'Open'],
-                  ['closed', 'Locked'],
-                  ['resolved', 'Results'],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    aria-pressed={status === value}
-                    onClick={() => setStatus(value)}
-                  >
-                    {label}
-                  </button>
-                ))}
+            <section className="fixture-toolbar" aria-label="Find a match">
+              <div className="market-tools">
+                <div className="filters" role="group" aria-label="Market status">
+                  {[
+                    ['all', 'All fixtures'],
+                    ['open', 'Open'],
+                    ['closed', 'Locked'],
+                    ['resolved', 'Results'],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      aria-pressed={status === value}
+                      onClick={() => setStatus(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="search">
+                  <Icon name="search" />
+                  <input
+                    aria-label="Search teams or competitions"
+                    placeholder="Find your next match"
+                    maxLength={80}
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+                  {search && (
+                    <button
+                      className="search-clear"
+                      aria-label="Clear search"
+                      onClick={(event) => {
+                        setSearch('');
+                        event.currentTarget.parentElement?.querySelector('input')?.focus();
+                      }}
+                    >
+                      <Icon name="close" />
+                    </button>
+                  )}
+                </div>
               </div>
-              <label className="search">
-                <Icon name="search" />
-                <input
-                  aria-label="Search teams or competitions"
-                  placeholder="Find your next match"
-                  maxLength={80}
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </label>
-            </div>
-            <div className="feed-meta" aria-live="polite">
-              <label className="fixture-sort fixture-league">
-                League
-                {!competitions.length && leagueFeed.isPending && <CellLoader variant="orbit" />}
-                <Select
-                  className="streak-select--compact"
-                  aria-label="Filter by league"
-                  value={competition}
-                  onChange={setCompetition}
-                  options={[
-                    {
-                      value: '',
-                      label:
-                        !competitions.length && leagueFeed.isPending
-                          ? 'Loading leagues…'
-                          : !competitions.length && leagueFeed.isError
-                            ? 'Leagues unavailable'
-                            : 'All leagues',
-                    },
-                    ...(competition && !competitions.some((item) => item.id === competition)
-                      ? [{ value: competition, label: 'Selected league' }]
-                      : []),
-                    ...competitions.map((item) => ({ value: item.id, label: item.name })),
-                  ]}
-                />
-                {leagueFeed.isError && competitions.length === 0 && (
-                  <button
-                    className="quiet"
-                    aria-busy={leagueFeed.isFetching}
-                    onClick={() => void leagueFeed.refetch()}
-                  >
-                    {leagueFeed.isFetching && <CellLoader variant="orbit" />}
-                    Retry leagues
-                  </button>
-                )}
-              </label>
-              <label className="fixture-sort">
-                Sort by
-                <Select
-                  className="streak-select--compact"
-                  aria-label="Sort fixtures"
-                  value={sort}
-                  onChange={(value) => setSort(value === 'kickoff' ? 'kickoff' : 'featured')}
-                  options={[
-                    { value: 'featured', label: 'Big games first' },
-                    { value: 'kickoff', label: 'Kickoff time' },
-                  ]}
-                />
-              </label>
-              <span>
-                {count === undefined
-                  ? 'Finding fixtures'
-                  : `${count} ${count === 1 ? 'fixture' : 'fixtures'}`}
-              </span>
-              <span>
-                {feed.isFetching && <CellLoader variant="orbit" />}
-                {feed.isFetching
-                  ? 'Updating…'
-                  : feed.dataUpdatedAt
-                    ? `Updated ${new Date(feed.dataUpdatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
-                    : ''}
-              </span>
-            </div>
+              <div className="feed-meta" aria-live="polite">
+                <label className="fixture-sort fixture-league">
+                  <span className="fixture-control-label">League</span>
+                  {!competitions.length && leagueFeed.isPending && <CellLoader variant="orbit" />}
+                  <Select
+                    className="streak-select--compact"
+                    aria-label="Filter by league"
+                    value={competition}
+                    onChange={setCompetition}
+                    options={[
+                      {
+                        value: '',
+                        label:
+                          !competitions.length && leagueFeed.isPending
+                            ? 'Loading leagues…'
+                            : !competitions.length && leagueFeed.isError
+                              ? 'Leagues unavailable'
+                              : 'All leagues',
+                      },
+                      ...(competition && !competitions.some((item) => item.id === competition)
+                        ? [{ value: competition, label: 'Selected league' }]
+                        : []),
+                      ...competitions.map((item) => ({ value: item.id, label: item.name })),
+                    ]}
+                  />
+                  {leagueFeed.isError && competitions.length === 0 && (
+                    <button
+                      className="quiet"
+                      aria-busy={leagueFeed.isFetching}
+                      onClick={() => void leagueFeed.refetch()}
+                    >
+                      {leagueFeed.isFetching && <CellLoader variant="orbit" />}
+                      Retry leagues
+                    </button>
+                  )}
+                </label>
+                <label className="fixture-sort">
+                  <span className="fixture-control-label">Sort by</span>
+                  <Select
+                    className="streak-select--compact"
+                    aria-label="Sort fixtures"
+                    value={sort}
+                    onChange={(value) => setSort(value === 'kickoff' ? 'kickoff' : 'featured')}
+                    options={[
+                      { value: 'featured', label: 'Big games first' },
+                      { value: 'kickoff', label: 'Kickoff time' },
+                    ]}
+                  />
+                </label>
+
+                <span>
+                  {count === undefined
+                    ? 'Finding fixtures'
+                    : `${count} ${count === 1 ? 'fixture' : 'fixtures'}`}
+                </span>
+                <span>
+                  {feed.isFetching && <CellLoader variant="orbit" />}
+                  {feed.isFetching
+                    ? 'Updating…'
+                    : feed.dataUpdatedAt
+                      ? `Updated ${new Date(feed.dataUpdatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+                      : ''}
+                </span>
+              </div>
+            </section>
             {feed.data && !feed.data.pages[0].covered && (
               <div className="notice" role="status">
                 The full schedule for these dates is not confirmed. Showing the available fixtures

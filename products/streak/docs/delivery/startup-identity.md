@@ -1,5 +1,12 @@
 # Approved logo and startup integration
 
+1 November owner-approved correction: the normal intro contains only the logo
+animation. Visible Open Streak and recovery actions are removed from the splash.
+Recovery starts hidden before first paint and uses a separate screen for real
+failure/timeouts, with independent missing-script fallback. See
+[implementation and verification](mobile-markets-startup.md). Earlier button/first
+paint descriptions below are historical.
+
 29 October 2026. The owner approved the revised On form identity on 28 October,
 then requested a longer splash after the fast-start correction was too brief.
 

@@ -56,6 +56,14 @@ require the same database role/schema. [Rules and evidence](docs/delivery/surviv
 
 ## Design and motion
 
+1 November owner correction: the normal splash should contain only the intro
+animation, with no visible buttons. This supersedes the visible Open Streak skip
+control described below. Keep genuine startup recovery separate from the intro.
+The owner approved the mobile markets/filter preview on 1 November. Integrate
+the compact grouped controls and intro-only splash described in
+`design/mobile-markets-review/README.md`. Recovery is hidden before first paint;
+missing scripts must still expose bounded recovery outside the intro.
+
 1 November dropdown correction: single-choice fields use compact in-page menus
 with subtle glass and proper SVG indicators. Do not rely on wallet webviews
 opening native select popups. Preserve meaningful labels, selected values,
