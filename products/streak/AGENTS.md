@@ -4,6 +4,13 @@ This is the canonical instruction file for work inside `products/streak`. Read t
 
 Read and maintain the [work tracker](docs/work-tracker.md) on every task and handoff. Record new steering requests without dropping earlier commitments. Before changing focus, update progress, unfinished acceptance criteria and the exact resume point. Mark work complete only with implementation and verification evidence, distinguishing local work from publication and deployment.
 
+## Private correspondence
+
+Owner direction, 1 November 2026: never commit or push DM drafts or other private
+correspondence. Keep any requested drafts in chat or the ignored `reports/private/`
+directory. Preserve owner deletions and keep private drafts out of public report
+links. Public weekly reports are separate deliverables.
+
 ## Approved scope and working method
 
 The owner approved the Streak UI and architecture on **15 October 2026**, including the latest dense prediction slip, clear glass elsewhere, labelled controls and shared scrollbar. The owner then requested documentation, recurring tests and CI before production implementation. [ADR 0001](docs/decisions/0001-approved-foundation.md) records that approval. Proceed within it without asking for the same permission again. Present material departures from the approved experience, trust boundaries, contract economics or launch scope for review before implementing those departures.

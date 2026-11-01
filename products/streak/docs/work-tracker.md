@@ -1,5 +1,15 @@
 # Streak work tracker
 
+1 November owner requests a GitHub link to [Week 23](../../../reports/week-23.md).
+Publish the public report with current release evidence and already published
+game screenshots. Keep private correspondence deleted and excluded. The broader
+local community gallery remains a separate unpublished draft.
+
+1 November owner publication correction: private correspondence drafts must remain
+local and excluded from commits. Remove the previously tracked draft and its
+documentation links from the current branch; preserve owner deletions. Public
+weekly reports remain separate. Do not restore or publish private drafts.
+
 1 November release completed: `1dc53d8` published Survivor outcomes and readable
 pending loaders, including the previously local Five team/points and Survivor
 season scheduling. `30599d2` then published all ten compact in-page selectors.
@@ -404,7 +414,7 @@ linked-cell loader preview decision.
 
 Week 22 rollout follow-up: anonymous HTTPS checks after publication found the matching `index-DWsM8nEv.js` frontend on streakpitch.com in API mode, and the served Survivor bundle includes the setup correction. Source and frontend rollout are verified; physical wallet and hosted payment/reward acceptance remain the next operational check.
 
-26 October Week 22 release published as `cfd8dfec20fe186bad1822d58d3eb87a1158e6fe` on `origin/main`. The exact-candidate hook passed all 71 checks at 18:23:53 UTC and push reused its receipt. [Report](../../../reports/week-22.md) and [DM draft](../../../reports/week-22-dm.md) cover Five, sponsor auctions, Survivor, reliability, local full-flow testing and streakpitch.com. Fresh Five screenshots use API data and an unsigned, unsaved squad; auction and Survivor screenshots are explicitly synthetic. The domain returned HTTPS 200; hosted release acceptance and physical MetaMask refund/prize checks remain separate. The DM was not sent. Unrelated .gitignore and nested benchmark work are excluded from the release. Resume with hosted acceptance, owner feedback and original logo/favicon; paid Survivor admission, automatic Survivor payouts and other stated beta limits remain pending. Preserve earlier commitments.
+26 October Week 22 release published as `cfd8dfec20fe186bad1822d58d3eb87a1158e6fe` on `origin/main`. The exact-candidate hook passed all 71 checks at 18:23:53 UTC and push reused its receipt. [Report](../../../reports/week-22.md) cover Five, sponsor auctions, Survivor, reliability, local full-flow testing and streakpitch.com. Fresh Five screenshots use API data and an unsigned, unsaved squad; auction and Survivor screenshots are explicitly synthetic. The domain returned HTTPS 200; hosted release acceptance and physical MetaMask refund/prize checks remain separate. Unrelated .gitignore and nested benchmark work are excluded from the release. Resume with hosted acceptance, owner feedback and original logo/favicon; paid Survivor admission, automatic Survivor payouts and other stated beta limits remain pending. Preserve earlier commitments.
 
 26 October Survivor setup correction complete locally: Continue setup previously only reselected a draft while publication was buried in the game hero. Drafts now open a dedicated host review with entry terms, prize, deadline, expandable schedule and Publish free competition. Creation and Review setup focus this workspace; inactive team boards are hidden until publication. Paid-entry and expired-schedule restrictions explain how to proceed. Six responsive Chromium/WebKit journeys and all 71 required major checks passed at 12:08:36 UTC in one run. Local HTTP checks confirm the new frontend is served in regular-data mode; refresh the page, no API restart needed. [Implementation and evidence](delivery/survivor-implementation.md). Free entry works; paid admission and automatic Survivor prize payments remain unimplemented. No funds, owner records, commit, push or hosted deployment changed. Preserve earlier release, physical-wallet and logo commitments.
 

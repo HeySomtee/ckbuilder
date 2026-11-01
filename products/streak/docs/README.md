@@ -86,9 +86,7 @@ selecting fresh fixtures. No hosted test or publication is claimed.
 
 27 October local implementation: [wallet compatibility, visible login recovery and restoration](delivery/wallet-compatibility.md). Independent identity review accepted; all 71 major checks and the subsequent scoped static/build check passed. Physical wallet and hosted acceptance remain separate.
 
-26 October release report: [Week 22: a reason to come back next weekend](../../../reports/week-22.md), with screenshots, the new streakpitch.com domain and explicit testnet limits. [DM draft for Neon](../../../reports/week-22-dm.md).
-
-26 October owner correction implemented locally: [environment-only game data, consistent Beta labels, Survivor competition discovery and next-three fixture outlooks](delivery/games-local-mode-and-outlook.md). All 71 major checks passed in one run; local API is back on regular football data.
+26 October release report: [Week 22: a reason to come back next weekend](../../../reports/week-22.md), with screenshots, the new streakpitch.com domain and explicit testnet limits. 26 October owner correction implemented locally: [environment-only game data, consistent Beta labels, Survivor competition discovery and next-three fixture outlooks](delivery/games-local-mode-and-outlook.md). All 71 major checks passed in one run; local API is back on regular football data.
 
 26 October implemented locally: [Five tabs, captain/save states, mobile return navigation and sponsor showcase](delivery/five-workspace.md). All required checks have passing coverage across the major run and documented follow-ups. Independent review accepted; original failed receipts remain. Logo/favicon design is next.
 
