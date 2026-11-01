@@ -1,5 +1,16 @@
 # Streak work tracker
 
+1 November owner requested publication after local acceptance. Runtime `cf81620`
+is pushed to GitHub main, including the approved mobile-only filters and button-free
+intro. All 79 checks passed in one full run, 07:32:05 to 08:17:57 UTC, Node 24.14.0.
+All 16 candidate files matched the recorded source hashes over unchanged base
+`e578df8`; normal commit/push hooks reused the receipt for tree `7fc68e028350`.
+The disposable PostgreSQL container was removed. Final release notes use scoped
+formatting/static hooks. Preserve unrelated report/checklist edits and private-draft
+exclusions. Hosted CI stays paused. Remaining: verify the deployed frontend and
+physical Zerion interaction; fix inherited Git environment isolation before the
+next full hook-driven run. Earlier local-only entries are historical.
+
 1 November owner requests a GitHub link to [Week 23](../../../reports/week-23.md).
 Publish the public report with current release evidence and already published
 game screenshots. Keep private correspondence deleted and excluded. The broader

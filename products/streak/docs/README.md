@@ -1,5 +1,9 @@
 # Streak documentation
 
+1 November [mobile filters and quiet startup](delivery/mobile-markets-startup.md)
+are published in `cf81620`. Desktop remains unchanged. All 79 required local checks
+passed; hosted deployment remains unverified. Earlier local-only entries are historical.
+
 1 November published release: `30599d2` includes the compact dropdowns, pending
 loader contrast, Survivor outcome rules and earlier Five live-team/Survivor season
 scheduling work. All 79 required local checks passed in one complete run, finished

@@ -1,5 +1,15 @@
 # Streak status
 
+1 November publication: `cf81620` is pushed to GitHub main. Mobile market filters
+use the approved compact panel; desktop retains its existing layout. The splash
+contains only the intro animation, with first-paint recovery hidden and genuine
+startup failures handled separately. All 79 required checks passed, including
+64 startup and 26 Season browser groups, on Node 24.14.0 at 08:17:57 UTC. Commit
+and push reused the unchanged tree receipt. Hosted CI remains paused; deployment
+and physical wallet-browser acceptance are not verified by this local run.
+See [delivery evidence](docs/delivery/mobile-markets-startup.md). Earlier local-only
+and approval-pending entries are historical.
+
 1 November publication completed: `30599d2` is pushed to GitHub `main`, including
 the earlier `1dc53d8` Survivor/loading release and the Five live-team and
 remaining-gameweek work. All 79 required checks passed in one run from
