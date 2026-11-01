@@ -48,6 +48,24 @@
   --scroll-size: 12px;
   font-family: var(--font);
 }
+/* CCC's shadow DOM inherits these theme tokens from its host. Keep the wallet
+   surface opaque, including when the chooser opens above a native slip dialog. */
+ccc-connector {
+  --background: #1a1e1c;
+  --divider: #39433c;
+  --btn-primary: #28372d;
+  --btn-primary-hover: #354b3b;
+  --btn-secondary: #252d28;
+  --btn-secondary-hover: #354139;
+  --btn-color: #f1f3ed;
+  --btn-color-hover: #ffffff;
+  --icon-primary: #b9ed8a;
+  --icon-secondary: #a4aea7;
+  --tip-color: #a4aea7;
+  --tip-color-hover: #f1f3ed;
+  color: #f1f3ed;
+  font-family: var(--font);
+}
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
