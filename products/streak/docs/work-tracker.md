@@ -1,5 +1,22 @@
 # Streak work tracker
 
+1 November added release scope: fix faded cells in disabled/pending buttons through
+the shared React/legacy stylesheet. Actual-style contrast and native-disabled
+interaction checks passed across Chromium/WebKit at 390/1440px; lowest measured
+outline contrast was 4.85:1. The real checkout also checks pending visibility.
+The preceding gate was interrupted before contracts for this steering, with its
+log retained. A fresh full gate covers the combined staged candidate.
+
+1 November Survivor v2 outcome implementation: early sole winners, all-loss
+rescue, pending/void safety, legacy published terms and idempotent prize recovery
+are documented in [the outcome table](delivery/survivor-outcomes.md). Focused unit
+and six Chromium/WebKit browser journeys passed; independent rules and money
+reviews accepted. The release includes the previously committed Five current
+team/points view and Survivor remaining-gameweek selector. The required full gate
+and push run from an isolated checkout, preserving report/gallery drafts and the
+owner acceptance checklist. Hosted CI remains paused; physical settlement, refunds
+and prize acceptance remain outstanding.
+
 31 October post-deadline release completed: `948fb1c` commits the combined Survivor
 and Five work. All 77 checks passed in one complete gate through the commit hook,
 from 12:57:59 to 13:38:27 UTC; the commit reused its exact-tree receipt. Source tree:

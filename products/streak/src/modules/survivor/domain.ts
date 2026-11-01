@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Sponsor } from '../five/domain';
 
-export const RULE_VERSION = 'survivor-free-v1';
+export const RULE_VERSION = 'survivor-free-v2';
+export type RuleVersion = 'survivor-free-v1' | typeof RULE_VERSION;
 export class SurvivorError extends Error {
   constructor(
     message: string,
@@ -80,7 +81,7 @@ export type Competition = {
   createdAt: string;
   terms: Terms;
   termsHash: string;
-  ruleVersion: typeof RULE_VERSION;
+  ruleVersion: RuleVersion;
   state: 'draft' | 'open' | 'running' | 'complete' | 'cancelled';
   rounds: Round[];
   entries: Entry[];
@@ -101,6 +102,20 @@ const kickoffTime = (round: Round, fixture: Fixture) =>
   round.testingPolicy === 'admin-controlled-v1' && round.testClosedAt
     ? Math.min(Date.parse(fixture.kickoff), Date.parse(round.testClosedAt))
     : Date.parse(fixture.kickoff);
+function validResult(round: Round, fixture: Fixture, result: Result, now: number) {
+  const confirmed = Date.parse(result.confirmedAt);
+  return (
+    Number.isFinite(confirmed) &&
+    confirmed >= kickoffTime(round, fixture) &&
+    confirmed <= Math.min(now, resolveTime(round)) &&
+    Number.isSafeInteger(result.home) &&
+    Number.isSafeInteger(result.away) &&
+    result.home >= 0 &&
+    result.away >= 0 &&
+    result.outcome ===
+      (result.home === result.away ? 'draw' : result.home > result.away ? 'home' : 'away')
+  );
+}
 const fail = (message: string): never => {
   throw new SurvivorError(message);
 };
@@ -332,7 +347,7 @@ export function observe(
         round.observed[fixture.id] = observation.observedAt;
         if (
           observation.result &&
-          Date.parse(observation.result.confirmedAt) >= kickoffTime(round, fixture) &&
+          validResult(round, fixture, observation.result, Date.parse(observation.observedAt)) &&
           !round.voidFixtures.includes(fixture.id)
         )
           round.results[fixture.id] = observation.result;
@@ -346,6 +361,12 @@ function complete(c: Competition, now: number, reason: string) {
   c.reason = reason;
   for (const entry of c.entries) if (entry.status === 'active') entry.status = 'winner';
   c.audit.push({ at: stamp(now), action: 'completed', round: c.currentRound });
+}
+function finalizeRound(c: Competition, now: number, action: string) {
+  const round = c.rounds[c.currentRound];
+  round.state = 'final';
+  round.finalizedAt = stamp(now);
+  c.audit.push({ at: stamp(now), action, round: c.currentRound });
 }
 export function cancel(c: Competition, now: number, reason: string) {
   c.state = 'cancelled';
@@ -391,33 +412,71 @@ export function advance(c: Competition, results: Record<string, Result>, now: nu
   if (!c.entries.some((e) => e.status === 'active'))
     return cancel(c, now, 'Everyone missed the pick deadline.');
   for (const fixture of round.fixtures) {
+    const stored = round.results[fixture.id];
+    if (
+      round.voidFixtures.includes(fixture.id) ||
+      (stored && !validResult(round, fixture, stored, now))
+    )
+      delete round.results[fixture.id];
     const result = results[fixture.id];
     if (
       !result ||
-      !Number.isFinite(Date.parse(result.confirmedAt)) ||
-      Date.parse(result.confirmedAt) > Math.min(now, resolveTime(round)) ||
-      Date.parse(result.confirmedAt) < kickoffTime(round, fixture)
+      round.voidFixtures.includes(fixture.id) ||
+      !validResult(round, fixture, result, now)
     )
       continue;
     const previous = round.results[fixture.id];
     if (!previous || Date.parse(result.confirmedAt) >= Date.parse(previous.confirmedAt))
       round.results[fixture.id] = result;
   }
-  if (now < resolveTime(round)) return;
   const active = c.entries.filter((e) => e.status === 'active');
-  let advancing = 0;
-  for (const entry of active) {
+  const beforeDeadline = now < resolveTime(round);
+  if (c.ruleVersion === RULE_VERSION && active.length === 1) {
+    // Missing picks never qualify for rescue. The sole picker has already won,
+    // irrespective of an unfinished fixture; do not invent a match result.
+    const entry = active[0];
+    const pick = entry.picks[String(c.currentRound)];
+    if (
+      round.voidFixtures.includes(pick.fixtureId) ||
+      (!beforeDeadline && !round.results[pick.fixtureId])
+    ) {
+      pick.result = 'void';
+      entry.used = entry.used.filter((id) => id !== pick.teamId);
+    }
+    finalizeRound(c, now, 'last-picker-won');
+    return complete(c, now, 'Last survivor after the pick deadline.');
+  }
+  const outcomes = active.map((entry) => {
     const pick = entry.picks[String(c.currentRound)];
     const fixture = round.fixtures.find((f) => f.id === pick.fixtureId)!;
     const result = round.results[fixture.id];
-    if (!result) {
-      pick.result = 'void';
+    const outcome: Pick['result'] = round.voidFixtures.includes(fixture.id)
+      ? 'void'
+      : result
+        ? result.outcome !== 'draw' && fixture[result.outcome].id === pick.teamId
+          ? 'won'
+          : 'lost'
+        : beforeDeadline
+          ? undefined
+          : 'void';
+    return { entry, pick, outcome };
+  });
+  if (
+    beforeDeadline &&
+    (c.ruleVersion !== RULE_VERSION ||
+      outcomes.some(({ outcome }) => !outcome) ||
+      outcomes.filter(({ outcome }) => outcome === 'won' || outcome === 'void').length !== 1)
+  )
+    return;
+  let advancing = 0;
+  for (const { entry, pick, outcome } of outcomes) {
+    pick.result = outcome;
+    if (outcome === 'void') {
       entry.used = entry.used.filter((id) => id !== pick.teamId);
       advancing++;
-    } else if (result.outcome !== 'draw' && fixture[result.outcome].id === pick.teamId) {
-      pick.result = 'won';
+    } else if (outcome === 'won') {
       advancing++;
-    } else pick.result = 'lost';
+    }
   }
   for (const entry of active) {
     const pick = entry.picks[String(c.currentRound)];
@@ -426,13 +485,11 @@ export function advance(c: Competition, results: Record<string, Result>, now: nu
       else entry.status = 'out';
     }
   }
-  round.state = 'final';
-  round.finalizedAt = stamp(now);
-  c.audit.push({
-    at: stamp(now),
-    action: advancing === 0 ? 'all-loss-rescue' : 'finalized',
-    round: c.currentRound,
-  });
+  finalizeRound(
+    c,
+    now,
+    beforeDeadline ? 'last-survivor-early' : advancing === 0 ? 'all-loss-rescue' : 'finalized',
+  );
   const remaining = c.entries.filter((e) => e.status === 'active');
   if (remaining.length === 1) return complete(c, now, 'Last survivor.');
   const next = c.rounds[c.currentRound + 1];

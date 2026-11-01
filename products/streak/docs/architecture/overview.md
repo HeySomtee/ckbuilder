@@ -1,5 +1,10 @@
 # Architecture and migration
 
+1 November Survivor v2 adds deterministic early completion over the locked pick
+snapshot. It preserves v1 terms, does not eliminate provisional losers while an
+all-loss rescue is possible, and reuses the existing funded-prize journal without
+changing credit identities. [Rules and edge cases](../delivery/survivor-outcomes.md).
+
 31 October Survivor creator prizes use the owner-approved dedicated custodial
 testnet rewards wallet. Survivor retains aggregate ownership; a payment adapter
 reuses Five funding, shared input reservations and the payout journal with a disjoint

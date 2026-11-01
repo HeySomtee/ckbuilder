@@ -27,6 +27,7 @@ export type Entry = {
   missedRound?: number;
 };
 export type Competition = {
+  ruleVersion: 'survivor-free-v1' | 'survivor-free-v2';
   prizeStatus: string;
   isCreator: boolean;
   prizeFunding: {
@@ -170,6 +171,10 @@ function detail(value: unknown): Competition {
   if (!rounds[currentRound]) bad();
   return {
     id: str(c.id),
+    ruleVersion: choice(c.ruleVersion ?? 'survivor-free-v1', [
+      'survivor-free-v1',
+      'survivor-free-v2',
+    ]) as Competition['ruleVersion'],
     prizeStatus: choice(c.prizeStatus ?? 'announced', [
       'announced',
       'none',

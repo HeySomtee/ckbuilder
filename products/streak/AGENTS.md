@@ -17,6 +17,13 @@ The owner approved the Streak UI and architecture on **15 October 2026**, includ
 
 ## Product and trust boundaries
 
+1 November Survivor outcome approval: new competitions use versioned v2 early
+completion only for a definite sole survivor after lock. Preserve v1 published
+timing, all-loss rescue with teams spent, exclusion of missed picks, explicit void
+restoration and immutable final prize allocations. A pending fixture cannot become
+an early void. Winner status is separate from payment confirmation. Keep the
+[outcome table](docs/delivery/survivor-outcomes.md) and in-app rules synchronized.
+
 31 October owner approval: new Survivor creator prizes use the existing dedicated
 custodial testnet rewards wallet, not a new escrow contract. Require exact creator
 funding and canonical confirmation before publishing a positive prize. Preserve
@@ -41,6 +48,12 @@ require the same database role/schema. [Rules and evidence](docs/delivery/surviv
 - Keep TypeScript strict. Validate untrusted data and narrow `unknown`; avoid unchecked casts, catch-and-ignore errors and unexplained suppressions. Pin reviewed dependencies and update the lockfile together.
 
 ## Design and motion
+
+1 November pending-button visibility: disabled controls performing work must keep
+the three-cell loader readable. Do not fade the whole pending control and its
+animation together. Retain native disabled behavior, normal inactive styling for
+controls without loaders, contrasting cells on filled/dark buttons, reduced motion
+and hidden-tab suspension. Shared React and legacy loaders use the same policy.
 
 31 October Five correction: after the deadline, keep the saved current gameweek
 team and its updating player points as the default view. Next-team selection is

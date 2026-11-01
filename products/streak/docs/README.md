@@ -1,5 +1,14 @@
 # Streak documentation
 
+1 November [pending-loader visibility](delivery/connected-loading.md): shared
+React/legacy button styles preserve readable cells without enabling disabled
+actions. Included in the Survivor/Five release candidate and browser verification.
+
+1 November [Survivor outcomes and early winners](delivery/survivor-outcomes.md):
+new v2 competitions finish when a sole winner is decided, preserving pending
+results, all-loss rescue and legacy terms. Includes the player-facing edge-case
+table, funding/recovery rules and verification scope. Release work is in progress.
+
 31 October verified release: `948fb1c` contains Survivor creator prizes and Five's
 live-team view. All 77 full-gate checks passed in one run. Not pushed or deployed;
 physical Survivor wallet acceptance remains separate. See [status](../status.md).

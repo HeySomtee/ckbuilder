@@ -1,5 +1,21 @@
 # Connected loading signature
 
+1 November visibility correction: disabled button opacity was multiplying the
+cells' own fade, making pending work difficult to see. The shared stylesheet now
+keeps disabled buttons containing a loader at full compositing opacity. Cells and
+links inherit the control's contrasting foreground, with thicker outlines and a
+higher pulse floor. Standalone panel loaders keep their three-color signature.
+Native disabled behavior is unchanged; unavailable controls without a loader stay
+dimmed. Both the React wrapper and bare legacy SVG use the same rules.
+
+The existing browser matrix now checks nine real-theme button variants, including
+coral/lime fills, dark secondary actions and destructive controls, at 390/1440px
+in Chromium/WebKit. It measures cell-stroke contrast at the lowest pulse level,
+accounts for gradient stops, verifies reduced motion and rejects duplicate clicks.
+The actual payment approval journey also checks its held pending button and captures
+it for visual inspection. Evidence is generated as `cell-loader-button-contrast.json`
+with the browser screenshots; release verification is recorded in [status](../../status.md).
+
 Owner approved the refined preview on 29 October 2026 for application use.
 
 The same three cells now identify pending work in Season and the retained legacy

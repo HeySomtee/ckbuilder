@@ -34,6 +34,7 @@ function Crest({ team }: { team: Team }) {
   );
 }
 function Rulebook({ competition }: { competition?: Competition | null }) {
+  const earlyFinish = !competition || competition.ruleVersion === 'survivor-free-v2';
   return (
     <div className="survivor-rulebook">
       <ol>
@@ -45,18 +46,23 @@ function Rulebook({ competition }: { competition?: Competition | null }) {
         </li>
         <li>Everyone else's picks stay private until the round locks, including from the admin.</li>
         <li>
-          Results remain provisional until six hours after the round's last scheduled kickoff.
+          {earlyFinish
+            ? 'Results remain provisional until the round is finalized. The usual resolution deadline is six hours after the round’s last scheduled kickoff; a sole winner can be confirmed earlier under the rule below. '
+            : 'Results remain provisional until six hours after the round’s last scheduled kickoff. '}
           Changed kickoffs or teams make a fixture unavailable and void its picks. Unresolved
-          fixtures also void at the deadline: you advance and get that team back.
+          fixtures also void at the resolution deadline: you advance and get that team back.
         </li>
         <li>
-          If every actual pick loses or draws, those players survive. Their teams stay used. Missed
-          picks are never rescued.
+          At the round's resolution deadline, if every actual pick loses or draws, those players
+          survive. Their teams stay used. Missed picks are never rescued.
         </li>
         <li>
-          The last survivor wins. At the end of the published schedule, remaining survivors are
-          joint winners. The same applies if no legal next round exists for everyone, or service
-          recovery misses the next opening deadline.
+          {earlyFinish
+            ? 'After picks lock, the only entrant who made a valid pick wins immediately if everyone else missed. Otherwise, an early winner is confirmed only when every remaining pick is resolved and exactly one entrant advances. Unplayed picks are never treated as losses. '
+            : 'The last survivor wins once the round is final. '}
+          At the end of the published schedule, remaining survivors are joint winners. The same
+          applies if no legal next round exists for everyone, or service recovery misses the next
+          opening deadline.
         </li>
         <li>
           Fewer than two opening entrants or everyone missing their pick cancels the competition.
@@ -219,6 +225,7 @@ export default function SurvivorPage({
     }
   }, [setupTarget, c?.id, c?.state]);
   const own = c?.entries.find((e) => e.id === c.ownId);
+  const winnerCount = c?.entries.filter((e) => e.status === 'winner').length ?? 0;
   const saved = own?.picks[String(c?.currentRound)];
   const [clock, setClock] = useState(Date.now());
   useEffect(() => {
@@ -233,6 +240,7 @@ export default function SurvivorPage({
     serverNow < Date.parse(round.lockAt) &&
     ['open', 'running'].includes(c?.state ?? '');
   const canPick = open && own?.status === 'active';
+  const finished = c?.state === 'complete' || c?.state === 'cancelled';
   const needsPrize = !!c && !['announced', 'none', 'confirmed'].includes(c.prizeStatus);
   const hasPrizePayment =
     c?.prizeFunding && ['submitted', 'confirmed', 'conflicted'].includes(c.prizeFunding.funding);
@@ -610,16 +618,27 @@ export default function SurvivorPage({
           <section className="glass survivor-hero">
             <div className="survivor-hero-copy">
               <span className="eyebrow">{c.terms.name.toUpperCase()} · BY STREAK</span>
-              <h2>
-                Win this week.
-                <br />
-                <em>Think three ahead.</em>
-              </h2>
-              <p>
-                One team to win. One chance to stay in.
-                <br />
-                Once you use a team, it is off your board.
-              </p>
+              {finished ? (
+                <>
+                  <h2>
+                    {c.state === 'complete' ? 'The run is complete.' : 'Competition cancelled.'}
+                  </h2>
+                  <p>Your saved picks and final standings remain here.</p>
+                </>
+              ) : (
+                <>
+                  <h2>
+                    Win this week.
+                    <br />
+                    <em>Think three ahead.</em>
+                  </h2>
+                  <p>
+                    One team to win. One chance to stay in.
+                    <br />
+                    Once you use a team, it is off your board.
+                  </p>
+                </>
+              )}
               <div className="survivor-actions">
                 {data.admin && (
                   <button
@@ -678,7 +697,7 @@ export default function SurvivorPage({
                   {c.prizeStatus === 'announced'
                     ? 'Not escrowed or paid'
                     : c.prizeStatus === 'confirmed'
-                      ? 'Held in Streak’s testnet rewards wallet'
+                      ? 'Funded through Streak’s testnet rewards wallet'
                       : 'No funded prize'}
                 </span>
               </div>
@@ -696,20 +715,32 @@ export default function SurvivorPage({
                 <b>
                   {c.entries.length} / {c.terms.limit}
                 </b>
-                <span>{c.entries.filter((e) => e.status !== 'out').length} still standing</span>
+                <span>
+                  {c.state === 'complete'
+                    ? `${winnerCount} ${winnerCount === 1 ? 'winner' : 'joint winners'}`
+                    : `${c.entries.filter((e) => e.status !== 'out').length} still standing`}
+                </span>
               </div>
               <div>
                 <small>
                   ROUND {c.currentRound + 1} OF {c.rounds.length}
                 </small>
                 <b>
-                  {open
-                    ? 'Picks open'
-                    : round.state === 'final'
-                      ? 'Round complete'
-                      : 'Picks locked'}
+                  {finished
+                    ? c.state === 'complete'
+                      ? 'Competition complete'
+                      : 'Competition cancelled'
+                    : open
+                      ? 'Picks open'
+                      : round.state === 'final'
+                        ? 'Round complete'
+                        : 'Picks locked'}
                 </b>
-                <span>Closes {date(round.lockAt)} · Your local time</span>
+                <span>
+                  {finished
+                    ? 'No further picks needed'
+                    : `Closes ${date(round.lockAt)} · Your local time`}
+                </span>
               </div>
             </div>
           </section>
@@ -722,7 +753,11 @@ export default function SurvivorPage({
                 {c.reason}{' '}
                 {c.prizeStatus === 'announced'
                   ? 'Any host award is handled separately.'
-                  : 'Funded prizes and refunds are processed by the rewards worker.'}
+                  : c.prizeStatus === 'none'
+                    ? 'This competition has no funded prize.'
+                    : c.state === 'complete'
+                      ? 'A confirmed winner is separate from a completed payout. Your rewards show delivery progress.'
+                      : 'Any funded prize refund appears in your rewards once processed.'}
               </p>
             </div>
           )}
@@ -746,17 +781,27 @@ export default function SurvivorPage({
                       <span className="eyebrow">
                         ROUND {c.currentRound + 1} · {round.label}
                       </span>
-                      <h3>{open ? 'Who keeps you in?' : 'The picks are in.'}</h3>
-                      <p className="survivor-deadline">
-                        <strong>
-                          {open ? 'Pick by' : 'Picks closed'} {date(round.lockAt)}
-                        </strong>
-                        <small>Your local time · Published round deadline</small>
-                      </p>
+                      <h3>
+                        {finished
+                          ? 'Your final team board.'
+                          : open
+                            ? 'Who keeps you in?'
+                            : 'The picks are in.'}
+                      </h3>
+                      {!finished && (
+                        <p className="survivor-deadline">
+                          <strong>
+                            {open ? 'Pick by' : 'Picks closed'} {date(round.lockAt)}
+                          </strong>
+                          <small>Your local time · Published round deadline</small>
+                        </p>
+                      )}
                       <p>
-                        {open
-                          ? 'Choose carefully. Today’s safe pick might be next week’s lifeline.'
-                          : `Final results by ${date(round.resolveAt)}. Picks remain visible below.`}
+                        {finished
+                          ? 'The competition has ended. Your saved pick remains visible below.'
+                          : open
+                            ? 'Choose carefully. Today’s safe pick might be next week’s lifeline.'
+                            : `Final results by ${date(round.resolveAt)}. Picks remain visible below.`}
                       </p>
                     </div>
                     {own && <span className="survivor-tag">{own.used.length} teams played</span>}
@@ -826,35 +871,39 @@ export default function SurvivorPage({
                           {selectedTeam ? pickName(selectedTeam) : 'Choose a team above'}
                         </strong>
                         <span>
-                          {open
-                            ? 'Private until the round locks'
-                            : saved
-                              ? 'Locked for this round'
-                              : 'No pick was saved'}
+                          {finished
+                            ? 'Competition ended'
+                            : open
+                              ? 'Private until the round locks'
+                              : saved
+                                ? 'Locked for this round'
+                                : 'No pick was saved'}
                         </span>
                       </div>
-                      <button
-                        className="survivor-primary"
-                        disabled={
-                          busy || !canPick || !selectedTeam || selectedTeam === saved?.teamId
-                        }
-                        aria-busy={action.isPending}
-                        onClick={() =>
-                          action.mutate({
-                            action: 'pick',
-                            id: c.id,
-                            round: c.currentRound,
-                            teamId: selectedTeam,
-                          })
-                        }
-                      >
-                        {action.isPending && <CellLoader variant="orbit" />}
-                        {action.isPending
-                          ? 'Saving your pick…'
-                          : selectedTeam === saved?.teamId
-                            ? 'Pick saved'
-                            : 'Save my pick'}
-                      </button>
+                      {!finished && (
+                        <button
+                          className="survivor-primary"
+                          disabled={
+                            busy || !canPick || !selectedTeam || selectedTeam === saved?.teamId
+                          }
+                          aria-busy={action.isPending}
+                          onClick={() =>
+                            action.mutate({
+                              action: 'pick',
+                              id: c.id,
+                              round: c.currentRound,
+                              teamId: selectedTeam,
+                            })
+                          }
+                        >
+                          {action.isPending && <CellLoader variant="orbit" />}
+                          {action.isPending
+                            ? 'Saving your pick…'
+                            : selectedTeam === saved?.teamId
+                              ? 'Pick saved'
+                              : 'Save my pick'}
+                        </button>
+                      )}
                     </div>
                   )}
                 </>
@@ -862,7 +911,7 @@ export default function SurvivorPage({
               {tab === 'board' && (
                 <div className="glass survivor-standings">
                   <div className="survivor-section-head">
-                    <h3>Still in the game.</h3>
+                    <h3>{finished ? 'Final standings.' : 'Still in the game.'}</h3>
                     <span>{c.entries.length} entrants</span>
                   </div>
                   {c.entries.length === 0 ? (
@@ -932,9 +981,13 @@ export default function SurvivorPage({
                                   : p?.result === 'lost'
                                     ? 'Eliminated'
                                     : p
-                                      ? r.state === 'scheduled'
-                                        ? 'Saved'
-                                        : 'Awaiting result'
+                                      ? c.state === 'complete' &&
+                                        own.status === 'winner' &&
+                                        i === c.currentRound
+                                        ? 'Winner · no result needed'
+                                        : r.state === 'scheduled'
+                                          ? 'Saved'
+                                          : 'Awaiting result'
                                       : own.missedRound === i
                                         ? 'Eliminated'
                                         : 'No pick'}

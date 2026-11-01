@@ -1,5 +1,19 @@
 # Streak status
 
+1 November release scope now also includes readable pending-button loaders across
+React and legacy pages. Shared CSS removes compounded dimming while preserving
+disabled actions and inactive-control styling. Contrast/interaction browser checks
+cover actual control styles and payment approval. The earlier full gate was
+interrupted for this steering; the final combined candidate requires a fresh pass.
+
+1 November Survivor v2 early completion is implemented locally. New competitions
+finish when one valid picker remains after lock or fully resolved picks leave one
+survivor. All-loss rescue, pending outcomes and existing v1 correction windows
+remain protected. Focused unit and six Chromium/WebKit journeys pass; full gate
+and publication are in progress. The release also includes the previously local
+Five team/points view and Survivor remaining-gameweek selector. See
+[outcomes and edge cases](docs/delivery/survivor-outcomes.md).
+
 31 October release verification: committed `948fb1c` after all 77 required checks
 passed in one full gate, completed at 13:38:27 UTC. This includes Survivor creator
 prizes/deadlines and Five's live team with independent next-week picks. The commit

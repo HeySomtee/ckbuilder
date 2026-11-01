@@ -1,5 +1,12 @@
 # Streak Survivor: rules and creation proposal
 
+1 November update: new v2 competitions can finish when a sole survivor is decided
+before the full round ends. All-loss rescue keeps actual pickers in, with teams
+spent and missed picks excluded. V1 competitions retain their published correction
+window. The [current outcome table](../delivery/survivor-outcomes.md) governs early
+winners, voids, ties, cancellations, exhausted choices, replay and funded prizes;
+it supersedes conflicting proposal text below for new competitions.
+
 31 October update: the owner approved creator-funded prizes through the existing
 custodial testnet rewards wallet. New competitions require confirmed funding before
 publication, use official FPL deadlines and allow up to the remaining complete

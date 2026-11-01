@@ -2,7 +2,10 @@ require('../../../scripts/quality/test-env.cjs');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { Pool } = require('pg');
+const { ccc } = require('@ckb-ccc/core');
+const { FiveRewards } = require('../dist/modules/five/rewards');
 const { PgSurvivorStorage } = require('../dist/modules/survivor/storage');
+const { prizeRound } = require('../dist/modules/survivor/prizes');
 const {
   createCompetition,
   publish,
@@ -188,8 +191,181 @@ async function main() {
       finished,
       'Restart cannot double-finalize.',
     );
+    // Exercise real persisted Survivor outcomes through the shared credit ledger.
+    // Funding is a synthetic confirmed record; no chain read, signing or payout runs.
+    const chain = new ccc.ClientPublicTestnet({ url: 'http://127.0.0.1:1', fallbacks: [] });
+    const rewards = new FiveRewards(pool, chain, 'ckt1synthetic-rewards');
+    const replayRewards = new FiveRewards(pool, chain, 'ckt1synthetic-rewards');
+    await rewards.init();
+    await replayRewards.init();
+    for (const scenario of ['sole-picker', 'early-winner', 'all-loss', 'all-missed']) {
+      const id = `prize-${scenario}`;
+      const prize = '20000000001';
+      await store.create(id, 'creator', (time) => {
+        const competition = createCompetition(
+          id,
+          'creator',
+          { ...terms, prizeShannons: prize },
+          [
+            {
+              ...slate,
+              testingPolicy: 'admin-controlled-v1',
+              lockAt: new Date(time + 60000).toISOString(),
+              resolveAt: new Date(time + 120000).toISOString(),
+              fixtures: [{ ...slate.fixtures[0], kickoff: new Date(time + 90000).toISOString() }],
+            },
+          ],
+          time,
+          `creator-${scenario}`,
+        );
+        competition.prizeFunding = {
+          id: competition.fundingIntentId,
+          accountId: 'creator',
+          wallet: competition.creatorWallet,
+          amountShannons: prize,
+          display: 'anonymous',
+          name: '',
+          logo: '',
+          link: '',
+          moderation: 'approved',
+          createdAt: competition.createdAt,
+          funding: 'confirmed',
+        };
+        publish(competition, time);
+        for (const entrant of ['first', 'second'])
+          join(
+            competition,
+            entrant,
+            entrant,
+            competition.termsHash,
+            time,
+            `${entrant}-${scenario}`,
+          );
+        if (scenario !== 'all-missed') savePick(competition, 'first', 0, 'a', time);
+        if (scenario === 'early-winner' || scenario === 'all-loss')
+          savePick(competition, 'second', 0, 'b', time);
+        return competition;
+      });
+      await store.change(id, (competition, time) => {
+        competition.rounds[0].testClosedAt = new Date(time - 1000).toISOString();
+        if (scenario === 'all-loss')
+          competition.rounds[0].testResolvedAt = new Date(time).toISOString();
+        advance(
+          competition,
+          scenario === 'early-winner' || scenario === 'all-loss'
+            ? {
+                fixture: {
+                  outcome: scenario === 'all-loss' ? 'draw' : 'home',
+                  home: 1,
+                  away: scenario === 'all-loss' ? 1 : 0,
+                  confirmedAt: new Date(time).toISOString(),
+                },
+              }
+            : {},
+          time,
+        );
+      });
+      const completed = await restarted.load(id);
+      assert.equal(completed.state, scenario === 'all-missed' ? 'cancelled' : 'complete');
+      const winners = completed.entries.filter((entry) => entry.status === 'winner');
+      assert.equal(winners.length, scenario === 'all-missed' ? 0 : scenario === 'all-loss' ? 2 : 1);
+      if (scenario === 'early-winner' || scenario === 'sole-picker')
+        assert.ok(
+          Date.parse(completed.rounds[0].finalizedAt) < Date.parse(completed.rounds[0].resolveAt),
+          'A sole survivor is finalized before the scheduled resolution time.',
+        );
+      if (scenario === 'all-loss')
+        assert.ok(winners.every((entry) => entry.picks['0'].result === 'rescued'));
+      const snapshot = JSON.stringify(completed);
+      await Promise.all(
+        Array.from({ length: 6 }, async (_, index) => {
+          const source = index % 2 ? restarted : store;
+          const ledger = index % 2 ? replayRewards : rewards;
+          const persisted = await source.change(id, (competition, time) => {
+            // Even contradictory late evidence cannot rewrite an already paid outcome.
+            advance(
+              competition,
+              {
+                fixture: {
+                  outcome: 'away',
+                  home: 0,
+                  away: 1,
+                  confirmedAt: new Date(time).toISOString(),
+                },
+              },
+              time,
+            );
+          });
+          await ledger.credit(prizeRound(persisted), true);
+        }),
+      );
+      assert.equal(JSON.stringify(await restarted.load(id)), snapshot);
+      const creditRows = (
+        await pool.query(
+          'SELECT id,wallet,amount::text AS amount FROM streak_five_credits WHERE starts_with(id,$1) ORDER BY id',
+          [`survivor.${id}:`],
+        )
+      ).rows;
+      const expected =
+        scenario === 'all-missed'
+          ? [
+              {
+                id: `survivor.${id}:refund:${completed.fundingIntentId}`,
+                wallet: completed.creatorWallet,
+                amount: prize,
+              },
+            ]
+          : [
+              ...winners.map((entry) => ({
+                id: `survivor.${id}:prize:${entry.publicId}`,
+                wallet: entry.wallet,
+                amount: (BigInt(prize) / BigInt(winners.length)).toString(),
+              })),
+              ...(scenario === 'all-loss'
+                ? [
+                    {
+                      id: `survivor.${id}:prize:creator-remainder`,
+                      wallet: completed.creatorWallet,
+                      amount: '1',
+                    },
+                  ]
+                : []),
+            ];
+      assert.deepEqual(
+        creditRows,
+        expected.sort((a, b) => a.id.localeCompare(b.id)),
+      );
+      assert.equal(
+        creditRows.reduce((sum, row) => sum + BigInt(row.amount), 0n),
+        BigInt(prize),
+      );
+      const wallets = creditRows.map((row) => row.wallet);
+      assert.equal(
+        (
+          await pool.query(
+            'SELECT count(*)::int AS n FROM streak_five_claim_requests WHERE wallet=ANY($1::text[])',
+            [wallets],
+          )
+        ).rows[0].n,
+        wallets.length,
+      );
+      await pool.query('DELETE FROM streak_five_claim_requests WHERE wallet=ANY($1::text[])', [
+        wallets,
+      ]);
+      await replayRewards.credit(prizeRound(await restarted.load(id)), true);
+      assert.equal(
+        (
+          await pool.query(
+            'SELECT count(*)::int AS n FROM streak_five_claim_requests WHERE wallet=ANY($1::text[])',
+            [wallets],
+          )
+        ).rows[0].n,
+        0,
+        'Replaying an already consumed prize or refund cannot create another payment request.',
+      );
+    }
     console.log(
-      'PASS Survivor PostgreSQL: concurrent final place, duplicate admission/create, rollback, persisted pick, deadline under contention and restart finalization.',
+      'PASS Survivor PostgreSQL: concurrent entry/deadline recovery; persisted early winners, all-loss shares, cancellation refunds and idempotent credit replay.',
     );
   } finally {
     await pool?.end();

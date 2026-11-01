@@ -9,6 +9,15 @@ const publicRoot = path.resolve(__dirname, '../public');
 const evidence =
   process.env.STREAK_SCREENSHOTS || path.resolve(__dirname, '../../../.quality-artifacts');
 const moduleOnly = process.argv.includes('--module-only');
+const contrastEvidence = [];
+const controlStyles = [
+  'design-system/styles.css',
+  'design-system/predictions.css',
+  'features/five/five.css',
+  'features/survivor/survivor.css',
+  'features/account/wallet.css',
+  'features/direct/activity.css',
+];
 assert.ok(process.argv.slice(2).every((arg) => arg === '--module-only'));
 fs.mkdirSync(evidence, { recursive: true });
 const fixture = `<!doctype html><html lang="en"><meta charset="utf-8">
@@ -45,6 +54,39 @@ window.loaderTest={
  }
 };
 </script></html>`;
+function controlsFixture(legacy) {
+  const cases = legacy
+    ? [
+        ['', 'btn', 'Legacy secondary'],
+        ['', 'btn btn-amber', 'Legacy primary'],
+        ['', 'btn btn-down', 'Legacy destructive'],
+      ]
+    : [
+        ['', '', 'Secondary'],
+        ['prediction-slip', 'review-button', 'Payment approval'],
+        ['five-page', 'btn primary', 'Save five'],
+        ['', 'survivor-primary', 'Fund Survivor prize'],
+        ['wallet-overview', 'wallet-primary', 'Wallet connection'],
+        ['activity-ledger', '', 'Collect return'],
+      ];
+  return `<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pending button contrast</title><link rel="stylesheet" href="/cell-loader.css">
+${legacy ? '<link rel="stylesheet" href="/styles.css">' : controlStyles.map((_, i) => `<link rel="stylesheet" href="/qa-control-style/${i}.css">`).join('')}
+<style>body{margin:0;padding:24px;background:#14201c;color:#f1f3ed}.loader-control-cases{display:grid;gap:16px;max-width:540px}.loader-control-cases>section{position:static;width:auto;max-width:none;max-height:none;padding:12px;background:#14201c;display:grid;gap:8px}.loader-control-cases button{max-width:100%;display:flex;align-items:center;justify-content:center}.loader-control-cases h1{font-size:22px}</style>
+<main class="loader-control-cases"><h1>Pending controls stay visible</h1>${cases.map(([parent, button, label], index) => `<section class="${parent}"><button class="${button}" disabled data-case="${label}" ${index === 3 ? '' : 'aria-busy="true"'}>${label}</button><button class="${button}" disabled data-inactive="${label}">Unavailable action</button></section>`).join('')}</main>
+<script type="module">
+import {cellLoaderMarkup,registerCellLoader} from '/cell-loader.js';
+window.controlClicks=0;
+for(const [index,button] of [...document.querySelectorAll('[data-case]')].entries()){
+ const markup=cellLoaderMarkup(index%2 ? 'wave' : 'orbit');
+ button.insertAdjacentHTML('afterbegin',${legacy ? 'markup' : '`<span class="cell-loader-host">${markup}</span>`'});
+ registerCellLoader(button.querySelector('svg'));
+ button.addEventListener('click',()=>window.controlClicks++);
+}
+window.controlsReady=true;
+</script></html>`;
+}
 const types = {
   '.html': 'text/html',
   '.js': 'application/javascript',
@@ -59,6 +101,22 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/loader-test') {
     res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
     return res.end(fixture);
+  }
+  if (url.pathname === '/loader-controls') {
+    res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
+    return res.end(controlsFixture(url.searchParams.has('legacy')));
+  }
+  const style = /^\/qa-control-style\/(\d+)\.css$/.exec(url.pathname);
+  if (style && controlStyles[Number(style[1])]) {
+    res.writeHead(200, { 'Content-Type': 'text/css' });
+    return res.end(
+      fs
+        .readFileSync(
+          path.resolve(__dirname, '../web/src', controlStyles[Number(style[1])]),
+          'utf8',
+        )
+        .replaceAll('../../../public/', '/'),
+    );
   }
   const pathname = ['/season', '/season/'].includes(url.pathname)
     ? '/season/index.html'
@@ -311,6 +369,137 @@ function clean(observations) {
   assert.deepEqual(observations.sockets, []);
   assert.deepEqual(observations.errors, []);
 }
+async function pendingControls(browser, base, width, name) {
+  for (const legacy of [false, true]) {
+    const f = await contextFor(browser, base, width);
+    try {
+      await f.page.goto(base + '/loader-controls' + (legacy ? '?legacy' : ''));
+      await f.page.waitForFunction(() => window.controlsReady);
+      const inspect = () =>
+        f.page.locator('[data-case]').evaluateAll((buttons) => {
+          const rgba = (value) => {
+            const values = value.match(/[\d.]+/g).map(Number);
+            return [...values.slice(0, 3), values[3] ?? 1];
+          };
+          const mix = (front, back, alpha = front[3]) =>
+            front.slice(0, 3).map((channel, i) => channel * alpha + back[i] * (1 - alpha));
+          const luminance = (rgb) =>
+            rgb.reduce((sum, channel, i) => {
+              const normalized = channel / 255;
+              return (
+                sum +
+                (normalized <= 0.04045
+                  ? normalized / 12.92
+                  : ((normalized + 0.055) / 1.055) ** 2.4) *
+                  [0.2126, 0.7152, 0.0722][i]
+              );
+            }, 0);
+          const ratio = (first, second) => {
+            const a = luminance(first),
+              b = luminance(second);
+            return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+          };
+          return buttons.map((button) => {
+            let backgrounds = [[0, 0, 0]],
+              opacity = 1;
+            const ancestors = [];
+            for (let node = button; node; node = node.parentElement) ancestors.unshift(node);
+            for (const node of ancestors) {
+              const css = getComputedStyle(node);
+              backgrounds = backgrounds.map((background) =>
+                mix(rgba(css.backgroundColor), background),
+              );
+              const stops = css.backgroundImage.match(/rgba?\([^)]+\)/g);
+              if (stops?.length)
+                backgrounds = stops.flatMap((stop) =>
+                  backgrounds.map((background) => mix(rgba(stop), background)),
+                );
+              opacity *= Number(css.opacity);
+            }
+            const svg = button.querySelector('svg'),
+              css = getComputedStyle(svg);
+            const orbit = svg.classList.contains('cell-loader--orbit');
+            const reduced = svg.dataset.reduced === 'true';
+            const floor = reduced
+              ? 1
+              : Number(css.getPropertyValue(orbit ? '--cell-pulse-min' : '--cell-stroke-min'));
+            const cells = [...svg.querySelectorAll('.cell-block')].map((cell) => {
+              const style = getComputedStyle(cell);
+              return {
+                stroke: style.stroke,
+                strokeWidth: Number.parseFloat(style.strokeWidth),
+                minimumContrast: Math.min(
+                  ...backgrounds.map((background) =>
+                    ratio(mix(rgba(style.stroke), background, floor * opacity), background),
+                  ),
+                ),
+              };
+            });
+            button.click();
+            const inactive = button.parentElement.querySelector('[data-inactive]');
+            return {
+              label: button.dataset.case,
+              disabled: button.disabled,
+              opacity,
+              foreground: getComputedStyle(button).color,
+              backgrounds,
+              cells,
+              inactiveDisabled: inactive.disabled,
+              inactiveOpacity: Number(getComputedStyle(inactive).opacity),
+              links: svg.querySelectorAll('.cell-link').length,
+            };
+          });
+        });
+      for (const motion of ['no-preference', 'reduce']) {
+        await f.page.emulateMedia({ reducedMotion: motion });
+        await f.page.waitForFunction(
+          (reduced) =>
+            [...document.querySelectorAll('.cell-loader')].every(
+              (svg) => svg.dataset.reduced === String(reduced),
+            ),
+          motion === 'reduce',
+        );
+        const values = await inspect();
+        for (const value of values) {
+          assert.equal(value.disabled, true, 'Pending actions cannot be submitted twice.');
+          assert.equal(value.opacity, 1, `${value.label}: ancestors must not fade pending work.`);
+          assert.equal(value.inactiveDisabled, true);
+          assert.ok(
+            value.inactiveOpacity < 0.7,
+            'Unavailable actions keep their disabled styling.',
+          );
+          assert.equal(value.cells.length, 3);
+          assert.equal(value.links, 2);
+          for (const cell of value.cells) {
+            assert.equal(
+              cell.stroke,
+              value.foreground,
+              'Button cells use its contrasting foreground.',
+            );
+            assert.ok(cell.strokeWidth >= 2);
+            assert.ok(
+              cell.minimumContrast >= 3,
+              `${value.label}: cell contrast ${cell.minimumContrast}; ${JSON.stringify(value)}`,
+            );
+          }
+        }
+        assert.equal(await f.page.evaluate(() => window.controlClicks), 0);
+        contrastEvidence.push({ browser: name, width, legacy, motion, values });
+      }
+      await f.page.emulateMedia({ reducedMotion: 'no-preference' });
+      await f.page.screenshot({
+        path: path.join(
+          evidence,
+          `cell-loader-controls-${legacy ? 'legacy' : 'season'}-${name}-${width}.png`,
+        ),
+        fullPage: true,
+      });
+      clean(f.observations);
+    } finally {
+      await f.close();
+    }
+  }
+}
 async function appStates(browser, base, width, name) {
   for (const legacy of [true, false]) {
     const f = await contextFor(browser, base, width, { app: true, legacy });
@@ -416,6 +605,7 @@ async function main() {
           } finally {
             await f.close();
           }
+          await pendingControls(browser, base, width, name);
           if (!moduleOnly) await appStates(browser, base, width, name);
         }
         const f = await contextFor(browser, base, 390, { reducedMotion: 'reduce' });
@@ -477,6 +667,18 @@ async function main() {
     }
     console.log(
       `Cell loader checks passed: ${groups} motion groups${moduleOnly ? '; application checks explicitly not run' : ' plus eight real application loading states'}. No backend, wallet, provider or external request used.`,
+    );
+    fs.writeFileSync(
+      path.join(evidence, 'cell-loader-button-contrast.json'),
+      JSON.stringify(
+        {
+          at: new Date().toISOString(),
+          scope: 'Isolated controls with actual app and legacy styles; no wallet or live payment',
+          checks: contrastEvidence,
+        },
+        null,
+        2,
+      ) + '\n',
     );
   } finally {
     server.closeAllConnections();

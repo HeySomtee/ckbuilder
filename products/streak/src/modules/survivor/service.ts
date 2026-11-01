@@ -96,6 +96,7 @@ export function confirmedResults(raw: Record<string, LiveResult>): Record<string
   for (const [id, r] of Object.entries(raw)) {
     if (
       !r.finished ||
+      r.live ||
       r.voided ||
       r.postponed ||
       r.suspended ||

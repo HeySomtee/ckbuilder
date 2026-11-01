@@ -21,6 +21,27 @@
   width: 44px;
   height: 21px;
 }
+/* Pending is an active operation. Keep its status legible while native disabled
+   still prevents another submission. An unavailable action has no loader. */
+:root button:disabled:has(.cell-loader) {
+  opacity: 1;
+  cursor: progress;
+}
+/* Use the control's readable foreground on both dark and solid primary fills.
+   The three-colour signature remains on panels and standalone progress. */
+button .cell-loader {
+  --cell-home: currentColor;
+  --cell-draw: currentColor;
+  --cell-away: currentColor;
+  --cell-link: currentColor;
+  --cell-pulse-min: 0.9;
+  --cell-stroke-min: 0.95;
+}
+button .cell-loader .cell-block {
+  stroke-width: 2;
+  stroke-opacity: 1;
+  fill-opacity: 0.16;
+}
 .cell-loader .cell-block {
   fill: currentColor;
   fill-opacity: 0.1;
@@ -88,7 +109,7 @@
   0%,
   100% {
     transform: scale(0.94);
-    opacity: 0.7;
+    opacity: var(--cell-pulse-min, 0.7);
   }
   50% {
     transform: scale(1.04);
@@ -115,7 +136,7 @@
   0%,
   100% {
     fill-opacity: 0.06;
-    stroke-opacity: 0.65;
+    stroke-opacity: var(--cell-stroke-min, 0.65);
   }
   50% {
     fill-opacity: 0.19;

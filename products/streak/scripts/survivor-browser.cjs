@@ -114,6 +114,7 @@ async function main() {
             );
           const service = new SurvivorService(store, ['synthetic-admin'], () => fixtures);
           let failRead = false;
+          let legacyRulePayload = false;
           let showFunding = false;
           let holdPick = false,
             releasePick,
@@ -154,6 +155,7 @@ async function main() {
                   req.method() === 'POST'
                     ? await service.action(actor, req.postDataJSON())
                     : await service.read(actor, url.searchParams.get('competition') || undefined);
+                if (legacyRulePayload && payload.detail) delete payload.detail.ruleVersion;
                 if (showFunding) payload.fundingAvailable = true; // UI capability only; no signer/chain transport is mocked here.
                 if (
                   holdCreate &&
@@ -408,24 +410,43 @@ async function main() {
           await page.getByRole('button', { name: 'Pick saved', exact: true }).waitFor();
           const time = Date.now();
           c.rounds[0].lockAt = new Date(time - 3000).toISOString();
-          c.rounds[0].resolveAt = new Date(time - 100).toISOString();
+          c.rounds[0].resolveAt = new Date(time + 86400000).toISOString();
           c.rounds[0].fixtures.forEach((f) => {
             f.kickoff = new Date(time - 2000).toISOString();
           });
-          advance(
-            c,
-            {
-              'fixture-0': {
-                outcome: 'home',
-                home: 2,
-                away: 0,
-                confirmedAt: new Date(time - 1000).toISOString(),
-              },
+          const legacy = structuredClone(c);
+          legacy.id = 'legacy-correction-window';
+          legacy.terms.name = 'Legacy competition';
+          legacy.ruleVersion = 'survivor-free-v1';
+          const confirmedResults = {
+            'fixture-0': {
+              outcome: 'home',
+              home: 2,
+              away: 0,
+              confirmedAt: new Date(time - 1000).toISOString(),
             },
-            time,
-          );
+          };
+          advance(legacy, confirmedResults, time);
+          assert.equal(legacy.state, 'running', 'Published v1 keeps its correction window');
+          store.rows.set(legacy.id, legacy);
+          advance(c, confirmedResults, time);
+          assert.equal(c.state, 'complete', 'Sole survivor finishes before unrelated fixtures');
+          assert.ok(time < Date.parse(c.rounds[0].resolveAt));
+          assert.equal(Object.keys(c.rounds[0].results).length, 1);
           await page.reload();
           await page.getByText('You survived.', { exact: true }).waitFor();
+          await page.getByRole('heading', { name: 'The run is complete.', exact: true }).waitFor();
+          await page
+            .locator('.survivor-stats')
+            .getByText('Competition complete', { exact: true })
+            .waitFor();
+          assert.equal(await page.getByText(/^Final results by /).count(), 0);
+          assert.equal(await page.locator('.survivor-deadline').count(), 0);
+          assert.equal(
+            await page.getByRole('button', { name: 'Pick saved', exact: true }).count(),
+            0,
+          );
+          await page.getByText('This competition has no funded prize.', { exact: false }).waitFor();
           await page.getByRole('button', { name: 'Your run', exact: true }).click();
           await page.getByText('Survived', { exact: true }).waitFor();
           await page.screenshot({
@@ -434,8 +455,57 @@ async function main() {
           });
           await page.getByRole('button', { name: 'How it works', exact: true }).click();
           await dialog.waitFor();
+          await dialog
+            .getByText(/every remaining pick is resolved and exactly one entrant advances/)
+            .waitFor();
           await page.keyboard.press('Escape');
           assert.equal(await dialog.isVisible(), false);
+          // A valid sole picker wins at lock without inventing a match result.
+          const solePicker = await store.load('second-game');
+          join(solePicker, actor.id, actor.name, solePicker.termsHash, time, actor.wallet);
+          join(
+            solePicker,
+            'missed',
+            'Missed deadline',
+            solePicker.termsHash,
+            time,
+            'synthetic-missed-wallet',
+          );
+          savePick(solePicker, actor.id, 0, 'team-0', time);
+          solePicker.rounds[0].lockAt = new Date(time - 1000).toISOString();
+          advance(solePicker, {}, time);
+          assert.equal(solePicker.state, 'complete');
+          assert.equal(solePicker.entries[0].picks['0'].result, undefined);
+          assert.ok(Date.parse(solePicker.rounds[0].fixtures[0].kickoff) > time);
+          store.rows.set(solePicker.id, solePicker);
+          await page.getByRole('button', { name: /Second competition/ }).click();
+          await page.getByRole('heading', { name: 'The run is complete.', exact: true }).waitFor();
+          await page.getByRole('button', { name: 'Survivor board', exact: true }).click();
+          await page.getByRole('heading', { name: 'Final standings.', exact: true }).waitFor();
+          await page
+            .locator('.survivor-standing')
+            .filter({ hasText: actor.name })
+            .getByText('Winner', { exact: true })
+            .waitFor();
+          await page.getByRole('button', { name: 'Your run', exact: true }).click();
+          await page.getByText('Winner · no result needed', { exact: true }).waitFor();
+          assert.equal(await page.getByText('Awaiting result', { exact: true }).count(), 0);
+          await page.reload();
+          await page.getByRole('button', { name: 'Your run', exact: true }).click();
+          await page.getByText('Winner · no result needed', { exact: true }).waitFor();
+          await page.screenshot({
+            path: path.join(out, `${name}-${width}-sole-picker.png`),
+            fullPage: true,
+          });
+          // An older payload without a rule version must show v1, never the new promise.
+          legacyRulePayload = true;
+          await page.getByRole('button', { name: /Legacy competition/ }).click();
+          await page.getByText(/^Final results by /).waitFor();
+          await page.getByRole('button', { name: 'How it works', exact: true }).click();
+          await dialog.getByText(/The last survivor wins once the round is final/).waitFor();
+          assert.equal(await dialog.getByText(/wins immediately/).count(), 0);
+          await page.keyboard.press('Escape');
+          legacyRulePayload = false;
           showFunding = true;
           await page.getByRole('button', { name: 'Create competition', exact: true }).click();
           await dialog.getByLabel('Competition name').fill('Creator prize UI');
@@ -497,7 +567,7 @@ async function main() {
           assert.deepEqual(external, []);
           await context.close();
           console.log(
-            `PASS Survivor ${name} ${width}: admin draft/edit/paid guard, publish, free entry, saved pick/reload, private standings, outage/retry, final history and dialog keyboard.`,
+            `PASS Survivor ${name} ${width}: 30-round creation, publish, free entry, saved pick/reload, privacy, outage/retry, early winner and missed-pick winner history, v1 rule fallback, prize recovery and dialog keyboard.`,
           );
         }
       } finally {

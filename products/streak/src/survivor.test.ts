@@ -68,6 +68,7 @@ const result = (outcome: 'home' | 'draw' | 'away'): Record<string, Result> => ({
 });
 {
   const c = competition();
+  c.ruleVersion = 'survivor-free-v1';
   savePick(c, 'one', 0, 'a', now);
   savePick(c, 'two', 0, 'b', now);
   assert.deepEqual(Object.keys(project(c, 'one', now).entries[1].picks), []);
