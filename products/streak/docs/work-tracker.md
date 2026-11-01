@@ -1,5 +1,18 @@
 # Streak work tracker
 
+1 November release completed: `1dc53d8` published Survivor outcomes and readable
+pending loaders, including the previously local Five team/points and Survivor
+season scheduling. `30599d2` then published all ten compact in-page selectors.
+Its exact tree `95be163ef780` passed all 79 required checks in a single run,
+06:06:49.203 to 06:44:51.442 UTC, Node 24.14.0. Commit/push hooks reused the
+successful receipt. Evidence is retained under
+`.quality-artifacts/release-nov1-dropdowns/.quality-artifacts/`: `all.json`,
+`nov1-dropdown-gate.log` and the exact-tree hook receipt. The earlier Windows/WSL
+cache-link failure and repair preflight remain recorded separately. No failed
+check was waived. Physical Zerion Android and hosted wallet/settlement acceptance
+remain open; hosted CI remains paused. Owner report/gallery drafts and acceptance
+checklist changes were excluded. Earlier pending-release entries are historical.
+
 1 November dropdown follow-up: implemented all seven Season selectors and three retained-page filters using in-page menus, compact text and shared glass styling. Browser findings fixed touch selection inside dialogs, WebKit trigger focus, duplicate keyboard clicks and ancestor scrolling. The 16-journey shared matrix and focused Five/Survivor flows pass; the final exact-tree gate also covers the last CSS fallback and legacy typeahead reset. Independent interaction review accepted. Preserve the pending Survivor/loading publication and earlier hosted acceptance commitments. Physical Zerion verification remains separate. Final gate and publication evidence belong to the release commit.
 
 1 November added release scope: fix faded cells in disabled/pending buttons through

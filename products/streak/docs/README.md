@@ -1,5 +1,12 @@
 # Streak documentation
 
+1 November published release: `30599d2` includes the compact dropdowns, pending
+loader contrast, Survivor outcome rules and earlier Five live-team/Survivor season
+scheduling work. All 79 required local checks passed in one complete run, finished
+at 06:44:51 UTC. Physical Zerion and hosted wallet acceptance remain separate;
+hosted CI stays paused. Earlier pending-publication notes below are historical.
+See [status](../status.md) and [work tracker](work-tracker.md).
+
 1 November [in-page dropdowns](delivery/in-page-selects.md): compact glass menus replace native pickers across Season and retained pages. Touch, keyboard, dialog focus and feature values use shared browser coverage. Physical Zerion acceptance remains separate.
 
 1 November [pending-loader visibility](delivery/connected-loading.md): shared

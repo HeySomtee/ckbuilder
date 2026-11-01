@@ -1,5 +1,13 @@
 # Streak status
 
+1 November publication completed: `30599d2` is pushed to GitHub `main`, including
+the earlier `1dc53d8` Survivor/loading release and the Five live-team and
+remaining-gameweek work. All 79 required checks passed in one run from
+06:06:49 to 06:44:51 UTC on Node 24.14.0, for exact tree `95be163ef780`.
+Commit and push reused that successful receipt. Hosted CI remains paused.
+Physical Zerion Android dropdown acceptance and hosted wallet/settlement checks
+remain outstanding. Earlier pending-publication entries below are historical.
+
 1 November dropdown correction: compact in-page controls replace native pickers across Season and retained pages, with shared glass styling and 44px touch targets. The 16-journey Chromium/WebKit matrix and focused Five/Survivor flows pass. The final publication commit records exact-tree release validation; physical Zerion Android acceptance remains separate. See [implementation](docs/delivery/in-page-selects.md).
 
 1 November release scope now also includes readable pending-button loaders across
