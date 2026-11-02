@@ -1,5 +1,10 @@
 # Streak status
 
+2 November product README now describes integrated direct predictions and claims,
+indexed Activity, custodial game rewards and the separate legacy treasury ledger.
+Season is the API-backed app; standalone previews and explicit local game data
+remain synthetic. This documentation correction changes no runtime behavior.
+
 1 November publication: `cf81620` is pushed to GitHub main. Mobile market filters
 use the approved compact panel; desktop retains its existing layout. The splash
 contains only the intro animation, with first-paint recovery hidden and genuine

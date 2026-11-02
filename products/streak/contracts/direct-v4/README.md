@@ -1,6 +1,6 @@
 # Streak direct contract v4
 
-This separate workspace supports one atomic payment for up to eight independent predictions. A transaction can create markets with their first ticket, add tickets to existing v4 markets, or combine both. Historical contracts stay unchanged. No deployment is configured until separately verified and pinned.
+This script workspace implements the Season app's atomic payment for up to eight independent predictions. A transaction can create markets with their first ticket, add tickets to existing v4 markets, or combine both. Historical contracts stay unchanged. Public testnet deployment and application integration are recorded in the [atomic-slip delivery report](../../docs/delivery/atomic-slip-correction.md); artifact hashes are recorded in the [build manifest](build-manifest.json). This does not establish mainnet readiness or completion of hosted acceptance.
 
 ## Arguments and identity
 

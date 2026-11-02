@@ -3,31 +3,56 @@
 > _On-chain multi-league football prediction-market terminal,
 > settled on the **Nervos CKB Pudge testnet**._
 
-Streak is a football prediction market with a vivid dark interface and a live
-Matchday centre. Anyone can open a market on a football fixture, anyone can take
-any side, and every market settles automatically against the live oracle feed
-at full-time. The original daily-pick streak game is preserved as one feature
-on top of the new market engine.
+Streak is a football prediction application on **CKB Pudge testnet**, available at
+[streakpitch.com](https://streakpitch.com). The React Season app at `/season/`
+integrates wallet-signed direct predictions, combined-slip payments, settlement,
+refunds and independently collectible returns. It also includes Matchday,
+Streak Five fantasy football and Streak Survivor.
 
-**Approved rebuild, 15 October 2026:** Start with the [documentation map](docs/README.md),
-[agent contract](AGENTS.md), [current status](status.md), and
-[quality gate](docs/delivery/quality.md). The current application uses a custodial
-treasury ledger. Direct market-cell staking remains separate Week 20 contract
-work until explicitly integrated; wallet signing alone does not change custody.
-The approved Season preview is an interactive simulation.
+## Current architecture and custody
 
-Before a major change or commit, run `npm run quality:major` from the repository
-root after the documented test setup. `npm test` in this directory runs the
-offline suite only. Real disposable PostgreSQL, browser and Rust checks are
-required by the full gate and cannot silently skip. Install local hooks once
-with `npm run hooks:install` from the repository root.
+Updated 2 November 2026. Start with the [documentation map](docs/README.md),
+[current status](status.md), [architecture](docs/architecture/overview.md) and
+[agent contract](AGENTS.md).
 
-**Week 17:** [Report and desktop/mobile screenshots](../../reports/week-17.md).
+- **Direct predictions:** funds are held in CKB cells governed by the versioned
+  market and claim scripts. A slip can fund up to eight independent predictions
+  in one transaction, including eligible market creation sponsored by Streak.
+  Settlement creates funded claim cells; collection pays the entitled wallet.
+  This is integrated application functionality, not separate future lab work.
+- **Activity:** PostgreSQL holds an event-driven read model for fast history.
+  It does not authorize payouts. Collection still validates live cells and the
+  recipient against the on-chain rules.
+- **Five and Survivor:** entries, scores and progression are application/database
+  features. Sponsorships, creator-funded prizes, refunds and rewards use a separate
+  **custodial testnet rewards wallet**, not the direct prediction scripts.
+- **Legacy accounts:** the retained account application has a custodial treasury
+  ledger for earlier deposits, virtual bets and withdrawals. Those liabilities
+  are separate from Season direct positions.
+- **Preview and local testing:** standalone design previews use synthetic data.
+  The actual Season app is API-backed. Five/Survivor dummy data is an explicit
+  local environment mode, not the default or a public mode switch.
 
-**Week 18:** [Rust contract prototype, deadline tests and evidence](../../reports/week-18.md).
-The prototype runs on an isolated local devnet and is not the app's treasury.
+Implementation references: [v4 scripts](contracts/direct-v4/README.md),
+[combined-slip payments](docs/delivery/atomic-slip-correction.md),
+[indexed Activity](docs/delivery/event-driven-activity.md),
+[Five automation](docs/delivery/five-automatic-gameweeks.md) and
+[Survivor creator prizes](docs/delivery/survivor-creator-prizes.md).
+The historical [Week 20 lab](../../src/week20/contract-lab) remains independent.
+[Early design notes](CONTRACT_DESIGN_NOTES.md) describe earlier research, not
+the current implementation status.
 
-**Future smart contracts:** [Design requirements and Solidity-pattern research](CONTRACT_DESIGN_NOTES.md).
+The football result publisher remains trusted. Current v4 markets have four
+deposit shards with eight position records each; integration does not establish
+unlimited concurrency, mainnet readiness or completion of hosted acceptance.
+Use the dated [status](status.md) and delivery records for evidence boundaries.
+
+For changes, follow the [scoped quality gates](docs/delivery/quality.md): docs use
+formatting/static policies, CSS adds a frontend build, and major runtime changes
+require `npm run quality:major`. Install local hooks from the repository root
+with `npm run hooks:install`. Hosted CI remains paused.
+
+## Matchday
 
 Open **Matchday** in the main navigation to follow scores, goals, cards,
 substitutions, confirmed lineups and match statistics. Each match keeps your
@@ -67,22 +92,33 @@ The on-chain design is modelled after two CKB references:
 ```bash
 cd products/streak
 npm install
+npm run build
 npm start
 ```
 
-After `npm run build`, open the new landing page at <http://localhost:4100> and the API-backed matchweek screen at <http://localhost:4100/season/>. The existing account application remains at `/index.html`; previously shared hash links still work. See the [Season milestone](docs/delivery/season-milestone.md) for setup, supported wallets and rollout limits.
+Open the landing page at <http://localhost:4100> and the API-backed Season app at <http://localhost:4100/season/>. The legacy account application remains at `/index.html`; previously shared hash links still work. See the [direct integration setup](docs/delivery/direct-testnet-milestone.md) and later [wallet compatibility notes](docs/delivery/wallet-compatibility.md) for configuration and supported flows.
 
 For a compiled server, run `npm run build` followed by `npm run serve`.
 See [PERFORMANCE.md](PERFORMANCE.md) for the request architecture, measurements,
 cache freshness, and withdrawal recovery behavior.
 
-**Connect Wallet** → pick a CKB wallet (MetaMask, UniSat, OKX…) and sign
-the login challenge. Your wallet is your account — no email, no password.
-Optionally set a display name for the leaderboard. Fund your wallet from the
-[Nervos Pudge faucet](https://faucet.nervos.org/), then **Deposit** (you sign
-the transfer yourself) to credit your platform escrow and start betting.
+In Season, connect a supported wallet and sign the login challenge. Fund the
+wallet with testnet CKB from the [Pudge faucet](https://faucet.nervos.org/), choose
+fixture outcomes, then review the slip's stake, refundable storage and network
+fee before signing. **You do not deposit into the legacy platform balance to
+fund a direct prediction.** After settlement, collect available returns from
+Activity using your wallet.
 
-Independently verify any settled market:
+The API alone is not the complete payment system. Direct market configuration,
+the separate sponsor and lifecycle operator, and the Activity relay must also
+be configured. See the [direct integration setup](docs/delivery/direct-testnet-milestone.md)
+and [combined-slip delivery](docs/delivery/atomic-slip-correction.md). Game rewards
+have their own worker and funding configuration.
+
+The following receipt command applies to the **legacy receipt system**, not
+direct-position claim verification:
+
+Verify a legacy settlement receipt:
 
 ```bash
 npm run verify -- m-wc-6            # against local http://localhost:4100
@@ -123,14 +159,14 @@ API to receive direct messages. POST `/api/me/notify` with JSON `{ "telegramChat
 Streak's state used to live as a **single JSON blob** — one `jsonb` column in one
 row (`streak_state.data`), which was itself just the old `data/db.json` moved
 behind an HTTP API. That shape made the unit of both reading and writing the
-*entire ledger*, so cost scaled with total history rather than with what a
+_entire ledger_, so cost scaled with total history rather than with what a
 request actually needed:
 
-| | before (single row) | after (tables) |
-|---|---|---|
-| a read (any endpoint) | ~3.1 MB | ~1.6 MB, cached; ~20 ms warm |
-| a write (e.g. placing a bet) | ~3.1 MB upsert | only the changed rows |
-| fetching one receipt | ~3.1 MB | ~1 KB by primary key |
+|                              | before (single row) | after (tables)               |
+| ---------------------------- | ------------------- | ---------------------------- |
+| a read (any endpoint)        | ~3.1 MB             | ~1.6 MB, cached; ~20 ms warm |
+| a write (e.g. placing a bet) | ~3.1 MB upsert      | only the changed rows        |
+| fetching one receipt         | ~3.1 MB             | ~1 KB by primary key         |
 
 The blob was 3.1 MB and growing by one market plus one receipt per settled
 fixture. Roughly half of it — 1.5 MB of settlement receipts — was archive data
@@ -206,7 +242,6 @@ IPv6-only.
 Regression checks live in `src/store_pg.test.ts` (`npm run test:store:pg`) and
 skip cleanly when no database is reachable.
 
-
 ## Legacy: Supabase-backed persistence (single JSON row)
 
 Superseded by the relational store above; kept for reference and as a fallback
@@ -268,8 +303,11 @@ APP_PUBLIC_URL=https://your-public-app-url
 `APP_PUBLIC_URL` must be reachable by Telegram (public HTTPS). On boot, Streak
 will attempt to call Telegram `setWebhook` automatically.
 
+## Legacy ledger market engine (parimutuel)
 
-## How the market engine works (parimutuel)
+This section describes the retained ledger implementation. Season direct
+predictions use the versioned scripts and funded claims linked above; they do
+not credit a virtual escrow balance at resolution.
 
 ```
 implied_prob[o]  = pools[o] / total_pool
@@ -293,12 +331,12 @@ A market **voids** (and refunds every bet) if no one took the winning side.
 
 ### Market lifecycle
 
-| Status     | Trigger                                                        |
-| ---------- | -------------------------------------------------------------- |
-| `open`     | Created (on first bet, or auto-seeded as `creator="system"`)   |
-| `closed`   | Kickoff reached — bets rejected, awaiting result               |
-| `resolved` | Match `final` from oracle → payouts credited to winner escrow  |
-| `void`     | No bet on the winning side, or no result available             |
+| Status     | Trigger                                                       |
+| ---------- | ------------------------------------------------------------- |
+| `open`     | Created (on first bet, or auto-seeded as `creator="system"`)  |
+| `closed`   | Kickoff reached — bets rejected, awaiting result              |
+| `resolved` | Match `final` from oracle → payouts credited to winner escrow |
+| `void`     | No bet on the winning side, or no result available            |
 
 The first user to bet on an auto-seeded market becomes its **creator** and
 earns the 1% creator fee at resolution. If no human creator exists, the fee
@@ -323,16 +361,16 @@ floor + fee headroom); minimum single bet against escrow is **10 CKB**.
 
 ---
 
-## The streak game (a layer on top)
+## Legacy daily streak game
 
 A **streak pick** is just a regular bet with `isStreakPick: true`. You can lock
 exactly one tagged bet per UTC day.
 
-| Outcome   | Effect on streak                                                |
-| --------- | --------------------------------------------------------------- |
-| ✅ Won    | `streak += 1` (best high-water mark updates)                    |
-| ❌ Lost   | streak enters **failed** state, frozen at its value             |
-| ⚪ Void   | streak unchanged, today's pick slot is freed                    |
+| Outcome | Effect on streak                                    |
+| ------- | --------------------------------------------------- |
+| ✅ Won  | `streak += 1` (best high-water mark updates)        |
+| ❌ Lost | streak enters **failed** state, frozen at its value |
+| ⚪ Void | streak unchanged, today's pick slot is freed        |
 
 A failed streak must be resolved before the next pick:
 
@@ -342,38 +380,32 @@ A failed streak must be resolved before the next pick:
 
 ---
 
-## Architecture
+## Application architecture
 
-```
-Browser (vanilla SPA)                       Node http server (no framework)
-  index.html / styles.css                     src/server.ts      — routing, static, sessions
-  app.js   — router, views, charts    ⇄ JSON  src/markets.ts     — parimutuel engine
-                                              src/game.ts        — match sync, streak revival
-                                              src/wallet.ts      — deposit / withdraw
-                                              src/settlement.ts  — on-chain receipt cells (publish/verify/merkle)
-                                              src/matches.ts     — applyResult (oracle ↔ simulator)
-                                              src/livescores.ts  — worldcup26.ir client (oracle role)
-                                              src/wcdata.ts      — real WC2026 fixture loader
-                                              src/auth.ts        — wallet-login challenges + sessions
-                                              src/chain.ts       — CCC: wallets, balances, transfers
-                                              src/store.ts       — atomic JSON store (data/db.json)
-                                                      │
-                                              CKB Pudge testnet (CCC public RPC)
-```
+| Area                 | Implementation and responsibility                                                                                                         |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Season frontend      | React, TypeScript and Vite in `web/src`; built into `public/season`. Wallet connection, signing, payment recovery and claims.             |
+| API                  | `src/server.ts` and feature modules; authentication, fixture catalogue, game operations and saved Activity reads.                         |
+| Direct payments      | `src/modules/direct` and `web/src/features/direct`; transaction building, sponsor coordination, signed recovery and lifecycle operations. |
+| On-chain enforcement | Versioned Rust scripts in `contracts/direct-v4`; market transitions, funds, refunds and claims. Earlier versions retain their own rules.  |
+| Activity index       | `src/modules/activity`; durable event delivery and PostgreSQL projections. Live-chain validation remains spending authority.              |
+| Games                | `src/modules/five` and `src/modules/survivor`; PostgreSQL entries and progression, with separate custodial rewards delivery.              |
+| Legacy application   | Vanilla `public/app.js`, ledger/treasury and receipt modules; retained separately from direct positions.                                  |
 
-- **No build step to run** — `ts-node` executes the TypeScript directly.
-- **Local persistence by default** — state lives in `data/db.json` (git-ignored),
-  with optional Supabase persistence. Football feeds and chain operations use
-  their configured external services.
-- **Small browser runtime** — `public/runtime.js` owns bounded request caching,
-  deduplication, invalidation and completion-based polling. The wallet connector
-  loads only on connection intent; no wallet SDK or remote fonts block startup.
-- **Inline SVG charts** — no chart library; the implied-probability lines and
-  sparklines are rendered as `<svg><polyline>` directly in `app.js`.
+The Season frontend requires a build. `ts-node` can run the API source, but does
+not compile frontend assets. Local JSON storage supports legacy development;
+it is not a substitute for PostgreSQL-backed game and Activity features. See
+[architecture and migration](docs/architecture/overview.md) for module boundaries.
+
+## Season interface
+
+Season uses a dark responsive layout with a shared prediction slip, wallet
+controls, payment recovery, linked-cell loading animations and dedicated game
+workspaces. The following design description belongs to the older account UI.
 
 ---
 
-## UI / design language
+## Legacy UI / design language
 
 Warm parchment, oxblood ink, forest green and muted blue. Serif headings and
 tabular figures sit alongside numbered pages, fine ruled dividers, a daily
@@ -398,7 +430,10 @@ unauthenticated `#/receipt/:marketId` page for sharing individual results.
 
 ---
 
-## On-chain settlement receipts
+## Legacy on-chain settlement receipts
+
+These receipt cells attest to legacy ledger settlement. Direct predictions use
+script-enforced market transitions and funded claim cells instead.
 
 Every resolved market publishes a **receipt cell** on Pudge so anyone — with no
 account, no server access, no trust in this codebase — can verify a settlement
@@ -494,12 +529,12 @@ open-source [rezarahiminia/worldcup2026](https://github.com/rezarahiminia/worldc
 dataset (ISC). To enable **live in-play scores and final results** (the oracle
 that resolves markets), set either:
 
-| Env                                  | Notes                                                                 |
-| ------------------------------------ | --------------------------------------------------------------------- |
-| `WC_API_TOKEN`                       | Paste an existing JWT. Skips bootstrap.                               |
-| `WC_API_EMAIL` + `WC_API_PASSWORD`   | Server auto-registers, logs in, caches the JWT in `data/db.json`.     |
-| `WC_API_NAME`                        | Display name used during auto-registration (default `Streak Terminal`).|
-| `WC_API_BASE`                        | Override the API base URL (default `https://worldcup26.ir`).          |
+| Env                                | Notes                                                                   |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| `WC_API_TOKEN`                     | Paste an existing JWT. Skips bootstrap.                                 |
+| `WC_API_EMAIL` + `WC_API_PASSWORD` | Server auto-registers, logs in, caches the JWT in `data/db.json`.       |
+| `WC_API_NAME`                      | Display name used during auto-registration (default `Streak Terminal`). |
+| `WC_API_BASE`                      | Override the API base URL (default `https://worldcup26.ir`).            |
 
 With nothing configured the game falls back to a deterministic simulated result
 keyed by match id (`src/matches.ts`), so markets still settle consistently.
@@ -518,11 +553,11 @@ Fixtures + results come through a single seam, `MatchDataProvider`
 ([src/providers/types.ts](src/providers/types.ts)). Pick one with
 `MATCH_PROVIDER`; nothing in the engine changes when you swap feeds.
 
-| `MATCH_PROVIDER` | Feed                                                                 |
-| ---------------- | -------------------------------------------------------------------- |
-| `football` (default when `API_SPORTS_KEY` is set) | Real API-SPORTS fixtures and confirmed results across configurable leagues. |
-| `worldcup` | Real WC2026 fixtures + the worldcup26.ir oracle above.           |
-| `dummy`          | A self-contained simulator: 20 Premier League clubs, round-robin gameweeks, matches that kick off / run / finish on a real clock. |
+| `MATCH_PROVIDER`                                  | Feed                                                                                                                              |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `football` (default when `API_SPORTS_KEY` is set) | Real API-SPORTS fixtures and confirmed results across configurable leagues.                                                       |
+| `worldcup`                                        | Real WC2026 fixtures + the worldcup26.ir oracle above.                                                                            |
+| `dummy`                                           | A self-contained simulator: 20 Premier League clubs, round-robin gameweeks, matches that kick off / run / finish on a real clock. |
 
 The real football provider loads a rolling fixture window for the Premier
 League, La Liga, Bundesliga, Serie A, Ligue 1 and Champions League by default.
@@ -590,7 +625,11 @@ and `DUMMY_AHEAD_SLOTS` (48).
 
 ---
 
-## API surface
+## Legacy and shared API reference
+
+This list predates the integrated direct-payment, Activity, Five and Survivor
+APIs. It is not the complete Season API. In particular, ledger bet/deposit/withdraw
+routes below do not describe the direct slip payment flow.
 
 ```
 POST /api/auth/nonce             → { address }     login challenge to sign
@@ -624,60 +663,67 @@ GET  /api/receipts/:id/proof     → merkle inclusion proof(s) for ?bet= or ?min
 
 ---
 
-## Security model
+## Security and custody boundaries
 
-Login and on-chain actions are **non-custodial**. Users connect their own CKB
-wallet through [CCC](https://docs.ckbccc.com/)'s multi-wallet connector and sign
-a login challenge; the server verifies the signature with
-`ccc.Signer.verifyMessage` and keys the account by the verified wallet
-identity. The server never holds user keys.
+Wallet connection and sign-in establish identity; they do not determine who
+holds funds. Users retain their wallet keys and approve wallet signatures.
 
-Deposits and streak renewals are transfers the **user signs in their own
-wallet**; the server confirms the on-chain tx (committed, paid to the treasury,
-from the user's address) before crediting escrow or reviving a streak.
-Withdrawals are the only treasury-signed leg, paying out to the user's
-connected address.
+- Direct prediction funds and funded claims are governed by CKB lock/type
+  scripts. The configured oracle/result publisher remains trusted for football
+  outcomes. Sponsor and lifecycle services coordinate transactions; a database
+  balance or index entry cannot override script-enforced payout rules.
+- Five/Survivor reward funding is custodial. The dedicated rewards wallet holds
+  contributions and signs prize/refund payouts under the application's rules.
+- Legacy deposits transfer funds to the treasury before a database balance is
+  credited. Legacy withdrawals require a treasury-signed transaction. A user
+  signing that initial deposit does not make the subsequent ledger non-custodial.
 
-The one server-held key is the **treasury** wallet (`TREASURY_PRIVATE_KEY`),
-used to pay out withdrawals and publish settlement receipts. On testnet its
-coins have no monetary value; on mainnet you would run the treasury behind
-appropriate key management.
+Server-side signing roles therefore extend beyond the legacy
+`TREASURY_PRIVATE_KEY`. Direct sponsor/operator and game rewards credentials
+have separate configuration and responsibilities. Never put signing keys in
+frontend assets or use production credentials in synthetic tests.
 
----
+See [direct integration boundaries](docs/delivery/direct-testnet-milestone.md),
+[sponsorship auctions](docs/delivery/five-sponsor-auction.md) and
+[Survivor funding](docs/delivery/survivor-creator-prizes.md). Current operation is
+on testnet; these integrations are not a mainnet audit or readiness claim.
 
 ## Configuration
 
-All economic constants live in [src/config.ts](src/config.ts):
+The following **legacy ledger** constants live in [src/config.ts](src/config.ts).
+They do not define all direct-script or game economics. Direct parameters are
+versioned with the scripts and registry; game terms are stored per competition.
 
-| Constant            | Default | Purpose                                          |
-| ------------------- | ------- | ------------------------------------------------ |
-| `MIN_BET_CKB`       | 10      | Smallest single bet against escrow               |
-| `MAX_BET_CKB`       | 100000  | Sanity cap on a single bet                       |
-| `MIN_ONCHAIN_CKB`   | 100     | Cell-floor minimum for on-chain deposit/withdraw |
-| `PROTOCOL_FEE_BPS`  | 200     | 2.00% of loser pool → protocol treasury          |
-| `CREATOR_FEE_BPS`   | 100     | 1.00% of loser pool → market creator             |
-| `RENEW_FEE_CKB`     | 63      | Streak revival fee (real on-chain)               |
-| `CREW_REVIVE_REBATE_CKB` | 20 | Escrow rebate per crew-mate who co-picked the revived match (cap 40) |
-| `SETTLE_INTERVAL_MS`| 20000   | Background slate-refresh / settlement cadence    |
-| `MARKET_HISTORY_CAP`| 480     | Max implied-prob ticks retained per market       |
+| Constant                 | Default | Purpose                                                              |
+| ------------------------ | ------- | -------------------------------------------------------------------- |
+| `MIN_BET_CKB`            | 10      | Smallest single bet against escrow                                   |
+| `MAX_BET_CKB`            | 100000  | Sanity cap on a single bet                                           |
+| `MIN_ONCHAIN_CKB`        | 100     | Cell-floor minimum for on-chain deposit/withdraw                     |
+| `PROTOCOL_FEE_BPS`       | 200     | 2.00% of loser pool → protocol treasury                              |
+| `CREATOR_FEE_BPS`        | 100     | 1.00% of loser pool → market creator                                 |
+| `RENEW_FEE_CKB`          | 63      | Streak revival fee (real on-chain)                                   |
+| `CREW_REVIVE_REBATE_CKB` | 20      | Escrow rebate per crew-mate who co-picked the revived match (cap 40) |
+| `SETTLE_INTERVAL_MS`     | 20000   | Background slate-refresh / settlement cadence                        |
+| `MARKET_HISTORY_CAP`     | 480     | Max implied-prob ticks retained per market                           |
 
-Environment variables (all optional):
+Legacy/shared environment reference (not a complete deployment configuration).
+Enabled features require their documented provider, database and signing settings:
 
-| Var    | Default | Purpose   |
-| ------ | ------- | --------- |
-| `PORT` | `4100`  | HTTP port |
-| `MATCH_PROVIDER` | `football` when an API key exists, otherwise `worldcup` | Active fixture/result feed (`football`, `worldcup` or `dummy`). |
-| `API_SPORTS_KEY` | — | Server-only API-SPORTS credential. A paid football plan is required for the current season. |
-| `FOOTBALL_LEAGUE_IDS` | `39,140,78,135,61,2` | API-Football competition ids to load. |
-| `FOOTBALL_SEASON` | inferred | Season starting year (`2026` means 2026/27). |
-| `FOOTBALL_FIXTURE_PAST_DAYS` / `FOOTBALL_FIXTURE_FUTURE_DAYS` | `2` / `21` | Rolling schedule/recovery window. |
-| `FOOTBALL_LIVE_POLL_SECONDS` | `20` | Live and final-confirmation polling cadence (minimum 15 seconds). |
-| `FOOTBALL_FINAL_CONFIRMATIONS` | `2` | Matching terminal snapshots required before settlement. |
-| `FOOTBALL_SCHEDULE_REFRESH_MINUTES` | `360` | Long-lived schedule cache TTL. |
-| `FOOTBALL_INSIGHT_PREFETCH_MINUTES` | `90` | Begin warming analytics this many minutes before kickoff. |
-| `FOOTBALL_INSIGHT_PREFETCH_BATCH` | `4` | Maximum stale fixtures warmed during one settlement pass. |
-| `DUMMY_STAGGER_MIN` / `DUMMY_MATCH_MINUTES` / `DUMMY_PAST_SLOTS` / `DUMMY_AHEAD_SLOTS` | `20` / `96` / `6` / `48` | Shape the rolling simulated schedule (dummy provider). |
-| `WC_API_TOKEN` / `WC_API_EMAIL` + `WC_API_PASSWORD` | — | Enable live oracle. |
-| `WC_API_BASE` | `https://worldcup26.ir` | Override oracle base URL. |
-| `WC_API_NAME` | `Streak Terminal` | Display name during auto-registration. |
-| `TREASURY_PRIVATE_KEY` | *auto-generated* | Reuse a funded Pudge wallet as the treasury (needed to publish on-chain settlement receipts). |
+| Var                                                                                    | Default                                                 | Purpose                                                                                       |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `PORT`                                                                                 | `4100`                                                  | HTTP port                                                                                     |
+| `MATCH_PROVIDER`                                                                       | `football` when an API key exists, otherwise `worldcup` | Active fixture/result feed (`football`, `worldcup` or `dummy`).                               |
+| `API_SPORTS_KEY`                                                                       | —                                                       | Server-only API-SPORTS credential. A paid football plan is required for the current season.   |
+| `FOOTBALL_LEAGUE_IDS`                                                                  | `39,140,78,135,61,2`                                    | API-Football competition ids to load.                                                         |
+| `FOOTBALL_SEASON`                                                                      | inferred                                                | Season starting year (`2026` means 2026/27).                                                  |
+| `FOOTBALL_FIXTURE_PAST_DAYS` / `FOOTBALL_FIXTURE_FUTURE_DAYS`                          | `2` / `21`                                              | Rolling schedule/recovery window.                                                             |
+| `FOOTBALL_LIVE_POLL_SECONDS`                                                           | `20`                                                    | Live and final-confirmation polling cadence (minimum 15 seconds).                             |
+| `FOOTBALL_FINAL_CONFIRMATIONS`                                                         | `2`                                                     | Matching terminal snapshots required before settlement.                                       |
+| `FOOTBALL_SCHEDULE_REFRESH_MINUTES`                                                    | `360`                                                   | Long-lived schedule cache TTL.                                                                |
+| `FOOTBALL_INSIGHT_PREFETCH_MINUTES`                                                    | `90`                                                    | Begin warming analytics this many minutes before kickoff.                                     |
+| `FOOTBALL_INSIGHT_PREFETCH_BATCH`                                                      | `4`                                                     | Maximum stale fixtures warmed during one settlement pass.                                     |
+| `DUMMY_STAGGER_MIN` / `DUMMY_MATCH_MINUTES` / `DUMMY_PAST_SLOTS` / `DUMMY_AHEAD_SLOTS` | `20` / `96` / `6` / `48`                                | Shape the rolling simulated schedule (dummy provider).                                        |
+| `WC_API_TOKEN` / `WC_API_EMAIL` + `WC_API_PASSWORD`                                    | —                                                       | Enable live oracle.                                                                           |
+| `WC_API_BASE`                                                                          | `https://worldcup26.ir`                                 | Override oracle base URL.                                                                     |
+| `WC_API_NAME`                                                                          | `Streak Terminal`                                       | Display name during auto-registration.                                                        |
+| `TREASURY_PRIVATE_KEY`                                                                 | _auto-generated_                                        | Reuse a funded Pudge wallet as the treasury (needed to publish on-chain settlement receipts). |

@@ -1,5 +1,18 @@
 # Streak work tracker
 
+2 November README architecture correction: replace the outdated product overview
+with the integrated Season direct-payment lifecycle, script-enforced claims and
+event-driven Activity boundary. Distinguish custodial Five/Survivor rewards and
+retained legacy ledger flows. Correct setup, architecture and security wording;
+label historical receipt, API and economic sections rather than erasing them.
+Preserve earlier local changes. This is documentation only, with no new runtime,
+deployment or capacity claim. Also corrected the v4 script README's obsolete
+deployment disclaimer using its existing delivery report and manifest. Changed-file
+formatting and repository static policies passed. No runtime tests were needed.
+Owner requested publication without tests. Publish only this README correction
+and its documentation entries, preserving unrelated local work. Prediction-placement
+concurrency remains next.
+
 1 November owner requested an immediate Week 23 terminology correction and push
 without checks. The report now distinguishes contention on one shared mutable
 tracking cell from reuse of shared script code. This is prose only; preserve

@@ -1,5 +1,10 @@
 # Streak documentation
 
+2 November [product README](../README.md) now distinguishes integrated Season
+direct predictions from custodial game rewards, the retained legacy ledger and
+synthetic previews. Setup, architecture and security descriptions follow the
+current implementation; historical ledger references are explicitly labelled.
+
 1 November [mobile filters and quiet startup](delivery/mobile-markets-startup.md)
 are published in `cf81620`. Desktop remains unchanged. All 79 required local checks
 passed; hosted deployment remains unverified. Earlier local-only entries are historical.
