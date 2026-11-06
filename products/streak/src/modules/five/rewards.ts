@@ -4,6 +4,13 @@ import { assertGameScope } from '../games-test/scope';
 import { FiveError, type Round } from './domain';
 import { CONFIRMATIONS } from './funding';
 import { isAuction } from './auction';
+import { projectSponsorRefund, refundableSponsors, type RefundLedgerRow } from './refunds';
+import { enqueueRewardWork, rewardSchemaGuard, rewardWorkSchema } from './work-queue';
+import {
+  notifyRewardsWorker,
+  workerHealthAvailable,
+  workerHealthConfigured,
+} from '../../infrastructure/worker-health';
 
 export interface RewardAccount {
   availableShannons: string;
@@ -31,7 +38,7 @@ export class FiveRewards {
     this.ready ??= assertGameScope(this.pool, this.testing)
       .then(() =>
         this.pool.query(
-          `
+          `${rewardSchemaGuard}
       CREATE TABLE IF NOT EXISTS streak_five_credits (
         id text PRIMARY KEY, wallet text NOT NULL, amount numeric(30,0) NOT NULL CHECK(amount>0),
         payout_id text);
@@ -41,8 +48,11 @@ export class FiveRewards {
         created_at timestamptz NOT NULL DEFAULT now());
       CREATE TABLE IF NOT EXISTS streak_five_claim_requests (wallet text PRIMARY KEY);
       ALTER TABLE streak_five_claim_requests ADD COLUMN IF NOT EXISTS refund_only boolean NOT NULL DEFAULT false;
+      ALTER TABLE streak_five_claim_requests ADD COLUMN IF NOT EXISTS next_attempt_at timestamptz NOT NULL DEFAULT clock_timestamp();
+      ALTER TABLE streak_five_claim_requests ADD COLUMN IF NOT EXISTS last_failure text NOT NULL DEFAULT '';
       CREATE TABLE IF NOT EXISTS streak_five_reward_runtime (
         id integer PRIMARY KEY CHECK(id=1), address text NOT NULL, heartbeat timestamptz NOT NULL);
+      ${rewardWorkSchema}
     `,
         ),
       )
@@ -54,6 +64,8 @@ export class FiveRewards {
     return this.ready;
   }
   async active() {
+    if (workerHealthConfigured())
+      return workerHealthAvailable(this.testing ? 'testRewards' : 'rewards');
     await this.init();
     const r = await this.pool.query(
       "SELECT 1 FROM streak_five_reward_runtime WHERE id=1 AND address=$1 AND heartbeat>clock_timestamp()-interval '90 seconds'",
@@ -69,6 +81,13 @@ export class FiveRewards {
       [this.address],
     );
   }
+  async pendingWork(): Promise<boolean> {
+    await this.init();
+    const result = await this.pool.query<{ pending: boolean }>(`SELECT
+      EXISTS(SELECT 1 FROM streak_five_claim_requests) OR
+      EXISTS(SELECT 1 FROM streak_five_payouts WHERE status<>'confirmed') AS pending`);
+    return result.rows[0].pending;
+  }
   async credit(round: Round, automatic = false) {
     const auction = isAuction(round);
     if (round.state !== 'final' && round.state !== 'cancelled' && !(auction && round.auction))
@@ -80,13 +99,7 @@ export class FiveRewards {
         ? [{ id: `${round.id}:prize:${e.publicId}`, wallet: e.wallet, amount }]
         : [];
     });
-    const returnAll = round.state === 'cancelled' || (round.state === 'final' && !rows.length);
-    const refunds = round.sponsors.filter(
-      (s) =>
-        s.funding === 'confirmed' &&
-        (returnAll ||
-          (auction && !!round.auction && !round.auction.winnerSponsorIds.includes(s.id))),
-    );
+    const refunds = refundableSponsors(round);
     for (const s of refunds)
       rows.push({ id: `${round.id}:refund:${s.id}`, wallet: s.wallet, amount: s.amountShannons });
     const connection = await this.pool.connect();
@@ -94,16 +107,14 @@ export class FiveRewards {
       await connection.query('BEGIN');
       // Queue automatic payouts only when introducing a credit. Repeated delivery of
       // immutable awards must not requeue paid/dust wallets ahead of other winners.
-      const existing = automatic
-        ? await connection.query<{ id: string }>(
-            'SELECT id FROM streak_five_credits WHERE id=ANY($1::text[])',
-            [rows.map((row) => row.id)],
-          )
-        : null;
-      const savedIds = new Set(existing?.rows.map((row) => row.id));
+      const existing = await connection.query<{ id: string; payout_id: string | null }>(
+        'SELECT id,payout_id FROM streak_five_credits WHERE id=ANY($1::text[])',
+        [rows.map((row) => row.id)],
+      );
+      const saved = new Map(existing.rows.map((row) => [row.id, row]));
       if (automatic)
         for (const wallet of [
-          ...new Set(rows.filter((row) => !savedIds.has(row.id)).map((row) => row.wallet)),
+          ...new Set(rows.filter((row) => !saved.has(row.id)).map((row) => row.wallet)),
         ].sort())
           await connection.query(
             'INSERT INTO streak_five_claim_requests(wallet,refund_only) VALUES($1,false) ON CONFLICT(wallet) DO UPDATE SET refund_only=false',
@@ -111,8 +122,17 @@ export class FiveRewards {
           );
       // Serialize refund producers with the consumer before inserting credits.
       // A producer racing deletion must leave a fresh queued request behind.
+      const refundWallets = auction
+        ? [
+            ...new Set(
+              refunds
+                .filter((s) => !saved.get(`${round.id}:refund:${s.id}`)?.payout_id)
+                .map((s) => s.wallet),
+            ),
+          ].sort()
+        : [];
       if (auction)
-        for (const wallet of [...new Set(refunds.map((s) => s.wallet))].sort())
+        for (const wallet of refundWallets)
           await connection.query(
             'INSERT INTO streak_five_claim_requests(wallet,refund_only) VALUES($1,true) ON CONFLICT(wallet) DO UPDATE SET refund_only=streak_five_claim_requests.refund_only',
             [wallet],
@@ -129,6 +149,17 @@ export class FiveRewards {
         if (old.rows[0].wallet !== row.wallet || old.rows[0].amount !== row.amount)
           throw Error('Frozen Five credit changed');
       }
+      // A consumer may have assigned the old credit while the producer waited
+      // for its request lock. Never leave a paid refund queued indefinitely.
+      if (refundWallets.length)
+        await connection.query(
+          `DELETE FROM streak_five_claim_requests q WHERE q.wallet=ANY($1::text[]) AND q.refund_only
+          AND NOT EXISTS(SELECT 1 FROM streak_five_credits c WHERE c.wallet=q.wallet
+            AND c.payout_id IS NULL AND c.id LIKE '%:refund:%')`,
+          [refundWallets],
+        );
+      if (automatic || refundWallets.length)
+        await enqueueRewardWork(connection, 'payout', 'wallet');
       await connection.query('COMMIT');
     } catch (e) {
       await connection.query('ROLLBACK');
@@ -184,6 +215,32 @@ export class FiveRewards {
       ]),
     );
   }
+  async sponsorRefund(round: Round, wallet: string, workerAvailable: boolean) {
+    const sponsors = refundableSponsors(round).filter((sponsor) => sponsor.wallet === wallet);
+    if (!sponsors.length) return null;
+    await this.init();
+    const [ledger, request] = await Promise.all([
+      this.pool.query<RefundLedgerRow>(
+        `SELECT c.id,c.amount::text,c.payout_id,p.wallet AS payout_wallet,p.status,p.tx_hash,p.created_at
+        FROM streak_five_credits c LEFT JOIN streak_five_payouts p ON p.id=c.payout_id
+        WHERE c.wallet=$1 AND c.id=ANY($2::text[])`,
+        [wallet, sponsors.map((sponsor) => `${round.id}:refund:${sponsor.id}`)],
+      ),
+      this.pool.query<{ last_failure: string }>(
+        'SELECT last_failure FROM streak_five_claim_requests WHERE wallet=$1',
+        [wallet],
+      ),
+    ]);
+    return projectSponsorRefund(
+      round,
+      wallet,
+      ledger.rows,
+      request.rows.length > 0,
+      !!request.rows[0]?.last_failure,
+      workerAvailable,
+      Date.now(),
+    );
+  }
   async request(wallet: string) {
     const a = await this.account(wallet);
     if (BigInt(a.pendingShannons) > 0n) return;
@@ -197,10 +254,22 @@ export class FiveRewards {
         'Rewards delivery is temporarily unavailable. Your balance remains saved.',
         503,
       );
-    await this.pool.query(
-      'INSERT INTO streak_five_claim_requests(wallet,refund_only) VALUES($1,false) ON CONFLICT(wallet) DO UPDATE SET refund_only=false',
-      [wallet],
-    );
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'INSERT INTO streak_five_claim_requests(wallet,refund_only) VALUES($1,false) ON CONFLICT(wallet) DO UPDATE SET refund_only=false',
+        [wallet],
+      );
+      await enqueueRewardWork(client, 'payout', 'wallet');
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    void notifyRewardsWorker(this.testing);
   }
   /** One dedicated worker/wallet; an advisory lock also serializes accidental duplicate processes. */
   async tick(signer: ccc.Signer, verifyBacking: (roundId: string) => Promise<void>) {
@@ -251,10 +320,12 @@ export class FiveRewards {
         }
       }
       const requested = await connection.query<{ wallet: string; refund_only: boolean }>(
-        'SELECT wallet,refund_only FROM streak_five_claim_requests ORDER BY wallet LIMIT 1',
+        `SELECT wallet,refund_only FROM streak_five_claim_requests
+        WHERE next_attempt_at<=clock_timestamp() ORDER BY next_attempt_at,wallet LIMIT 1`,
       );
       if (!requested.rows.length) return;
       const wallet = requested.rows[0].wallet;
+      let failure = 'backing';
       await connection.query('BEGIN');
       try {
         const request = await connection.query<{ refund_only: boolean }>(
@@ -271,6 +342,7 @@ export class FiveRewards {
         );
         for (const id of new Set(credits.rows.map((c) => c.id.split(':')[0])))
           await verifyBacking(id);
+        failure = 'building';
         const total = credits.rows.reduce((n, c) => n + BigInt(c.amount), 0n);
         const target = (await ccc.Address.fromString(wallet, this.chain)).script;
         const minimum =
@@ -294,6 +366,7 @@ export class FiveRewards {
         await tx.completeInputsByCapacity(signer, 0n, filter);
         await tx.completeFeeBy(signer, 1000n, filter);
         tx = await signer.signTransaction(tx);
+        failure = 'validation';
         if (
           !tx.outputs[0]?.lock.eq(target) ||
           tx.outputs[0].capacity !== total ||
@@ -309,6 +382,7 @@ export class FiveRewards {
         )
           throw Error('Unexpected reward change');
         await this.chain.sendTransactionDry(tx, 'passthrough');
+        failure = 'journal';
         const id = tx.hash();
         await connection.query(
           'INSERT INTO streak_five_payouts(id,wallet,amount,signed_bytes,tx_hash,status) VALUES($1,$2,$3,$4,$1,$5)',
@@ -323,6 +397,13 @@ export class FiveRewards {
         // The next tick broadcasts the committed journal, including after a crash here.
       } catch (e) {
         await connection.query('ROLLBACK');
+        // Preserve the obligation and its scope, but let unrelated wallets run.
+        // Store only a fixed category, never RPC errors, addresses or signed bytes.
+        await connection.query(
+          `UPDATE streak_five_claim_requests SET next_attempt_at=clock_timestamp()+interval '30 seconds',
+          last_failure=$2 WHERE wallet=$1`,
+          [wallet, failure],
+        );
         throw e;
       }
     } finally {

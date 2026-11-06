@@ -12,6 +12,7 @@ const { PgFiveStorage } = require('../dist/modules/five/storage');
 const { FiveFunding } = require('../dist/modules/five/funding');
 const { FiveRewards } = require('../dist/modules/five/rewards');
 const { FiveService } = require('../dist/modules/five/service');
+const { PgFiveProfiles } = require('../dist/modules/five/profile');
 const { newRound, parseTerms, saveEntry, standings } = require('../dist/modules/five/domain');
 const { auctionView } = require('../dist/modules/five/auction');
 
@@ -81,7 +82,19 @@ async function main() {
     const admin = { id: 'host', name: 'Rehearsal host', wallet: destination };
     const funding = new FiveFunding(store, client, destination);
     let rewards = new FiveRewards(pool, client, destination);
-    const service = new FiveService(store, [destination], undefined, funding, rewards);
+    const profiles = new PgFiveProfiles(pool);
+    await profiles.save(alice.id, 'Alice demo');
+    await profiles.save(bobActor.id, 'Bob demo');
+    await profiles.save(admin.id, admin.name);
+    const service = new FiveService(
+      store,
+      [destination],
+      undefined,
+      funding,
+      rewards,
+      false,
+      profiles,
+    );
     const players = ['GK', 'DEF', 'MID', 'MID', 'FWD'].map((position, i) => ({
       id: `p${i}`,
       name: `Demo player ${i + 1}`,

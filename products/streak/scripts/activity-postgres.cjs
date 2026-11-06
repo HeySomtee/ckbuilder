@@ -69,11 +69,14 @@ function event(d, tx, state = 'signed', pending = true) {
 }
 function projection(d, owners) {
   return {
+    evidenceVersion: 1,
     descriptor: d,
     owners,
     phase: 'settled',
     checkedAt: Date.now(),
     checkpoint: { blockNumber: '100', blockHash: H(100) },
+    settlementCheckpoint: { blockNumber: '100', blockHash: H(100) },
+    observedTip: { blockNumber: '104', blockHash: H(104) },
     transactionHashes: [
       d.creationTxHash,
       ...Object.values(owners).flatMap((s) => s.positions.map((p) => p.transactionHash)),
@@ -140,6 +143,91 @@ async function main() {
     const next = await store.take();
     assert.ok(next);
     assert.equal(await store.complete(next, p, 86_400_000), true);
+    const sourceBefore = (await store.readSources([d.fixtureId]))[0];
+    const originalWalletRows = await pool.query(
+      'SELECT owner_hash,xmin::text AS version FROM activity_wallet_markets WHERE market_key=$1 ORDER BY owner_hash',
+      [marketKey(d)],
+    );
+    assert.equal(sourceBefore.revision, '1');
+    assert.equal(sourceBefore.stale, false);
+    assert.equal(sourceBefore.projection.owners[ownerA].positions[0].transactionHash, tx);
+    await pool.query('UPDATE activity_markets SET due_at=clock_timestamp() WHERE market_key=$1', [
+      marketKey(d),
+    ]);
+    // JSONB may reorder every object's keys; the canonical source identity must not depend on it.
+    const sameSource = JSON.parse(
+      JSON.stringify(p, (_key, value) =>
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? Object.fromEntries(Object.entries(value).reverse())
+          : value,
+      ),
+    );
+    sameSource.checkedAt += 1000;
+    for (const owner of Object.values(sameSource.owners)) owner.checkedAt += 1000;
+    sameSource.transactionHashes.reverse();
+    assert.equal(await store.complete(await store.take(), sameSource, 86_400_000), true);
+    assert.equal(
+      (await store.readSources([d.fixtureId]))[0].revision,
+      sourceBefore.revision,
+      'identical canonical evidence does not create a new campaign source revision',
+    );
+    assert.deepEqual(
+      (
+        await pool.query(
+          'SELECT owner_hash,xmin::text AS version FROM activity_wallet_markets WHERE market_key=$1 ORDER BY owner_hash',
+          [marketKey(d)],
+        )
+      ).rows,
+      originalWalletRows.rows,
+      'unchanged canonical checks do not delete or rewrite owner rows',
+    );
+    assert.equal(
+      (await store.read(ownerA, 'synthetic-wallet-A')).groups[0].snapshot.checkedAt,
+      sameSource.checkedAt,
+      'freshness is read from the market check without rewriting each owner',
+    );
+    assert.equal(
+      (await store.readSources([d.fixtureId]))[0].projection.checkedAt,
+      sameSource.checkedAt,
+      'campaign evidence receives the latest successful check time',
+    );
+    await pool.query(
+      "UPDATE activity_markets SET checked_at=clock_timestamp()-interval '3 minutes',due_at=clock_timestamp()+interval '1 day' WHERE market_key=$1",
+      [marketKey(d)],
+    );
+    const agedSource = (await store.readSources([d.fixtureId]))[0];
+    assert.equal(
+      agedSource.stale,
+      false,
+      'refresh queues before the evidence grace window expires',
+    );
+    assert.equal(agedSource.revision, sourceBefore.revision);
+    const campaignRefresh = await store.take();
+    assert.equal(
+      campaignRefresh.key,
+      marketKey(d),
+      'aged campaign history uses the existing job queue',
+    );
+    await store.readSources([d.fixtureId]);
+    assert.equal(
+      await store.take(),
+      null,
+      'repeated campaign reads coalesce behind the leased market',
+    );
+    assert.equal(
+      await store.complete(campaignRefresh, { ...sameSource, checkedAt: Date.now() }, 86_400_000),
+      true,
+    );
+    await pool.query(
+      "UPDATE activity_markets SET checked_at=clock_timestamp()-interval '3 minutes',failures=1,due_at=clock_timestamp()+interval '1 hour' WHERE market_key=$1",
+      [marketKey(d)],
+    );
+    await store.readSources([d.fixtureId]);
+    assert.equal(await store.take(), null, 'campaign reads do not defeat failed-RPC backoff');
+    await pool.query(
+      'UPDATE activity_markets SET failures=0,checked_at=clock_timestamp() WHERE market_key=$1',
+      [marketKey(d)],
+    );
     view = await store.read(ownerA, 'synthetic-wallet-A');
     assert.equal(
       view.groups[0].snapshot.positions.length,
@@ -175,6 +263,13 @@ async function main() {
     await pool.query('UPDATE activity_markets SET due_at=clock_timestamp()');
     const rollback = await store.take();
     await store.complete(rollback, projection(d, {}), 86_400_000);
+    const sourceAfterRollback = (await store.readSources([d.fixtureId]))[0];
+    assert.equal(
+      sourceAfterRollback.revision,
+      '2',
+      'a canonical rollback advances the source revision',
+    );
+    assert.deepEqual(sourceAfterRollback.projection.owners, {});
     assert.equal(
       (await store.read(ownerA, 'synthetic-wallet-A')).groups.length,
       0,
@@ -345,9 +440,14 @@ async function main() {
     );
 
     assert.equal(
-      recoveryDelay({ ...projection(d, {}), phase: 'open' }),
-      300_000,
-      'empty open market keeps targeted discovery',
+      recoveryDelay({ ...projection(d, {}), phase: 'open' }, d.cutoffMs - 3_600_000),
+      900_000,
+      'future open market retains targeted discovery with enough idle time for database suspension',
+    );
+    assert.equal(
+      recoveryDelay({ ...projection(d, {}), phase: 'open' }, d.cutoffMs - 2_000),
+      2_000,
+      'idle discovery still wakes exactly at the published cutoff',
     );
     assert.equal(
       recoveryDelay({ ...projection(d, {}), phase: 'settled' }),
@@ -372,6 +472,24 @@ async function main() {
     );
 
     await pool.query("UPDATE activity_markets SET due_at=clock_timestamp()+interval '1 day'");
+    assert.equal(
+      await store.nextDueDelay(),
+      900_000,
+      'idle durable jobs leave a fifteen-minute recovery window',
+    );
+    await pool.query(
+      "UPDATE activity_markets SET due_at=clock_timestamp(),lease_until=clock_timestamp()+interval '2 minutes' WHERE market_key=$1",
+      [marketKey(target)],
+    );
+    const leaseDelay = await store.nextDueDelay();
+    assert.ok(
+      leaseDelay > 110_000 && leaseDelay <= 120_000,
+      'a leased overdue job sleeps until lease expiry instead of busy polling',
+    );
+    await pool.query(
+      "UPDATE activity_markets SET lease_until=NULL,due_at=clock_timestamp()+interval '1 day' WHERE market_key=$1",
+      [marketKey(target)],
+    );
     const liveEvent = event(descriptor(250), H(2500));
     let chainStarted = false,
       releaseChain;
@@ -468,6 +586,49 @@ async function main() {
     } finally {
       stopOutage();
     }
+
+    await pool.query("UPDATE activity_markets SET due_at=clock_timestamp()+interval '1 day'");
+    const changing = descriptor(501);
+    await store.bootstrap([changing]);
+    const shared = projection(changing, {
+      [ownerA]: snapshot(position(H(5011), 'claimable')),
+      [ownerB]: snapshot(position(H(5012), 'claimed')),
+    });
+    await store.complete(await store.take(), shared, 86_400_000);
+    const stableOwner = (
+      await pool.query(
+        'SELECT xmin::text AS version FROM activity_wallet_markets WHERE market_key=$1 AND owner_hash=$2',
+        [marketKey(changing), ownerB],
+      )
+    ).rows[0].version;
+    await pool.query('UPDATE activity_markets SET due_at=clock_timestamp() WHERE market_key=$1', [
+      marketKey(changing),
+    ]);
+    await store.complete(
+      await store.take(),
+      {
+        ...shared,
+        checkedAt: shared.checkedAt + 1000,
+        owners: { ...shared.owners, [ownerA]: snapshot(position(H(5011), 'claimed')) },
+      },
+      86_400_000,
+    );
+    assert.equal(
+      (
+        await pool.query(
+          'SELECT xmin::text AS version FROM activity_wallet_markets WHERE market_key=$1 AND owner_hash=$2',
+          [marketKey(changing), ownerB],
+        )
+      ).rows[0].version,
+      stableOwner,
+      'one owner collecting does not rewrite other owners in that market',
+    );
+    assert.equal(
+      (await store.readSources([changing.fixtureId]))[0].projection.owners[ownerA].positions[0]
+        .status,
+      'claimed',
+      'the changed owner remains correctly projected',
+    );
 
     console.log(
       `Activity PostgreSQL: replay, atomicity, leases, owner isolation, pending, exact totals, pagination, stale retention and rollback passed. 24-market first page ${elapsed.toFixed(1)}ms; 0 chain reads (synthetic local evidence).`,

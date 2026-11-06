@@ -1,6 +1,8 @@
 import type { Pool } from 'pg';
 import { assertGameScope } from '../games-test/scope';
 import { SurvivorError, type Competition } from './domain';
+import { enqueueRewardWork, rewardSchemaGuard, rewardWorkSchema } from '../five/work-queue';
+import { notifyRewardsWorker } from '../../infrastructure/worker-health';
 
 export type CompetitionSummary = Pick<Competition, 'id' | 'state' | 'terms' | 'createdAt'>;
 export interface SurvivorStorage {
@@ -14,12 +16,14 @@ export interface SurvivorStorage {
   ): Promise<Competition>;
   remove(id: string): Promise<void>;
 }
-const schema = `CREATE TABLE IF NOT EXISTS streak_survivor_competitions (
+const schema = `${rewardSchemaGuard}
+CREATE TABLE IF NOT EXISTS streak_survivor_competitions (
   id text PRIMARY KEY, creator text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
   state text NOT NULL, data jsonb NOT NULL
 ); ALTER TABLE streak_survivor_competitions ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 CREATE INDEX IF NOT EXISTS streak_survivor_state ON streak_survivor_competitions(state, created_at DESC);
-CREATE TABLE IF NOT EXISTS streak_five_funding_inputs(outpoint text PRIMARY KEY,intent text NOT NULL);`;
+CREATE TABLE IF NOT EXISTS streak_five_funding_inputs(outpoint text PRIMARY KEY,intent text NOT NULL);
+${rewardWorkSchema}`;
 export class PgSurvivorStorage implements SurvivorStorage {
   private ready?: Promise<void>;
   constructor(
@@ -85,7 +89,9 @@ export class PgSurvivorStorage implements SurvivorStorage {
         'INSERT INTO streak_survivor_competitions(id, creator, state, data) VALUES($1,$2,$3,$4)',
         [id, creator, data.state, JSON.stringify(data)],
       );
+      await enqueueRewardWork(client, 'survivor', id);
       await client.query('COMMIT');
+      void notifyRewardsWorker(this.testing);
       return data;
     } catch (error) {
       await client.query('ROLLBACK');
@@ -130,12 +136,15 @@ export class PgSurvivorStorage implements SurvivorStorage {
       const time = await client.query<{ now: Date }>('SELECT clock_timestamp() AS now');
       mutate(data, time.rows[0].now.getTime());
       const after = JSON.stringify(data);
-      if (before !== after)
+      if (before !== after) {
         await client.query(
           'UPDATE streak_survivor_competitions SET state=$2, data=$3 WHERE id=$1',
           [id, data.state, after],
         );
+        await enqueueRewardWork(client, 'survivor', id);
+      }
       await client.query('COMMIT');
+      if (before !== after) void notifyRewardsWorker(this.testing);
       return data;
     } catch (error) {
       await client.query('ROLLBACK');

@@ -388,6 +388,7 @@ async function main() {
           return route.continue();
         });
         await context.routeWebSocket('**/*', (socket) => socket.close());
+        await require('./browser-campaign-fixture.cjs')(context, base);
         const page = await context.newPage();
         page.setDefaultTimeout(30000);
         page.on('pageerror', (error) => errors.push(error.message));
@@ -439,12 +440,10 @@ async function main() {
             true,
             'Cost sheet restores focus without closing the slip.',
           );
-          const dimensions = await page
-            .locator('dialog.prediction-slip')
-            .evaluate((el) => ({
-              footer: el.querySelector('.slip-footer').getBoundingClientRect().height,
-              list: el.querySelector('#slip-picks-panel').getBoundingClientRect().height,
-            }));
+          const dimensions = await page.locator('dialog.prediction-slip').evaluate((el) => ({
+            footer: el.querySelector('.slip-footer').getBoundingClientRect().height,
+            list: el.querySelector('#slip-picks-panel').getBoundingClientRect().height,
+          }));
           assert.ok(dimensions.footer < 220 && dimensions.list > 300, JSON.stringify(dimensions));
           assert.equal(await page.locator('#slip-picks-panel .batch-transaction').count(), 0);
           await page.screenshot({
@@ -732,11 +731,9 @@ async function main() {
           }
         }
         await page.goto(base + '/season/');
-        const populatedCard = page
-          .getByRole('article')
-          .filter({
-            has: page.getByRole('link', { name: 'View market: Liverpool vs Everton', exact: true }),
-          });
+        const populatedCard = page.getByRole('article').filter({
+          has: page.getByRole('link', { name: 'View market: Liverpool vs Everton', exact: true }),
+        });
         await populatedCard.waitFor();
         releasePools();
         await populatedCard.getByText('50%', { exact: true }).waitFor();

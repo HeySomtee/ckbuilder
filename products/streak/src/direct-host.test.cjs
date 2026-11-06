@@ -5,8 +5,16 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
+const { fork } = require('node:child_process');
+const { once } = require('node:events');
 const { setTimeout: delay } = require('node:timers/promises');
-const { buildConfig, prepareState, runHost } = require('../scripts/direct-host.cjs');
+const {
+  buildConfig,
+  prepareState,
+  runHost,
+  workerControl,
+  containerMemory,
+} = require('../scripts/direct-host.cjs');
 
 function sample(root) {
   return {
@@ -88,6 +96,12 @@ test('hosted child environments isolate signer, database, Telegram and inherited
     assert.equal(child.STREAK_DIRECT_PRIVATE_KEY, env.STREAK_DIRECT_PRIVATE_KEY);
   }
   assert.equal(worker.STREAK_SPONSOR_IPC_SECRET, undefined);
+  assert.match(api.STREAK_WORKER_HEALTH_SECRET, /^[0-9a-f]{64}$/);
+  assert.equal(api.STREAK_WORKER_HEALTH_URL, 'http://127.0.0.1:4102');
+  for (const child of [sponsor, worker]) {
+    assert.equal(child.STREAK_WORKER_HEALTH_SECRET, undefined);
+    assert.equal(child.STREAK_WORKER_HEALTH_URL, undefined);
+  }
   assert.equal(worker.STREAK_DIRECT_CATALOGUE_URL, undefined);
   assert.equal(worker.STREAK_DIRECT_PROGRESS_DIR, undefined);
   assert.equal(sponsor.STREAK_DIRECT_CATALOGUE_URL, env.STREAK_DIRECT_CATALOGUE_URL);
@@ -115,6 +129,10 @@ test('Five rewards has a separate opt-in signer and shares no keys with API or p
   );
   assert.equal(environments.rewards.TREASURY_PRIVATE_KEY, undefined);
   assert.equal(environments.rewards.STREAK_DIRECT_PRIVATE_KEY, undefined);
+  assert.equal(
+    environments.rewards.STREAK_WORKER_HEALTH_SECRET,
+    environments.api.STREAK_WORKER_HEALTH_SECRET,
+  );
   for (const key of ['api', 'sponsor', 'worker'])
     assert.equal(environments[key].STREAK_FIVE_REWARDS_PRIVATE_KEY, undefined);
   assert.throws(
@@ -126,6 +144,121 @@ test('Five rewards has a separate opt-in signer and shares no keys with API or p
     buildConfig({ ...env, STREAK_FIVE_REWARDS_ENABLED: '0' }).environments.rewards,
     undefined,
   );
+});
+
+test('memory sampling reads cgroup totals and tolerates missing or unlimited accounting', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'streak-cgroup-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  assert.equal(containerMemory(directory), null);
+  for (const [name, value] of Object.entries({
+    current: '310091776',
+    peak: '369913856',
+    max: '536870912',
+  }))
+    fs.writeFileSync(path.join(directory, `memory.${name}`), value);
+  assert.deepEqual(containerMemory(directory), {
+    currentBytes: 310091776,
+    peakBytes: 369913856,
+    limitBytes: 536870912,
+  });
+  fs.writeFileSync(path.join(directory, 'memory.max'), 'max');
+  assert.equal(containerMemory(directory), null);
+});
+
+test(
+  'private worker health and wake require authorization and a live responsive child',
+  { timeout: 15000 },
+  async (t) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'streak-worker-health-'));
+    const fixture = path.join(directory, 'worker.cjs');
+    fs.writeFileSync(
+      fixture,
+      `let wakes=0; process.on('message', m=> {
+    if(m.token !== '${'44'.repeat(32)}') return;
+    if(m.type==='streak.worker.wake') wakes++;
+    process.send({type:'streak.worker.response',id:m.id,ready:m.type==='streak.worker.wake'||wakes>0});
+  });`,
+    );
+    const child = fork(fixture, [], {
+      execArgv: [],
+      env: {},
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    });
+    const role = new Map([['rewards', child]]);
+    const control = await workerControl(0, '44'.repeat(32), role);
+    child.on('message', (value) => control.message(child, value));
+    child.once('disconnect', () => control.disconnected(child));
+    t.after(async () => {
+      if (child.exitCode === null && child.signalCode === null) {
+        const closed = once(child, 'exit');
+        child.kill('SIGKILL');
+        await closed;
+      }
+      await control.close();
+      fs.rmSync(directory, { recursive: true, force: true });
+    });
+    const origin = `http://127.0.0.1:${control.server.address().port}`;
+    const request = async (path, method = 'GET', token = '44'.repeat(32)) => {
+      const response = await fetch(`${origin}${path}`, {
+        method,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    assert.deepEqual(await request('/workers/rewards/health', 'GET', 'invalid'), {
+      status: 401,
+      body: { ready: false },
+    });
+    assert.deepEqual(await request('/workers/rewards/health'), {
+      status: 503,
+      body: { ready: false },
+    });
+    assert.deepEqual(await request('/workers/rewards/wake', 'POST'), {
+      status: 200,
+      body: { ready: true },
+    });
+    assert.deepEqual(await request('/workers/rewards/health'), {
+      status: 200,
+      body: { ready: true },
+    });
+    assert.deepEqual(await request('/workers/testRewards/health'), {
+      status: 503,
+      body: { ready: false },
+    });
+    assert.equal((await request('/workers/rewards/wake')).status, 404);
+    const closed = once(child, 'exit');
+    child.kill('SIGKILL');
+    await closed;
+    assert.deepEqual(await request('/workers/rewards/health'), {
+      status: 503,
+      body: { ready: false },
+    });
+  },
+);
+test('campaign verification receives a public mainnet address but no mainnet signer', () => {
+  const env = {
+    ...sample(path.resolve(os.tmpdir(), 'synthetic-campaign-mount')),
+    STREAK_CAMPAIGNS_REWARDS_ADDRESS: 'ckb1' + 'a'.repeat(60),
+    STREAK_CAMPAIGNS_ADMIN_WALLETS: 'ckt1' + 'b'.repeat(60),
+    STREAK_CAMPAIGNS_DATABASE_URL: 'postgresql://synthetic:synthetic@127.0.0.1/campaign_test',
+    STREAK_CAMPAIGNS_REWARDS_PRIVATE_KEY: 'synthetic-forbidden',
+    STREAK_CAMPAIGNS_EMPTY_HISTORY_ACK: '1',
+  };
+  const { environments } = buildConfig(env);
+  assert.equal(environments.sponsor.STREAK_CAMPAIGNS_EMPTY_HISTORY_ACK, '1');
+  assert.equal(environments.api.STREAK_CAMPAIGNS_EMPTY_HISTORY_ACK, undefined);
+  assert.equal(environments.worker.STREAK_CAMPAIGNS_EMPTY_HISTORY_ACK, undefined);
+  assert.equal(
+    environments.api.STREAK_CAMPAIGNS_REWARDS_ADDRESS,
+    env.STREAK_CAMPAIGNS_REWARDS_ADDRESS,
+  );
+  assert.equal(environments.api.STREAK_CAMPAIGNS_ADMIN_WALLETS, env.STREAK_CAMPAIGNS_ADMIN_WALLETS);
+  assert.equal(environments.api.STREAK_CAMPAIGNS_DATABASE_URL, env.STREAK_CAMPAIGNS_DATABASE_URL);
+  for (const child of Object.values(environments)) {
+    if (!child) continue;
+    assert.equal(child.STREAK_CAMPAIGNS_REWARDS_PRIVATE_KEY, undefined);
+    if (child !== environments.api) assert.equal(child.STREAK_CAMPAIGNS_REWARDS_ADDRESS, undefined);
+  }
 });
 test('invalid, overlapping, off-mount or bulk configuration fails before spawning', () => {
   const env = sample(path.resolve(os.tmpdir(), 'synthetic-streak-mount'));
@@ -166,6 +299,13 @@ test('disk preflight verifies mount, preserves journal and refuses symlink escap
   assert.equal(fs.existsSync(path.join(config.directories[0], 'new')), false);
   const lease = path.join(config.directories[0], 'worker-lease');
   fs.mkdirSync(lease);
+  const schedulerFile = path.join(lease, 'scheduler.flock');
+  fs.writeFileSync(schedulerFile, '', { mode: 0o600 });
+  prepareState(config, mount);
+  assert.ok(
+    fs.existsSync(schedulerFile),
+    'an unlocked persistent OS-lock inode does not block restart',
+  );
   fs.writeFileSync(path.join(lease, 'operator.lock'), 'synthetic-stale-lease');
   assert.throws(() => prepareState(config, mount), /lease remains/);
   assert.equal(fs.readFileSync(path.join(lease, 'operator.lock'), 'utf8'), 'synthetic-stale-lease');

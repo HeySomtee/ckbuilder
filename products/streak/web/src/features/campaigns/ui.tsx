@@ -1,0 +1,734 @@
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Icon } from '../../components/icon';
+import { CellLoader } from '../../components/cell-loader';
+import { Notice } from '../../components/notice';
+import { useNow } from '../../lib/use-now';
+import type { Account } from '../account/api';
+import type { Market } from '../markets/api';
+import type { Outcome } from '../predictions/draft';
+import { getPublicMarket } from '../predictions/api';
+import { actCampaign, loadCampaignOptions, loadCampaigns, prepareCampaignGameweek } from './api';
+import type {
+  CampaignAction,
+  CampaignAward,
+  CampaignDraftInput,
+  CampaignFixture,
+  CampaignPage,
+} from './api';
+import { CampaignList, CampaignPlay } from './play';
+import { CampaignSetup } from './setup';
+import { CampaignAdmin, DeleteCampaign } from './admin';
+import { FiveEntryName } from './five-entry-name';
+import { Badge, Busy, ckb, Dialog } from './presentation';
+import './campaigns.css';
+
+export interface CampaignsProps {
+  account: Account | null;
+  accountReady: boolean;
+  onSignIn: () => void;
+  signInPending: boolean;
+  onPick: (market: Market, outcome: Outcome) => void;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  onOpenFive: (roundId: string) => void;
+  initialAdmin?: boolean;
+}
+export function Campaigns({
+  account,
+  accountReady,
+  onSignIn,
+  signInPending,
+  onPick,
+  selectedId,
+  onSelect,
+  onOpenFive,
+  initialAdmin = false,
+}: CampaignsProps) {
+  const queryClient = useQueryClient();
+  const scope = account?.id ?? 'guest';
+  const listKey = ['private', 'campaigns', scope, 'list'] as const;
+  const [offset, setOffset] = useState(0),
+    [adminView, setAdminView] = useState(initialAdmin);
+  const [adminTab, setAdminTab] = useState<'monitor' | 'evidence'>('monitor');
+  const [creating, setCreating] = useState(false),
+    [editing, setEditing] = useState(false);
+  const [error, setError] = useState(''),
+    [notice, setNotice] = useState('');
+  const [deleting, setDeleting] = useState(false),
+    [joining, setJoining] = useState(false),
+    [finalizing, setFinalizing] = useState(false),
+    [addressOpen, setAddressOpen] = useState(false);
+  const [address, setAddress] = useState(''),
+    [addressConfirmed, setAddressConfirmed] = useState(false);
+  const [payout, setPayout] = useState<CampaignAward | null>(null),
+    [paymentHash, setPaymentHash] = useState(''),
+    [paymentIndex, setPaymentIndex] = useState('');
+  const [pickPending, setPickPending] = useState<string | null>(null);
+  const activeScope = useRef(scope);
+  activeScope.current = scope;
+  const active = useRef(true),
+    currentId = useRef(selectedId);
+  currentId.current = selectedId;
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    setOffset(0);
+    setCreating(false);
+    setEditing(false);
+    setDeleting(false);
+    setJoining(false);
+    setFinalizing(false);
+    setAddressOpen(false);
+    setPayout(null);
+    setError('');
+    setNotice('');
+  }, [selectedId, scope]);
+  const queryKey = selectedId
+    ? ['private', 'campaigns', scope, 'detail', selectedId, offset]
+    : listKey;
+  const query = useQuery({
+    queryKey,
+    queryFn: async ({ signal }) => {
+      const result = await loadCampaigns(selectedId, signal, offset);
+      if (result.viewerId !== (account?.id ?? null))
+        throw new Error('Your sign-in changed. Refresh before continuing.');
+      return result;
+    },
+    enabled: accountReady,
+    staleTime: 15000,
+    refetchInterval: (q) =>
+      q.state.data?.detail && ['open', 'live', 'finalizing'].includes(q.state.data.detail.state)
+        ? 30000
+        : false,
+    refetchIntervalInBackground: false,
+    retry: 1,
+  });
+  const sessionChanged =
+    query.error?.message === 'Your sign-in changed. Refresh before continuing.';
+  const page =
+      !sessionChanged && query.data?.viewerId === (account?.id ?? null) ? query.data : undefined,
+    detail = page?.detail ?? null;
+  const admin = page?.admin === true && !!account && page.viewerId === account.id;
+  const showEditor = admin && (creating || (editing && detail?.state === 'draft'));
+  const options = useQuery({
+    queryKey: ['private', 'campaigns', scope, 'options'],
+    queryFn: ({ signal }) => loadCampaignOptions(signal),
+    enabled: accountReady && showEditor,
+    staleTime: 30000,
+    retry: 1,
+  });
+  const mutation = useMutation({ mutationFn: (action: CampaignAction) => actCampaign(action) });
+  const preparation = useMutation({ mutationFn: prepareCampaignGameweek });
+  const localNow = useNow(!!detail && ['open', 'live'].includes(detail.state));
+  const now = localNow + (page ? Date.parse(page.now) - query.dataUpdatedAt : 0);
+  const pending = mutation.isPending || preparation.isPending;
+  async function prepareGameweek(event: number) {
+    if (pending || !admin) return;
+    setError('');
+    try {
+      const result = await preparation.mutateAsync(event);
+      if (!active.current) return;
+      const optionsKey = ['private', 'campaigns', scope, 'options'];
+      queryClient.setQueryData(optionsKey, result);
+      await queryClient.invalidateQueries({ queryKey: optionsKey });
+    } catch (failure) {
+      if (active.current)
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : 'The gameweek could not be prepared. Please try again.',
+        );
+    }
+  }
+  async function mutate(action: CampaignAction): Promise<CampaignPage | null> {
+    if (pending || !account) return null;
+    setError('');
+    setNotice('');
+    try {
+      const result = await mutation.mutateAsync(action);
+      if (!active.current || activeScope.current !== scope) return null;
+      if (result.viewerId !== account.id)
+        throw Error('Your sign-in changed. Refresh before continuing.');
+      queryClient.setQueryData(listKey, { ...result, detail: null });
+      if (result.detail)
+        queryClient.setQueryData(
+          ['private', 'campaigns', scope, 'detail', result.detail.id, 0],
+          result,
+        );
+      await queryClient.invalidateQueries({ queryKey: ['private', 'campaigns', scope] });
+      return result;
+    } catch (failure) {
+      if (active.current && activeScope.current === scope)
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : 'The update could not be saved. Please try again.',
+        );
+      return null;
+    }
+  }
+  async function save(draft: CampaignDraftInput, publish: boolean) {
+    let result = await mutate(
+      creating || !detail
+        ? { action: 'create', draft }
+        : { action: 'update', id: detail.id, revision: detail.revision, draft },
+    );
+    const saved = result?.detail;
+    if (!saved) return;
+    if (publish) {
+      result = await mutate({ action: 'publish', id: saved.id, revision: saved.revision });
+      if (!result) {
+        onSelect(saved.id);
+        setNotice('Your draft is saved. Publishing needs another check.');
+        return;
+      }
+    }
+    setCreating(false);
+    setEditing(false);
+    setAdminView(!publish);
+    onSelect(saved.id);
+    setNotice(publish ? 'Your competition is published.' : 'Competition draft saved.');
+  }
+  async function pick(fixture: CampaignFixture, outcome: Outcome) {
+    if (!detail || pickPending) return;
+    if (!account) {
+      onSignIn();
+      return;
+    }
+    if (!detail.own) {
+      setJoining(true);
+      return;
+    }
+    setError('');
+    setPickPending(fixture.fixtureId);
+    const targetId = detail.id;
+    try {
+      const market = await queryClient.fetchQuery({
+        queryKey: ['public-market', fixture.marketId],
+        queryFn: ({ signal }) => getPublicMarket(fixture.marketId, signal),
+        staleTime: 5000,
+      });
+      if (!active.current || currentId.current !== targetId) return;
+      if (
+        market.market.matchId !== fixture.fixtureId ||
+        !market.accepting ||
+        !market.market.available ||
+        Date.now() >= Date.parse(market.terms.closesAt)
+      )
+        throw Error(
+          'This match is not accepting a new prediction right now. Your other picks are safe.',
+        );
+      onPick(market.market, outcome);
+    } catch (failure) {
+      if (active.current && currentId.current === targetId)
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : 'The match could not be opened. Please try again.',
+        );
+    } finally {
+      if (active.current) setPickPending(null);
+    }
+  }
+  if (!accountReady || (!page && query.isPending))
+    return (
+      <section className="campaign-page">
+        <Busy />
+      </section>
+    );
+  if (!page)
+    return (
+      <section className="campaign-page">
+        <Notice
+          title="Competitions could not be loaded"
+          tone="attention"
+          actions={
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void query.refetch()}
+              disabled={query.isFetching}
+            >
+              {query.isFetching && <CellLoader />} Retry competitions
+            </button>
+          }
+        >
+          {query.error?.message ?? 'Please try again.'}
+        </Notice>
+      </section>
+    );
+  const ownAward = detail?.awards.find(
+    (award) => award.publicId !== null && award.publicId === detail.own?.publicId,
+  );
+  return (
+    <section className="campaign-page">
+      <div className="campaign-route-controls">
+        {(selectedId || creating) && (
+          <button
+            type="button"
+            className="btn campaign-quiet"
+            onClick={() => {
+              setCreating(false);
+              onSelect(null);
+            }}
+            disabled={pending}
+          >
+            Back to competitions
+          </button>
+        )}
+        {admin && !showEditor && (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setAdminView(!adminView);
+              setError('');
+            }}
+          >
+            {adminView ? 'Player view' : 'Manage competitions'}{' '}
+            <Icon name={adminView ? 'account' : 'shield'} />
+          </button>
+        )}
+      </div>
+      {query.isError && (
+        <Notice
+          title="Showing the last loaded competition"
+          tone="attention"
+          actions={
+            <button className="btn" type="button" onClick={() => void query.refetch()}>
+              Refresh
+            </button>
+          }
+        >
+          The latest update could not be loaded. Existing entries are preserved.
+        </Notice>
+      )}
+      {notice && <Notice title={notice} dismissible />}
+      {error && !deleting && !showEditor && !joining && !finalizing && !addressOpen && !payout && (
+        <Notice title="This action needs attention" tone="attention">
+          {error}
+        </Notice>
+      )}
+      {showEditor ? (
+        options.data ? (
+          <CampaignSetup
+            key={creating ? 'new' : detail?.id}
+            initial={creating ? undefined : detail?.draft}
+            options={options.data}
+            pending={pending}
+            error={error}
+            onSave={save}
+            onPrepareGameweek={prepareGameweek}
+            onCancel={() => {
+              setCreating(false);
+              setEditing(false);
+            }}
+          />
+        ) : options.isError || !options.isPending ? (
+          <Notice
+            title="Fixture and gameweek options could not be loaded"
+            tone="attention"
+            actions={
+              <button
+                className="btn"
+                type="button"
+                onClick={() => void options.refetch()}
+                disabled={options.isFetching}
+              >
+                Retry options
+              </button>
+            }
+          >
+            {options.error?.message ?? 'Please refresh the available options.'}
+          </Notice>
+        ) : (
+          <Busy text="Loading fixtures and gameweeks" />
+        )
+      ) : !selectedId ? (
+        <CampaignList
+          campaigns={page.campaigns}
+          admin={admin}
+          onSelect={onSelect}
+          onCreate={() => {
+            setCreating(true);
+            setAdminView(true);
+            setError('');
+          }}
+        />
+      ) : !detail ? (
+        <Notice title="This competition is not available">
+          It may have been removed, or you may not have access to it.
+        </Notice>
+      ) : admin && adminView ? (
+        <>
+          <div className="campaign-admin-toolbar">
+            <nav className="campaign-tabs" aria-label="Competition administration">
+              <button
+                type="button"
+                aria-pressed={adminTab === 'monitor'}
+                onClick={() => setAdminTab('monitor')}
+              >
+                Manage
+              </button>
+              <button
+                type="button"
+                aria-pressed={adminTab === 'evidence'}
+                onClick={() => setAdminTab('evidence')}
+              >
+                Evidence
+              </button>
+              {detail.state === 'draft' && (
+                <button type="button" onClick={() => setEditing(true)}>
+                  Set up
+                </button>
+              )}
+            </nav>
+            {detail.state !== 'deleted' && (
+              <button
+                type="button"
+                className="btn campaign-delete-outline"
+                onClick={() => {
+                  setError('');
+                  setDeleting(true);
+                }}
+              >
+                Delete competition
+              </button>
+            )}
+          </div>
+          <CampaignAdmin
+            detail={detail}
+            tab={adminTab}
+            pending={pending || query.isFetching}
+            onEdit={() => setEditing(true)}
+            onFinalize={() => {
+              setError('');
+              setFinalizing(true);
+            }}
+            onRefresh={() => void query.refetch()}
+            onRecordPayout={(award) => {
+              setError('');
+              setPaymentHash(award.transactionHash ?? '');
+              setPaymentIndex('');
+              setPayout(award);
+            }}
+          />
+        </>
+      ) : detail.state === 'deleted' && !detail.awards.length ? (
+        <div className="campaign-empty">
+          <Icon name="shield" />
+          <h1>This competition has closed.</h1>
+          <p>Existing predictions, squads and payment recovery are preserved.</p>
+        </div>
+      ) : detail.state === 'draft' ? (
+        <Notice title="This competition is still a draft">
+          {admin ? (
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => {
+                setAdminView(true);
+                setEditing(true);
+              }}
+            >
+              Continue setup
+            </button>
+          ) : (
+            'It will be available when the organizer publishes it.'
+          )}
+        </Notice>
+      ) : (
+        <CampaignPlay
+          key={detail.id}
+          detail={detail}
+          authenticated={!!account}
+          now={now}
+          pending={pending}
+          pickPending={pickPending}
+          onJoin={() => {
+            setError('');
+            setJoining(true);
+          }}
+          onSignIn={onSignIn}
+          signInPending={signInPending}
+          onPick={(fixture, outcome) => void pick(fixture, outcome)}
+          onOpenFive={onOpenFive}
+          onAddress={() => {
+            setAddress(ownAward?.receivingAddress ?? '');
+            setAddressConfirmed(false);
+            setError('');
+            setAddressOpen(true);
+          }}
+          onPage={setOffset}
+        />
+      )}
+      {joining && detail && (
+        <Dialog title={`Join ${detail.name}`} onClose={() => setJoining(false)} pending={pending}>
+          <p>Join for free and take your place on the leaderboard immediately.</p>
+          <div className="campaign-join-summary">
+            <Badge>
+              {detail.kind === 'five' ? 'Streak Five' : `${detail.fixtureCount} fixtures`}
+            </Badge>
+            <strong>{ckb(detail.prizeTotalShannons)} CKB</strong>
+            <span>{detail.prizePlaces} winning places</span>
+          </div>
+          <p>
+            {detail.kind === 'five'
+              ? 'Your saved team for the selected gameweek counts. Earlier final squad saves break a points tie.'
+              : 'Only your first qualifying paid prediction per fixture counts. Correct calls earn 3 points. Stake size does not affect points.'}
+          </p>
+          <p>
+            {detail.rehearsal
+              ? 'This is a rehearsal. It does not offer mainnet rewards or collect payout addresses.'
+              : 'Playing uses testnet tCKB. Campaign prizes use mainnet CKB and require organizer-approved payouts.'}
+          </p>
+          {error && (
+            <Notice title="Registration was not completed" tone="attention">
+              {error}
+            </Notice>
+          )}
+          {detail.kind === 'five' && account ? (
+            <FiveEntryName
+              key={`${account.id}:${detail.id}`}
+              accountId={account.id}
+              pending={pending}
+              disabled={!detail.termsHash}
+              onJoin={async () => {
+                if (!detail.termsHash) return;
+                const result = await mutate({
+                  action: 'join',
+                  id: detail.id,
+                  termsHash: detail.termsHash,
+                });
+                if (result) {
+                  setJoining(false);
+                  setNotice('You are registered. Your place is now on the table.');
+                }
+              }}
+            />
+          ) : (
+            <button
+              className="btn primary"
+              type="button"
+              disabled={pending || !detail.termsHash}
+              onClick={() => {
+                if (detail.termsHash)
+                  void mutate({ action: 'join', id: detail.id, termsHash: detail.termsHash }).then(
+                    (result) => {
+                      if (result) {
+                        setJoining(false);
+                        setNotice('You are registered. Your place is now on the table.');
+                      }
+                    },
+                  );
+              }}
+            >
+              {pending && <CellLoader />} Agree & join competition
+            </button>
+          )}
+        </Dialog>
+      )}
+      {deleting && detail && admin && (
+        <DeleteCampaign
+          detail={detail}
+          pending={pending}
+          error={error}
+          onClose={() => setDeleting(false)}
+          onDelete={async (target) => {
+            const result = await mutate({ action: 'delete', ...target });
+            if (result) {
+              setDeleting(false);
+              setNotice('Competition archived. Existing entries and obligations are preserved.');
+              onSelect(null);
+            }
+          }}
+        />
+      )}
+      {finalizing && detail && admin && (
+        <Dialog title="Finalize competition" onClose={() => setFinalizing(false)} pending={pending}>
+          <p>
+            Lock the verified standings and allocate the published prizes. Payment is a separate
+            step.
+          </p>
+          <p>
+            Current score status: <strong>{detail.scoreStatus}</strong>.
+          </p>
+          {detail.scoreStatus !== 'final' && (
+            <Notice title="Final source results are still required">
+              Refresh the competition after all results are verified. Provisional scores cannot
+              create final awards.
+            </Notice>
+          )}
+          {error && (
+            <Notice title="Finalization was not completed" tone="attention">
+              {error}
+            </Notice>
+          )}
+          <button
+            type="button"
+            className="btn primary"
+            disabled={pending || detail.scoreStatus !== 'final'}
+            onClick={() =>
+              void mutate({ action: 'finalize', id: detail.id, revision: detail.revision }).then(
+                (result) => {
+                  if (result) {
+                    setFinalizing(false);
+                    setNotice('Final standings and awards are saved.');
+                  }
+                },
+              )
+            }
+          >
+            {pending && <CellLoader />} Finalize verified standings
+          </button>
+        </Dialog>
+      )}
+      {addressOpen && detail && ownAward && !detail.rehearsal && (
+        <Dialog
+          title="Your prize receiving address"
+          onClose={() => setAddressOpen(false)}
+          pending={pending}
+        >
+          <p>
+            Your award is <strong>{ckb(ownAward.amountShannons)} CKB</strong>, paid on mainnet by
+            the organizer.
+          </p>
+          <label className="campaign-field" htmlFor="campaign-prize-address">
+            Mainnet CKB receiving address
+            <input
+              id="campaign-prize-address"
+              value={address}
+              onChange={(e) => {
+                setAddress(e.target.value);
+                setAddressConfirmed(false);
+              }}
+              placeholder="ckb1..."
+              spellCheck={false}
+              autoComplete="off"
+              disabled={pending}
+              readOnly={!!ownAward.receivingAddress}
+            />
+          </label>
+          {!ownAward.receivingAddress && (
+            <label className="campaign-rehearsal">
+              <input
+                type="checkbox"
+                checked={addressConfirmed}
+                onChange={(e) => setAddressConfirmed(e.target.checked)}
+                disabled={pending}
+              />
+              <span>I have checked this mainnet address</span>
+            </label>
+          )}
+          <p className="campaign-small">
+            This address cannot be changed after confirmation. Check it carefully. Saving an address
+            does not send funds or mark the prize paid.
+          </p>
+          {error && (
+            <Notice title="Address could not be saved" tone="attention">
+              {error}
+            </Notice>
+          )}
+          {!ownAward.receivingAddress && (
+            <button
+              type="button"
+              className="btn primary"
+              disabled={pending || !addressConfirmed || !/^ckb1[a-z0-9]{30,}$/.test(address.trim())}
+              onClick={() =>
+                void mutate({
+                  action: 'payout-address',
+                  id: detail.id,
+                  address: address.trim(),
+                }).then((result) => {
+                  if (result) {
+                    setAddressOpen(false);
+                    setNotice('Receiving address saved for organizer review.');
+                  }
+                })
+              }
+            >
+              {pending && <CellLoader />} Save receiving address
+            </button>
+          )}
+        </Dialog>
+      )}
+      {payout && detail && admin && !detail.rehearsal && (
+        <Dialog title="Verify prize payment" onClose={() => setPayout(null)} pending={pending}>
+          <p>
+            First send <strong>{ckb(payout.amountShannons)} CKB</strong> to{' '}
+            {payout.name ?? 'the winner'} from your configured organizer wallet. Then add the
+            transaction details here.
+          </p>
+          <p className="campaign-payout-address">{payout.receivingAddress}</p>
+          <label className="campaign-field" htmlFor="campaign-payment-hash">
+            Mainnet transaction hash
+            <input
+              id="campaign-payment-hash"
+              value={paymentHash}
+              onChange={(e) => setPaymentHash(e.target.value)}
+              placeholder="0x..."
+              autoComplete="off"
+              spellCheck={false}
+              disabled={pending}
+            />
+          </label>
+          <label className="campaign-field" htmlFor="campaign-payment-index">
+            Recipient output index
+            <input
+              id="campaign-payment-index"
+              value={paymentIndex}
+              onChange={(e) => setPaymentIndex(e.target.value)}
+              placeholder="0"
+              inputMode="numeric"
+              disabled={pending}
+            />
+          </label>
+          <p className="campaign-small">
+            The first output is index 0. Streak checks the recipient, exact amount, organizer wallet
+            and 24 confirmations. This action does not send funds.
+          </p>
+          {error && (
+            <Notice title="Payment proof could not be verified" tone="attention">
+              {error}
+            </Notice>
+          )}
+          <button
+            type="button"
+            className="btn primary"
+            disabled={
+              pending ||
+              !payout.publicId ||
+              detail.scoreStatus === 'review-required' ||
+              !/^0x[a-fA-F0-9]{64}$/.test(paymentHash.trim()) ||
+              !/^(0|[1-9]\d*)$/.test(paymentIndex) ||
+              !Number.isSafeInteger(Number(paymentIndex))
+            }
+            onClick={() => {
+              if (payout.publicId)
+                void mutate({
+                  action: 'record-payout',
+                  id: detail.id,
+                  publicId: payout.publicId,
+                  transactionHash: paymentHash.trim().toLowerCase(),
+                  outputIndex: Number(paymentIndex),
+                }).then((result) => {
+                  if (result) {
+                    setPayout(null);
+                    setNotice('Payment verified on mainnet. The prize record is updated.');
+                  }
+                });
+            }}
+          >
+            {pending && <CellLoader />} Verify payment proof
+          </button>
+        </Dialog>
+      )}
+    </section>
+  );
+}
+export default Campaigns;

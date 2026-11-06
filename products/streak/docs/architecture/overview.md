@@ -1,5 +1,30 @@
 # Architecture and migration
 
+6 November [Five manager identity and refund status](../delivery/five-names-pitch-refunds.md)
+adds scoped public profiles without changing login identity or squad save times.
+The sponsor banner projects exact owner credits/payouts; unsigned retry scheduling
+retains the existing signed-payment journal and single-wallet spending protections.
+
+6 November [background efficiency refactor](../delivery/background-efficiency.md)
+adds targeted fixture/receipt SQL, durable due-time queues and local wake signals.
+Activity and competition checks preserve unchanged records instead of creating
+timestamp-only rewrites. Hosted rewards readiness uses authenticated local child
+and dependency checks. This is local implementation; hosted memory and billing
+improvements still need measurement.
+
+5 November [competitions](../delivery/competitions.md) add a PostgreSQL application
+layer around existing prediction payments and Five squads. Canonical Activity
+snapshots and accepted Five records project public standings; they do not control
+prediction funds. Mainnet campaign awards remain organizer-wallet transfers with
+read-only exact-output verification, separate from existing testnet rewards.
+
+1 November proposal: [concurrent prediction payments](concurrent-payments.md)
+replaces service-wide funding barriers with per-resource coordination and records
+the separate v4 capacity limit. The [larger-market candidate](payment-protocol-vnext.md)
+adds pre-created lanes and bounded tree settlement, including conservation,
+rounding, data availability and funding requirements. These are drafts for review;
+current payment behavior and deployed scripts have not changed.
+
 1 November Survivor v2 adds deterministic early completion over the locked pick
 snapshot. It preserves v1 terms, does not eliminate provisional losers while an
 all-loss rescue is possible, and reuses the existing funded-prize journal without
@@ -125,13 +150,28 @@ Use TanStack Query for server-owned data with account-scoped keys and explicit f
 
 ## Persistence and jobs
 
-PostgreSQL relational tables, changed-row writes, explicit deletion helpers and uniqueness constraints already exist. The remaining concern is whole-working-set reads plus read/clone/mutate writes serialized only inside one Node process. A second process has a different queue. Replace hot mutations with focused SQL transactions before enabling API replicas.
+PostgreSQL relational tables, changed-row writes, explicit deletion helpers and
+uniqueness constraints already exist. Fixture synchronization now selects affected
+fixtures, unsettled bets and their users in 64-fixture pages within one transaction;
+receipt recovery selects pending source records directly. These paths no longer
+load the whole application store. Some interactive legacy routes still use
+whole-working-set reads and read/clone/mutate writes. Their writer queue is local
+to one Node process, so this refactor does not make API replicas safe.
 
 Bound and paginate reads. Add indexes from actual query plans. Use row locks or compare-and-swap versions for invariants, document lock ordering, and retry safe whole transactions rather than arbitrary partial operations. Keep exact integer money through load, mutation and serialization. Unique business keys are the final duplicate guard.
 
 Challenges and sessions now use dedicated PostgreSQL tables, hash-only session storage and atomic audience-bound single-use challenges. Local development has a single-process atomic file adapter. Hosted origin policy, secure cookies and verified database TLS are implemented. Coordinated source/global rate limits and bounded ledger writes are still required before replicas. See the [Season milestone](../delivery/season-milestone.md) for rollout and wallet-access limits. Separate accounts, verified identities and linked wallets. Linking needs an authenticated session and fresh proof; a supplied email/address alone never merges accounts.
 
-The existing web process coalesces a 20-second fixture/settlement loop. Replace authoritative work with leased durable jobs carrying business key, attempt count, next-run time, owner/expiry and last error. Write required jobs/outbox records in the domain transaction. Handlers are idempotent under at-least-once execution. Fence stale workers before completion after lease expiry.
+The API now schedules fixture and game progression around provider updates,
+deadlines and unresolved work rather than an unconditional 20-second loop.
+Activity and competitions own persisted due times; rewards mutations enqueue
+their jobs in the same transaction as the source change. Local wake signals reduce
+latency, while startup catch-up and a fallback no later than fifteen minutes
+recover missed signals. Pending payments retain faster checks. Activity leases
+and job generations fence obsolete completions; duplicate delivery remains safe.
+Survivor progression still runs when fixture synchronization fails. The separate
+direct-market settlement process retains its bounded interval. Exact cadences and
+remaining limits are in the [efficiency delivery record](../delivery/background-efficiency.md).
 
 Persist signed transaction bytes and the hash before broadcast. Reconcile that hash and its inputs after timeout or restart before rebuilding. Unknown broadcast outcome is not permission for another spend. PostgreSQL is sufficient for initial jobs, sessions and coordination; add Redis only for a measured need.
 

@@ -11,6 +11,7 @@ import {
 } from './domain';
 import type { FiveFeed } from './service';
 import type { FplSeason, ScoutData, ScoutPlayer, PlayerProfile, FixtureSchedule } from './scouting';
+import { BoundedMemo } from '../../infrastructure/bounded-memo';
 const list = (value: unknown, max: number) => {
   if (!Array.isArray(value) || value.length > max)
     throw new FiveError('The player feed returned incomplete data.', 503);
@@ -18,7 +19,7 @@ const list = (value: unknown, max: number) => {
 };
 /** Explicitly opt-in. Public endpoint accessibility does not grant redistribution permission. */
 export class FplFiveFeed implements FiveFeed {
-  private cache = new Map<string, { at: number; promise: Promise<unknown> }>();
+  private readonly cache = new BoundedMemo<unknown>(80, 8 * 1024 * 1024);
   private activeRequests = 0;
   constructor(
     public readonly available: boolean,
@@ -43,6 +44,24 @@ export class FplFiveFeed implements FiveFeed {
       throw new FiveError('Gameweek schedule is incomplete.', 503);
     events.sort((a, b) => a.id - b.id);
     return { season: events[0].deadline.slice(0, 4), events };
+  }
+  async nextUpdateAt(): Promise<number> {
+    const now = Date.now();
+    let next = now + 15 * 60_000;
+    for (const row of list(await this.get('fixtures/'), 500)) {
+      const fixture = object(row);
+      const kickoff = Date.parse(String(fixture.kickoff_time));
+      // The provider's started flag can lag kickoff or remain in a cached
+      // response. Keep minute updates through that gap, including extra time.
+      if (
+        fixture.finished !== true &&
+        (fixture.started === true ||
+          (Number.isFinite(kickoff) && kickoff <= now && now - kickoff < 6 * 3_600_000))
+      )
+        return now + 60_000;
+      if (Number.isFinite(kickoff) && kickoff > now) next = Math.min(next, kickoff);
+    }
+    return next;
   }
   async scouting(): Promise<ScoutData> {
     const boot = object(await this.get('bootstrap-static/'));
@@ -221,9 +240,10 @@ export class FplFiveFeed implements FiveFeed {
     };
   }
   private async get(path: string): Promise<unknown> {
+    return this.cache.get(path, 60_000, () => this.request(path));
+  }
+  private async request(path: string): Promise<unknown> {
     if (!this.available) throw new FiveError('Approved player-data access is not configured.', 503);
-    const cached = this.cache.get(path);
-    if (cached && Date.now() - cached.at < 60_000) return cached.promise;
     if (this.activeRequests >= 8)
       throw new FiveError('Player data is busy. Please retry in a moment.', 503);
     this.activeRequests++;
@@ -255,16 +275,9 @@ export class FplFiveFeed implements FiveFeed {
         reader.releaseLock();
       }
       return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
-    })()
-      .finally(() => {
-        this.activeRequests--;
-      })
-      .catch((error) => {
-        this.cache.delete(path);
-        throw error;
-      });
-    if (this.cache.size >= 80) this.cache.delete(this.cache.keys().next().value!);
-    this.cache.set(path, { at: Date.now(), promise });
+    })().finally(() => {
+      this.activeRequests--;
+    });
     return promise;
   }
   async catalogue(event: number): Promise<Terms> {

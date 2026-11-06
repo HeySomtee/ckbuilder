@@ -1,7 +1,7 @@
 # Production test plan: Friday, 30 October 2026
 
-Historical plan. Use the [31 October FPL-first checklist](hosted-acceptance-2026-10-31.md)
-for today's funded-wallet campaign and noon Five deadline.
+Historical plan. Use the [GW10 production checklist](hosted-acceptance-2026-11-06.md)
+for the current post-deployment competition rehearsal. The dates below are archived.
 
 Use **[streakpitch.com](https://streakpitch.com/season/)**, regular data and **testnet tCKB**. All times are **Lagos (UTC+1)**. Tests are not yet performed. Local review does not count as production acceptance.
 

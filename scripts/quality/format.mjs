@@ -14,6 +14,12 @@ const files = repositoryFiles().filter(
     ) ||
     /^products\/streak\/(?:scripts\/(?:browser-select\.cjs|select-browser\.cjs|select-browser-fixture\.tsx)|public\/select-controls\.(?:js|css))$/.test(
       file,
+    ) ||
+    /^products\/streak\/src\/(?:infrastructure\/.*\.ts|(?:efficiency-cache|worker-health)\.test\.ts|fixture-sync-pg-checks\.ts)$/.test(
+      file,
+    ) ||
+    /^products\/streak\/(?:src\/(?:modules\/campaigns\/.*\.ts|campaigns?[a-z-]*\.test\.ts)|scripts\/campaigns-[a-z-]+\.cjs|shared\/campaign-wire\.d\.ts)$/.test(
+      file,
     ),
 );
 if (!files.length) throw new Error('No foundation files found for formatting.');

@@ -18,6 +18,14 @@ export interface ActivityPosition {
   outPoint: BatchPoint;
   transactionHash: string;
   claimTransactionHash?: string;
+  /** Original canonical deposit, retained when admission/claims replace the carrying cell. */
+  commit?: {
+    blockHash: string;
+    blockNumber: string;
+    timestamp: number;
+    transactionIndex: number;
+    outputIndex: number;
+  };
 }
 export interface ActivitySnapshot {
   phase: 'open' | 'reported' | 'settled' | 'voided' | 'unknown';

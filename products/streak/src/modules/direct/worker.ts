@@ -6,6 +6,7 @@ import { runOperator, boundedJson, operatorFundingBarrier } from './cli';
 import { OperatorJournal, reconcileOperation, operationKey, OPERATION_FILE } from './journal';
 import { loadOperatorMarket, MARKET_RESERVE_SHANNONS } from './operator';
 import { canonicalSponsorConflicts } from './sponsor-journal';
+import { withWorkerSchedulingLock } from './scheduler-lock';
 import {
   ProvisionQueue,
   parseProvisionCatalogue,
@@ -149,14 +150,13 @@ export async function runWorkerOnce(stopping: () => boolean = () => false): Prom
     registry.publicationTargets = [batchRegistry];
     batchRegistry.publicationTargets = [registry];
   }
-  const lease = new OperatorJournal(join(directory, 'worker-lease'));
   const client = new ccc.ClientPublicTestnet({
     url: PUBLIC_DIRECT_CONFIG.rpc,
     fallbacks: [],
     timeout: 15_000,
     maxConcurrent: 2,
   });
-  await lease.exclusive(async () => {
+  await withWorkerSchedulingLock(directory, async () => {
     if (stopping()) return;
     const catalogueUrl = process.env.STREAK_DIRECT_CATALOGUE_URL;
     const progressDirectory = process.env.STREAK_DIRECT_PROGRESS_DIR;

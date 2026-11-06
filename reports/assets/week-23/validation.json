@@ -1,0 +1,432 @@
+{
+  "report": "Week 23",
+  "reportDate": "2026-11-01",
+  "period": {
+    "afterReport": "2026-10-26",
+    "through": "2026-11-01"
+  },
+  "evidenceType": "Existing isolated local verification, summarized for publication; no new runtime gate run for this report",
+  "sourceReceipt": ".quality-artifacts/all.json",
+  "command": "npm run quality:major",
+  "runtimeCommit": "948fb1c",
+  "documentationHead": "cc994c69f82cbb3931fd2f81b44bef34580a2e17",
+  "exactTreeReceiptPrefix": "d0bf4b7149bf",
+  "group": "all",
+  "node": "24.14.0",
+  "startedAt": "2026-10-31T12:57:59.213Z",
+  "finishedAt": "2026-10-31T13:38:27.722Z",
+  "status": "passed",
+  "checkCount": 77,
+  "checks": [
+    {
+      "label": "Foundation formatting",
+      "status": "passed",
+      "durationMs": 12647
+    },
+    {
+      "label": "Static documentation, source and secret policies",
+      "status": "passed",
+      "durationMs": 12237
+    },
+    {
+      "label": "Learning repository TypeScript build",
+      "status": "passed",
+      "durationMs": 7242
+    },
+    {
+      "label": "Season TypeScript and hook lint",
+      "status": "passed",
+      "durationMs": 15890
+    },
+    {
+      "label": "Streak TypeScript build",
+      "status": "passed",
+      "durationMs": 14917
+    },
+    {
+      "label": "Season strict TypeScript",
+      "status": "passed",
+      "durationMs": 30734
+    },
+    {
+      "label": "Season production build",
+      "status": "passed",
+      "durationMs": 6220
+    },
+    {
+      "label": "Quality gate regression tests",
+      "status": "passed",
+      "durationMs": 15772
+    },
+    {
+      "label": "Streak src\\activity-chain.test.ts regression",
+      "status": "passed",
+      "durationMs": 13174
+    },
+    {
+      "label": "Streak src\\activity-events.test.ts regression",
+      "status": "passed",
+      "durationMs": 15149
+    },
+    {
+      "label": "Streak src\\backend-performance.test.ts regression",
+      "status": "passed",
+      "durationMs": 19014
+    },
+    {
+      "label": "Streak src\\catalogue-status.test.ts regression",
+      "status": "passed",
+      "durationMs": 5457
+    },
+    {
+      "label": "Streak src\\direct-batch.test.ts regression",
+      "status": "passed",
+      "durationMs": 45722
+    },
+    {
+      "label": "Streak src\\direct-fixture-reader.test.ts regression",
+      "status": "passed",
+      "durationMs": 8913
+    },
+    {
+      "label": "Streak src\\direct-hosted-drain.test.ts regression",
+      "status": "passed",
+      "durationMs": 9479
+    },
+    {
+      "label": "Streak src\\direct-http.test.ts regression",
+      "status": "passed",
+      "durationMs": 17302
+    },
+    {
+      "label": "Streak src\\direct-pools.test.ts regression",
+      "status": "passed",
+      "durationMs": 7870
+    },
+    {
+      "label": "Streak src\\direct-provision.test.ts regression",
+      "status": "passed",
+      "durationMs": 9986
+    },
+    {
+      "label": "Streak src\\direct-sponsor.test.ts regression",
+      "status": "passed",
+      "durationMs": 13907
+    },
+    {
+      "label": "Streak src\\direct.test.ts regression",
+      "status": "passed",
+      "durationMs": 11923
+    },
+    {
+      "label": "Streak src\\five-auction.test.ts regression",
+      "status": "passed",
+      "durationMs": 9352
+    },
+    {
+      "label": "Streak src\\five-auto.test.ts regression",
+      "status": "passed",
+      "durationMs": 8464
+    },
+    {
+      "label": "Streak src\\five.test.ts regression",
+      "status": "passed",
+      "durationMs": 10505
+    },
+    {
+      "label": "Streak src\\fixture-ranking.test.ts regression",
+      "status": "passed",
+      "durationMs": 6098
+    },
+    {
+      "label": "Streak src\\games-test.test.ts regression",
+      "status": "passed",
+      "durationMs": 17827
+    },
+    {
+      "label": "Streak src\\identity.test.ts regression",
+      "status": "passed",
+      "durationMs": 17345
+    },
+    {
+      "label": "Streak src\\insights.test.ts regression",
+      "status": "passed",
+      "durationMs": 8980
+    },
+    {
+      "label": "Streak src\\markets.test.ts regression",
+      "status": "passed",
+      "durationMs": 8457
+    },
+    {
+      "label": "Streak src\\matchday.test.ts regression",
+      "status": "passed",
+      "durationMs": 4682
+    },
+    {
+      "label": "Streak src\\predictions.test.ts regression",
+      "status": "passed",
+      "durationMs": 17896
+    },
+    {
+      "label": "Streak src\\providers\\football.test.ts regression",
+      "status": "passed",
+      "durationMs": 7657
+    },
+    {
+      "label": "Streak src\\providers\\schedule.test.ts regression",
+      "status": "passed",
+      "durationMs": 6683
+    },
+    {
+      "label": "Streak src\\store.test.ts regression",
+      "status": "passed",
+      "durationMs": 6946
+    },
+    {
+      "label": "Streak src\\survivor.test.ts regression",
+      "status": "passed",
+      "durationMs": 11200
+    },
+    {
+      "label": "Direct host process lifecycle regression",
+      "status": "passed",
+      "durationMs": 8690
+    },
+    {
+      "label": "Streak client runtime regression",
+      "status": "passed",
+      "durationMs": 15156
+    },
+    {
+      "label": "Isolated PostgreSQL store regression",
+      "status": "passed",
+      "durationMs": 12223
+    },
+    {
+      "label": "Season TypeScript and hook lint",
+      "status": "passed",
+      "durationMs": 18226
+    },
+    {
+      "label": "Streak TypeScript build",
+      "status": "passed",
+      "durationMs": 20766
+    },
+    {
+      "label": "Season strict TypeScript",
+      "status": "passed",
+      "durationMs": 29907
+    },
+    {
+      "label": "Season production build",
+      "status": "passed",
+      "durationMs": 3968
+    },
+    {
+      "label": "Isolated event-driven Activity PostgreSQL regression",
+      "status": "passed",
+      "durationMs": 7136
+    },
+    {
+      "label": "Isolated Five PostgreSQL admission regression",
+      "status": "passed",
+      "durationMs": 4384
+    },
+    {
+      "label": "Isolated Survivor PostgreSQL admission regression",
+      "status": "passed",
+      "durationMs": 2326
+    },
+    {
+      "label": "In-app game test controls and isolated lifecycle",
+      "status": "passed",
+      "durationMs": 4938
+    },
+    {
+      "label": "Season TypeScript and hook lint",
+      "status": "passed",
+      "durationMs": 17269
+    },
+    {
+      "label": "Streak TypeScript build",
+      "status": "passed",
+      "durationMs": 15066
+    },
+    {
+      "label": "Season strict TypeScript",
+      "status": "passed",
+      "durationMs": 19763
+    },
+    {
+      "label": "Season production build",
+      "status": "passed",
+      "durationMs": 3096
+    },
+    {
+      "label": "Startup splash and bundle recovery",
+      "status": "passed",
+      "durationMs": 133365
+    },
+    {
+      "label": "Shared cell loading motion and pending UI",
+      "status": "passed",
+      "durationMs": 55209
+    },
+    {
+      "label": "Five automatic gameweek and player scouting browser regression",
+      "status": "passed",
+      "durationMs": 112196
+    },
+    {
+      "label": "Five gameweek and squad browser regression",
+      "status": "passed",
+      "durationMs": 55311
+    },
+    {
+      "label": "Actual game pages with controlled dummy data",
+      "status": "passed",
+      "durationMs": 49318
+    },
+    {
+      "label": "Survivor admin and free-entry browser regression",
+      "status": "passed",
+      "durationMs": 108655
+    },
+    {
+      "label": "Current Streak browser regression",
+      "status": "passed",
+      "durationMs": 68728
+    },
+    {
+      "label": "Integrated Season browser regression",
+      "status": "passed",
+      "durationMs": 188612
+    },
+    {
+      "label": "Direct testnet wallet and recovery browser regression",
+      "status": "passed",
+      "durationMs": 102997
+    },
+    {
+      "label": "Shared EVM wallet connection browser regression",
+      "status": "passed",
+      "durationMs": 79172
+    },
+    {
+      "label": "Wallet overview and Telegram browser regression",
+      "status": "passed",
+      "durationMs": 15662
+    },
+    {
+      "label": "Account navigation and pinned slip browser regression",
+      "status": "passed",
+      "durationMs": 73878
+    },
+    {
+      "label": "Full application EVM checkout journey",
+      "status": "passed",
+      "durationMs": 248681
+    },
+    {
+      "label": "Atomic combined-payment browser regression",
+      "status": "passed",
+      "durationMs": 46220
+    },
+    {
+      "label": "Sponsored first prediction browser regression",
+      "status": "passed",
+      "durationMs": 45581
+    },
+    {
+      "label": "Approved preview interaction regression",
+      "status": "passed",
+      "durationMs": 30807
+    },
+    {
+      "label": "Independent multi-pick browser regression",
+      "status": "passed",
+      "durationMs": 107183
+    },
+    {
+      "label": "Atomic prediction Rust VM regression",
+      "status": "passed",
+      "durationMs": 16027
+    },
+    {
+      "label": "Streak sponsored creation Rust VM regression",
+      "status": "passed",
+      "durationMs": 9127
+    },
+    {
+      "label": "Streak compatible contract Rust VM regression",
+      "status": "passed",
+      "durationMs": 9207
+    },
+    {
+      "label": "Week 20 Rust VM and format regression",
+      "status": "passed",
+      "durationMs": 9155
+    },
+    {
+      "label": "Week 20 exact accounting regression",
+      "status": "passed",
+      "durationMs": 199
+    },
+    {
+      "label": "Week 20 client transaction regression",
+      "status": "passed",
+      "durationMs": 2682
+    },
+    {
+      "label": "Direct prediction signed devnet lifecycle",
+      "status": "passed",
+      "durationMs": 30494
+    },
+    {
+      "label": "Sponsored first prediction signed devnet lifecycle",
+      "status": "passed",
+      "durationMs": 36437
+    },
+    {
+      "label": "Atomic prediction signed devnet lifecycle",
+      "status": "passed",
+      "durationMs": 131791
+    },
+    {
+      "label": "Five sponsorship and reward signed devnet lifecycle",
+      "status": "passed",
+      "durationMs": 20211
+    },
+    {
+      "label": "Five interactive local-chain rehearsal",
+      "status": "passed",
+      "durationMs": 22845
+    }
+  ],
+  "release": {
+    "verifiedOn": "2026-11-01",
+    "remoteMain": "2839e9ea824225ba09091c27b7432e1cba19c309",
+    "source": "GitHub connector fetch_commit for HeySomtee/ckbuilder at main",
+    "remoteCommitUrl": "https://github.com/HeySomtee/ckbuilder/commit/2839e9ea824225ba09091c27b7432e1cba19c309",
+    "localOnlyCommits": ["948fb1c", "cc994c6"],
+    "hostedCi": "Paused by owner; no hosted CI pass claimed",
+    "renderDeployment": "Not independently verified by this report"
+  },
+  "boundaries": [
+    "The 77-check gate is local isolated evidence, not physical-wallet or hosted acceptance.",
+    "Screenshots show actual application components using synthetic fixtures, positions and payments.",
+    "The 24-market 17.6-33.6 ms Activity result measures a synthetic local database read with zero chain calls, not hosted page latency.",
+    "Five and new Survivor prizes use a disclosed custodial testnet rewards wallet.",
+    "Hosted auction closure, refunds, prediction settlement, Survivor progression and final awards remain acceptance work.",
+    "The owner reports six funded test wallets and completed squad-save/reload/account-switch checklist items.",
+    "The owner reports posting the GitHub issue update; its public post URL was not independently verified.",
+    "No commit, push, deployment, external post or live payment was performed to prepare this report."
+  ],
+  "screenshotEvidence": [
+    "../community-2026-10-31/raw/capture-provenance.json",
+    "../community-2026-10-31/raw/five-capture-provenance.json",
+    "../community-2026-10-31/raw/survivor-capture-provenance.json",
+    "../community-2026-10-31/gallery-validation.json"
+  ]
+}

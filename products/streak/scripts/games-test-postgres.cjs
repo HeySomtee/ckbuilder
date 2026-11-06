@@ -9,6 +9,7 @@ const { testPool } = require('../dist/modules/games-test/runtime');
 const { bindTestWallet, assertGameScope } = require('../dist/modules/games-test/scope');
 const { newRound, parseTerms } = require('../dist/modules/five/domain');
 const { FiveService } = require('../dist/modules/five/service');
+const { PgFiveProfiles } = require('../dist/modules/five/profile');
 const { FiveFunding } = require('../dist/modules/five/funding');
 const { FiveRewards } = require('../dist/modules/five/rewards');
 const { PgFiveStorage } = require('../dist/modules/five/storage');
@@ -37,7 +38,9 @@ async function main() {
     const other = { id: 'other', name: 'Other', wallet: 'dummy-other' };
     const feed = new DummyFiveFeed();
     const funding = new FiveFunding(fiveStore, client, address);
-    const five = new FiveService(fiveStore, [address], feed, funding);
+    const profiles = new PgFiveProfiles(pool);
+    await profiles.save(owner.id, owner.name);
+    const five = new FiveService(fiveStore, [address], feed, funding, undefined, false, profiles);
     const survivor = new SurvivorService(
       survivorStore,
       [address],
@@ -208,6 +211,16 @@ async function main() {
     await assert.rejects(assertGameScope(scopePool, false), /scope/);
     await assert.rejects(new PgFiveStorage(scopePool).list(), /scope/);
     assert.equal((await new PgFiveStorage(scopePool, true).list()).length, 0);
+    await assert.rejects(new PgFiveProfiles(scopePool).get(owner.id), /scope/);
+    const testProfiles = new PgFiveProfiles(scopePool, true);
+    assert.equal(
+      await testProfiles.get(owner.id),
+      null,
+      'test names do not inherit ordinary names',
+    );
+    await testProfiles.save(owner.id, 'Synthetic Test Manager');
+    assert.equal((await profiles.get(owner.id)).displayName, owner.name);
+    assert.equal((await testProfiles.get(owner.id)).displayName, 'Synthetic Test Manager');
     const fallbackPool = new Pool({
       connectionString: url.href,
       options: '-c search_path=public,streak_games_test',

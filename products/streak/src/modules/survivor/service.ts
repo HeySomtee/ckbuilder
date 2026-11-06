@@ -2,6 +2,8 @@ import type { Match } from '../../types';
 import type { FixtureObservation, LiveResult } from '../../providers/types';
 import {
   advance,
+  lockTime,
+  resolveTime,
   cancel,
   createCompetition,
   join,
@@ -341,16 +343,25 @@ export class SurvivorService {
     return this.read(actor, id);
   }
   async tick() {
+    let delay = 15 * 60_000;
     for (const c of await this.storage.list())
       if (['open', 'running'].includes(c.state))
         try {
           await this.storage.change(c.id, (current, now) => {
             observe(current, this.observationSnapshot(), now);
             advance(current, {}, now);
+            for (const round of current.rounds) {
+              const at = lockTime(round);
+              if (round.state === 'scheduled' && at > now) delay = Math.min(delay, at - now);
+              const resolution = resolveTime(round);
+              if (round.state === 'locked' && resolution > now)
+                delay = Math.min(delay, resolution - now);
+            }
           });
         } catch (error) {
           // An empty competition may be deleted after this worker lists it.
           if (!(error instanceof SurvivorError) || error.status !== 404) throw error;
         }
+    return Math.max(1000, delay);
   }
 }

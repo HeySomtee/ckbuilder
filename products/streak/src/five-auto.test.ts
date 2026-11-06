@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { FiveService, type FiveFeed } from './modules/five/service';
+import { MemoryFiveProfiles } from './test-support/five-profiles';
 import { FplFiveFeed } from './modules/five/feed';
 import {
   newRound,
@@ -289,6 +290,148 @@ async function progression() {
   assert.throws(() => normalizeStats({ ...zero, goals: 1 }), /Non-appearance/);
 }
 
+async function prepareFutureGameweek() {
+  const store = new Store();
+  const season: FplSeason = {
+    season: '2030',
+    events: [1, 2, 3].map((event) => ({
+      id: event,
+      name: `Gameweek ${event}`,
+      deadline: terms(event).lockAt,
+      finished: false,
+      checked: false,
+    })),
+  };
+  let catalogueCalls = 0;
+  let catalogue: FiveFeed['catalogue'] = async (event) => terms(event);
+  const feed: FiveFeed = {
+    available: true,
+    season: async () => structuredClone(season),
+    catalogue: async (event) => {
+      catalogueCalls++;
+      return catalogue(event);
+    },
+    results: async () => ({
+      stats: Object.fromEntries(players.map((p) => [p.id, { ...zero, minutes: 90 }])),
+      source: 'Synthetic prepared gameweek',
+      complete: false,
+    }),
+  };
+  const service = new FiveService(
+    store,
+    [],
+    feed,
+    undefined,
+    undefined,
+    true,
+    new MemoryFiveProfiles([{ id: 'prepared-player', name: 'Player' }]),
+  );
+  const choices = await service.upcomingGameweeks();
+  assert.deepEqual(
+    choices.map((w) => w.event),
+    [1, 2, 3],
+  );
+  assert.equal(choices[1].id, 'fpl-2030-2');
+  assert.equal(choices[1].lockAt, terms(2).lockAt);
+  assert.equal(catalogueCalls, 0, 'listing future events must not freeze prices or player pools');
+  assert.equal(store.rows.size, 0);
+  await service.prepareGameweek(2);
+  const id = choices[1].id;
+  const prepared = structuredClone(store.rows.get(id)!);
+  assert.equal(prepared.state, 'open');
+  assert.equal(prepared.creator, 'fpl-scheduler', 'prepared rounds use ordinary automatic scoring');
+  assert.equal(prepared.terms.sponsorshipMode, 'auction');
+  assert.equal(prepared.terms.source, 'FPL event 2');
+  assert.ok(
+    !store.rows.has('fpl-2030-1'),
+    'preparing one event does not open speculative extra rounds',
+  );
+  catalogue = async (event) => ({
+    ...terms(event),
+    players: terms(event).players.map((p) => ({ ...p, cost: 76 })),
+  });
+  await service.prepareGameweek(2);
+  assert.equal(catalogueCalls, 1, 'repeated preparation does not re-price an opened gameweek');
+  assert.deepEqual(store.rows.get(id), prepared);
+  const actor = { id: 'prepared-player', name: 'Player', wallet: 'synthetic-wallet' };
+  await service.action(actor, {
+    action: 'enter',
+    id,
+    players: players.map((p) => p.id),
+    captain: '3',
+    termsHash: prepared.termsHash,
+  });
+  await service.progress();
+  assert.ok(store.rows.has('fpl-2030-1'), 'the ordinary scheduler still opens the earliest event');
+  assert.equal(store.rows.get(id)!.termsHash, prepared.termsHash);
+  assert.equal(
+    (await service.read(actor, id)).detail!.ownId,
+    store.rows.get(id)!.entries[0].publicId,
+  );
+  store.now = start + 49 * hour;
+  await service.progress();
+  assert.equal(
+    store.rows.get(id)!.scoreRevision,
+    1,
+    'an early prepared team automatically receives live points',
+  );
+  assert.ok(Object.keys(store.rows.get(id)!.scores).length > 0);
+  await assert.rejects(service.prepareGameweek(2), /upcoming official/);
+  assert.deepEqual(
+    (await service.upcomingGameweeks()).map((w) => w.event),
+    [3],
+  );
+
+  const disabled = new FiveService(new Store(), [], feed, undefined, undefined, false);
+  await assert.rejects(disabled.upcomingGameweeks(), /must be enabled/);
+  await assert.rejects(disabled.prepareGameweek(3), /must be enabled/);
+  await assert.rejects(service.prepareGameweek(39), /whole number/);
+  await assert.rejects(service.prepareGameweek(4), /upcoming official/);
+  const invalidStore = new Store();
+  const invalidService = new FiveService(invalidStore, [], feed, undefined, undefined, true);
+  for (const change of [
+    (t: ReturnType<typeof terms>) => ({ ...t, source: 'FPL event 2' }),
+    (t: ReturnType<typeof terms>) => ({
+      ...t,
+      lockAt: new Date(Date.parse(t.lockAt) + hour).toISOString(),
+    }),
+    (t: ReturnType<typeof terms>) => ({ ...t, testingPolicy: 'admin-controlled-v1' as const }),
+    (t: ReturnType<typeof terms>) => ({
+      ...t,
+      players: t.players.map((p) => ({ ...p, cost: 200 })),
+    }),
+  ]) {
+    catalogue = async (event) => change(terms(event));
+    await assert.rejects(invalidService.prepareGameweek(3), /match|Test player pools|legal squad/);
+    assert.equal(invalidStore.rows.size, 0, 'invalid future data never opens a round');
+  }
+  catalogue = async (event) => {
+    invalidStore.now = Date.parse(terms(event).lockAt) - 30_000;
+    return terms(event);
+  };
+  await assert.rejects(invalidService.prepareGameweek(3), /deadline is too close/);
+  assert.equal(invalidStore.rows.size, 0, 'the DB clock is checked again after fetching players');
+  invalidStore.now = start;
+  const conflicting = newRound('fpl-2030-3', 'manual-admin', terms(3), start);
+  conflicting.state = 'open';
+  invalidStore.rows.set(conflicting.id, structuredClone(conflicting));
+  await assert.rejects(invalidService.prepareGameweek(3), /differs from the official schedule/);
+  assert.deepEqual(
+    invalidStore.rows.get(conflicting.id),
+    conflicting,
+    'a canonical ID conflict is never overwritten',
+  );
+  conflicting.creator = 'fpl-scheduler';
+  conflicting.terms.testingPolicy = 'admin-controlled-v1';
+  invalidStore.rows.set(conflicting.id, structuredClone(conflicting));
+  await assert.rejects(invalidService.prepareGameweek(3), /differs from the official schedule/);
+  delete conflicting.terms.testingPolicy;
+  conflicting.state = 'cancelled';
+  invalidStore.rows.set(conflicting.id, structuredClone(conflicting));
+  await assert.rejects(invalidService.prepareGameweek(3), /cannot be reopened/);
+  assert.equal(invalidStore.rows.get(conflicting.id)!.state, 'cancelled');
+}
+
 async function adapter() {
   const p = {
     id: 1,
@@ -445,6 +588,6 @@ async function adapter() {
   assert.equal((await new FplFiveFeed(true, fetcher).results(1, cat)).complete, true);
   await assert.rejects(new FplFiveFeed(false, fetcher).season(), /not configured/);
 }
-void Promise.all([progression(), adapter()]).then(() =>
+void Promise.all([progression(), adapter(), prepareFutureGameweek()]).then(() =>
   console.log('Five automatic progression, fair recovery, deduplication and FPL scouting passed.'),
 );

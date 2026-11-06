@@ -4,6 +4,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { chromium, webkit } = require('playwright');
+const expectedNavigation = [
+  ['Overview', '/season/?view=overview'],
+  ['Markets', '/season/'],
+  ['Matchday', '/season/?view=matchday'],
+  ['Streak Five', '/season/?view=five'],
+  ['Streak Survivor', '/season/?view=survivor'],
+  ['Competitions', '/season/?view=competitions'],
+  ['Clubhouse', '/season/?view=clubhouse'],
+  ['My activity', '/season/?view=activity'],
+  ['My Account', '/season/?view=account'],
+];
 
 async function main() {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'streak-account-navigation-'));
@@ -93,6 +104,7 @@ async function main() {
           await context.route('**/*', (route) =>
             new URL(route.request().url()).origin === base ? localRoute(route) : route.abort(),
           );
+          await require('./browser-campaign-fixture.cjs')(context, base);
           await page.goto(base + '/season/?view=overview');
           await page.locator('.overview-fixture').first().waitFor();
           assert.equal(await page.getByText('Your next chapter.', { exact: true }).count(), 0);
@@ -106,11 +118,35 @@ async function main() {
               scroll: el.scrollHeight,
               links: [...el.querySelectorAll('nav a')].map((a) => {
                 const r = a.getBoundingClientRect();
-                return { top: r.top, bottom: r.bottom, height: r.height };
+                return {
+                  top: r.top,
+                  bottom: r.bottom,
+                  height: r.height,
+                  href: a.getAttribute('href'),
+                };
               }),
             }));
-            assert.equal(rail.scroll, rail.client, 'Sidebar must have no internal overflow');
-            assert.equal(rail.links.length, 8);
+            assert.equal(
+              rail.scroll,
+              rail.client,
+              `Sidebar must have no internal overflow at ${width}x${height}`,
+            );
+            assert.deepEqual(
+              rail.links.map((link) => link.href),
+              expectedNavigation.map(([, href]) => href),
+            );
+            const mainNavigation = page.getByRole('navigation', {
+              name: 'Main navigation',
+              exact: true,
+            });
+            for (const [label, href] of expectedNavigation) {
+              assert.equal(
+                await mainNavigation
+                  .getByRole('link', { name: new RegExp('^' + label + '(?:\\s*Beta)?$') })
+                  .getAttribute('href'),
+                href,
+              );
+            }
             assert.ok(rail.links.every((r) => r.top >= 0 && r.bottom <= height && r.height >= 44));
             await page.evaluate(() => window.scrollTo(0, 500));
             const account = await page
@@ -127,6 +163,12 @@ async function main() {
             const nav = page.getByRole('navigation', { name: 'Mobile navigation', exact: true });
             await nav.getByRole('button', { name: 'More pages' }).click();
             const menu = page.getByRole('dialog', { name: 'More pages' });
+            assert.equal(
+              await menu
+                .getByRole('link', { name: 'Competitions', exact: true })
+                .getAttribute('href'),
+              '/season/?view=competitions',
+            );
             await menu.getByRole('link', { name: 'Clubhouse' }).click();
             await page.getByRole('heading', { name: 'Clubhouse', exact: true }).waitFor();
             await nav.getByRole('link', { name: 'Overview', exact: true }).click();
@@ -144,7 +186,14 @@ async function main() {
             );
             assert.ok(first.height <= 140, 'Overview rows remain compact');
           }
-          for (const view of ['account', 'activity', 'five', 'matchday', 'clubhouse']) {
+          for (const view of [
+            'account',
+            'activity',
+            'five',
+            'matchday',
+            'clubhouse',
+            'competitions',
+          ]) {
             await page.goto(base + '/season/?view=' + view);
             await page.locator('main h1:visible').waitFor();
             assert.equal(
@@ -155,6 +204,139 @@ async function main() {
           }
           results.push(`${name} ${width}x${height}: compact layout and reachable navigation`);
           await context.close();
+        }
+        for (const [width, height] of [
+          [1024, 461],
+          [1024, 600],
+          [1440, 900],
+        ]) {
+          const context = await browser.newContext({
+            viewport: { width, height },
+            reducedMotion: 'reduce',
+            timezoneId: 'UTC',
+            serviceWorkers: 'block',
+          });
+          try {
+            await context.route('**/*', (route) =>
+              new URL(route.request().url()).origin === base ? localRoute(route) : route.abort(),
+            );
+            const campaigns = [
+              ['prediction-weekend', 'Weekend prediction challenge', 'predictions', 'open'],
+              ['five-weekend', 'Streak Five community cup', 'five', 'live'],
+              [
+                'prediction-finished',
+                'October supporters championship results',
+                'predictions',
+                'finished',
+              ],
+            ].map(([id, campaignName, kind, state]) => ({
+              id,
+              name: campaignName,
+              kind,
+              state,
+              description: 'Synthetic navigation fixture',
+              rehearsal: false,
+              registrationClosesAt: '2030-01-08T12:00:00Z',
+              fiveRoundId: kind === 'five' ? 'fpl:12' : null,
+              fixtureCount: kind === 'five' ? 0 : 3,
+              registeredCount: 0,
+              activeCount: 0,
+              prizeTotalShannons: '10000000000',
+              prizePlaces: 1,
+              joined: false,
+            }));
+            await context.route(`${base}/api/campaigns`, (route) =>
+              route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                  now: new Date(clock).toISOString(),
+                  admin: false,
+                  viewerId: null,
+                  campaigns,
+                  detail: null,
+                }),
+              }),
+            );
+            const page = await context.newPage();
+            await page.clock.install({ time: clock });
+            await page.goto(base + '/season/?view=overview');
+            const navigation = page.getByRole('navigation', {
+              name: 'Main navigation',
+              exact: true,
+            });
+            await navigation.locator('.campaign-nav-link').last().waitFor();
+            const brand = await page.locator('.rail .wordmark').boundingBox();
+            const geometry = await navigation.evaluate((el) => ({
+              height: el.clientHeight,
+              scrollHeight: el.scrollHeight,
+              width: el.clientWidth,
+              scrollWidth: el.scrollWidth,
+              overflowY: getComputedStyle(el).overflowY,
+              railHeight: el.parentElement.clientHeight,
+              railScrollHeight: el.parentElement.scrollHeight,
+              bounds: el.getBoundingClientRect().toJSON(),
+            }));
+            assert.equal(
+              geometry.railHeight,
+              geometry.railScrollHeight,
+              'Named competitions stay inside the fixed rail',
+            );
+            assert.equal(geometry.overflowY, 'auto');
+            assert.equal(
+              geometry.scrollWidth,
+              geometry.width,
+              'Navigation labels fit beside the scrollbar',
+            );
+            assert.ok(geometry.bounds.bottom <= height && geometry.height > 0);
+            if (height <= 600) assert.ok(geometry.scrollHeight > geometry.height);
+            for (const campaign of campaigns) {
+              const link = navigation.getByRole('link', { name: new RegExp('^' + campaign.name) });
+              assert.equal(
+                await link.getAttribute('href'),
+                `/season/?view=competitions&campaign=${campaign.id}`,
+              );
+              await link.focus();
+              const bounds = await link.boundingBox();
+              assert.ok(
+                bounds.height >= 44 &&
+                  bounds.y >= geometry.bounds.top &&
+                  bounds.y + bounds.height <= geometry.bounds.bottom + 1,
+                'Every competition can be reached without clipping its touch target',
+              );
+            }
+            const account = navigation.getByRole('link', { name: 'My Account', exact: true });
+            await account.focus();
+            await page.waitForFunction(() => {
+              const target = document.querySelector('.rail nav a[href="/season/?view=account"]');
+              return (
+                target === document.activeElement &&
+                target.getBoundingClientRect().bottom <= innerHeight
+              );
+            });
+            const accountBounds = await account.boundingBox();
+            assert.ok(
+              accountBounds.height >= 44 && accountBounds.y + accountBounds.height <= height,
+              `Account target stays inside ${name} ${width}x${height}: ${JSON.stringify(accountBounds)}`,
+            );
+            assert.deepEqual(
+              await page.locator('.rail .wordmark').boundingBox(),
+              brand,
+              'Scrolling navigation leaves the brand in place',
+            );
+            assert.equal(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+              true,
+            );
+            await page.screenshot({
+              path: path.join(out, `${name}-${width}x${height}-campaign-navigation.png`),
+            });
+            await account.press('Enter');
+            await page.getByRole('heading', { name: 'My Account', exact: true }).waitFor();
+            results.push(`${name} ${width}x${height}: named competitions and account reachable`);
+          } finally {
+            await context.close();
+          }
         }
         for (const [width, height] of [
           [320, 568],
@@ -179,6 +361,7 @@ async function main() {
             }
             return localRoute(route);
           });
+          await require('./browser-campaign-fixture.cjs')(context, base);
           await page.goto(base + '/season/?view=overview');
           await page.getByRole('heading', { name: 'Good to have you here.' }).waitFor();
           await page.waitForFunction(

@@ -13,25 +13,48 @@ export async function connectNative(element, keyByte) {
   const events = new Map();
   const calls = [];
   const provider = {
-    getNetwork: async () => { calls.push('getNetwork'); return 'nervos_testnet'; },
-    isConnected: async () => { calls.push('isConnected'); return true; },
-    getAccount: async () => { calls.push('getAccount'); return [address]; },
+    getNetwork: async () => {
+      calls.push('getNetwork');
+      return 'nervos_testnet';
+    },
+    isConnected: async () => {
+      calls.push('isConnected');
+      return true;
+    },
+    getAccount: async () => {
+      calls.push('getAccount');
+      return [address];
+    },
     getPublicKey: async () => [{ address, publicKey }],
-    signMessage: async (message) => { calls.push('signMessage'); return account.signMessageRaw(message); },
-    connect: async () => { throw Error('Already authorized native wallet must not request access'); },
-    switchNetwork: async () => { throw Error('Must not switch network automatically'); },
-    on: (name, listener) => { if (!events.has(name)) events.set(name, new Set()); events.get(name).add(listener); },
+    signMessage: async (message) => {
+      calls.push('signMessage');
+      return account.signMessageRaw(message);
+    },
+    connect: async () => {
+      throw Error('Already authorized native wallet must not request access');
+    },
+    switchNetwork: async () => {
+      throw Error('Must not switch network automatically');
+    },
+    on: (name, listener) => {
+      if (!events.has(name)) events.set(name, new Set());
+      events.get(name).add(listener);
+    },
     removeListener: (name, listener) => events.get(name)?.delete(listener),
   };
   window.utxoGlobal = { ckbSigner: provider };
   window.syntheticNative = { address, publicKey, calls };
-  const { signer } = UtxoGlobal.getUtxoGlobalSigners(client).find(row => row.name === 'CKB');
-  element.onClose(() => void element.updateSigner({ name: 'UTXO Global Wallet' }, { name: 'CKB', signer }));
+  const { signer } = UtxoGlobal.getUtxoGlobalSigners(client).find((row) => row.name === 'CKB');
+  element.onClose(
+    () => void element.updateSigner({ name: 'UTXO Global Wallet' }, { name: 'CKB', signer }),
+  );
 }
 
 export async function connectEvm(element, options = {}) {
   // Public, unfunded test identities. Never substitute an application key.
-  let wallet = new Wallet(`0x${(options.other ? (options.otherKeyByte ?? '22') : (options.keyByte ?? '11')).repeat(32)}`);
+  let wallet = new Wallet(
+    `0x${(options.other ? (options.otherKeyByte ?? '22') : (options.keyByte ?? '11')).repeat(32)}`,
+  );
   let connected = true;
   let accessGranted = !options.requireAccess;
   let mode = options.mode ?? 'accept';
@@ -43,21 +66,31 @@ export async function connectEvm(element, options = {}) {
       calls.push(method);
       if (method === 'wallet_revokePermissions') {
         if (options.noRevoke) throw Object.assign(Error('Unsupported method'), { code: 4200 });
-        if (options.holdRevoke) await new Promise(done => { window.releaseSyntheticRevoke = done; });
+        if (options.holdRevoke)
+          await new Promise((done) => {
+            window.releaseSyntheticRevoke = done;
+          });
         connected = false;
         accessGranted = false;
-        [...(events.get('accountsChanged') ?? [])].forEach(callback => callback([]));
+        [...(events.get('accountsChanged') ?? [])].forEach((callback) => callback([]));
         return null;
       }
       if (method === 'wallet_requestPermissions') {
-        if (options.noPermissions) throw Object.assign(Error('Unsupported method'), { code: -32601 });
-        if (options.rejectPermissions) throw Object.assign(Error('Account selection cancelled.'), { code: 4001 });
-        if (options.selectOther) wallet = new Wallet(`0x${(options.otherKeyByte ?? '22').repeat(32)}`);
+        if (options.unlistedPermissions)
+          throw Object.assign(Error('rpc method is not whitelisted'), { code: -32603 });
+        if (options.noPermissions)
+          throw Object.assign(Error('Unsupported method'), { code: -32601 });
+        if (options.rejectPermissions)
+          throw Object.assign(Error('Account selection cancelled.'), { code: 4001 });
+        if (options.selectOther)
+          wallet = new Wallet(`0x${(options.otherKeyByte ?? '22').repeat(32)}`);
         connected = true;
         return [{ parentCapability: 'eth_accounts' }];
       }
       if (method === 'eth_requestAccounts') {
         if (mode === 'reject-access') throw Error('Synthetic wallet access declined.');
+        if (mode === 'unlisted-access')
+          throw Object.assign(Error('rpc method is not whitelisted'), { code: -32603 });
         if (mode === 'change-access') wallet = new Wallet(`0x${'44'.repeat(32)}`);
         accessGranted = true;
       }
@@ -66,6 +99,8 @@ export async function connectEvm(element, options = {}) {
       if (method !== 'personal_sign') throw Error(`Unexpected synthetic wallet request: ${method}`);
       if (!accessGranted) throw Error('No connected wallet');
       if (mode === 'reject') throw Error('User rejected the synthetic sign-in request.');
+      if (mode === 'unlisted-sign')
+        throw Object.assign(Error('rpc method is not whitelisted'), { code: -32603 });
       if (mode === 'hold')
         await new Promise((done) => {
           release = done;
@@ -93,8 +128,13 @@ export async function connectEvm(element, options = {}) {
     reselect: async (nextElement) => {
       options.selectOther = true;
       await signer.connect();
-      nextElement.onClose(() => void nextElement.updateSigner(
-        { name: options.walletName ?? 'MetaMask' }, { name: 'Ethereum', signer }));
+      nextElement.onClose(
+        () =>
+          void nextElement.updateSigner(
+            { name: options.walletName ?? 'MetaMask' },
+            { name: 'Ethereum', signer },
+          ),
+      );
     },
     listenerCount: () => [...events.values()].reduce((sum, listeners) => sum + listeners.size, 0),
     accept: () => {

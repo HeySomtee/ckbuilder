@@ -16,12 +16,43 @@ function injectedProvider(signer: ccc.Signer): WalletProvider | undefined {
   return provider as WalletProvider;
 }
 function unsupported(error: unknown): boolean {
-  return (
-    !!error &&
-    typeof error === 'object' &&
-    'code' in error &&
-    (error.code === 4200 || error.code === -32601)
-  );
+  // Treat an explicit method-whitelist error like 4200 / -32601 only for the
+  // optional wallet_requestPermissions call, never account access or signing.
+  // A wrapped rejection or other failure still takes precedence.
+  const pending: unknown[] = [error];
+  const seen = new Set<object>();
+  let methodMissing = false;
+  let unlistedMethod = false;
+  while (pending.length) {
+    const value = pending.pop();
+    if (typeof value === 'string') {
+      if (
+        /\b(rejected|denied|cancelled|canceled|unauthori[sz]ed|pending|disconnected)\b|\bnot (?:authori[sz]ed|connected)\b|\bno connected wallet\b|\bconnection (?:lost|closed)\b/i.test(
+          value,
+        )
+      )
+        return false;
+      unlistedMethod ||= /^rpc method is not whitelisted[.!]?$/i.test(value.trim());
+      continue;
+    }
+    if (!value || typeof value !== 'object' || seen.has(value)) continue;
+    if (seen.size >= 8) return false;
+    seen.add(value);
+    if ('message' in value && typeof value.message === 'string') pending.push(value.message);
+    if ('code' in value && value.code !== undefined) {
+      const code =
+        typeof value.code === 'string' && /^-?\d+$/.test(value.code)
+          ? Number(value.code)
+          : value.code;
+      if (code === 4200 || code === -32601) methodMissing = true;
+      else if (code !== -32603 && code !== -32000 && code !== -32001) return false;
+    }
+    if ('cause' in value) pending.push(value.cause);
+    if ('error' in value) pending.push(value.error);
+    if ('data' in value) pending.push(value.data);
+    if ('originalError' in value) pending.push(value.originalError);
+  }
+  return methodMissing || unlistedMethod;
 }
 
 // Only explicit disconnect/reconnect uses these methods. Restoration is read-only.

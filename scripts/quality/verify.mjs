@@ -128,6 +128,19 @@ async function browserChecks() {
     isolated: true,
   });
   run(
+    'Five named standings, pitch and refund states',
+    [join(product, 'scripts/five-standings-browser.cjs')],
+    {
+      cwd: product,
+      isolated: true,
+    },
+  );
+  run(
+    'Competition registration, existing picks, admin and finished browser states',
+    [join(product, 'scripts/campaigns-browser.cjs')],
+    { cwd: product, isolated: true },
+  );
+  run(
     'Actual game pages with controlled dummy data',
     [join(product, 'scripts/games-test-browser.cjs')],
     { cwd: product, isolated: true },
@@ -297,6 +310,11 @@ try {
           cwd: product,
           isolated: true,
         },
+      );
+      run(
+        'Isolated campaign registration, deletion and payout evidence regression',
+        [join(product, 'scripts/campaigns-postgres.cjs')],
+        { cwd: product, isolated: true },
       );
       run(
         'Isolated Survivor PostgreSQL admission regression',

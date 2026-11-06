@@ -8,6 +8,8 @@ import { PgFiveStorage } from './storage';
 import { ccc } from '@ckb-ccc/core';
 import { FiveFunding } from './funding';
 import { FiveRewards } from './rewards';
+import { PgFiveProfiles } from './profile';
+import { DueWork } from '../../infrastructure/due-work';
 let service: FiveService | undefined;
 export function fiveService() {
   if (process.env.STREAK_FIVE_NETWORK && process.env.STREAK_FIVE_NETWORK !== 'testnet')
@@ -50,19 +52,26 @@ export function fiveService() {
     address ? new FiveFunding(store, client, address) : undefined,
     address ? new FiveRewards(pool, client, address) : undefined,
     process.env.STREAK_FIVE_FPL_ENABLED === '1',
+    new PgFiveProfiles(pool),
   );
   return service;
 }
 
 export function startFiveProgression() {
   if (process.env.STREAK_FIVE_FPL_ENABLED !== '1') return () => {};
-  const tick = () => {
-    void Promise.resolve()
-      .then(() => fiveService().progress())
-      .catch(() => console.warn('[five] automatic gameweek refresh deferred'));
+  let unsubscribe: (() => void) | undefined;
+  const work = new DueWork(
+    async () => {
+      const current = fiveService();
+      unsubscribe ??= current.campaignStore.subscribe?.(() => work.wake());
+      await current.progress();
+      return current.nextProgressDelay();
+    },
+    () => console.warn('[five] automatic gameweek refresh deferred'),
+  );
+  work.start();
+  return () => {
+    work.stop();
+    unsubscribe?.();
   };
-  tick();
-  const timer = setInterval(tick, 60_000);
-  timer.unref();
-  return () => clearInterval(timer);
 }

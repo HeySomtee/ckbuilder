@@ -5,6 +5,8 @@ const { Pool } = require('pg');
 const { PgFiveStorage } = require('../dist/modules/five/storage');
 const { FiveService } = require('../dist/modules/five/service');
 const { FiveRewards } = require('../dist/modules/five/rewards');
+const { RewardWorkQueue, enqueueRewardWork } = require('../dist/modules/five/work-queue');
+const { PgSurvivorStorage } = require('../dist/modules/survivor/storage');
 const { closeAuction } = require('../dist/modules/five/auction');
 const { ccc } = require('@ckb-ccc/core');
 const { newRound, parseTerms, saveEntry } = require('../dist/modules/five/domain');
@@ -21,6 +23,8 @@ async function main() {
   try {
     await admin.query(`CREATE SCHEMA "${schema}"`);
     pool = new Pool({ connectionString: url.href, options: `-c search_path=${schema}`, max: 12 });
+    await require('./five-schema-checks.cjs')(pool);
+    await require('./five-profile-checks.cjs')(pool);
     const storage = new PgFiveStorage(pool),
       now = Date.now();
     const players = ['GK', 'DEF', 'MID', 'MID', 'FWD'].map((position, i) => ({
@@ -74,6 +78,69 @@ async function main() {
       /abort/,
     );
     assert.deepEqual(await storage.load('test'), before);
+    const participant = before.entries[0];
+    let saveNotifications = 0;
+    const unsubscribeSaves = storage.subscribe(() => {
+      saveNotifications++;
+    });
+    const initialHistory = await storage.entryHistory('test', participant.accountId);
+    assert.equal(
+      initialHistory.length,
+      1,
+      'accepted first save is recorded in the same transaction',
+    );
+    await storage.change('test', (r, time) =>
+      saveEntry(
+        r,
+        { id: participant.accountId, name: participant.name, wallet: participant.wallet },
+        [...participant.players].reverse(),
+        participant.captain,
+        r.termsHash,
+        time,
+      ),
+    );
+    assert.equal(
+      saveNotifications,
+      0,
+      'an unchanged reordered save does not wake campaign scoring',
+    );
+    assert.equal((await storage.entryHistory('test', participant.accountId)).length, 1);
+    await storage.change('test', (r, time) =>
+      saveEntry(
+        r,
+        { id: participant.accountId, name: participant.name, wallet: participant.wallet },
+        participant.players,
+        'p3',
+        r.termsHash,
+        time,
+      ),
+    );
+    assert.equal(saveNotifications, 1);
+    const changedHistory = await storage.entryHistory('test', participant.accountId);
+    assert.equal(changedHistory.length, 2);
+    assert.equal(changedHistory[0].entry.captain, 'p3');
+    assert.equal(changedHistory[1].entry.captain, participant.captain);
+    await assert.rejects(
+      storage.change('test', (r, time) => {
+        saveEntry(
+          r,
+          { id: participant.accountId, name: participant.name, wallet: participant.wallet },
+          participant.players,
+          'p2',
+          r.termsHash,
+          time,
+        );
+        throw Error('reject historical save');
+      }),
+      /reject historical save/,
+    );
+    assert.equal((await storage.entryHistory('test', participant.accountId)).length, 2);
+    assert.equal(
+      saveNotifications,
+      1,
+      'rolled-back saves do not emit committed source notifications',
+    );
+    unsubscribeSaves();
     await assert.rejects(
       storage.create('test', 'admin', (time) =>
         newRound('test', 'admin', { ...terms, name: 'Changed' }, time),
@@ -327,6 +394,125 @@ async function main() {
     console.log(
       'Five PostgreSQL admission races, rollback, idempotency, DB-clock cutoff and automatic jsonb deduplication passed.',
     );
+
+    // The queue is scheduling evidence only. No real chain, wallets or keys are used.
+    const work = new RewardWorkQueue(pool);
+    await work.initialize();
+    await pool.query('DELETE FROM streak_reward_work');
+    const transaction = await pool.connect();
+    try {
+      await transaction.query('BEGIN');
+      await enqueueRewardWork(transaction, 'five', 'rolled-back');
+      await transaction.query('ROLLBACK');
+      assert.deepEqual(await work.due(), [], 'aborted source transactions cannot create work');
+    } finally {
+      transaction.release();
+    }
+    await enqueueRewardWork(pool, 'five', 'scheduled');
+    const original = (await work.due())[0];
+    assert.equal(original.subject, 'scheduled');
+    await Promise.all(
+      Array.from({ length: 12 }, () => enqueueRewardWork(pool, 'five', 'scheduled')),
+    );
+    const newer = (await work.due())[0];
+    assert.equal(
+      BigInt(newer.generation),
+      BigInt(original.generation) + 12n,
+      'concurrent producers retain every wake generation',
+    );
+    await work.complete(original, null);
+    assert.equal(
+      (await work.due())[0].generation,
+      newer.generation,
+      'an old consumer cannot clear new durable work',
+    );
+    await work.complete(newer, Date.now() + 600_000);
+    assert.deepEqual(await work.due(), []);
+    assert.ok(
+      (await work.delay()) > 590_000,
+      'scheduled work sleeps instead of polling every ten seconds',
+    );
+    await work.complete(original, null);
+    assert.deepEqual(
+      await work.due(),
+      [],
+      'a stale consumer cannot bring forward an already rescheduled generation',
+    );
+    await work.complete(newer, null);
+    assert.equal(
+      await work.delay(),
+      900_000,
+      'finished queues retain only a sparse recovery deadline',
+    );
+    await work.complete(original, null);
+    assert.deepEqual(
+      await work.due(),
+      [],
+      'a stale consumer cannot resurrect completed newer work',
+    );
+    await enqueueRewardWork(pool, 'five', 'scheduled');
+    assert.equal(
+      (await work.due())[0].subject,
+      'scheduled',
+      'a completed marker wakes on a new committed source change',
+    );
+
+    await pool.query('DELETE FROM streak_reward_work');
+    for (let i = 0; i < 8; i++) await enqueueRewardWork(pool, 'five', `hot-${i}`);
+    await enqueueRewardWork(pool, 'payout', 'wallet');
+    await pool.query(
+      "UPDATE streak_reward_work SET due_at=clock_timestamp()-CASE WHEN kind='five' THEN interval '2 minutes' ELSE interval '1 minute' END",
+    );
+    const hot = await work.due();
+    assert.equal(hot.length, 8);
+    assert.ok(hot.every((job) => job.kind === 'five'));
+    for (const job of hot) {
+      await enqueueRewardWork(pool, job.kind, job.subject);
+      await work.complete(job, null);
+    }
+    assert.equal(
+      (await work.due())[0].kind,
+      'payout',
+      'continually edited gameweeks cannot starve a waiting payout',
+    );
+
+    await pool.query('DELETE FROM streak_reward_work');
+    await new PgSurvivorStorage(pool).list();
+    await enqueueRewardWork(pool, 'five', 'audit-auction');
+    const retained = (await work.due())[0];
+    await work.complete(retained, Date.now() + 600_000);
+    await work.seed();
+    assert.ok(
+      !(await work.due()).some((job) => job.subject === 'audit-auction'),
+      'startup migration preserves an existing future job deadline',
+    );
+    assert.ok(
+      (await work.due()).some((job) => job.kind === 'payout'),
+      'startup migration discovers retained claim requests',
+    );
+    await pool.query('DELETE FROM streak_reward_work');
+    await pool.query('DELETE FROM streak_five_claim_requests');
+    const txHash = `0x${'91'.repeat(32)}`;
+    await pool.query(
+      "INSERT INTO streak_five_payouts(id,wallet,amount,signed_bytes,tx_hash,status) VALUES('migration','synthetic',1,'synthetic',$1,'submitted')",
+      [txHash],
+    );
+    await work.seed();
+    assert.ok(
+      (await work.due()).some((job) => job.kind === 'payout'),
+      'startup migration recovers a signed payout without a remaining claim request',
+    );
+    await pool.query('DELETE FROM streak_reward_work');
+    await pool.query("UPDATE streak_five_payouts SET status='confirmed' WHERE id='migration'");
+    await work.seed();
+    assert.ok(
+      !(await work.due()).some((job) => job.kind === 'payout'),
+      'confirmed payout history does not keep the idle worker busy',
+    );
+    console.log(
+      'Rewards durable queue: transactional rollback, concurrent wake generations, stale completion, due scheduling, fairness and migration recovery passed.',
+    );
+    await require('./five-refund-checks.cjs')(pool, terms);
   } finally {
     if (pool) await pool.end();
     await admin.query(`DROP SCHEMA "${schema}" CASCADE`);

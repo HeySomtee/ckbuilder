@@ -1,9 +1,134 @@
 # Streak status
 
+6 November [Zerion RPC compatibility](docs/delivery/wallet-compatibility.md): the
+optional reconnect account picker now tolerates the reported exact unsupported
+method message while required account access, signing and account checks stay
+mandatory. Independent identity review, five permission tests, all four rebuilt
+Chromium/WebKit wallet journeys and final static/type/lint/build checks passed.
+These follow the 94-stage Five major run as separate coverage. The matching
+failure is reproduced locally; actual Zerion mobile acceptance and deployment
+remain outstanding. No new Render setting is required.
+
+6 November [Five names, pitch standings and refunds](docs/delivery/five-names-pitch-refunds.md)
+are implemented locally following preview approval. Required persistent FPL names,
+short wallet labels and mobile squad inspection preserve private picks and squad
+save timestamps. Refund banners follow payout records; paid refunds stop
+requeueing and failed unsigned requests yield to other wallets. Independent
+identity/money review resolved account-session fencing and delayed-payment copy.
+All 94 major-gate stages passed at 11:07:41 UTC, including signed local-chain
+refund and prize collection. The later Zerion optional-RPC compatibility fix passed
+separate final verification; this is not a final-tree publication receipt.
+No push, deployment or confirmation of the reported hosted refund is claimed.
+Earlier preview-only entries below are historical.
+
+6 November [Five standings preview](design/five-standings-review/README.md) is ready
+for review: required FPL display names, shortened wallet labels, row-to-pitch squad
+inspection, player points and mobile return controls. Focused Chromium/WebKit
+checks pass with synthetic data. App integration awaits design approval; this
+preview makes no production identity, scoring or financial changes.
+
+6 November [background efficiency refactor](docs/delivery/background-efficiency.md)
+is implemented locally: targeted fixture SQL, Activity/campaign change suppression,
+durable reward jobs and deadline scheduling, local worker readiness, bounded caches
+and Linux scheduling ownership. Independent reviews fixed legacy user normalization,
+payout queue fairness, provider-failure progression and concurrent schema creation.
+The 91-stage major gate passed; after the final schema fix, static, unit and
+PostgreSQL lanes passed again. Pinned Linux scheduling tests also pass. This is
+combined coverage, not a single-run final-tree publication receipt. No commit,
+push, deployment, live fund movement or measured Neon/Render savings are claimed.
+
+5 November [GW10 production checklist](docs/delivery/hosted-acceptance-2026-11-06.md)
+is ready for the owner's post-deployment rehearsal. It reuses six funded wallets
+and distinguishes live testnet game flows from separate mainnet award acceptance.
+Official FPL deadlines were verified; hosted availability, deployment and real-wallet
+acceptance remain unverified. This documentation update makes no runtime changes.
+
+5 November [competitions runtime](docs/delivery/competitions.md) is implemented
+and verified locally: persisted registration/scoring, configurable admin
+setup, original prediction/Five flows, public standings, retained deleted histories
+and read-only mainnet award verification. Future official gameweeks can be prepared
+without waiting for the current deadline. Independent review is complete. All
+required coverage passed across 75 application checks and 11 CKB/local-chain stages;
+the latter required a separate WSL-enabled run, so no single-run green release
+receipt is claimed. No push, deployment, live campaign publication or fund movement.
+Earlier preview-only entries below describe the preceding design phase.
+
+5 November the competition admin preview adds two-step deletion: review the named
+competition, then type its exact name before Delete becomes available. Deleted
+sample listings remain removed across reloads when browser storage is available;
+admins can start a fresh draft. Five setup includes GW10 for the requested rehearsal
+ahead of the GW11 campaign. This is standalone design behavior, not live campaign
+deletion. Runtime deletion must retain audit, existing entries and financial
+obligations, and exclude labelled rehearsals from community engagement evidence.
+
+5 November the [competition preview](design/competition-review/README.md) adds
+guided admin setup, configurable prize places/amounts, fixture selection and an
+Evidence tab. The $25/$15/$10 podium is the first-campaign preset. Preview edits
+update synthetic player/admin views only; registration, scoring and mainnet payout
+integration are not enabled. Campaign picks must reuse the existing slip/payment
+and Five squad flows. Organizer-controlled, wallet-approved mainnet payouts are
+the selected first-campaign model; no reward address or funds are configured here.
+The [evidence and PostHog guide](docs/product/campaign-evidence.md) describes future
+verified records and optional analytics, including new-project setup. It enables
+no tracking and presents no synthetic numbers as real engagement evidence.
+
+5 November owner approved the competition UI. The local preview is the approved
+design for implementation, including the $25/$15/$10 podium per competition.
+Campaign registration/scoring integration and mainnet payout infrastructure remain
+unimplemented. The selected organizer wallet requires owner-approved payments;
+user-initiated automatic claims have not been selected or implemented.
+
+5 November campaign prize design updated to $25/$15/$10 for the top three in each
+competition, $100 total before fees. A dedicated organizer-controlled mainnet
+wallet with approved payouts is selected for the first campaign; it is not
+configured or implemented. Existing Five/Survivor rewards remain testnet-only.
+Only the standalone design preview and planning notes change in this increment.
+
+5 November [competition design preview](design/competition-review/README.md) is
+available locally on port 4198. Dropdowns cover both games, key entry/result states
+and admin oversight. Finished views separate final rank/points from prize payment.
+Registration immediately creates a ranked entry; non-participants remain at the
+bottom. This is synthetic design review only, with no campaign runtime integration,
+production data, fund movement or publication. Payment concurrency and the earlier
+deferred monitoring backlog remain outstanding.
+
+3 November owner schedules funding and capacity monitoring, dashboards and alerts
+for post-grant implementation. The payment proposal records usable-funding,
+fragmentation, reservation and protocol-headroom signals; no monitoring system
+has been implemented by this planning update.
+
+3 November funding-selection backlog now includes combining sponsor cells within
+a slip and reviewing bounded user-wallet fragmentation handling. Recorded in the
+[payment proposal](docs/architecture/concurrent-payments.md) for later work with
+concurrency. The owner's sponsor top-up does not remove these implementation limits.
+
 2 November product README now describes integrated direct predictions and claims,
 indexed Activity, custodial game rewards and the separate legacy treasury ledger.
 Season is the API-backed app; standalone previews and explicit local game data
 remain synthetic. This documentation correction changes no runtime behavior.
+
+1 November priority update: prediction-placement concurrency remains next.
+Large-scale Activity indexing upgrades are deferred pending demand and funding;
+they do not block the v4 concurrency increment. The backlog and reconsideration
+criteria are recorded in the work tracker and payment proposal. No runtime change
+or new capacity claim accompanies this decision.
+
+1 November [concurrent payments proposal](docs/architecture/concurrent-payments.md)
+is drafted for owner review. It covers different/same-market and sponsored
+payments, safe reservations, restart/reorg recovery, measurable acceptance and
+the current four-lane/32-position limit. The revised lifecycle design includes
+concurrent auction admission, late contribution refunds, rewards backing and a
+[larger-market settlement candidate](docs/architecture/payment-protocol-vnext.md).
+The candidate covers complete lane inclusion, cross-lane funding, rounding and
+independent claims; exact scripts and capacity still require proof and review.
+No concurrency implementation or new protocol deployment is claimed. The earlier
+message-only edit remains local.
+
+1 November local payment-review wording now distinguishes temporary reservation
+and first-payment confirmation from unverified availability, reassures users that
+picks are saved and gives a next step. Payment guards and recovery are unchanged.
+Frontend TypeScript/build, targeted lint and formatting passed. Not committed or
+pushed; the earlier full-gate receipt does not cover this wording increment.
 
 1 November publication: `cf81620` is pushed to GitHub main. Mobile market filters
 use the approved compact panel; desktop retains its existing layout. The splash
@@ -15,15 +140,42 @@ and physical wallet-browser acceptance are not verified by this local run.
 See [delivery evidence](docs/delivery/mobile-markets-startup.md). Earlier local-only
 and approval-pending entries are historical.
 
-1 November publication completed: `30599d2` is pushed to GitHub `main`, including
-the earlier `1dc53d8` Survivor/loading release and the Five live-team and
-remaining-gameweek work. All 79 required checks passed in one run from
-06:06:49 to 06:44:51 UTC on Node 24.14.0, for exact tree `95be163ef780`.
-Commit and push reused that successful receipt. Hosted CI remains paused.
-Physical Zerion Android dropdown acceptance and hosted wallet/settlement checks
-remain outstanding. Earlier pending-publication entries below are historical.
+1 November approved mobile-only market layout and quiet startup are implemented
+locally. Desktop retains its original controls. All 79 required major checks passed
+in one run, 07:32:05 to 08:17:57 UTC, Node 24.14.0, including 64 startup and 26
+Season browser groups. The isolated checkout preserved the owner's unfinished
+checklist/report edits. Source hashes are recorded in
+`.quality-artifacts/nov1-mobile-startup-source.json`. No commit/push in this increment.
+See [implementation](docs/delivery/mobile-markets-startup.md). Earlier preview
+approval-pending entries are historical.
 
-1 November dropdown correction: compact in-page controls replace native pickers across Season and retained pages, with shared glass styling and 44px touch targets. The 16-journey Chromium/WebKit matrix and focused Five/Survivor flows pass. The final publication commit records exact-tree release validation; physical Zerion Android acceptance remains separate. See [implementation](docs/delivery/in-page-selects.md).
+1 November mobile markets redesign is ready as a local interactive preview at
+`http://127.0.0.1:4197/`, with compact grouped controls and an intro-only splash.
+Eight Chromium/WebKit journeys pass. Delaying the actual startup controller
+reproduces a flash of recovery controls in both engines. Application integration
+and startup correction await preview approval. See
+[design and findings](design/mobile-markets-review/README.md).
+
+1 November completed release: runtime `30599d2` and verification notes `dff2340`
+are pushed to GitHub `main`, including the earlier `1dc53d8` Survivor/loading
+release and Five live-team/remaining-gameweek work. All 79 required checks passed
+in one run, 06:06:49 to 06:44:51 UTC, Node 24.14.0, exact tree `95be163ef780`.
+The docs-only follow-up passed formatting and static policies. At 06:52:27 UTC,
+the public Season frontend returned HTTP 200 and matched the verified build.
+Physical Zerion Android dropdown and hosted wallet/settlement acceptance remain
+outstanding. Hosted CI remains paused. Earlier pending-release notes are historical.
+
+1 November publication: `1dc53d8` is pushed to GitHub main, including the earlier
+Five live-team/points and Survivor rounds/prize work. All 78 complete local checks
+passed at 05:37:27 UTC; commit and push reused the exact-tree receipt. Hosted CI
+remains paused and Render deployment is not yet verified. The dropdown follow-up
+is in its separate final release gate, with the 16 shared browser scenarios passed.
+
+1 November dropdown follow-up: replacing native single-choice pickers with shared
+in-page controls across Season and retained pages. Compact text and glass styling
+preserve touch targets, keyboard behavior and dialog focus. Browser verification
+and publication remain in progress. The existing Survivor/loading release is
+being validated independently; this follow-up does not replace its commitments.
 
 1 November release scope now also includes readable pending-button loaders across
 React and legacy pages. Shared CSS removes compounded dimming while preserving
@@ -38,6 +190,12 @@ remain protected. Focused unit and six Chromium/WebKit journeys pass; full gate
 and publication are in progress. The release also includes the previously local
 Five team/points view and Survivor remaining-gameweek selector. See
 [outcomes and edge cases](docs/delivery/survivor-outcomes.md).
+
+1 November [Week 23 report](../../reports/week-23.md) summarize work since 26 October. GitHub
+`main` was independently read as `2839e9e`; local `948fb1c` and `cc994c6` remain
+unpublished. The report preserves the existing 77-check local gate evidence and
+the outstanding hosted acceptance. No runtime, deployment or fund movement is
+part of this documentation update.
 
 31 October release verification: committed `948fb1c` after all 77 required checks
 passed in one full gate, completed at 13:38:27 UTC. This includes Survivor creator

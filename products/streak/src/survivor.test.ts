@@ -337,6 +337,22 @@ class MemoryStore implements SurvivorStorage {
 }
 async function main() {
   await seasonAndPrizes();
+  const scheduled = new MemoryStore();
+  savePick(scheduled.data[0], 'one', 0, 'a', now);
+  savePick(scheduled.data[0], 'two', 0, 'b', now);
+  const scheduledService = new SurvivorService(scheduled, ['admin-wallet'], () => []);
+  assert.equal(
+    await scheduledService.tick(),
+    1000,
+    'Idle scheduling wakes at the first pick deadline.',
+  );
+  scheduled.now = now + 1500;
+  assert.equal(
+    await scheduledService.tick(),
+    3500,
+    'A locked round wakes at its resolution cutoff rather than an idle interval.',
+  );
+  assert.equal(scheduled.data[0].rounds[0].state, 'locked');
   const store = new MemoryStore();
   const service = new SurvivorService(store, ['admin-wallet'], () => []);
   const player = { id: 'one', name: 'One', wallet: 'player-wallet' };

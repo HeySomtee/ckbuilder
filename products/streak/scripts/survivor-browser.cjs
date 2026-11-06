@@ -187,6 +187,7 @@ async function main() {
             return route.continue();
           });
           await context.routeWebSocket('**/*', (socket) => socket.close());
+          await require('./browser-campaign-fixture.cjs')(context, base);
           const page = await context.newPage();
           page.on('pageerror', (error) => errors.push(error.message));
           await page.goto(base + '/season/?view=survivor');

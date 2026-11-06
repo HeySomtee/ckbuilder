@@ -24,6 +24,7 @@ import {
 } from "./chain";
 import { MIN_ONCHAIN_CKB } from "./config";
 import { read, update } from "./store";
+import { pgEnabled, pgHasPendingWithdrawals } from './store_pg';
 import type { Deposit, User, UserWallet, Withdraw } from "./types";
 
 // ── Treasury (singleton; created on first boot) ─────────────────────────────
@@ -287,6 +288,10 @@ export async function recoverUnsentWithdrawals(): Promise<void> {
 }
 
 let reconcilingWithdrawals: Promise<void> | null = null;
+
+export async function hasPendingWithdrawals(): Promise<boolean> {
+  return pgEnabled() ? pgHasPendingWithdrawals() : read((db) => db.withdraws.some((w) => w.status === 'pending'));
+}
 
 /** Recover successful sends whose RPC response or final persistence was lost. */
 export function reconcilePendingWithdrawals(): Promise<void> {

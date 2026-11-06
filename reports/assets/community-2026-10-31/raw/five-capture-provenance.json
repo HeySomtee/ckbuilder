@@ -1,0 +1,40 @@
+{
+  "capturedAt": "2026-10-31T18:05:04.952Z",
+  "sourceSha": "cc994c69f82cbb3931fd2f81b44bef34580a2e17",
+  "harness": ".quality-artifacts/community-five-capture.cjs",
+  "basedOn": "products/streak/scripts/five-auto-browser.cjs",
+  "synthetic": true,
+  "description": "Actual built Streak Five app with an isolated saved squad and synthetic player prices, form and upcoming fixtures. No provider, real account, wallet, database or fund movement.",
+  "screenshots": [
+    {
+      "file": "five-desktop.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "scroll": {
+        "x": 0,
+        "y": 0
+      },
+      "sha256": "31bebf9cd2901d74a3ec35f071070e023150a131e5420fe4e2f2e3d862a89c12",
+      "pageErrors": [],
+      "externalRequests": [],
+      "localRequestCount": 26
+    },
+    {
+      "file": "five-mobile.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "scroll": {
+        "x": 0,
+        "y": 118
+      },
+      "sha256": "1e2844f1e60e8c73164361f091fe2a2436719d4f0f78005fb3afcf56ae82e0fd",
+      "pageErrors": [],
+      "externalRequests": [],
+      "localRequestCount": 26
+    }
+  ]
+}

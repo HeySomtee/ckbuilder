@@ -135,6 +135,7 @@ async function main() {
           return route.continue();
         });
         await context.routeWebSocket('**/*', (socket) => socket.close());
+        await require('./browser-campaign-fixture.cjs')(context, base);
         await context.addInitScript(() => {
           Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
@@ -522,6 +523,7 @@ async function main() {
           ).length;
           for (const [mode, message] of [
             ['reject-access', 'Synthetic wallet access declined.'],
+            ['unlisted-access', 'rpc method is not whitelisted'],
             [
               'change-access',
               'Your wallet account or network changed. Connect again and review your action.',
@@ -546,9 +548,33 @@ async function main() {
               false,
               'Access rejection or account replacement must stop before requesting a signature.',
             );
-            if (mode === 'reject-access') await disconnect.click();
+            if (mode !== 'change-access') await disconnect.click();
             await connect.waitFor();
           }
+          const beforeSigningFailure = requests.filter((url) => url === '/api/auth/verify').length;
+          await signIn.click();
+          await choose({ mode: 'unlisted-sign' });
+          const failedSignature = page
+            .locator('main > .feedback-card')
+            .filter({ hasText: 'rpc method is not whitelisted' });
+          await failedSignature.waitFor();
+          assert.equal(
+            requests.filter((url) => url === '/api/auth/verify').length,
+            beforeSigningFailure,
+            'An unavailable required signature must never continue to proof verification.',
+          );
+          assert.equal(
+            await page.evaluate(
+              () => window.syntheticEvm.calls.filter((method) => method === 'personal_sign').length,
+            ),
+            1,
+            'A failed required signature is not retried silently.',
+          );
+          await failedSignature
+            .getByRole('button', { name: 'Dismiss notification', exact: true })
+            .click();
+          await disconnect.click();
+          await connect.waitFor();
           await signIn.click();
           await choose({ mode: 'hold' });
           await page.waitForFunction(() => window.syntheticEvm.calls.includes('personal_sign'));
@@ -679,6 +705,41 @@ async function main() {
             await page.getByRole('button', { name: 'Copy wallet address', exact: true }).count(),
             0,
           );
+          const verifiesBeforeUnlisted = requests.filter(
+            (url) => url === '/api/auth/verify',
+          ).length;
+          await signIn.click();
+          await choose({
+            unlistedPermissions: true,
+            walletName: 'Zerion',
+            keyByte: (0x90 + groups).toString(16),
+          });
+          await signOut.waitFor();
+          const unlistedCalls = await page.evaluate(() => window.syntheticEvm.calls);
+          assert.equal(
+            unlistedCalls.filter((method) => method === 'wallet_requestPermissions').length,
+            1,
+            'An unavailable optional picker is attempted only once.',
+          );
+          assert.ok(unlistedCalls.includes('eth_requestAccounts'));
+          assert.equal(
+            unlistedCalls.filter((method) => method === 'personal_sign').length,
+            1,
+            'The current account still explicitly approves one ordinary sign-in challenge.',
+          );
+          assert.equal(
+            requests.filter((url) => url === '/api/auth/verify').length,
+            verifiesBeforeUnlisted + 1,
+          );
+          assert.equal(
+            await page.evaluate(
+              async () => (await (await fetch('/api/me')).json()).user.walletAddress,
+            ),
+            await page.evaluate(() => window.syntheticEvm.address),
+            'A missing optional picker cannot bypass the selected account proof.',
+          );
+          await signOut.click();
+          await signIn.waitFor();
           await signIn.click();
           await choose({
             noPermissions: true,

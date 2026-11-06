@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Streak | Desktop and mobile gallery</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      :root {
+        color-scheme: dark;
+        font-family: Arial, Helvetica, sans-serif;
+        color: #eff1e9;
+        background: #090f0c;
+      }
+      body {
+        margin: 0;
+      }
+      a {
+        color: #b8e77b;
+        text-underline-offset: 4px;
+      }
+      .intro {
+        max-width: 1100px;
+        padding: 64px 28px 32px;
+        margin: auto;
+      }
+      .intro h1 {
+        margin: 20px 0 12px;
+        font-size: clamp(32px, 5vw, 56px);
+        letter-spacing: -2px;
+      }
+      .intro p {
+        max-width: 760px;
+        color: #a9b5ad;
+        font-size: 17px;
+        line-height: 1.65;
+      }
+      .links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        margin-top: 24px;
+      }
+      .gallery {
+        max-width: 1500px;
+        margin: auto;
+        padding: 0 24px 80px;
+      }
+      .board-wrap {
+        margin-top: 44px;
+      }
+      .board {
+        width: 1920px;
+        padding: 56px 64px 44px;
+        background: radial-gradient(ellipse at 83% 0%, #19382b 0, transparent 58%), #101a15;
+        border: 1px solid #35463c;
+        overflow: hidden;
+      }
+      .masthead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .brand {
+        width: 188px;
+        height: 48px;
+        object-fit: contain;
+        object-position: left;
+      }
+      .domain {
+        font-size: 20px;
+        letter-spacing: 1px;
+        color: #b4c1b8;
+      }
+      .eyebrow {
+        margin: 34px 0 12px;
+        color: #b8e77b;
+        font-size: 15px;
+        letter-spacing: 3px;
+        font-weight: 700;
+      }
+      h2 {
+        font-size: 52px;
+        line-height: 1.06;
+        letter-spacing: -1.8px;
+        margin: 0;
+      }
+      .subtitle {
+        font-size: 21px;
+        color: #b4c1b8;
+        margin: 14px 0 30px;
+        line-height: 1.5;
+      }
+      .screens {
+        display: grid;
+        grid-template-columns: 1350px 402px;
+        gap: 40px;
+        align-items: start;
+      }
+      .screen-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 2px;
+        margin: 0 0 12px;
+        color: #d1d9d1;
+      }
+      .screen-label span {
+        color: #83978b;
+        font-weight: 400;
+        letter-spacing: 1px;
+      }
+      .frame {
+        margin: 0;
+        border: 1px solid #536357;
+        border-radius: 16px;
+        background: #0d1711;
+        overflow: hidden;
+        box-shadow: 0 15px 40px #0005;
+      }
+      .frame a {
+        display: block;
+      }
+      .frame img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .mobile .frame {
+        border-radius: 24px;
+      }
+      .annotation {
+        color: #b5c2b9;
+        font-size: 17px;
+        line-height: 1.5;
+        margin: 20px 4px 0;
+      }
+      .annotation strong {
+        color: #ff9a6a;
+      }
+      .board-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 30px;
+        padding-top: 22px;
+        border-top: 1px solid #34463b;
+        color: #93a69a;
+        font-size: 15px;
+      }
+      .board-footer b {
+        color: #b8e77b;
+        font-weight: 400;
+      }
+      .exports {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        padding: 16px 2px;
+        font-size: 14px;
+      }
+      .preview-slot {
+        overflow: hidden;
+      }
+      .preview-slot .board {
+        transform-origin: top left;
+      }
+      body.export .intro,
+      body.export .exports,
+      body.export .board-wrap:not(.selected) {
+        display: none;
+      }
+      body.export .gallery {
+        padding: 0;
+        margin: 0;
+        max-width: none;
+      }
+      body.export .board-wrap {
+        margin: 0;
+      }
+      body.export .preview-slot {
+        height: auto !important;
+        overflow: visible;
+      }
+      body.export .board {
+        transform: none !important;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="intro">
+      <img
+        class="brand"
+        src="../../products/streak/public/brand/on-form-wordmark.svg"
+        alt="Streak"
+      />
+      <h1>Predictions first.<br />More ways to play.</h1>
+      <p>
+        Five paired desktop and mobile views, covering predictions, Streak Five and Survivor. These
+        are the actual application components with isolated sample fixtures, balances and payment
+        states. They are not evidence of live payments, participation or production liquidity.
+      </p>
+      <nav class="links" aria-label="Publishing files">
+        <a href="github-issue-update.md">GitHub issue draft</a>
+        <a href="nervos-talk.md">Nervos Talk draft</a>
+        <a href="README.md">Upload instructions</a>
+        <a href="../assets/community-2026-10-31/raw/capture-provenance.json">Capture provenance</a>
+        <a href="../assets/community-2026-10-31/raw/five-capture-provenance.json"
+          >Five provenance</a
+        >
+        <a href="../assets/community-2026-10-31/raw/survivor-capture-provenance.json"
+          >Survivor provenance</a
+        >
+      </nav>
+    </header>
+    <main class="gallery">
+      <section class="board-wrap" id="markets">
+        <div class="preview-slot">
+          <article class="board" aria-label="Prediction market desktop and mobile">
+            <header class="masthead">
+              <img
+                class="brand"
+                src="../../products/streak/public/brand/on-form-wordmark.svg"
+                alt="Streak"
+              /><span class="domain">streakpitch.com</span>
+            </header>
+            <p class="eyebrow">01 / MAKE YOUR CALL</p>
+            <h2>The match. The pool. Your prediction.</h2>
+            <p class="subtitle">Explore the market, choose an outcome and build your slip.</p>
+            <div class="screens">
+              <div>
+                <p class="screen-label">DESKTOP <span>1440 × 1000</span></p>
+                <figure class="frame">
+                  <a href="../assets/community-2026-10-31/raw/markets-desktop.png"
+                    ><img
+                      src="../assets/community-2026-10-31/raw/markets-desktop.png"
+                      alt="Desktop prediction market with the outcome controls and pool chart"
+                  /></a>
+                </figure>
+              </div>
+              <div class="mobile">
+                <p class="screen-label">MOBILE <span>390 × 844</span></p>
+                <figure class="frame">
+                  <a href="../assets/community-2026-10-31/raw/markets-mobile.png"
+                    ><img
+                      src="../assets/community-2026-10-31/raw/markets-mobile.png"
+                      alt="The same prediction market on mobile"
+                  /></a>
+                </figure>
+                <p class="annotation">The same market, adapted to a smaller screen.</p>
+              </div>
+            </div>
+            <footer class="board-footer">
+              <span>Actual Streak interface · Isolated sample data</span><b>CKB Pudge testnet</b>
+            </footer>
+          </article>
+        </div>
+        <div class="exports">
+          <a href="../assets/community-2026-10-31/01-markets.png" download>Download paired PNG</a
+          ><a href="../assets/community-2026-10-31/raw/markets-desktop.png">Desktop original</a
+          ><a href="../assets/community-2026-10-31/raw/markets-mobile.png">Mobile original</a>
+        </div>
+      </section>
+      <section class="board-wrap" id="payment-tracking">
+        <div class="preview-slot">
+          <article class="board" aria-label="Payment tracking desktop and mobile">
+            <header class="masthead">
+              <img
+                class="brand"
+                src="../../products/streak/public/brand/on-form-wordmark.svg"
+                alt="Streak"
+              /><span class="domain">streakpitch.com</span>
+            </header>
+            <p class="eyebrow">02 / FOLLOW YOUR PAYMENT</p>
+            <h2>Your payment stays within reach.</h2>
+            <p class="subtitle">Follow progress in a compact control while you explore the app.</p>
+            <div class="screens">
+              <div>
+                <p class="screen-label">DESKTOP <span>1440 × 1000</span></p>
+                <figure class="frame">
+                  <a href="../assets/community-2026-10-31/raw/payment-tracking-desktop.png"
+                    ><img
+                      src="../assets/community-2026-10-31/raw/payment-tracking-desktop.png"
+                      alt="Desktop market with a pending payment tracker"
+                  /></a>
+                </figure>
+              </div>
+              <div class="mobile">
+                <p class="screen-label">MOBILE <span>390 × 844</span></p>
+                <figure class="frame">
+                  <a href="../assets/community-2026-10-31/raw/payment-tracking-mobile.png"
+                    ><img
+                      src="../assets/community-2026-10-31/raw/payment-tracking-mobile.png"
+                      alt="Mobile market with the minimized three-cell payment control"
+                  /></a>
+                </figure>
+                <p class="annotation">
+                  <strong>The three-cell control</strong> keeps pending status compact. Tap to
+                  expand; drag to a clear corner.
+                </p>
+              </div>
+            </div>
+            <footer class="board-footer">
+              <span>Actual Streak interface · Simulated pending payment</span
+              ><b>CKB Pudge testnet</b>
+            </footer>
+          </article>
+        </div>
+        <div class="exports">
+          <a href="../assets/community-2026-10-31/02-payment-tracking.png" download
+            >Download paired PNG</a
+          ><a href="../assets/community-2026-10-31/raw/payment-tracking-desktop.png"
+            >Desktop original</a
+          ><a href="../assets/community-2026-10-31/raw/payment-tracking-mobile.png"
+            >Mobile original</a
+          >
+        </div>
+      </section>
+      <section class="board-wrap" id="activity">
+        <div class="preview-slot">
+          <article class="board" aria-label="Wallet activity desktop and mobile">
+            <header class="masthead">
+              <img
+                class="brand"
+                src="../../products/streak/public/brand/on-form-wordmark.svg"
+                alt="Streak"
+              /><span class="domain">streakpitch.com</span>
+            </header>
+            <p class="eyebrow">03 / FOLLOW YOUR RETURNS</p>
+            <h2>Your matchday, accounted for.</h2>
+            <p class="subtitle">Open predictions and available returns, together in My activity.</p>
+            <div class="screens">
+              <div>
+                <p class="screen-label">DESKTOP <span>1440 × 1000</span></p>
+                <figure class="frame">
+                  <a href="../assets/community-2026-10-31/raw/activity-desktop.png"
+                    ><img
+                      src="../assets/community-2026-10-31/raw/activity-desktop.png"
+                      alt="Desktop My activity showing prediction history and available returns"
+                  /></a>
+                </figure>
+              </div>
+              <div class="mobile">
+                <p class="screen-label">MOBILE <span>390 × 844</span></p>
+                <figure class="frame">
+                  <a href="../assets/community-2026-10-31/raw/activity-mobile.png"
+                    ><img
+                      src="../assets/community-2026-10-31/raw/activity-mobile.png"
+                      alt="The same populated My activity view on mobile"
+                  /></a>
+                </figure>
+                <p class="annotation">
+                  Saved history loads from the wallet index. Collection still verifies live chain
+                  state.
+                </p>
+              </div>
+            </div>
+            <footer class="board-footer">
+              <span>Actual Streak interface · Synthetic positions and returns</span
+              ><b>CKB Pudge testnet</b>
+            </footer>
+          </article>
+        </div>
+        <div class="exports">
+          <a href="../assets/community-2026-10-31/03-activity.png" download>Download paired PNG</a
+          ><a href="../assets/community-2026-10-31/raw/activity-desktop.png">Desktop original</a
+          ><a href="../assets/community-2026-10-31/raw/activity-mobile.png">Mobile original</a>
+        </div>
+      </section>
+      <section class="board-wrap" id="five">
+        <div class="preview-slot">
+          <article class="board" aria-label="Streak Five desktop and mobile">
+            <header class="masthead">
+              <img
+                class="brand"
+                src="../../products/streak/public/brand/on-form-wordmark.svg"
+                alt="Streak"
+              />
+              <span class="domain">streakpitch.com</span>
+            </header>
+            <p class="eyebrow">04 / STREAK FIVE</p>
+            <h2>Five players. Your weekly game plan.</h2>
+            <p class="subtitle">
+              Build your squad, choose a captain and follow their performances.
+            </p>
+            <div class="screens">
+              <div>
+                <p class="screen-label">DESKTOP <span>1440 × 1000</span></p>
+                <figure class="frame">
+                  <a href="../assets/community-2026-10-31/raw/five-desktop.png"
+                    ><img
+                      src="../assets/community-2026-10-31/raw/five-desktop.png"
+                      alt="Streak Five squad on desktop"
+                  /></a>
+                </figure>
+              </div>
+              <div class="mobile">
+                <p class="screen-label">MOBILE <span>390 × 844</span></p>
+                <figure class="frame">
+                  <a href="../assets/community-2026-10-31/raw/five-mobile.png"
+                    ><img
+                      src="../assets/community-2026-10-31/raw/five-mobile.png"
+                      alt="The same Streak Five squad on mobile"
+                  /></a>
+                </figure>
+                <p class="annotation">
+                  A five-player fantasy squad, with a double-points captain and a fresh start each
+                  gameweek.
+                </p>
+              </div>
+            </div>
+            <footer class="board-footer">
+              <span>Actual Streak interface · Isolated sample game data</span
+              ><b>Free fantasy · Beta</b>
+            </footer>
+          </article>
+        </div>
+        <div class="exports">
+          <a href="../assets/community-2026-10-31/04-streak-five.png" download
+            >Download paired PNG</a
+          >
+          <a href="../assets/community-2026-10-31/raw/five-desktop.png">Desktop original</a>
+          <a href="../assets/community-2026-10-31/raw/five-mobile.png">Mobile original</a>
+        </div>
+      </section>
+      <section class="board-wrap" id="survivor">
+        <div class="preview-slot">
+          <article class="board" aria-label="Streak Survivor desktop and mobile">
+            <header class="masthead">
+              <img
+                class="brand"
+                src="../../products/streak/public/brand/on-form-wordmark.svg"
+                alt="Streak"
+              />
+              <span class="domain">streakpitch.com</span>
+            </header>
+            <p class="eyebrow">05 / STREAK SURVIVOR</p>
+            <h2>One team. Make it count.</h2>
+            <p class="subtitle">
+              Choose a winner each round. Every used team changes your next decision.
+            </p>
+            <div class="screens">
+              <div>
+                <p class="screen-label">DESKTOP <span>1440 × 1000</span></p>
+                <figure class="frame">
+                  <a href="../assets/community-2026-10-31/raw/survivor-desktop.png"
+                    ><img
+                      src="../assets/community-2026-10-31/raw/survivor-desktop.png"
+                      alt="Streak Survivor team selection on desktop"
+                  /></a>
+                </figure>
+              </div>
+              <div class="mobile">
+                <p class="screen-label">MOBILE <span>390 × 844</span></p>
+                <figure class="frame">
+                  <a href="../assets/community-2026-10-31/raw/survivor-mobile.png"
+                    ><img
+                      src="../assets/community-2026-10-31/raw/survivor-mobile.png"
+                      alt="The same Streak Survivor team selection on mobile"
+                  /></a>
+                </figure>
+                <p class="annotation">
+                  Pick a team to win, plan ahead and keep your run alive without reusing a team.
+                </p>
+              </div>
+            </div>
+            <footer class="board-footer">
+              <span>Actual Streak interface · Isolated sample game data</span><b>Survivor · Beta</b>
+            </footer>
+          </article>
+        </div>
+        <div class="exports">
+          <a href="../assets/community-2026-10-31/05-streak-survivor.png" download
+            >Download paired PNG</a
+          >
+          <a href="../assets/community-2026-10-31/raw/survivor-desktop.png">Desktop original</a>
+          <a href="../assets/community-2026-10-31/raw/survivor-mobile.png">Mobile original</a>
+        </div>
+      </section>
+    </main>
+    <script>
+      const selected = new URLSearchParams(location.search).get('export');
+      if (
+        selected &&
+        ['markets', 'payment-tracking', 'activity', 'five', 'survivor'].includes(selected)
+      ) {
+        document.body.classList.add('export');
+        document.getElementById(selected).classList.add('selected');
+      } else {
+        function sizeBoards() {
+          for (const slot of document.querySelectorAll('.preview-slot')) {
+            const board = slot.querySelector('.board');
+            const scale = Math.min(1, slot.clientWidth / 1920);
+            board.style.transform = `scale(${scale})`;
+            slot.style.height = `${board.offsetHeight * scale}px`;
+          }
+        }
+        addEventListener('resize', sizeBoards);
+        addEventListener('load', sizeBoards);
+        sizeBoards();
+      }
+    </script>
+  </body>
+</html>

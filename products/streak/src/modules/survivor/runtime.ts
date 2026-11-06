@@ -82,5 +82,5 @@ export async function tickSurvivor() {
   if ((!process.env.STREAK_SURVIVOR_DATABASE_URL && !pgEnabled()) || provider.id !== 'football')
     return;
   const current = survivorService();
-  await current.tick();
+  return current.tick();
 }

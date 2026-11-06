@@ -1,5 +1,76 @@
 import { CellLoader } from '../../components/cell-loader';
+import { Icon } from '../../components/icon';
 import { money, type FiveRound } from './api';
+import './refund-status.css';
+
+const refundCopy = {
+  owed: ['Refund recorded', 'Your refund is saved and awaiting delivery.'],
+  queued: ['Refund queued', 'Your refund is waiting to be sent. You can leave this page.'],
+  paused: [
+    'Refund delivery paused',
+    'Your refund is still recorded. Delivery will resume when the rewards service is available.',
+  ],
+  confirming: [
+    'Refund confirming on CKB',
+    'The payment is being checked for confirmation. You can leave this page.',
+  ],
+  delayed: [
+    'Refund is taking longer than expected',
+    'Your refund is saved. Streak is retrying delivery checks. You do not need to bid again.',
+  ],
+  returned: ['Refund returned', 'Confirmed on CKB and returned to your wallet.'],
+  review: [
+    'Refund needs a delivery check',
+    'Your refund is recorded. The saved payment needs review before delivery can continue.',
+  ],
+} as const;
+
+export function SponsorRefund({ round }: { round: FiveRound }) {
+  const refund = round.sponsorRefund;
+  if (!refund) return null;
+  const [title, description] = refundCopy[refund.state];
+  return (
+    <div className="five-refund-status" data-state={refund.state}>
+      <p className="five-refund-heading" role="status">
+        {refund.state === 'confirming' ? (
+          <CellLoader variant="wave" />
+        ) : (
+          <Icon name={refund.state === 'returned' ? 'shield' : 'wallet'} />
+        )}
+        <strong>{title}</strong>
+        <span>{money(refund.totalShannons)} tCKB</span>
+      </p>
+      <p>{description}</p>
+      {BigInt(refund.returnedShannons) > 0n &&
+        BigInt(refund.returnedShannons) < BigInt(refund.totalShannons) && (
+          <p>
+            {money(refund.returnedShannons)} tCKB returned ·{' '}
+            {money((BigInt(refund.totalShannons) - BigInt(refund.returnedShannons)).toString())}{' '}
+            tCKB remaining
+          </p>
+        )}
+      {refund.transactionHashes.length > 0 && (
+        <details>
+          <summary>
+            View refund payments <Icon name="chevron-down" />
+          </summary>
+          <div className="five-refund-links">
+            {refund.transactionHashes.map((hash, index) => (
+              <a
+                key={hash}
+                href={`https://pudge.explorer.nervos.org/transaction/${encodeURIComponent(hash)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Refund payment {index + 1} <Icon name="arrow" />
+              </a>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
 
 export function SponsorAuction({
   round,
@@ -20,7 +91,7 @@ export function SponsorAuction({
     leading: "You're leading",
     outbid: 'Another sponsor leads',
     won: 'You won the sponsor spot',
-    refunding: 'Your refund is being returned',
+    refunding: 'Your refund is awaiting a delivery update',
     confirming: 'Your bid is confirming',
   };
   return (
@@ -76,13 +147,15 @@ export function SponsorAuction({
             </div>
           )}
         </div>
-        {status[a.ownStatus] && (
-          <p className="five-auction-status" role="status">
-            {(settling || ['confirming', 'refunding'].includes(a.ownStatus)) && (
-              <CellLoader variant="wave" />
-            )}
-            {status[a.ownStatus]}
-          </p>
+        {round.sponsorRefund ? (
+          <SponsorRefund round={round} />
+        ) : (
+          status[a.ownStatus] && (
+            <p className="five-auction-status" role="status">
+              {a.ownStatus === 'confirming' && <CellLoader variant="wave" />}
+              {status[a.ownStatus]}
+            </p>
+          )
         )}
       </div>
       <div className="five-auction-action">

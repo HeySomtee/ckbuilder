@@ -1,6 +1,14 @@
 import { ccc } from '@ckb-ccc/core';
-import { Pool } from 'pg';
-import { setTimeout as delay } from 'node:timers/promises';
+import { Pool, type QueryConfig } from 'pg';
+import { DueWork } from '../../infrastructure/due-work';
+import {
+  installWorkerHealthProbe,
+  workerHealthConfigured,
+} from '../../infrastructure/worker-health';
+import { RewardWorkQueue } from './work-queue';
+import { isAuction } from './auction';
+import { lockTime } from './timing';
+import { lockTime as survivorLockTime } from '../survivor/domain';
 import { postgresConfig } from '../../infrastructure/postgres-config';
 import { PgFiveStorage } from './storage';
 import { FiveFunding } from './funding';
@@ -49,58 +57,96 @@ async function main() {
     rewards = new FiveRewards(pool, client, address, testing);
   const survivorStore = new PgSurvivorStorage(pool, testing);
   const survivor = new SurvivorPrizes(survivorStore, rewards);
-  let survivorCursor = 0;
-  let stopped = false,
-    cursor = 0;
-  const credited = new Map<string, number>();
-  process.on('SIGTERM', () => {
-    stopped = true;
+  await store.list();
+  await survivorStore.list();
+  await rewards.init();
+  const queue = new RewardWorkQueue(pool);
+  await queue.initialize();
+  await queue.seed();
+  const hostedHealth = workerHealthConfigured();
+  let stopped = false;
+  let current: Promise<number> | undefined;
+  let finish!: () => void;
+  const finished = new Promise<void>((resolve) => {
+    finish = resolve;
   });
-  process.on('SIGINT', () => {
-    stopped = true;
-  });
-  try {
-    while (!stopped) {
+  const run = async (): Promise<number> => {
+    for (const job of await queue.due()) {
+      if (stopped) break;
+      let next: number | null = null;
       try {
-        const rounds = await store.list();
-        const batch = [...rounds.slice(cursor), ...rounds.slice(0, cursor)].slice(0, 4);
-        cursor = (cursor + batch.length) % Math.max(rounds.length, 1);
-        for (const r of batch) {
-          try {
-            await funding.reconcile(r.id);
-            await funding.settleAuction(r.id);
-            const round = await store.load(r.id);
-            if (round && credited.get(round.id) !== round.revision) {
-              await rewards.credit(round);
-              credited.set(round.id, round.revision);
-            }
-          } catch {
-            console.warn('[five-rewards] gameweek refresh deferred');
+        if (job.kind === 'five') {
+          await funding.reconcile(job.subject);
+          await funding.settleAuction(job.subject);
+          const round = await store.load(job.subject);
+          if (round) {
+            await rewards.credit(round);
+            if (round.sponsors.some((s) => s.signedBytes && s.funding === 'submitted'))
+              next = Date.now() + 10_000;
+            else if (isAuction(round) && !round.auction && round.state === 'open')
+              next = Math.max(Date.now() + 10_000, lockTime(round));
           }
+        } else if (job.kind === 'survivor') {
+          await survivor.tick(job.subject);
+          const competition = await survivorStore.load(job.subject);
+          if (competition?.prizeFunding?.funding === 'submitted') next = Date.now() + 10_000;
+          else if (competition?.state === 'draft' && competition.prizeFunding?.signedBytes)
+            next = Math.max(Date.now() + 10_000, survivorLockTime(competition.rounds[0]));
+        } else {
+          await rewards.tick(signer, (id) =>
+            id.startsWith('survivor.') ? survivor.verify(id.slice(9)) : funding.verifyConfirmed(id),
+          );
+          if (await rewards.pendingWork()) next = Date.now() + 10_000;
         }
-        const competitions = await survivorStore.list();
-        const survivorBatch = [
-          ...competitions.slice(survivorCursor),
-          ...competitions.slice(0, survivorCursor),
-        ].slice(0, 4);
-        survivorCursor = (survivorCursor + survivorBatch.length) % Math.max(competitions.length, 1);
-        for (const c of survivorBatch) {
-          try {
-            await survivor.tick(c.id);
-          } catch {
-            console.warn('[survivor-prizes] delivery deferred; saved payments retained');
-          }
-        }
-        await rewards.tick(signer, (id) =>
-          id.startsWith('survivor.') ? survivor.verify(id.slice(9)) : funding.verifyConfirmed(id),
-        );
-        await rewards.heartbeat();
       } catch {
-        console.warn('[five-rewards] delivery paused; saved transactions retained for retry');
+        next = Date.now() + 30_000;
+        console.warn('[five-rewards] saved work deferred; financial records retained');
       }
-      if (!stopped) await delay(10000);
+      await queue.complete(job, next);
     }
+    if (!hostedHealth) await rewards.heartbeat();
+    return Math.min(await queue.delay(), hostedHealth ? 15 * 60_000 : 10_000);
+  };
+  const work = new DueWork(
+    () => {
+      current = run().finally(() => {
+        current = undefined;
+      });
+      return current;
+    },
+    () => console.warn('[five-rewards] delivery paused; saved work retained'),
+    30_000,
+    true,
+  );
+  const removeHealth = installWorkerHealthProbe(
+    async () => {
+      if (stopped) return false;
+      // pg supports per-query timeouts; its current QueryConfig types omit it.
+      const probe: QueryConfig & { query_timeout: number } = {
+        text: 'SELECT 1',
+        query_timeout: 2000,
+      };
+      await Promise.all([pool.query(probe), client.getTipHeader()]);
+      return !stopped;
+    },
+    () => work.wake(),
+  );
+  const stop = () => {
+    stopped = true;
+    work.stop();
+    finish();
+  };
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
+  try {
+    work.start();
+    await finished;
+    await current;
   } finally {
+    work.stop();
+    removeHealth();
+    process.off('SIGTERM', stop);
+    process.off('SIGINT', stop);
     await pool.end();
   }
 }

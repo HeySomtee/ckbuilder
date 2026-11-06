@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { Player } from './api';
+import { Icon } from '../../components/icon';
 export const positions = ['FWD', 'MID', 'MID', 'DEF', 'GK'];
 export function Jersey({ player }: { player: Player }) {
   const palette = ['#a4c9d9', '#d87b77', '#aca1ce', '#7eaf99', '#d1bb82'];
@@ -24,25 +25,33 @@ export function Modal({
   title,
   onClose,
   children,
+  className = '',
+  returnFocus,
+  backLabel,
+  onBack,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  className?: string;
+  returnFocus?: HTMLElement | null;
+  backLabel?: string;
+  onBack?: () => void;
 }) {
   const ref = useRef<HTMLDialogElement | null>(null),
     titleId = useId();
   useEffect(() => {
-    const origin = document.activeElement;
+    const origin = returnFocus ?? document.activeElement;
     const dialog = ref.current;
     dialog?.showModal();
     return () => {
       dialog?.close();
       if (origin instanceof HTMLElement && origin.isConnected) origin.focus();
     };
-  }, []);
+  }, [returnFocus]);
   return (
     <dialog
-      className="five-dialog"
+      className={`five-dialog ${className}`}
       ref={ref}
       aria-labelledby={titleId}
       onCancel={(e) => {
@@ -51,9 +60,17 @@ export function Modal({
       }}
     >
       <header>
+        {backLabel && onBack && (
+          <button className="five-dialog-back" onClick={onBack}>
+            <span className="five-chevron-back">
+              <Icon name="chevron-down" />
+            </span>
+            {backLabel}
+          </button>
+        )}
         <h2 id={titleId}>{title}</h2>
         <button aria-label="Close" onClick={onClose}>
-          ×
+          <Icon name="close" />
         </button>
       </header>
       {children}

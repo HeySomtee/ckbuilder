@@ -1,0 +1,69 @@
+{
+  "capturedAt": "2026-10-31T18:06:25.442Z",
+  "sourceSHA": "cc994c69f82cbb3931fd2f81b44bef34580a2e17",
+  "harness": ".quality-artifacts/community-survivor-capture.cjs",
+  "builtEntrySha256": "a403b343e89943e08143a22098dcd039d1cdb40b8fa9cec948bcc39bba38b170",
+  "synthetic": true,
+  "description": "Actual built Survivor components, isolated in-memory SurvivorService/domain fixture. Free competition with 24 sample entrants, 12 survivors, Manchester City already used and Liverpool saved in round 2. No real funds, wallets, provider data, production database, admin controls, or UI edits. Normal scroll places the team board at top.",
+  "timezone": "Africa/Lagos",
+  "captures": [
+    {
+      "file": "survivor-desktop.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "scroll": {
+        "x": 0,
+        "y": 906
+      },
+      "sha256": "96f4fa9b932948d145302e6002ede925d6f2a5512fadb6cdbe4bcd8074d2ae9f",
+      "errors": [],
+      "external": [],
+      "localAssetInterceptions": [
+        "https://gallery.invalid/team-50.png",
+        "https://gallery.invalid/team-40.png",
+        "https://gallery.invalid/team-45.png",
+        "https://gallery.invalid/team-49.png",
+        "https://gallery.invalid/team-34.png",
+        "https://gallery.invalid/team-55.png",
+        "https://gallery.invalid/team-66.png"
+      ],
+      "requests": [
+        {
+          "path": "/api/survivor",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "file": "survivor-mobile.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "scroll": {
+        "x": 0,
+        "y": 1188
+      },
+      "sha256": "3cf2736d87fa69e68075b5b54b13a491efab6f0e9a93ca12a01f1471ba7700f2",
+      "errors": [],
+      "external": [],
+      "localAssetInterceptions": [
+        "https://gallery.invalid/team-50.png",
+        "https://gallery.invalid/team-40.png",
+        "https://gallery.invalid/team-45.png",
+        "https://gallery.invalid/team-49.png",
+        "https://gallery.invalid/team-34.png",
+        "https://gallery.invalid/team-55.png",
+        "https://gallery.invalid/team-66.png"
+      ],
+      "requests": [
+        {
+          "path": "/api/survivor",
+          "method": "GET"
+        }
+      ]
+    }
+  ]
+}

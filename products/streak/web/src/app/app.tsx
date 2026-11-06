@@ -18,6 +18,13 @@ import { followMarket, marketHref, navigateMarket, useMarketRoute } from '../lib
 import { navigateActivity, useDirectRoute } from '../lib/direct-route';
 import { useSectionRoute, sectionHref, followSection } from '../lib/section-route';
 import { AppNavigation } from './navigation';
+import { loadCampaigns } from '../features/campaigns/api';
+import {
+  useCampaignRoute,
+  useFiveRoundRoute,
+  navigateCampaign,
+  openCampaignFive,
+} from '../lib/campaign-route';
 import { SectionPage } from './sections';
 import { getAtomicEntryEnabled } from '../features/direct/availability-api';
 import { Notice } from '../components/notice';
@@ -39,6 +46,7 @@ import {
 const DirectPage = lazy(() => import('../features/direct/ui'));
 const SurvivorPage = lazy(() => import('../features/survivor/ui'));
 const FivePage = lazy(() => import('../features/five/ui'));
+const CampaignsPage = lazy(() => import('../features/campaigns/ui'));
 
 function MarketCard({
   market,
@@ -198,6 +206,8 @@ export function App() {
   });
   const currentEntry = directEntry && entryMode.data === true;
   const section = useSectionRoute();
+  const selectedCampaign = useCampaignRoute();
+  const requestedFiveRound = useFiveRoundRoute();
   const activePage =
     directRoute === 'wallet' || directRoute === 'activity'
       ? directRoute
@@ -326,6 +336,24 @@ export function App() {
     });
   }, [wallet.connection, account.data]);
   const [signInStage, setSignInStage] = useState('Connecting wallet');
+  const campaignList = useQuery({
+    queryKey: ['private', 'campaigns', account.data?.id ?? 'guest', 'list'],
+    queryFn: async ({ signal }) => {
+      const page = await loadCampaigns(null, signal);
+      if (page.viewerId !== (account.data?.id ?? null))
+        throw Error('Your sign-in changed. Refresh competitions.');
+      return page;
+    },
+    enabled: !account.isPending,
+    staleTime: 30_000,
+    retry: false,
+    refetchInterval: section === 'competitions' ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  });
+  const navCampaigns =
+    !campaignList.isError && campaignList.data?.viewerId === (account.data?.id ?? null)
+      ? campaignList.data?.campaigns
+      : [];
   const login = useMutation({
     mutationFn: () => signIn(setSignInStage),
     retry: false,
@@ -430,7 +458,11 @@ export function App() {
         >
           <Brand />
         </a>
-        <AppNavigation active={activePage} />
+        <AppNavigation
+          active={activePage}
+          campaigns={navCampaigns}
+          selectedCampaign={selectedCampaign}
+        />
       </aside>
       <div className="workspace">
         <header className="topbar">
@@ -461,7 +493,9 @@ export function App() {
                             ? 'Matchday'
                             : section === 'clubhouse'
                               ? 'Clubhouse'
-                              : 'Markets'}
+                              : section === 'competitions'
+                                ? 'Competitions'
+                                : 'Markets'}
             </strong>
           </span>
           <div className="account-actions">
@@ -512,9 +546,14 @@ export function App() {
               {selectionNotice}
             </p>
           )}
-          {section && section !== 'survivor' && section !== 'five' && !directRoute && !marketId && (
-            <SectionPage section={section} onPick={pick} picks={draftState.draft.picks} />
-          )}
+          {section &&
+            section !== 'survivor' &&
+            section !== 'five' &&
+            section !== 'competitions' &&
+            !directRoute &&
+            !marketId && (
+              <SectionPage section={section} onPick={pick} picks={draftState.draft.picks} />
+            )}
           {section === 'survivor' && !directRoute && !marketId && (
             <Suspense fallback={<BusyState label="Opening Survivor" />}>
               <SurvivorPage
@@ -531,13 +570,31 @@ export function App() {
           {section === 'five' && !directRoute && !marketId && (
             <Suspense fallback={<BusyState label="Opening Streak Five" />}>
               <FivePage
-                key={`five:${account.data?.id ?? 'public'}`}
+                key={`five:${account.data?.id ?? 'public'}:${requestedFiveRound ?? ''}`}
+                initialRound={requestedFiveRound ?? ''}
                 account={account.data ?? null}
                 accountReady={!account.isPending}
                 onSignIn={() => {
                   if (!logout.isPending) login.mutate();
                 }}
                 signInPending={login.isPending || logout.isPending}
+              />
+            </Suspense>
+          )}
+          {section === 'competitions' && !directRoute && !marketId && (
+            <Suspense fallback={<BusyState label="Opening competitions" />}>
+              <CampaignsPage
+                key={`campaigns:${account.data?.id ?? 'public'}:${wallet.revision}`}
+                account={account.data ?? null}
+                accountReady={!account.isPending}
+                onSignIn={() => {
+                  if (!logout.isPending) login.mutate();
+                }}
+                signInPending={login.isPending || logout.isPending}
+                onPick={pick}
+                selectedId={selectedCampaign}
+                onSelect={navigateCampaign}
+                onOpenFive={openCampaignFive}
               />
             </Suspense>
           )}
@@ -845,7 +902,12 @@ export function App() {
           </div>
         </main>
       </div>
-      <AppNavigation active={activePage} mobile />
+      <AppNavigation
+        active={activePage}
+        campaigns={navCampaigns}
+        selectedCampaign={selectedCampaign}
+        mobile
+      />
       <PredictionSlip
         store={draftStore}
         open={slipOpen}

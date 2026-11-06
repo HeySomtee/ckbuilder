@@ -1,5 +1,39 @@
 # Wallet compatibility and sign-in recovery
 
+## 6 November: Zerion optional account-picker compatibility
+
+The owner reported "rpc method is not whitelisted" while signing in inside
+Zerion mobile on streakpitch.com. A matching local failure exists after an explicit
+disconnect: Streak's optional `wallet_requestPermissions` account picker accepted
+only standard unsupported-method codes, so a bridge using that wording stopped
+connection. The screenshot alone cannot identify the actual failing method.
+
+The fallback now recognizes the exact whitelist message in bounded error wrappers
+only for that optional picker. Explicit denial, rejection, disconnection, pending
+requests and unknown error codes remain failures. Nested uncoded rejection text
+also overrides an outer unsupported-method code. Required `eth_requestAccounts`,
+message signing and server challenge verification remain unchanged, as do account
+revision and complete-lock identity checks. Silent restoration never invokes this
+optional permission flow.
+
+Zerion's [public extension implementation](https://github.com/zeriontech/zerion-wallet-extension/blob/3bae12354d509e8d879b764230933de747bb829e/src/background/Wallet/Wallet.ts#L3046-L3054)
+delegates its picker to account access. That supports treating the picker as an
+optional capability; it does not establish Android's implementation or error code.
+[EIP-1193](https://eips.ethereum.org/EIPS/eip-1193#provider-errors) distinguishes
+unsupported methods from denied and unauthorized requests.
+
+Independent identity review and five focused permission tests passed. All four
+rebuilt-app wallet journeys passed in Chromium/WebKit at 390 and 1440 pixels.
+They verify successful signed sign-in after an unsupported optional picker, no
+nonce/signature after failed required account access, and no verification after a
+failed required signature. Final static checks, strict types, lint and the production
+build also passed. Evidence: `.quality-artifacts/zerion-rpc-permissions.log`,
+`zerion-rpc-wallet-browser.log` and `five-zerion-final-static.json` in the same directory.
+The preceding Five major run passed 94 stages; these later wallet checks are
+separate coverage, not a single-run final-tree publication receipt.
+Physical Zerion acceptance and deployment remain separate. No Render configuration
+or database change is needed for this frontend fix.
+
 ## 30 October: disconnect and account switching
 
 The owner confirmed Zerion Android sign-in works after updating the wallet app,

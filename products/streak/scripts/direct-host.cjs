@@ -3,8 +3,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
+const http = require('node:http');
 const { spawn } = require('node:child_process');
-const { randomUUID } = require('node:crypto');
+const { randomUUID, randomBytes, timingSafeEqual } = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
 
 const ROOT = path.resolve(__dirname, '../../..');
@@ -21,6 +22,9 @@ const API = [
   'STREAK_FIVE_FPL_ENABLED',
   'STREAK_FIVE_NETWORK',
   'STREAK_FIVE_REWARDS_ADDRESS',
+  'STREAK_CAMPAIGNS_DATABASE_URL',
+  'STREAK_CAMPAIGNS_ADMIN_WALLETS',
+  'STREAK_CAMPAIGNS_REWARDS_ADDRESS',
   'STREAK_GAMES_TEST_ENABLED',
   'STREAK_GAMES_TEST_DATABASE_URL',
   'STREAK_GAMES_TEST_REWARDS_ADDRESS',
@@ -135,6 +139,12 @@ function buildConfig(env) {
     STREAK_SKIP_ENV_FILE: '1',
     ...registry,
   };
+  // Ephemeral per-supervisor authorization. Never forwarded to payment signers,
+  // browser configuration, the database, logs or inherited from external input.
+  const workerHealth = {
+    STREAK_WORKER_HEALTH_URL: `http://127.0.0.1:${controlPort}`,
+    STREAK_WORKER_HEALTH_SECRET: randomBytes(32).toString('hex'),
+  };
   const ipc = {
     STREAK_SPONSOR_URL: sponsor.origin,
     STREAK_SPONSOR_IPC_SECRET: env.STREAK_SPONSOR_IPC_SECRET,
@@ -163,6 +173,7 @@ function buildConfig(env) {
     )
       throw Error('Use a dedicated Five rewards key, separate from prediction and treasury keys.');
     rewards = {
+      ...workerHealth,
       ...pick(env, COMMON),
       NODE_ENV: 'production',
       STREAK_SKIP_ENV_FILE: '1',
@@ -207,6 +218,7 @@ function buildConfig(env) {
     if (env.STREAK_GAMES_TEST_REWARDS_ADDRESS === env.STREAK_FIVE_REWARDS_ADDRESS)
       throw Error('Test games require a separate rewards address.');
     testRewards = {
+      ...workerHealth,
       ...pick(env, COMMON),
       NODE_ENV: 'production',
       STREAK_SKIP_ENV_FILE: '1',
@@ -229,12 +241,18 @@ function buildConfig(env) {
     environments: {
       api: {
         ...common,
+        ...workerHealth,
         ...pick(env, API),
         ...ipc,
         PORT: String(apiPort),
         MATCH_PROVIDER: 'football',
       },
-      sponsor: { ...operator, ...ipc, STREAK_DIRECT_CATALOGUE_URL: catalogue },
+      sponsor: {
+        ...operator,
+        ...ipc,
+        STREAK_DIRECT_CATALOGUE_URL: catalogue,
+        ...pick(env, ['STREAK_CAMPAIGNS_EMPTY_HISTORY_ACK']),
+      },
       worker: operator,
       ...(rewards ? { rewards } : {}),
       ...(testRewards ? { testRewards } : {}),
@@ -243,6 +261,11 @@ function buildConfig(env) {
 }
 
 function prepareState(config, mountInfo = fs.readFileSync('/proc/self/mountinfo', 'utf8')) {
+  if (
+    process.platform === 'linux' &&
+    !['/usr/bin/flock', '/bin/flock'].some((file) => fs.existsSync(file))
+  )
+    throw Error('Hosted settlement scheduling requires util-linux flock.');
   const mounts = mountInfo
     .split('\n')
     .map((line) =>
@@ -312,6 +335,88 @@ async function probe(url, headers, accept) {
   }
 }
 
+function containerMemory(directory = '/sys/fs/cgroup') {
+  try {
+    const values = ['current', 'peak', 'max'].map((name) =>
+      Number(fs.readFileSync(path.join(directory, `memory.${name}`), 'utf8').trim()),
+    );
+    if (values.some((value) => !Number.isSafeInteger(value) || value < 0) || !values[2])
+      return null;
+    return { currentBytes: values[0], peakBytes: values[1], limitBytes: values[2] };
+  } catch {
+    return null;
+  }
+}
+
+/** No periodic dependency probes: only authenticated API requests wake a worker. */
+async function workerControl(portNumber, secret, childrenByRole) {
+  if (typeof secret !== 'string' || !/^[0-9a-f]{64}$/.test(secret))
+    throw Error('Worker control requires private supervisor authorization.');
+  const pending = new Map();
+  const ask = (child, type) => {
+    if (!child?.connected || pending.size >= 64) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const id = randomUUID();
+      const finish = (ready) => {
+        const job = pending.get(id);
+        if (!job) return;
+        clearTimeout(job.timer);
+        pending.delete(id);
+        resolve(ready === true);
+      };
+      pending.set(id, { child, finish, timer: setTimeout(() => finish(false), 3000) });
+      try {
+        child.send({ type: `streak.worker.${type}`, id, token: secret }, (error) => {
+          if (error) finish(false);
+        });
+      } catch {
+        finish(false);
+      }
+    });
+  };
+  const server = http.createServer(async (req, res) => {
+    res.setHeader('cache-control', 'no-store');
+    res.setHeader('content-type', 'application/json');
+    const supplied = req.headers.authorization;
+    const expected = `Bearer ${secret}`;
+    if (
+      typeof supplied !== 'string' ||
+      Buffer.byteLength(supplied) !== Buffer.byteLength(expected) ||
+      !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))
+    )
+      return res.writeHead(401).end('{"ready":false}');
+    const match = /^\/workers\/(rewards|testRewards)\/(health|wake)$/.exec(req.url || '');
+    if (!match || req.method !== (match[2] === 'wake' ? 'POST' : 'GET'))
+      return res.writeHead(404).end('{"ready":false}');
+    if (req.headers['transfer-encoding'] || Number(req.headers['content-length'] || 0) !== 0)
+      return res.writeHead(400).end('{"ready":false}');
+    const ready = await ask(childrenByRole.get(match[1]), match[2]);
+    res.writeHead(ready ? 200 : 503).end(JSON.stringify({ ready }));
+  });
+  server.keepAliveTimeout = 1000;
+  server.requestTimeout = 5000;
+  server.headersTimeout = 5000;
+  await new Promise((resolve, reject) => {
+    server.once('error', () => reject(Error('A required local service port is already occupied.')));
+    server.listen(portNumber, '127.0.0.1', resolve);
+  });
+  return {
+    server,
+    message(child, value) {
+      if (!value || typeof value !== 'object' || value.type !== 'streak.worker.response') return;
+      const job = pending.get(value.id);
+      if (job?.child === child) job.finish(value.ready);
+    },
+    disconnected(child) {
+      for (const job of pending.values()) if (job.child === child) job.finish(false);
+    },
+    close() {
+      for (const job of pending.values()) job.finish(false);
+      return new Promise((resolve) => server.close(resolve));
+    },
+  };
+}
+
 async function runHost(config, options = {}) {
   const runtime = {
     startupMs: 120_000,
@@ -330,20 +435,27 @@ async function runHost(config, options = {}) {
   };
   const log = options.log || ((message) => console.log(`[streak-host] ${message}`));
   const children = new Set();
+  const childrenByRole = new Map();
   let stopped = false,
     workerTimer,
     workerDeadline,
+    memoryTimer,
     stopPromise;
   let finish;
   const done = new Promise((resolve) => {
     finish = resolve;
   });
-  const control = await listen(config.controlPort);
+  const control = await workerControl(
+    config.controlPort,
+    config.environments.api.STREAK_WORKER_HEALTH_SECRET,
+    childrenByRole,
+  );
   const stop = (code, reason) => {
     if (stopPromise) return stopPromise;
     stopped = true;
     clearTimeout(workerTimer);
     clearTimeout(workerDeadline);
+    clearInterval(memoryTimer);
     log(reason);
     stopPromise = (async () => {
       const running = [...children];
@@ -357,7 +469,7 @@ async function runHost(config, options = {}) {
       }, runtime.shutdownMs);
       await Promise.all(running.map((child) => child.completion));
       clearTimeout(deadline);
-      await new Promise((resolve) => control.close(resolve));
+      await control.close();
       process.off('SIGTERM', terminate);
       process.off('SIGINT', terminate);
       options.signal?.removeEventListener('abort', terminate);
@@ -374,14 +486,26 @@ async function runHost(config, options = {}) {
   if (options.signal?.aborted) terminate();
   function start(name) {
     if (stopped) return undefined;
+    const workerIpc = name === 'rewards' || name === 'testRewards';
+    const standard = options.stdio || 'inherit';
     const child = spawn(process.execPath, commands[name], {
       cwd: options.cwd || ROOT,
       env: config.environments[name],
-      stdio: options.stdio || 'inherit',
+      stdio: workerIpc
+        ? [
+            ...(Array.isArray(standard) ? standard.slice(0, 3) : [standard, standard, standard]),
+            'ipc',
+          ]
+        : standard,
       windowsHide: true,
       shell: false,
     });
     children.add(child);
+    childrenByRole.set(name, child);
+    if (workerIpc) {
+      child.on('message', (value) => control.message(child, value));
+      child.once('disconnect', () => control.disconnected(child));
+    }
     let complete;
     child.completion = new Promise((resolve) => {
       complete = resolve;
@@ -391,6 +515,8 @@ async function runHost(config, options = {}) {
     });
     child.once('close', (code) => {
       children.delete(child);
+      if (childrenByRole.get(name) === child) childrenByRole.delete(name);
+      control.disconnected(child);
       complete();
       if (stopped) return;
       if (name !== 'worker') {
@@ -465,6 +591,13 @@ async function runHost(config, options = {}) {
         ));
     if (!(await waitReady(sponsorCheck, 'Sponsor'))) return await done;
     log('API and atomic sponsor are ready. Starting serialized settlement passes.');
+    const measureMemory = () => {
+      const memory = containerMemory();
+      if (memory) log(`Container memory ${JSON.stringify(memory)}`);
+    };
+    measureMemory();
+    memoryTimer = setInterval(measureMemory, 300_000);
+    memoryTimer.unref();
     if (config.environments.rewards) start('rewards');
     if (config.environments.testRewards) start('testRewards');
     runWorker();
@@ -474,7 +607,7 @@ async function runHost(config, options = {}) {
   return await done;
 }
 
-module.exports = { buildConfig, prepareState, runHost };
+module.exports = { buildConfig, prepareState, runHost, workerControl, containerMemory };
 if (require.main === module) {
   (async () => {
     if (process.platform !== 'linux')

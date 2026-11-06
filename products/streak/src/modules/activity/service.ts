@@ -1,6 +1,6 @@
 import type { ActivityPage } from '../../../shared/activity-wire';
 import type { DirectMarketDescriptor } from '../direct/registry';
-import { PgActivityStorage } from './storage';
+import { PgActivityStorage, sourceHash } from './storage';
 import type { ActivityMarketProjection } from './chain';
 import { parseActivityEventBatch } from './events';
 
@@ -14,6 +14,10 @@ interface ActivitySource {
   ): Promise<ActivityMarketProjection>;
   canonicalCheckpoint(projection: ActivityMarketProjection): Promise<boolean>;
 }
+export interface ActivitySourceChange {
+  fixtureIds: string[];
+  freshnessOnly: boolean;
+}
 
 /** Durable jobs wake on events; timers only deliver missed events and reconcile known records. */
 export class ActivityService {
@@ -24,36 +28,70 @@ export class ActivityService {
   private moreEvents = false;
   private deliveryDegraded = false;
   private pumping = false;
+  private pumpRequested = false;
+  private deliveryRequested = false;
+  private stopJobs?: () => void;
+  private jobFailures = 0;
   private draining?: Promise<void>;
   private eventTimer?: ReturnType<typeof setTimeout>;
   private jobTimer?: ReturnType<typeof setTimeout>;
+  private readonly sourceListeners = new Set<(change: ActivitySourceChange) => void>();
   constructor(
     readonly store: PgActivityStorage,
     private readonly source: ActivitySource,
     private readonly warn: (message: string) => void = (message) => console.warn(message),
   ) {}
 
+  subscribe(listener: (change: ActivitySourceChange) => void): () => void {
+    this.sourceListeners.add(listener);
+    return () => this.sourceListeners.delete(listener);
+  }
+
+  private sourceChanged(fixtureIds: string[], freshnessOnly = false): void {
+    for (const listener of this.sourceListeners) {
+      try {
+        listener({ fixtureIds: [...new Set(fixtureIds)], freshnessOnly });
+      } catch {
+        this.warn('[activity] saved source notification deferred');
+      }
+    }
+  }
+
   start(): () => void {
+    if (!this.stopped) throw Error('Activity service is already running');
     this.stopped = false;
+    this.stopJobs = this.store.subscribeJobs(() => this.pump());
+    this.pumpRequested = true;
     this.wake();
     return () => {
       this.stopped = true;
       clearTimeout(this.eventTimer);
       clearTimeout(this.jobTimer);
+      this.stopJobs?.();
     };
   }
 
   wake(): void {
-    if (this.stopped || this.draining) return;
+    if (this.stopped) return;
+    if (this.draining) {
+      this.deliveryRequested = true;
+      return;
+    }
     clearTimeout(this.eventTimer);
     void this.drain()
       .catch(() => this.warn('[activity] event delivery delayed; saved records retained'))
       .finally(() => {
         if (!this.stopped) {
-          this.eventTimer = setTimeout(() => this.wake(), this.moreEvents ? 250 : 30_000);
+          const immediate = this.deliveryRequested;
+          this.deliveryRequested = false;
+          this.eventTimer = setTimeout(
+            () => this.wake(),
+            immediate || this.moreEvents ? 250 : 30_000,
+          );
           this.eventTimer.unref();
         }
-        this.pump();
+        // An empty local relay response must not wake PostgreSQL every 30 seconds.
+        if (this.pumpRequested) this.pump();
       });
   }
 
@@ -95,7 +133,8 @@ export class ActivityService {
       this.deliveryDegraded = batch.degraded === true;
       const ids: string[] = [];
       for (const event of batch.events) {
-        await this.store.ingest(event);
+        if (await this.store.ingest(event))
+          this.sourceChanged(event.descriptors.map((descriptor) => descriptor.fixtureId));
         ids.push(event.id);
       }
       if (ids.length) await this.source.acknowledge(ids);
@@ -104,17 +143,35 @@ export class ActivityService {
   }
 
   private pump(): void {
-    if (this.stopped || this.pumping || !this.initialized) return;
+    if (this.stopped) return;
+    if (this.pumping || !this.initialized) {
+      this.pumpRequested = true;
+      return;
+    }
     clearTimeout(this.jobTimer);
+    this.pumpRequested = false;
     this.pumping = true;
     void this.runJobs()
-      .catch(() => this.warn('[activity] index refresh delayed; saved records retained'))
-      .finally(() => {
-        this.pumping = false;
+      .then(async () => {
+        const delay = await this.store.nextDueDelay();
+        this.jobFailures = 0;
+        return delay;
+      })
+      .catch(() => {
+        this.warn('[activity] index refresh delayed; saved records retained');
+        return Math.min(900_000, 15_000 * 2 ** Math.min(this.jobFailures++, 6));
+      })
+      .then((delay) => {
         if (!this.stopped) {
-          this.jobTimer = setTimeout(() => this.pump(), 5_000);
+          this.jobTimer = setTimeout(
+            () => this.pump(),
+            this.pumpRequested ? 0 : Math.max(25, delay),
+          );
           this.jobTimer.unref();
         }
+      })
+      .finally(() => {
+        this.pumping = false;
       });
   }
 
@@ -129,6 +186,12 @@ export class ActivityService {
         const historical =
           !job.changed &&
           previous &&
+          previous.evidenceVersion === 1 &&
+          previous.observedTip &&
+          previous.settlementCheckpoint &&
+          BigInt(previous.observedTip.blockNumber) -
+            BigInt((previous.settlementCheckpoint ?? previous.checkpoint).blockNumber) >=
+            3n &&
           ['settled', 'voided'].includes(previous.phase) &&
           Object.values(previous.owners).every(
             (s) =>
@@ -149,9 +212,14 @@ export class ActivityService {
                 ),
               }
             : await this.source.project(job.descriptor, previous);
-        await this.store.complete(job, projection, recoveryDelay(projection));
+        if (await this.store.complete(job, projection, recoveryDelay(projection)))
+          this.sourceChanged(
+            [job.descriptor.fixtureId],
+            !job.stale && !!previous && sourceHash(previous) === sourceHash(projection),
+          );
       } catch {
         await this.store.fail(job);
+        this.sourceChanged([job.descriptor.fixtureId]);
         this.warn('[activity] market verification deferred; previous observation retained');
       }
     }
@@ -177,12 +245,14 @@ export class ActivityService {
   }
 }
 
-export function recoveryDelay(projection: ActivityMarketProjection): number {
+export function recoveryDelay(projection: ActivityMarketProjection, now = Date.now()): number {
   const positions = Object.values(projection.owners).flatMap((s) => [...s.positions]);
   if (positions.some((p) => p.status === 'submitted')) return 20_000;
   if (positions.some((p) => ['pending-validation', 'refund-required'].includes(p.status)))
     return 120_000;
   if (positions.some((p) => p.status === 'claimable')) return 120_000;
+  if (projection.phase === 'open' && projection.descriptor.cutoffMs > now)
+    return Math.max(250, Math.min(900_000, projection.descriptor.cutoffMs - now));
   if (positions.some((p) => p.status === 'accepted')) return 300_000;
   if (['open', 'reported', 'unknown'].includes(projection.phase)) return 300_000;
   // Fully collected history retains a daily canonical checkpoint audit.

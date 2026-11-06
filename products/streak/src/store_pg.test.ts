@@ -324,6 +324,7 @@ async function run(): Promise<void> {
       (BigInt(committed) + 1n).toString(),
       "The write queue and PostgreSQL pool recover after a rejected transaction.",
     );
+    await (await import("./fixture-sync-pg-checks")).fixtureSyncPostgresChecks(probe);
     console.log(
       "Real PostgreSQL integration passed: isolated schema, exact money, archive reads, partial writes, concurrent writes, replay rejection, atomic rollback and recovery.",
     );

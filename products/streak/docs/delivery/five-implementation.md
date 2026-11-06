@@ -1,5 +1,49 @@
 # Streak Five implementation, 20 October 2026
 
+6 November [manager names, squad pitches and refund status](five-names-pitch-refunds.md)
+integrates the approved standings design and corrects auction refund presentation
+and queue retries. Public names remain separate from login identity and squad
+save timestamps. Implementation and verification are in progress locally.
+
+6 November update: the [background efficiency refactor](background-efficiency.md)
+replaces hosted rewards heartbeat writes and repeated scans with durable due-time
+jobs and authenticated local health checks. The original implementation and test
+evidence below remain dated history; current scheduling is described next.
+
+## 6 November scheduling and rewards readiness
+
+Five and Survivor funding changes, award credits and collection requests save
+their rewards work in the same PostgreSQL transaction. A local wake reduces
+latency; saved jobs, startup catch-up and a fifteen-minute fallback recover missed
+wakes. The worker processes at most eight due jobs per pass and five submitted
+contributions per gameweek. Completed work sleeps until a new source mutation.
+Job generations prevent an older completion from clearing newly saved work.
+
+Submitted contributions and payouts are checked after ten seconds; failures
+retain financial records and retry after thirty seconds. An open sponsor auction
+sleeps until its frozen lock time once its funding is confirmed. Unpublished,
+funded Survivor drafts retain their refund deadline. Five progression separately
+schedules official FPL deadlines and expected scoring updates, with a fifteen-minute
+fallback. Database-clock checks still reject late squad changes and sponsorships
+when a request arrives, even if a background wake is delayed.
+
+Under the hosted launcher, readiness is an authenticated loopback request to the
+supervisor, which checks the actual rewards child over private IPC and asks it to
+check PostgreSQL and CKB RPC. A live process alone is insufficient. The supervisor
+creates the private token at startup; no new Render secret is needed. An unavailable
+probe disables new money actions while preserving signed recovery. Standalone
+workers without this hosted control channel retain the ten-second database
+heartbeat and the address-matched, ninety-second readiness window for compatibility.
+See [worker ownership and health](hosted-worker-efficiency.md).
+
+The advisory signer lock, durable signed bytes, reserved credits, canonical
+confirmation checks and exact-transaction retries remain the spending safeguards.
+Deploy the API, supervisor and rewards worker together; mixed old/new producers
+are unsupported. These are local changes, not evidence of hosted savings or a
+new live-wallet acceptance run.
+
+## Earlier implementation updates
+
 24 October update: [sponsor auctions](five-sponsor-auction.md) supersede shared
 contributions for newly created automatic rounds. Existing gameweeks retain
 their original community-gift terms. Highest cumulative funded bid wins the
@@ -69,9 +113,10 @@ No live funds have been transferred and no sponsored round has been created.
 
 The dedicated wallet needs a separate testnet fee/change reserve, recommended
 at least 100 tCKB in addition to sponsored prizes. There is no automatic transfer
-from another operator wallet. Only a recent matching worker heartbeat enables
-new sponsorship or collection; existing saved signatures remain recoverable.
-No wallet or funded budget was created by development.
+from another operator wallet. New sponsorship and collection require rewards-worker
+readiness through the hosted health channel or standalone heartbeat described
+above; existing saved signatures remain recoverable. No wallet or funded budget
+was created by the original development work.
 
 ### First local gameweek
 
@@ -151,8 +196,10 @@ A donor can supply a competing transaction hash; only a canonical spend of a
 reserved input with 24 confirmations permits a durable conflict resolution.
 Unknown status or a missing live cell alone is never grounds to replace a spend.
 
-The worker rotates through at most four gameweeks and five submitted contributions
-per gameweek per pass. It does not rescan historical confirmed deposits each pass.
+The original 20 October worker rotated through at most four gameweeks and five
+submitted contributions per gameweek per pass. The 6 November due queue replaces
+that gameweek scan while retaining the per-gameweek contribution bound. It does
+not rescan historical confirmed deposits each pass.
 Contribution failures are isolated; final credits are idempotent. The worker
 retains unresolved payout bytes and pauses new wallet spends if their inputs
 cannot be verified. Operator interference with this dedicated wallet requires

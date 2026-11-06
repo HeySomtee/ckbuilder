@@ -1,6 +1,14 @@
 # Hosted payment launcher
 
-19 October 2026. Implementation complete locally, not yet published or activated on Render.
+19 October 2026 delivery record. At that date the implementation was complete
+locally, but not yet published or activated on Render. The dated release evidence
+below remains historical.
+
+6 November 2026 update: [hosted worker recovery and readiness](hosted-worker-efficiency.md)
+adds the Linux scheduling lock, authenticated rewards health/wake IPC and bounded
+memory measurements. This refactor is locally verified; hosted activation and
+post-deployment memory observations are separate work. The process description
+below includes these changes.
 
 The hosted API was serving the new UI and contract pins but had no atomic registry setting or supervised operator. The owner configured the service and 1 GB disk through the setup checklist. The new start command is:
 
@@ -12,7 +20,18 @@ Use this only after the tested implementation is present in the deployed revisio
 
 ## Process and storage behavior
 
-The launcher requires Linux, production configuration, the real football provider, all required credentials and distinct local ports. Its default persistent mount is `/var/data/streak`; a different mount requires `STREAK_HOST_STATE_DIR`. It checks Linux mount metadata, refuses symlink/overlapping paths and verifies writable/fsync-capable directories. It refuses preexisting operator, worker and publication leases without deleting them. It never reads `.env` or a wallet key file. Mount presence and fsync are preflight checks, not proof that backups have been tested.
+The launcher requires Linux, production configuration, the real football provider,
+all required credentials, distinct local ports and `flock` at `/usr/bin/flock` or
+`/bin/flock`. Its default persistent mount is `/var/data/streak`; a different mount
+requires `STREAK_HOST_STATE_DIR`. It checks Linux mount metadata, refuses
+symlink/overlapping paths and verifies writable/fsync-capable directories. It
+refuses preexisting financial `operator.lock`, legacy
+`worker-lease/operator.lock` and publication leases without deleting them. The
+new `worker-lease/scheduler.flock` file is expected to persist and does not block
+startup by its existence; the worker acquires its kernel lock before each pass.
+Never unlink that file to override a running owner. The launcher never reads
+`.env` or a wallet key file. Mount presence and fsync are preflight checks, not
+proof that backups have been tested.
 
 The API, sponsor and worker receive explicit environment allowlists. The API retains the existing legacy treasury and Neon settings, but receives no direct operator key or private journal path. Sponsor/worker receive the direct key and provider credential, without database, treasury or Telegram credentials. All children disable `.env` loading and omit inherited Node options and unknown credentials. This is process-configuration isolation inside one service, not separate OS users or a hardware key boundary. If the legacy treasury uses the same underlying key, environment naming alone does not create distinct wallet identities.
 
@@ -20,17 +39,33 @@ The sponsor catalogue URL is derived from the API's `PORT`; any supplied conflic
 
 A loopback supervisor port, default 4102, prevents two launchers in one network namespace. API and sponsor ports must be unused before startup. The launcher starts the API, waits up to two minutes for pinned testnet configuration, then starts the authenticated sponsor and waits for its atomic configuration. The real football catalogue can still be warming up or unavailable after process readiness; `/api/direct/batch/demand` remains the user-facing eligibility gate.
 
+The same supervisor port now serves private rewards health and wake requests.
+The supervisor generates an ephemeral token for the API and rewards children;
+no additional Render secret is needed. Authenticated health requests ask the
+current child over IPC to check readiness and dependencies, with a three-second
+response bound. A wake only interrupts sleep after work is durably saved. Neither
+endpoint replaces the rewards journal or grants permission to spend. The sponsor
+and settlement worker do not receive this token. Hosted rewards readiness no
+longer requires a periodic PostgreSQL heartbeat write.
+
 The worker runs one pass immediately after readiness and then 60 seconds after each completed pass. It never overlaps itself. A failed pass is logged and retried on that cadence; a five-minute hang shuts the service down. API or sponsor exit stops the whole service with a failure status so hosting can restart the complete process group instead of leaving an apparently working website without its signer.
 
 SIGTERM/SIGINT stops future worker passes and signals the children. The sponsor stops accepting requests and waits for in-flight requests and its active recovery pass. The worker stops before starting further operations and finishes its active operation to release journal leases normally. Its cursor preserves the interrupted market. After 25 seconds the supervisor force-stops remaining children and exits unsuccessfully. Forced termination can leave journal locks requiring explicit ownership checks and reconciliation. No startup or shutdown path deletes a stale lock, signed transaction or prior recovery record.
 
-## Handover and release
+On Linux, forced worker termination releases its scheduling lock automatically.
+Financial mutation/publication locks still fail closed and may require review;
+releasing the scheduling lock does not prove that any payment completed. Legacy
+scheduling files must be verified and archived before migration, and old and new
+worker binaries must not share the journal concurrently. Container memory current,
+peak and limit values are logged every five minutes without querying PostgreSQL.
+
+## Historical handover and release, 19 October 2026
 
 The owner accepts a fresh hosted test pilot without importing old test activity. That does not authorize concurrent signers against different journals for the same wallet. Before activation, stop the local sponsor and worker, reconcile unresolved signed transactions, and archive rather than delete local test records. This implementation does not perform that live handover or import/delete any records. Retained old positions may require their archived descriptors for claims.
 
 `render.yaml` describes one Starter service with a 1 GB mounted disk and the supervisor start command. Actual Render account settings and deployment are separate facts. Runtime directory acknowledgement remains an explicit secret-setting entry rather than being silently enabled by the blueprint.
 
-## Verification
+## Historical verification, 19 October 2026
 
 All 52 major-gate checks passed at 08:54:42 UTC on 19 October, including browser journeys, disposable PostgreSQL, contract validation and signed local-chain settlement/recovery. Evidence: `.quality-artifacts/hosted-launcher-major.json`. Independent recovery review has no remaining blockers. The owned disposable database was stopped after validation. These checks used synthetic credentials and local chains, not the hosted operator.
 

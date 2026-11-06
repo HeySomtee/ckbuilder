@@ -415,7 +415,11 @@ export function BatchCheckout({
         const principal = amountShannons(pick.amountCkb);
         if (!fixture || !['available', 'funded'].includes(fixture.state))
           throw Error(
-            `${fixture?.label ?? 'A selected match'} is not available. Your picks are saved.`,
+            fixture?.state === 'reserved'
+              ? `A payment is being prepared for ${fixture.label}. Your picks are saved. Please try reviewing again shortly.`
+              : fixture?.state === 'confirming'
+                ? `The first payment for ${fixture.label} is confirming on CKB. Your picks are saved. Please try reviewing again shortly.`
+                : `We couldn't confirm that ${fixture?.label ?? 'a selected match'} is open for predictions right now. Your picks are saved. Try reviewing again, or choose another match.`,
           );
         if (principal === null || principal < BigInt(latest.manifest.limits.minPrincipalShannons))
           throw Error(
@@ -840,9 +844,7 @@ export function BatchCheckout({
                 )}
                 {error && (
                   <Notice
-                    title={
-                      submit.error ? 'Check your payment status' : 'Payment review needs attention'
-                    }
+                    title={submit.error ? 'Check your payment status' : "Let's get your slip ready"}
                     tone="attention"
                   >
                     {error.message}{' '}

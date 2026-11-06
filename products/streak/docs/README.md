@@ -1,22 +1,85 @@
 # Streak documentation
 
+6 November [Five names, pitch standings and refunds](delivery/five-names-pitch-refunds.md):
+the approved preview is integrated into the app, including required public manager
+names, saved squad pitches and accurate refund status. Independent review and
+focused checks are complete; all 94 major-gate stages passed. Hosted rollout and
+the owner's individual refund verification remain. The later Zerion RPC fix passed
+separate follow-up verification in the [wallet record](delivery/wallet-compatibility.md).
+
+6 November [Five standings preview](../design/five-standings-review/README.md):
+named manager rows open squad pitches; first-entry names, private picks, live/final
+scores and mobile navigation are ready for design review. Preview only.
+
+6 November [background efficiency](delivery/background-efficiency.md) records the
+targeted SQL, durable scheduling, cache and recovery refactor, with a separate
+[hosted worker ownership/readiness guide](delivery/hosted-worker-efficiency.md).
+Local verification is complete across the major gate and affected follow-up
+lanes; hosted savings remain to be measured. No publication or deployment yet.
+
+5 November [GW10 production checklist](delivery/hosted-acceptance-2026-11-06.md):
+short post-deployment rehearsal using the six funded wallets, real testnet payments,
+Five squads/sponsorship, competition standings, exports and deletion. Official
+GW10 lock: 6 November at 19:30 Lagos; GW11 lock: 21 November at noon. Hosted
+acceptance remains unperformed; mainnet award testing is separate from rehearsals.
+
+5 November [competitions runtime](delivery/competitions.md): actual app integration,
+scoring and tie rules, administration, two-step deletion, private evidence exports
+and organizer-funded mainnet prize verification. Local coverage and independent
+review are complete, including future gameweek preparation: 75 application stages
+and 11 CKB/local-chain stages passed in separate runs after a WSL permission retry.
+No hosted rollout or fund movement. The earlier preview entries are historical.
+
+5 November [competition design preview](../design/competition-review/README.md):
+interactive prediction/Five competition states, finished winners and points,
+registration ranking and admin oversight. Guided setup includes configurable prize
+places/amounts and fixture selection, with $25/$15/$10 as the first-campaign preset.
+Admin deletion reviews the competition, then requires its exact name; the preview
+also offers the earlier gameweek for rehearsal. Live deletion remains unimplemented.
+The Evidence preview and [campaign evidence plan](product/campaign-evidence.md)
+cover verified participation/payment records, optional PostHog analytics and a
+new-project setup guide. Base UI approved; refinements remain synthetic local
+design work. No campaign runtime, tracking deployment or publication is enabled.
+
 2 November [product README](../README.md) now distinguishes integrated Season
 direct predictions from custodial game rewards, the retained legacy ledger and
 synthetic previews. Setup, architecture and security descriptions follow the
 current implementation; historical ledger references are explicitly labelled.
 
+1 November [concurrent payment architecture proposal](architecture/concurrent-payments.md):
+per-cell funding and deposit reservations, sponsor concurrency, signature-safe
+recovery, game treasury liabilities and a separate larger-market protocol milestone.
+The [larger-market candidate](architecture/payment-protocol-vnext.md) describes
+pre-created lanes, bounded settlement and independently funded claims. Drafts for
+owner review, not implemented migrations or verified capacity claims.
+
 1 November [mobile filters and quiet startup](delivery/mobile-markets-startup.md)
 are published in `cf81620`. Desktop remains unchanged. All 79 required local checks
 passed; hosted deployment remains unverified. Earlier local-only entries are historical.
 
-1 November published release: `30599d2` includes the compact dropdowns, pending
-loader contrast, Survivor outcome rules and earlier Five live-team/Survivor season
-scheduling work. All 79 required local checks passed in one complete run, finished
-at 06:44:51 UTC. Physical Zerion and hosted wallet acceptance remain separate;
-hosted CI stays paused. Earlier pending-publication notes below are historical.
-See [status](../status.md) and [work tracker](work-tracker.md).
+1 November [compact market filters and quiet startup](delivery/mobile-markets-startup.md):
+approved preview integrated into the real market controls and startup lifecycle.
+First-paint recovery stays hidden, with separate bounded failure recovery. Desktop
+retains its existing layout. All 79 required major checks passed locally; no
+publication in this increment. The earlier preview entries are historical.
 
-1 November [in-page dropdowns](delivery/in-page-selects.md): compact glass menus replace native pickers across Season and retained pages. Touch, keyboard, dialog focus and feature values use shared browser coverage. Physical Zerion acceptance remains separate.
+1 November [mobile markets and quiet startup preview](../design/mobile-markets-review/README.md):
+compact glass filters, button-free intro and a reproduced first-paint recovery
+flash. Eight browser preview journeys pass. Awaiting design approval; no runtime
+integration or publication yet.
+
+1 November published release: runtime `30599d2` and release notes `dff2340` include
+compact glass dropdowns, readable pending cells, Survivor outcomes and the earlier
+Five live-team/Survivor season scheduling. All 79 required local checks passed in
+one complete run. The public frontend matched the verified build at 06:52:27 UTC;
+physical Zerion and hosted wallet acceptance remain separate. Hosted CI stays
+paused. Earlier pending-publication entries below are historical. See
+[status](../status.md) and [work tracker](work-tracker.md).
+
+1 November [in-page dropdowns](delivery/in-page-selects.md): compact glass menus
+replace native pickers across the app following the Zerion mobile report.
+Implementation and browser verification are in progress; physical wallet-browser
+acceptance is recorded separately.
 
 1 November [pending-loader visibility](delivery/connected-loading.md): shared
 React/legacy button styles preserve readable cells without enabling disabled
@@ -26,6 +89,16 @@ actions. Included in the Survivor/Five release candidate and browser verificatio
 new v2 competitions finish when a sole winner is decided, preserving pending
 results, all-loss rescue and legacy terms. Includes the player-facing edge-case
 table, funding/recovery rules and verification scope. Release work is in progress.
+
+1 November [Week 23 report](../../../reports/week-23.md): event-driven Activity,
+wallet/mobile recovery, linked-cell identity and loaders, Five improvements and
+creator-funded Survivor prizes. Includes paired screenshots, a dated 77-check
+validation summary and explicit published/local/hosted acceptance boundaries.
+31 October [community publishing pack](../../../reports/community/README.md):
+GitHub and Nervos Talk drafts with a prediction-first desktop/mobile gallery and
+image-upload instructions. Actual app captures use isolated sample data. As of
+1 November the owner reports the GitHub issue update is posted; its public URL
+has not been independently verified. Nervos Talk remains pending account permissions.
 
 31 October verified release: `948fb1c` contains Survivor creator prizes and Five's
 live-team view. All 77 full-gate checks passed in one run. Not pushed or deployed;

@@ -1,4 +1,4 @@
-﻿require('../../../scripts/quality/test-env.cjs');
+require('../../../scripts/quality/test-env.cjs');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
@@ -6,6 +6,7 @@ const path = require('node:path');
 const { chromium, webkit } = require('playwright');
 const { chooseOption } = require('./browser-select.cjs');
 const { FiveService } = require('../dist/modules/five/service');
+const { MemoryFiveProfiles } = require('../dist/test-support/five-profiles');
 const { newRound, parseTerms } = require('../dist/modules/five/domain');
 const { closeAuction } = require('../dist/modules/five/auction');
 class Store {
@@ -85,7 +86,15 @@ async function main() {
           });
           const actor = { id: 'admin', name: 'Test Admin', wallet: 'test-admin' },
             store = new Store(),
-            service = new FiveService(store, ['test-admin']);
+            service = new FiveService(
+              store,
+              ['test-admin'],
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              new MemoryFiveProfiles([actor]),
+            );
           const errors = [],
             external = [];
           let failCreate = true;
@@ -135,6 +144,7 @@ async function main() {
             return route.continue();
           });
           await context.routeWebSocket('**/*', (socket) => socket.close());
+          await require('./browser-campaign-fixture.cjs')(context, origin);
           const page = await context.newPage();
           page.on('pageerror', (e) => errors.push(e.message));
           await page.goto(origin + '/season/?view=five');

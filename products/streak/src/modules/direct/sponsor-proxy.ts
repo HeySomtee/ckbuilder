@@ -32,7 +32,8 @@ export async function sponsorProxy(
     !/^\/(?:batch\/)?(?:configuration|fixture|status|offer|submit|resolve|resume)(?:\?.*)?$/.test(
       path,
     ) &&
-    !/^\/activity\/(?:events|ack)$/.test(path)
+    !/^\/activity\/(?:events|ack)$/.test(path) &&
+    path !== '/campaign/absence'
   )
     throw Error('Invalid sponsor operation');
   const response = await fetch(`${origin.origin}${path}`, {

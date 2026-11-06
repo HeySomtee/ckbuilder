@@ -21,11 +21,16 @@ type State =
   | { kind: 'shard'; id: number; accepted: Ticket[]; pending: Ticket | null }
   | { kind: 'reserve'; outcome: Outcome | 255; totals: bigint[] }
   | { kind: 'claim'; id: number; ticket: Ticket };
-type Observed = { transaction: ccc.Transaction; header: ccc.ClientBlockHeader };
+type Observed = {
+  transaction: ccc.Transaction;
+  header: ccc.ClientBlockHeader;
+  transactionIndex: number;
+};
 type Entry = {
   cell: ccc.Cell;
   state: State;
   header: ccc.ClientBlockHeader;
+  transactionIndex: number;
   accepted: string[];
   pending?: string;
   position?: string;
@@ -34,12 +39,34 @@ type OwnedPosition = { owner: string; value: ActivityPosition };
 
 /** Internal persisted evidence, never a permission to spend a claim cell. */
 export interface ActivityMarketProjection {
+  /** Older persisted projections are readable, but cannot establish campaign ordering. */
+  evidenceVersion?: 1;
   descriptor: DirectMarketDescriptor;
   phase: ActivitySnapshot['phase'];
   owners: Record<string, ActivitySnapshot>;
   checkedAt: number;
   checkpoint: { blockNumber: string; blockHash: string };
+  observedTip?: { blockNumber: string; blockHash: string };
+  settlementCheckpoint?: { blockNumber: string; blockHash: string };
+  report?: ActivitySnapshot['report'];
+  settlement?: ActivitySnapshot['settlement'];
   transactionHashes: string[];
+  occupancy?: { accepted: number; pending: number; limit: 32 };
+}
+
+/** Reuse terminal history only while its checkpoint and prior depth still hold. */
+export async function canonicalActivityCheckpoint(
+  client: Pick<ccc.Client, 'getTipHeader' | 'getHeaderByNumberNoCache'>,
+  projection: ActivityMarketProjection,
+): Promise<boolean> {
+  if (!projection.observedTip) return false;
+  const tip = await client.getTipHeader();
+  // A shorter branch can preserve the transaction yet remove its confirmations.
+  // Force replay rather than stamping old observedTip depth with a fresh time.
+  if (tip.number < BigInt(projection.observedTip.blockNumber)) return false;
+  const header = await client.getHeaderByNumberNoCache(projection.checkpoint.blockNumber);
+  if (!header || header.hash !== projection.checkpoint.blockHash) return false;
+  return (await client.getHeaderByNumberNoCache(tip.number))?.hash === tip.hash;
 }
 
 const key = (point: ccc.OutPointLike): string => {
@@ -181,6 +208,8 @@ export async function readActivityMarket(
     requireEvidence(hashes.size <= MAX_TRANSACTIONS, 'market history needs a larger recovery pass');
   }
   const headers = new Map<string, Promise<ccc.ClientBlockHeader | undefined>>();
+  // Retain only transaction ordering, not full blocks and unrelated transactions.
+  const blocks = new Map<string, Promise<Map<string, number>>>();
   const canonical = (number: bigint) => {
     const identity = number.toString();
     let pending = headers.get(identity);
@@ -213,7 +242,36 @@ export async function readActivityMarket(
         response.transaction.outputs.length <= MAX_CELLS,
       'transaction cell bound exceeded',
     );
-    return { transaction: response.transaction, header };
+    let index = response.txIndex;
+    if (index === undefined) {
+      let block = blocks.get(header.hash);
+      if (!block) {
+        block = client.getBlockByHashNoCache(header.hash).then((full) => {
+          requireEvidence(
+            full?.header.hash === header.hash,
+            'transaction ordering block is missing',
+          );
+          const positions = new Map<string, number>();
+          full.transactions.forEach((transaction, index) => {
+            const id = transaction.hash();
+            if (hashes.has(id)) positions.set(id, index);
+          });
+          return positions;
+        });
+        blocks.set(header.hash, block);
+      }
+      const found = (await block).get(hash);
+      requireEvidence(found !== undefined, 'transaction is absent from its canonical block');
+      index = BigInt(found);
+    }
+    requireEvidence(
+      index >= 0n &&
+        index <= BigInt(Number.MAX_SAFE_INTEGER) &&
+        header.timestamp >= 0n &&
+        header.timestamp <= BigInt(Number.MAX_SAFE_INTEGER),
+      'transaction order or timestamp is outside supported bounds',
+    );
+    return { transaction: response.transaction, header, transactionIndex: Number(index) };
   });
   const genesis = observations.find((row) => row.transaction.hash() === descriptor.creationTxHash);
   requireEvidence(genesis, 'market creation is missing');
@@ -235,6 +293,7 @@ export async function readActivityMarket(
   let phase: ActivitySnapshot['phase'] = 'open';
   let report: ActivitySnapshot['report'];
   let settlement: ActivitySnapshot['settlement'];
+  let settlementCheckpoint: ActivityMarketProjection['settlementCheckpoint'];
   const outputEntries = (observed: Observed): Entry[] => {
     const result: Entry[] = [];
     observed.transaction.outputs.forEach((output, index) => {
@@ -244,7 +303,13 @@ export async function readActivityMarket(
         outputData: observed.transaction.outputsData[index],
         outPoint: { txHash: observed.transaction.hash(), index },
       });
-      result.push({ cell, state: decode(cell, descriptor), header: observed.header, accepted: [] });
+      result.push({
+        cell,
+        state: decode(cell, descriptor),
+        header: observed.header,
+        transactionIndex: observed.transactionIndex,
+        accepted: [],
+      });
     });
     return result;
   };
@@ -272,6 +337,13 @@ export async function readActivityMarket(
         entitlementShannons: null,
         outPoint: point(entry.cell.outPoint),
         transactionHash: entry.cell.outPoint.txHash,
+        commit: {
+          blockHash: entry.header.hash,
+          blockNumber: entry.header.number.toString(),
+          timestamp: Number(entry.header.timestamp),
+          transactionIndex: entry.transactionIndex,
+          outputIndex: Number(entry.cell.outPoint.index),
+        },
       },
     });
     return identity;
@@ -494,6 +566,10 @@ export async function readActivityMarket(
           outcome: outcome === 255 ? null : outcome,
           emptyWinner: outcome !== 255 && totals[outcome] === 0n,
         };
+        settlementCheckpoint = {
+          blockNumber: observed.header.number.toString(),
+          blockHash: observed.header.hash,
+        };
       }
     } else if (first.state.kind === 'claim') {
       requireEvidence(
@@ -563,11 +639,26 @@ export async function readActivityMarket(
     genesis.header,
   );
   return {
+    evidenceVersion: 1,
     descriptor,
     phase,
     owners,
     checkedAt,
     checkpoint: { blockNumber: checkpoint.number.toString(), blockHash: checkpoint.hash },
+    observedTip: { blockNumber: tip.number.toString(), blockHash: tip.hash },
+    ...(settlementCheckpoint ? { settlementCheckpoint } : {}),
+    ...(report ? { report } : {}),
+    ...(settlement ? { settlement } : {}),
     transactionHashes: [...hashes],
+    occupancy: {
+      accepted: [...unspent.values()].reduce(
+        (sum, entry) => sum + (entry.state.kind === 'shard' ? entry.state.accepted.length : 0),
+        0,
+      ),
+      pending: [...unspent.values()].filter(
+        (entry) => entry.state.kind === 'shard' && entry.state.pending !== null,
+      ).length,
+      limit: 32,
+    },
   };
 }

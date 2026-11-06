@@ -9,6 +9,7 @@ const { ccc } = require('@ckb-ccc/core');
 const { TestGameControls } = require('../dist/modules/games-test/runtime');
 const { DummyFiveFeed, sampleFixtures, samplePlayers } = require('../dist/modules/games-test/data');
 const { FiveService } = require('../dist/modules/five/service');
+const { MemoryFiveProfiles } = require('../dist/test-support/five-profiles');
 const { FiveFunding } = require('../dist/modules/five/funding');
 const { lockTime } = require('../dist/modules/five/timing');
 const { SurvivorService } = require('../dist/modules/survivor/service');
@@ -112,7 +113,15 @@ async function main() {
             '0x' + '17'.repeat(32),
           ).getRecommendedAddress();
           const funding = new FiveFunding(fiveStore, client, address);
-          const five = new FiveService(fiveStore, [actor.wallet], feed, funding);
+          const five = new FiveService(
+            fiveStore,
+            [actor.wallet],
+            feed,
+            funding,
+            undefined,
+            undefined,
+            new MemoryFiveProfiles([actor]),
+          );
           const anchor = Date.now();
           const survivor = new SurvivorService(
             survivorStore,
@@ -129,7 +138,15 @@ async function main() {
             survivor,
             funding,
           );
-          const ordinary = new FiveService(new Store(), [actor.wallet]);
+          const ordinary = new FiveService(
+            new Store(),
+            [actor.wallet],
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            new MemoryFiveProfiles([actor]),
+          );
           await context.route('**/*', async (route) => {
             const req = route.request(),
               url = new URL(req.url());
@@ -181,6 +198,7 @@ async function main() {
             return route.continue();
           });
           await context.routeWebSocket('**/*', (socket) => socket.close());
+          await require('./browser-campaign-fixture.cjs')(context, origin);
           const page = await context.newPage();
           page.on('pageerror', (e) => errors.push(e.message));
           await page.goto(origin + '/season/?view=five');

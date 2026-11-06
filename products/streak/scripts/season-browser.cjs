@@ -146,6 +146,7 @@ async function main() {
           return route.continue();
         });
         await context.routeWebSocket('**/*', (socket) => socket.close());
+        await require('./browser-campaign-fixture.cjs')(context, base);
         const page = await context.newPage();
         const reads = observeReads(page, base);
         const errors = [];
@@ -562,6 +563,7 @@ async function main() {
         new URL(route.request().url()).origin === base ? route.continue() : route.abort(),
       );
       await liveContext.routeWebSocket('**/*', (socket) => socket.close());
+      await require('./browser-campaign-fixture.cjs')(liveContext, base);
       const livePage = await liveContext.newPage();
       const liveReads = observeReads(livePage, base);
       const mondayNight = new Date(
@@ -684,6 +686,7 @@ async function main() {
         new URL(route.request().url()).origin === base ? route.continue() : route.abort(),
       );
       await context.routeWebSocket('**/*', (socket) => socket.close());
+      await require('./browser-campaign-fixture.cjs')(context, base);
       let page = await context.newPage();
       let recoveryReads = observeReads(page, base);
       // Recovery must work without loading the new application's JavaScript.
@@ -719,6 +722,7 @@ async function main() {
         new URL(route.request().url()).origin === base ? route.continue() : route.abort(),
       );
       await context.routeWebSocket('**/*', (socket) => socket.close());
+      await require('./browser-campaign-fixture.cjs')(context, base);
       page = await context.newPage();
       recoveryReads = observeReads(page, base);
       let fail = true;

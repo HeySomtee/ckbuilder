@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import * as ccc from '@ckb-ccc/core';
-import { readActivityMarket } from './modules/activity/chain';
+import { canonicalActivityCheckpoint, readActivityMarket } from './modules/activity/chain';
 import { fundedPayout } from './modules/direct/operator';
 import {
   createRecord,
@@ -97,6 +97,21 @@ class Chain {
     this.client.getHeaderByNumberNoCache = async (number) => {
       return this.headers.get(Number(ccc.numFrom(number)));
     };
+    this.client.getBlockByHashNoCache = async (hash) => {
+      const blockHeader = [...this.headers.values()].find(
+        (value) => value.hash === ccc.hexFrom(hash),
+      );
+      return blockHeader
+        ? ccc.ClientBlock.from({
+            header: blockHeader,
+            proposals: [],
+            uncles: [],
+            transactions: [...this.history.values()]
+              .filter((value) => value.blockHash === blockHeader.hash)
+              .map((value) => value.transaction),
+          })
+        : undefined;
+    };
     this.client.findCellsPagedNoCache = async (key) => ({
       cells: [...this.live.values()].filter((cell) => cell.cellOutput.type?.eq(key.script)),
       lastCursor: '0x',
@@ -130,6 +145,7 @@ class Chain {
         status: 'committed',
         blockHash: block.hash,
         blockNumber: block.number,
+        txIndex: 0,
       }),
     );
     for (const input of tx.inputs) this.live.delete(pointKey(input.previousOutput));
@@ -356,6 +372,18 @@ async function main() {
     const second = await readActivityMarket(chain.client, m.descriptor, initial);
     assert.equal(second.owners[alice.hash()].positions.length, sponsored ? 2 : 1);
     const stable = second.owners[alice.hash()].positions[0].id;
+    const originalCommit = second.owners[alice.hash()].positions[0].commit;
+    assert.deepEqual(
+      originalCommit,
+      {
+        blockHash: chain.headers.get(sponsored ? 1 : 2)!.hash,
+        blockNumber: sponsored ? '1' : '2',
+        timestamp: CUTOFF - (sponsored ? 60_000 : 40_000),
+        transactionIndex: 0,
+        outputIndex: sponsored ? m.base + 1 : config === V4_DIRECT_CONFIG ? 2 : 0,
+      },
+      'original deposit evidence is independent of the carrying shard',
+    );
     const shardIndex = config === V4_DIRECT_CONFIG ? 2 : 0;
     const thirdTx = deposit(
       chain,
@@ -375,6 +403,7 @@ async function main() {
     assert.equal(third.owners[alice.hash()].positions[0].id, stable);
     assert.equal(third.owners[alice.hash()].positions[0].outPoint.txHash, thirdTx.hash());
     assert.equal(third.owners[alice.hash()].positions[0].status, 'accepted');
+    assert.deepEqual(third.owners[alice.hash()].positions[0].commit, originalCommit);
     assert.equal(third.owners[bob.hash()].positions[0].status, 'pending-validation');
     assert.equal(
       new Set(third.owners[alice.hash()].positions.map((position) => position.id)).size,
@@ -396,14 +425,26 @@ async function main() {
       m.guarded,
     );
     const settled = await readActivityMarket(chain.client, m.descriptor);
+    assert.deepEqual(settled.settlementCheckpoint, settled.checkpoint);
     assert.equal(settled.owners[alice.hash()].phase, 'settled');
     assert.equal(settled.owners[alice.hash()].positions[0].id, stable);
     assert.equal(settled.owners[alice.hash()].positions[0].status, 'claimable');
     assert.equal(settled.owners[bob.hash()].positions[0].entitlementShannons, STORAGE.toString());
     const claimed = collect(chain, chain.cell(closed, 1), alice, CUTOFF + 20_000);
     const collected = await readActivityMarket(chain.client, m.descriptor);
+    assert.deepEqual(
+      collected.settlementCheckpoint,
+      settled.settlementCheckpoint,
+      'collection keeps the original settlement block for finality',
+    );
+    assert.notDeepEqual(collected.checkpoint, collected.settlementCheckpoint);
     assert.equal(collected.owners[alice.hash()].positions[0].status, 'claimed');
     assert.equal(collected.owners[alice.hash()].positions[0].claimTransactionHash, claimed.hash());
+    assert.deepEqual(
+      collected.owners[alice.hash()].positions[0].commit,
+      originalCommit,
+      'collection preserves original deadline and tie-break evidence',
+    );
     assert.equal(collected.owners[bob.hash()].positions[0].status, 'claimable');
     collect(chain, chain.cell(closed, 0), operator, CUTOFF + 30_000);
     const cleanup = await readActivityMarket(chain.client, m.descriptor);
@@ -415,9 +456,56 @@ async function main() {
   }
   {
     const chain = new Chain(),
+      m = market(chain);
+    const terminal = await readActivityMarket(chain.client, m.descriptor);
+    terminal.phase = 'settled';
+    terminal.owners = {};
+    terminal.settlementCheckpoint = terminal.checkpoint;
+    terminal.observedTip = { blockNumber: '4', blockHash: header(4, CUTOFF).hash };
+    const oldTip = header(4, CUTOFF);
+    chain.headers.set(4, oldTip);
+    chain.client.getTipHeader = async () => oldTip;
+    assert.equal(await canonicalActivityCheckpoint(chain.client, terminal), true);
+    chain.client.getTipHeader = async () => header(3, CUTOFF);
+    assert.equal(
+      await canonicalActivityCheckpoint(chain.client, terminal),
+      false,
+      'a shorter branch must replay even when the settlement transaction remains canonical',
+    );
+    chain.client.getTipHeader = async () => oldTip;
+    chain.headers.set(4, header(4, CUTOFF, H('e')));
+    assert.equal(
+      await canonicalActivityCheckpoint(chain.client, terminal),
+      false,
+      'a tip reorg during the cheap check cannot refresh old depth evidence',
+    );
+    chain.headers.set(4, oldTip);
+    chain.headers.set(1, header(1, CUTOFF, H('f')));
+    assert.equal(
+      await canonicalActivityCheckpoint(chain.client, terminal),
+      false,
+      'an orphaned history checkpoint must replay',
+    );
+    console.log('PASS historical checkpoint freshness rejects reduced depth and canonical changes');
+  }
+  {
+    const chain = new Chain(),
+      m = market(chain, V4_DIRECT_CONFIG, home);
+    const response = chain.history.get(m.transaction.hash())!;
+    response.txIndex = undefined;
+    const projection = await readActivityMarket(chain.client, m.descriptor);
+    assert.equal(
+      projection.owners[alice.hash()].positions[0].commit?.transactionIndex,
+      0,
+      'older RPC responses recover transaction order from the canonical block',
+    );
+  }
+  {
+    const chain = new Chain(),
       m = market(chain, V4_DIRECT_CONFIG, home, CUTOFF, 3);
     const first = await readActivityMarket(chain.client, m.descriptor);
     assert.equal(first.owners[alice.hash()].positions[0].status, 'refund-required');
+    assert.equal(first.owners[alice.hash()].positions[0].commit?.timestamp, CUTOFF);
     const late = deposit(
       chain,
       chain.cell(m.transaction, 4),
@@ -430,6 +518,11 @@ async function main() {
     );
     const refunded = await readActivityMarket(chain.client, m.descriptor);
     assert.equal(refunded.owners[alice.hash()].positions[0].status, 'refunded');
+    assert.deepEqual(
+      refunded.owners[alice.hash()].positions[0].commit,
+      first.owners[alice.hash()].positions[0].commit,
+      'a late refunded deposit keeps its late original timestamp',
+    );
     assert.equal(
       refunded.owners[alice.hash()].positions[0].id,
       first.owners[alice.hash()].positions[0].id,

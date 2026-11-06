@@ -1,5 +1,7 @@
 import { Jersey, Modal, positions } from './presentation';
 import { LiveTeam } from './live-team';
+import { FiveStandings } from './standings';
+import { FplNameDialog } from './name';
 import { CellLoader } from '../../components/cell-loader';
 import { Select } from '../../components/select';
 import { GameTestPanel } from '../games-test/panel';
@@ -8,7 +10,7 @@ import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FormEvent, RefObject } from 'react';
 import type { Account } from '../account/api';
-import { actFive, loadFive, money, shannons } from './api';
+import { actFive, loadFive, money, saveFiveProfile, shannons } from './api';
 import type { FiveData, FiveRound, Player } from './api';
 import './five.css';
 import './game.css';
@@ -85,7 +87,13 @@ function Builder({
   scoutingAvailable,
   now,
   squadControl,
+  profileName,
+  walletLabel,
+  onNameSave,
 }: {
+  profileName: string;
+  walletLabel: string;
+  onNameSave: (name: string) => Promise<void>;
   squadControl: RefObject<(() => void) | null>;
   now: number;
   scoutingAvailable: boolean;
@@ -134,6 +142,7 @@ function Builder({
   });
   const [error, setError] = useState(''),
     [review, setReview] = useState(false),
+    [nameStep, setNameStep] = useState(false),
     [limit, setLimit] = useState(40);
   const selected = ids
     .map((id) => round.terms.players.find((p) => p.id === id))
@@ -334,7 +343,9 @@ function Builder({
             disabled={pending || locked || !complete || unchanged}
             aria-busy={saving || (!authenticated && signInPending)}
             aria-describedby="five-save-hint"
-            onClick={() => (authenticated ? setReview(true) : onSignIn())}
+            onClick={() =>
+              !authenticated ? onSignIn() : profileName ? setReview(true) : setNameStep(true)
+            }
           >
             {saving ? (
               <>
@@ -344,7 +355,9 @@ function Builder({
             ) : locked ? (
               'Squad locked'
             ) : authenticated ? (
-              own ? (
+              !profileName ? (
+                'Add your FPL name'
+              ) : own ? (
                 unchanged ? (
                   'Changes saved'
                 ) : (
@@ -364,6 +377,9 @@ function Builder({
             {locked
               ? 'Picks are locked for this gameweek.'
               : missing ||
+                (!profileName && authenticated
+                  ? 'Add your public FPL name before saving your five.'
+                  : '') ||
                 (unchanged
                   ? 'All changes saved.'
                   : own
@@ -372,6 +388,18 @@ function Builder({
           </p>
           <small>Free entry. No wallet payment.</small>
         </div>
+        {nameStep && (
+          <FplNameDialog
+            walletLabel={walletLabel}
+            continueToSquad
+            onClose={() => setNameStep(false)}
+            onSave={onNameSave}
+            onSaved={() => {
+              setNameStep(false);
+              setReview(true);
+            }}
+          />
+        )}
         {review && (
           <Modal
             title={own ? 'Save your changes?' : 'Your five, ready to go.'}
@@ -827,11 +855,13 @@ export default function FivePage({
   accountReady,
   onSignIn,
   signInPending,
+  initialRound = '',
 }: {
   account: Account | null;
   accountReady: boolean;
   onSignIn: () => void;
   signInPending: boolean;
+  initialRound?: string;
 }) {
   const [tab, setTab] = useState<WorkspaceTab>('team');
   const squadControl = useRef<(() => void) | null>(null);
@@ -845,9 +875,9 @@ export default function FivePage({
     });
   };
   const client = useQueryClient(),
-    [selection, setSelection] = useState(''),
+    [selection, setSelection] = useState(initialRound),
     [modal, setModal] = useState<
-      'rules' | 'admin' | 'scores' | 'finalize' | 'sponsor' | 'cancel' | null
+      'rules' | 'admin' | 'scores' | 'finalize' | 'sponsor' | 'cancel' | 'name' | null
     >(null);
   const [reason, setReason] = useState('');
   const [message, setMessage] = useState(''),
@@ -855,6 +885,8 @@ export default function FivePage({
     [scoreSource, setScoreSource] = useState(''),
     [complete, setComplete] = useState(false);
   const identity = account?.id ?? 'guest';
+  const activeIdentity = useRef(identity);
+  activeIdentity.current = identity;
   const key = ['private', 'five', identity, selection, gamesDataMode];
   const clock = useNow(true),
     live = useRef(true);
@@ -911,6 +943,18 @@ export default function FivePage({
   });
   const data = query.data,
     r = data?.detail;
+  const saveName = async (name: string) => {
+    const profile = await saveFiveProfile(name, identity);
+    if (!live.current || activeIdentity.current !== identity)
+      throw Error('Your sign-in changed. Refresh before continuing.');
+    client.setQueriesData<FiveData>({ queryKey: ['private', 'five', identity] }, (cached) =>
+      cached?.viewerId === identity ? { ...cached, profile } : cached,
+    );
+    void client.invalidateQueries({ queryKey: ['private', 'five', identity] });
+  };
+  const walletLabel = account?.walletAddress
+    ? `${account.walletAddress.slice(0, 8)}…${account.walletAddress.slice(-6)}`
+    : '';
   const pendingBody =
     mutation.isPending &&
     mutation.variables.identity === identity &&
@@ -991,6 +1035,11 @@ export default function FivePage({
           run={action}
         />
         <div className="five-actions">
+          {account && (
+            <button className="btn" onClick={() => setModal('name')}>
+              Your FPL name
+            </button>
+          )}
           <button className="btn" onClick={() => setModal('rules')}>
             How it works
           </button>
@@ -1203,6 +1252,9 @@ export default function FivePage({
               />
             ) : (
               <Builder
+                profileName={data.profile?.displayName ?? ''}
+                walletLabel={walletLabel}
+                onNameSave={saveName}
                 squadControl={squadControl}
                 now={serverNow}
                 scoutingAvailable={data.feedAvailable}
@@ -1232,70 +1284,7 @@ export default function FivePage({
             hidden={tab !== 'standings'}
           >
             <BackToSquad onClick={backToTeam} />{' '}
-            <section className="glass five-standings">
-              <header>
-                <p className="eyebrow">THE WEEKEND TABLE</p>
-                <h2>{r.state === 'final' ? 'Final standings' : 'Leaderboard'}</h2>
-                <small>
-                  {r.scoreRevision
-                    ? `Score revision ${r.scoreRevision} · ${r.scoresAt ? date(r.scoresAt) : ''}`
-                    : 'Scores appear after the deadline.'}
-                </small>
-              </header>
-              {r.standings.length ? (
-                r.standings.map((e, i) => (
-                  <details className="five-standing-detail" key={e.id}>
-                    <summary className={`five-standing ${e.id === r.ownId ? 'own' : ''}`}>
-                      <span>{i + 1}</span>
-                      <strong>
-                        {e.name}
-                        {e.id === r.ownId ? ' · You' : ''}
-                      </strong>
-                      <span>{e.pending ? 'Pending' : `${e.points} pts`}</span>
-                      {r.state === 'final' && BigInt(r.rewards[e.id] ?? '0') > 0n && (
-                        <small>{money(r.rewards[e.id])} tCKB allocated</small>
-                      )}
-                    </summary>
-                    <div className="five-score-breakdown">
-                      {r.entries
-                        .find((entry) => entry.id === e.id)
-                        ?.players?.map((id) => {
-                          const player = r.terms.players.find((p) => p.id === id),
-                            score = r.scores[id];
-                          const captain =
-                            r.entries.find((entry) => entry.id === e.id)?.captain === id;
-                          return (
-                            <div key={id}>
-                              <strong>
-                                {player?.name ?? 'Player'}
-                                {captain ? ' · Captain ×2' : ''}
-                              </strong>
-                              <span>
-                                {score
-                                  ? `${score.points * (captain ? 2 : 1)} pts`
-                                  : 'Awaiting confirmed statistics'}
-                              </span>
-                              {score && (
-                                <small>
-                                  {score.lines
-                                    .map((l) => `${l.label} ${l.points > 0 ? '+' : ''}${l.points}`)
-                                    .join(' · ')}
-                                </small>
-                              )}
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </details>
-                ))
-              ) : (
-                <p>
-                  {r.entries.length
-                    ? 'Squads and standings stay private until the gameweek locks.'
-                    : 'Be the first to put your football instinct on the team sheet.'}
-                </p>
-              )}
-            </section>
+            <FiveStandings key={`${identity}:${r.id}`} round={r} now={serverNow} />
           </section>
           <section
             id="five-panel-sponsors"
@@ -1358,6 +1347,16 @@ export default function FivePage({
             )}
           </section>
         </>
+      )}
+      {modal === 'name' && account && (
+        <FplNameDialog
+          key={identity}
+          initialName={data?.profile?.displayName ?? ''}
+          walletLabel={walletLabel}
+          onClose={() => setModal(null)}
+          onSave={saveName}
+          onSaved={() => setModal(null)}
+        />
       )}
       {modal === 'sponsor' && activeSponsorRound && account && (
         <Modal

@@ -4,6 +4,125 @@ import { Jersey, Modal, positions } from './presentation';
 import { PlayerProfile } from './player-profile';
 import './live-team.css';
 
+export type SquadEntry = FiveRound['entries'][number];
+export function savedSquad(round: FiveRound, entry: SquadEntry) {
+  return (entry.players ?? []).flatMap((id) => {
+    const player = round.terms.players.find((p) => p.id === id);
+    return player ? [player] : [];
+  });
+}
+export function squadPoints(round: FiveRound, entry: SquadEntry) {
+  const squad = savedSquad(round, entry);
+  return {
+    observed: squad.filter((p) => round.scores[p.id] !== undefined).length,
+    total: squad.reduce(
+      (sum, p) => sum + (round.scores[p.id]?.points ?? 0) * (p.id === entry.captain ? 2 : 1),
+      0,
+    ),
+    count: squad.length,
+  };
+}
+
+/** Saved entries and the existing score snapshot are the sole source for every pitch. */
+export function SquadPitch({
+  round,
+  entry,
+  onPlayer,
+  selectedId,
+}: {
+  round: FiveRound;
+  entry: SquadEntry;
+  onPlayer: (player: Player) => void;
+  selectedId?: string;
+}) {
+  const squad = savedSquad(round, entry),
+    used = new Set<string>();
+  return (
+    <div className="five-pitch">
+      {positions.map((pos, i) => {
+        const player = squad.find((p) => p.position === pos && !used.has(p.id));
+        if (!player) return null;
+        used.add(player.id);
+        const points = round.scores[player.id],
+          captain = player.id === entry.captain;
+        return (
+          <div className={`five-slot slot-${i}`} data-position={pos} key={player.id}>
+            <button
+              className="five-pitch-player"
+              aria-label={`View ${player.name} gameweek points`}
+              data-player-id={player.id}
+              aria-pressed={selectedId === player.id}
+              onClick={() => onPlayer(player)}
+            >
+              <Jersey player={player} />
+              <strong>{player.name}</strong>
+            </button>
+            {captain && (
+              <span className="five-live-captain" aria-label="Captain, double points">
+                C
+              </span>
+            )}
+            <span className="five-live-player-points" data-pending={!points}>
+              {points ? `${points.points * (captain ? 2 : 1)} pts` : 'Awaiting points'}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function PlayerPoints({
+  round,
+  entry,
+  player,
+}: {
+  round: FiveRound;
+  entry: SquadEntry;
+  player: Player;
+}) {
+  const score = round.scores[player.id],
+    multiplier = player.id === entry.captain ? 2 : 1;
+  return (
+    <div className="five-live-breakdown">
+      <p className="eyebrow">
+        {player.position} · {player.team}
+      </p>
+      <h3>{player.name}</h3>
+      <p className="five-player-score">
+        {score
+          ? `${score.points * multiplier} points${multiplier === 2 ? ' · Captain ×2' : ''}`
+          : 'Awaiting points'}
+      </p>
+      {score ? (
+        <>
+          {score.lines.map((line, i) => (
+            <div key={i}>
+              <span>{line.label}</span>
+              <strong>
+                {line.points > 0 ? '+' : ''}
+                {line.points}
+              </strong>
+            </div>
+          ))}
+          {multiplier === 2 && (
+            <p>
+              Player score {score.points} × 2 = {score.points * 2} points for this team.
+            </p>
+          )}
+        </>
+      ) : (
+        <p>No player score has arrived yet. This is not a confirmed zero.</p>
+      )}
+      <p>
+        {round.state === 'final'
+          ? 'Final gameweek score.'
+          : 'Provisional Streak Five score. Updates as match data arrives.'}
+      </p>
+    </div>
+  );
+}
+
 /** Only the saved entry is rendered here. Unsaved builder picks never become live scores. */
 export function LiveTeam({
   round,
@@ -16,19 +135,6 @@ export function LiveTeam({
 }) {
   const [player, setPlayer] = useState<Player | null>(null);
   const own = round.entries.find((e) => e.id === round.ownId);
-  const squad = (own?.players ?? []).flatMap((id) => {
-    const p = round.terms.players.find((p) => p.id === id);
-    return p ? [p] : [];
-  });
-  const observed = squad.filter((p) => round.scores[p.id] !== undefined).length;
-  const total = squad.reduce(
-    (sum, p) => sum + (round.scores[p.id]?.points ?? 0) * (p.id === own?.captain ? 2 : 1),
-    0,
-  );
-  const final = round.state === 'final';
-  const used = new Set<string>();
-  const score = player ? round.scores[player.id] : undefined;
-  const multiplier = player?.id === own?.captain ? 2 : 1;
   if (!own)
     return (
       <section className="glass five-empty-state">
@@ -40,6 +146,8 @@ export function LiveTeam({
         </p>
       </section>
     );
+  const { observed, total, count } = squadPoints(round, own),
+    final = round.state === 'final';
   return (
     <section className="five-live-team" aria-label="Your gameweek points">
       <div className="glass five-pitch-card">
@@ -60,38 +168,10 @@ export function LiveTeam({
             <span>{observed ? 'points' : 'Awaiting points'}</span>
           </div>
         </header>
-        <div className="five-pitch">
-          {positions.map((pos, i) => {
-            const p = squad.find((p) => p.position === pos && !used.has(p.id));
-            if (!p) return null;
-            used.add(p.id);
-            const points = round.scores[p.id];
-            const captain = p.id === own.captain;
-            return (
-              <div className={`five-slot slot-${i}`} data-position={pos} key={p.id}>
-                <button
-                  className="five-pitch-player"
-                  aria-label={`View ${p.name} gameweek points`}
-                  onClick={() => setPlayer(p)}
-                >
-                  <Jersey player={p} />
-                  <strong>{p.name}</strong>
-                </button>
-                {captain && (
-                  <span className="five-live-captain" aria-label="Captain, double points">
-                    C
-                  </span>
-                )}
-                <span className="five-live-player-points" data-pending={!points}>
-                  {points ? `${points.points * (captain ? 2 : 1)} pts` : 'Awaiting points'}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+        <SquadPitch round={round} entry={own} onPlayer={setPlayer} />
         <footer>
           <span>
-            {observed} of {squad.length} players have points updates. Captain doubled.
+            {observed} of {count} players have points updates. Captain doubled.
           </span>
           <span>
             {round.scoresAt
@@ -105,38 +185,7 @@ export function LiveTeam({
       </div>
       {player && (
         <Modal title={`${player.name} · ${round.terms.name}`} onClose={() => setPlayer(null)}>
-          <div className="five-live-breakdown">
-            <h3>
-              {score
-                ? `${score.points * multiplier} points${multiplier === 2 ? ' · Captain ×2' : ''}`
-                : 'Awaiting points'}
-            </h3>
-            {score ? (
-              <>
-                {score.lines.map((line, i) => (
-                  <div key={i}>
-                    <span>{line.label}</span>
-                    <strong>
-                      {line.points > 0 ? '+' : ''}
-                      {line.points}
-                    </strong>
-                  </div>
-                ))}
-                {multiplier === 2 && (
-                  <p>
-                    Player score {score.points} × 2 = {score.points * 2} points for your team.
-                  </p>
-                )}
-              </>
-            ) : (
-              <p>No player score has arrived yet. This is not a confirmed zero.</p>
-            )}
-            <p>
-              {final
-                ? 'Final gameweek score.'
-                : 'Provisional Streak Five score. Updates as match data arrives.'}
-            </p>
-          </div>
+          <PlayerPoints round={round} entry={own} player={player} />
           {scoutingAvailable && (
             <PlayerProfile
               player={player}

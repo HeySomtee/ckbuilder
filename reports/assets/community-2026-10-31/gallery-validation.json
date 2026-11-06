@@ -1,0 +1,90 @@
+{
+  "capturedAt": "2026-10-31T18:07:33.726Z",
+  "status": "passed",
+  "source": "gallery.html composition of actual application captures",
+  "externalRequests": "blocked",
+  "boards": [
+    {
+      "file": "01-markets.png",
+      "width": 1920,
+      "height": 1379.71875,
+      "bytes": 1052468,
+      "frames": [
+        {
+          "width": 1440,
+          "height": 1000
+        },
+        {
+          "width": 390,
+          "height": 844
+        }
+      ]
+    },
+    {
+      "file": "02-payment-tracking.png",
+      "width": 1920,
+      "height": 1380.25,
+      "bytes": 1110668,
+      "frames": [
+        {
+          "width": 1440,
+          "height": 1000
+        },
+        {
+          "width": 390,
+          "height": 844
+        }
+      ]
+    },
+    {
+      "file": "03-activity.png",
+      "width": 1920,
+      "height": 1380.25,
+      "bytes": 953476,
+      "frames": [
+        {
+          "width": 1440,
+          "height": 1000
+        },
+        {
+          "width": 390,
+          "height": 844
+        }
+      ]
+    },
+    {
+      "file": "04-streak-five.png",
+      "width": 1920,
+      "height": 1380.25,
+      "bytes": 959103,
+      "frames": [
+        {
+          "width": 1440,
+          "height": 1000
+        },
+        {
+          "width": 390,
+          "height": 844
+        }
+      ]
+    },
+    {
+      "file": "05-streak-survivor.png",
+      "width": 1920,
+      "height": 1380.25,
+      "bytes": 1102412,
+      "frames": [
+        {
+          "width": 1440,
+          "height": 1000
+        },
+        {
+          "width": 390,
+          "height": 844
+        }
+      ]
+    }
+  ],
+  "galleryWidths": [1440, 390],
+  "pageErrors": []
+}

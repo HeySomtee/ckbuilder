@@ -114,6 +114,8 @@ export interface MatchDataProvider {
   scheduleCoverage?(): { from: string; to: string; complete: boolean } | null;
   /** Current results keyed by match id. `{}` when nothing to report. */
   fetchResults(): Promise<Record<string, LiveResult>>;
+  /** Next useful provider/deadline wake; no database or network read. */
+  nextSyncAt?(): number;
   fixtureObservations?(): Record<string, FixtureObservation>;
   fixtureObservationHistory?(): Record<string, FixtureObservation[]>;
   /** Provider health snapshot for the UI. */

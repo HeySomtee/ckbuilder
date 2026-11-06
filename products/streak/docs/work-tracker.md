@@ -1,5 +1,426 @@
 # Streak work tracker
 
+6 November publication gate stopped twice on the unchanged WebKit late-controller
+startup recovery case: the CSS watchdog did not expose the retry link within its
+existing deadline. Add an independent 10-second entry-script watchdog, cancelled
+when the shell is ready and inactive after controller setup. Preserve the CSS
+fallback when the entry script is also unavailable, and preserve the existing
+browser assertions. All 64 startup groups now pass in Chromium and WebKit; an
+independent lifecycle review found no blocker. Recheck the complete staged
+candidate before publication. Failed logs and the focused pass remain under
+`.quality-artifacts/streak-release-*`.
+
+6 November owner authorizes commit and push of the prepared Streak release:
+competitions, background efficiency, Five manager/pitch/refund changes and Zerion
+optional-RPC compatibility. Publication review preserves the public screenshot
+pack, restores newer published Week 23 facts, and excludes private correspondence
+and generated nested test state. Run the normal exact-candidate commit gate, then
+reuse its successful receipt for push. Hosted CI remains paused via the commit's
+skip marker. The local publication result is recorded separately in
+`.quality-artifacts/streak-release-2026-11-06.json`; deployed wallet/refund
+acceptance, Render/Neon measurements and prediction concurrency remain follow-up
+work regardless of Git publication.
+
+6 November implementation update: approved Five names/pitch UI and refund fixes
+passed all 94 major-gate stages at 11:07:41 UTC, including signed local-chain
+refund/prize journeys. Independent identity/money review resolved session-response
+fencing and truthful delayed-refund copy. The later Zerion optional account-picker
+fix is independently reviewed with unit checks passed; final static/build and
+built-app wallet regressions passed separately (seven static stages, five permission
+tests and four Chromium/WebKit journeys). Keep this combined coverage
+distinct from an exact final-tree publication receipt. No push/deployment or live
+refund confirmation. Resume hosted acceptance, efficiency measurement and earlier
+campaign/payment-concurrency commitments after rollout.
+
+The task-owned disposable PostgreSQL container was stopped after successful tests;
+the owner's existing local database and preview remain untouched. Final code and
+screenshots are local. Deployment and real Zerion/refund confirmation remain the
+next acceptance steps, with no new Render variables required by these fixes.
+
+6 November owner confirms the refund issue is on streakpitch.com and reports
+Zerion mobile sign-in failing with "rpc method is not whitelisted." Keep the
+approved Five implementation and verification work; investigate the wallet RPC
+sequence and add only a justified compatibility fallback, preserving explicit
+rejection and account/signature checks. Independent identity review and focused
+provider/browser regressions are required. Public read-only diagnosis at
+10:45 UTC returned fundingAvailable=true, Gameweek 9 final and auction settled;
+the new refund field is absent from the hosted response. This does not establish
+whether the owner's individual refund was paid. No authenticated production
+records, keys or funds were accessed.
+
+6 November owner approves the Five standings preview and requests implementation,
+plus investigation of a sponsor refund stuck on "Your refund is being returned."
+Work in progress: persistent scoped FPL names before entry, named standings with
+short wallet labels, shared live/standings pitch and mobile navigation. The
+auction banner currently derives refunding only from losing the auction, ignoring
+confirmed payout records; delivery review also found repeated paid-refund queueing
+and a failed request capable of starving other wallets. Connect owner-only status
+to durable refund credits and payout journals, retain signed-payment recovery,
+and add bounded retry scheduling. Independent review and the major gate remain
+required. Preserve the completed local efficiency work and earlier campaign,
+hosted acceptance and payment-concurrency commitments. No production diagnosis
+of this particular payment or fund movement is claimed.
+
+6 November owner requests a design preview before implementation: Five standings
+should show required FPL display names and shortened wallet labels; selecting a
+manager opens a positioned squad pitch instead of an expanded footballer list.
+The [interactive preview](../design/five-standings-review/README.md) is ready on
+loopback port 4199: first-entry name gate, final/live points, captain scoring and
+mobile back navigation. It preserves pre-deadline squad privacy, pending-score
+semantics and separate allocation/payment status. Focused Chromium desktop/mobile
+and WebKit mobile checks passed; screenshots were inspected. Runtime name
+validation/public wallet-label projection remain proposed work pending design
+approval. No app integration or publication. Continue preserving the
+completed local efficiency refactor and earlier hosted/campaign commitments.
+
+6 November owner approved the efficiency refactor. Implementation is complete locally:
+targeted fixture/receipt SQL, unchanged Activity/campaign write suppression,
+durable due-work queues and event wakes, authenticated local rewards health,
+bounded provider/chain caches and Linux scheduling locks. Independent SQL and
+financial/recovery reviews resolved legacy user defaults, payout queue fairness,
+provider-failure scheduling and concurrent first-start schema creation. The
+91-stage major gate passed at 08:41:26 UTC; after the final schema fix, static
+(7 stages), unit (40) and disposable PostgreSQL (10) passed by 08:51:30 UTC.
+Pinned Linux Node 24.14.0 lock tests passed separately. This is combined coverage,
+not a single-run final-tree publication receipt. Runbooks and the
+[delivery record](delivery/background-efficiency.md) are current. No commit, push,
+deployment, live fund movement or measured hosting savings are claimed.
+Next: coordinated API/supervisor/worker rollout and hosted idle/live/settlement
+memory and Neon activity measurements. Preserve hosted campaign acceptance, PostHog setup and
+prediction placement concurrency work. Earlier proposal-only entries below are
+historical.
+
+6 November owner asks for implementation specifics in a short summary. Proposed
+steps: replace whole-store fixture synchronization with indexed, transactional
+queries for affected fixtures/markets/bets and consistent cache invalidation;
+diff Activity owners and campaign semantic state before writing, separating
+freshness from audit revisions; persist due times and deduplicated jobs, wake
+existing workers by authenticated local notifications and rebuild timers from
+durable state on startup. Preserve bounded chain/provider polling, recovery
+sweeps and request-time deadline checks. Replace the rewards database heartbeat
+only together with its current 90-second readiness gate, using responsive local
+health checks that include required dependencies. Bound caches by age/count/bytes
+and page heavy reads. For the single-host Linux deployment, evaluate an OS-held
+scheduling lock with verified descriptor lifetime so process death releases it;
+financial mutation/publication locks, signed records and input reservations keep
+their separate recovery requirements. Independent review agrees with these
+boundaries. Verify idle, active, pending-payment, deadline and interrupted-worker
+scenarios with memory/query baselines. These remain proposed changes, not an
+implementation or hosting change; existing tasks remain pending.
+
+6 November owner supplies current-container cgroup measurements: 310091776 bytes
+current (295.73 MiB), 369913856 bytes peak (352.78 MiB), and a 536870912-byte
+limit (512 MiB), with all reported memory events zero. These supersede the
+475.56 MiB summed-RSS estimate for container usage; shared pages inflated that
+sum. Entrypoints confirm PID 52 is the supervisor, 59 the API, 96 the sponsor
+and 105 Five rewards. No settlement process appears in this snapshot, which does
+not establish whether prior passes ran. Current usage is about 58% and recorded
+peak about 69% of the limit. There is no measured imminent exhaustion or proven
+leak in this instance; the previous Render memory-limit incident remains valid.
+Normal processes are running, but end-to-end hosted acceptance and long-running
+settlement/live-match memory behavior remain unverified. Prioritize targeted
+reads, unchanged-data suppression, bounded caches and less idle database work;
+measure representative peaks before recommending a paid memory upgrade. No
+runtime optimization or hosted mutation was made in this diagnostic turn.
+
+6 November owner supplies a process snapshot from a new hosted instance after
+recovery guidance. PID 52 has three Node children (59, 96, 105). Their RSS values
+are 81128, 185840, 129968 and 90036 KiB respectively, totaling 475.56 MiB. This
+supports concern about combined process overhead against the previously observed
+512 MiB cap, but summed RSS can count shared pages multiple times and is not the
+container's charged usage. Entrypoints, current cgroup usage/peak and worker-pass
+memory remain unverified; the process tree alone is not full hosted acceptance.
+Use lightweight shell reads for container memory and allowlisted process identity
+instead of launching another Node diagnostic in the constrained service. No new
+runtime optimization, deployment or financial action was performed in this turn.
+
+6 November owner requests a simple explanation and efficiency recommendations
+before further implementation. Independent source review recommends targeted SQL
+instead of repeatedly materializing/copying the twelve-table store, bounded
+provider/chain caches and measured combined process memory. Activity already has
+event delivery; retain it and schedule durable work by the next due time, with
+prompt checks for pending money/live matches and sparse recovery checks when idle.
+All idle database wakeups must be addressed together, including rewards heartbeats,
+Survivor, campaigns and fixture synchronization, for Neon to suspend. Separate
+freshness metadata from semantic changes to avoid unchanged Activity rewrites
+and campaign audit churn; preserve audit evidence and outstanding obligations for
+finished/deleted competitions. Restart recovery must prove exclusive ownership
+and reconcile retained financial journals. These changes can use existing services
+without Redis or another worker. Begin with a small memory/query baseline, reduce
+large reads and redundant writes, then idle scheduling and restart hardening.
+No measured savings, proven leak or 512 MiB capacity guarantee is claimed; actual
+Neon billing attribution and successful hosted recovery remain unverified. This
+turn records advice only, not runtime implementation or a paid hosting change.
+
+6 November hosted ownership check confirms PID 52 exactly matches the supplied
+signer-free maintenance server. The retained worker lease names PID 33955 on the
+previous Render instance, with modification time 4 November at 22:18:23 UTC. The
+current maintenance instance differs; prior process and lock inventories showed
+no other application worker or mutation lease. Together with Render's exclusive
+disk attachment this supports archiving only that stale scheduling lease, then
+restoring `node products/streak/scripts/direct-host.cjs` so preserved journals
+reconcile normally. The cgroup memory limit is 536870912 bytes (512 MiB). Recovery
+instructions are prepared; archive execution, normal startup and process memory
+measurements remain owner-side and unverified. Do not present the lease recovery
+as a memory fix. Memory reduction, Neon idle-work reduction, PostHog integration
+and the hosted competition rehearsal remain outstanding.
+
+6 November owner supplies Render's incident email: the service exceeded its
+memory limit and Render restarted it. This corrects the earlier disk-exhaustion
+description. The reported persistent mount is healthy; the email establishes
+memory exhaustion, not a specific leak or traffic spike. An abrupt restart could
+leave the worker scheduling lease behind. Source inspection confirms the hosted
+launcher runs compiled JavaScript in separate API, sponsor, optional Five rewards
+and serial settlement-worker processes, plus the supervisor. Their combined
+memory and broad database working-set reads warrant measurement; no per-process
+usage or historical peak has yet been obtained. Continue the bounded lock-owner
+and maintenance-process check before retiring only the scheduling lease. Keep
+memory remediation and Neon no-change-query/write reductions as separate pending
+work. No runtime setting, lock, financial record or hosted process was changed.
+
+6 November owner supplies hosted maintenance diagnostics: the durable mount uses
+3.0 MB of 974 MB, with 955 MB available; inode usage is 1%. The only reported
+lease is `operator-private/worker-lease/operator.lock` (114 bytes). Persistent
+storage is not currently exhausted; the original resource-failure cause remains
+unverified. PID 52 is labelled MainThread, requiring command-identity inspection
+before treating it as maintenance-only. Next: read bounded lock owner metadata
+and identify that process. Independent review confirms this is a scheduling
+lease: once its prior owner is proven stopped, archive only that file and resume
+normal preserved-journal reconciliation. A blanket manual audit of all transactions
+is not necessary for this narrower scheduling recovery. Mutation locks, reserved
+inputs and funding barriers remain intact. No lease has yet been retired.
+
+6 November owner reports Render Shell is available again after the maintenance
+startup guidance. Next hosted evidence: filesystem byte/inode usage, largest
+durable-state directories, exact lease filenames/sizes and process IDs/names.
+These are read-only checks; no private environment dump or signed bytes are needed.
+Maintenance activation is owner-reported, not independently verified. No stale
+lease retirement, disk cleanup or signer restart has been performed by this agent.
+
+6 November owner adds that the original hosted failure followed disk exhaustion
+and confirms the high database bill was Neon PostgreSQL, initially described as
+Redis. Read-only source audit finds no Redis integration/dependency. Actual billed
+usage remains unverified. Normal background cadences include Activity job checks
+every five seconds, enabled Five rewards passes/heartbeat every ten seconds,
+sponsor recovery every fifteen seconds, the API tick every twenty seconds, and
+Five progression plus serialized direct-worker passes about every minute.
+Provider caches and adaptive polling reduce some external calls; timers do not
+imply constant CPU execution or a transaction on every tick. These settings can
+keep a serverless database active even without visitors.
+
+Independent source review identifies broad working-set PostgreSQL reads in the
+API tick, repeated replacement of Activity owner projections during audits, and
+the rewards heartbeat even without payouts. In the new competition implementation,
+fresh verification timestamps also trigger campaign metadata/audit writes without
+score changes, including finished/deleted competitions. That is a concrete new
+growth issue to correct before rollout, not evidence of the earlier disk incident
+or historical Neon charges. Preserve meaningful score, registration, award and
+financial audit events when reducing no-change writes.
+
+Disk-full failure is now an additional plausible source of the retained lease:
+operator acquisition creates the file before writing its owner metadata, and a
+failed write can leave it behind. Financial journals, football observations and
+Activity acknowledgement files persist; some have count caps/deduplication but
+there is no complete automatic safe archive/retention path. Actual disk consumers
+are not yet measured. Continue maintenance recovery and inspect bytes/inodes and
+directory sizes before any cleanup; preserve signed records and unresolved funds.
+Then scope idle-work reduction and baseline disk/cost safeguards separately from
+the larger deferred post-grant monitoring project. No runtime or hosted changes
+were made by this audit; PostHog and campaign acceptance remain pending.
+
+6 November hosted deployment investigation: owner reports build success followed
+by `Operator or registry lease remains` from the launcher; Render Shell is
+unavailable. Source review confirms startup blocks solely on existence of operator,
+worker or canonical-selection lease files. It does not establish live ownership.
+A plausible cause is the 25-second forced shutdown interrupting sequential RPCs
+or the sponsor's active recovery pass before lease cleanup. Actual lock metadata
+and preceding shutdown logs remain unavailable, so this is not a confirmed cause.
+Independent read-only review concurs. No lock, journal, hosted setting or funds
+were changed. Next: temporary signer-free maintenance startup to regain Shell,
+inspect exact lease ownership, preserve state and reconcile before targeted recovery.
+Do not automatically delete locks by age/PID. The old per-fixture reconcile command
+does not cover every v4 batch record and is insufficient alone for this audit.
+PostHog project setup and the GW10 hosted rehearsal remain outstanding.
+
+5 November owner moves to PostHog setup. Repository inspection confirms analytics
+remain documentation-only: no SDK, runtime initialization or deployed event capture.
+Provide short new-project steps for Streak Production and request its write-only
+project token and exact regional ingestion host before integration. Keep the
+existing evidence exports authoritative and the planned explicit-event, privacy
+and operator-rehearsal exclusions. No PostHog project, tracking or paid feature
+has been created or enabled in this setup-guidance step. Preserve campaign
+deployment and real-wallet acceptance as outstanding work.
+
+5 November owner requested a simple, ordered post-deployment test guide. The
+[GW10 checklist](delivery/hosted-acceptance-2026-11-06.md) reuses funded wallets A–F
+and covers both competition types, original payment/squad flows, sponsorship,
+deadlines, claims, ties, inactive entrants, evidence and deletion. Official public
+FPL reads verified GW10 closes 6 November at 19:30 Lagos and GW11 closes 21 November
+at noon. Hosted availability could not be verified; fixture selection must be
+confirmed in the deployed app. No live transactions, campaign publication or
+acceptance checks were performed. Rehearsals cannot exercise mainnet awards;
+retain that as a separate real-payment acceptance item. Next: deploy the already
+implemented runtime, confirm hosted settings, then follow the owner's checklist.
+
+5 November implementation of the approved competitions design is complete locally:
+persistent campaigns and registration, configurable
+prizes/fixtures, real Five squad reuse, the existing prediction slip, canonical
+scoring and ties, public standings, private evidence exports and two-step audited
+deletion. Registration immediately ranks inactive entrants at the bottom. Published
+terms are frozen; deleted listings retain participant access and prize obligations.
+Rehearsals are explicitly labelled and excluded from community evidence. Mainnet
+awards use an owner-controlled wallet with exact-output confirmation, never the
+testnet rewards signer. Administrators can prepare a future official FPL gameweek
+now, retaining ordinary Five saves and automatic scoring. Named competition lists
+remain reachable on short desktop screens and mobile.
+
+Independent review is complete. All 86 required stages passed across the major
+run's 75 application/database/browser checks and a separate 11-stage CKB run with
+WSL access and the disposable test DB. The major aggregate stopped at the WSL
+permission boundary; it is not a single-run green release receipt. See the
+[delivery record](delivery/competitions.md) for exact runs and limitations. No commit,
+push, deployment, live competition publication or mainnet payment was made.
+Next operational work is hosted configuration and the owner's real-wallet rehearsal,
+then the separately configured public campaign. Preserve the deferred payment
+concurrency and post-grant monitoring work. PostHog setup instructions are ready;
+the project, SDK, consent configuration and tracking activation remain separate.
+
+5 November deletion preview is implemented for both competition types: two steps,
+exact-name guard, cancellation/back, persistent sample removal and a fresh-draft
+action. Both desktop navigation and the mobile competition menu hide deleted
+listings. Five setup offers sample GW10 for rehearsal. All 26 focused Chromium/
+WebKit checks passed at 390px/1440px; destructive-button hover contrast was also
+corrected and reviewed. Formatting, module syntax and static policies passed.
+No live campaign backend, production deletion, database changes or publication
+is included. The runtime requirements immediately below remain outstanding.
+
+5 November owner requests admin competition deletion for a rehearsal with test
+accounts this gameweek before the main campaign next week. Require two steps:
+first review the competition and deletion consequences, then type its exact name
+before enabling the final action. The current task adds this interaction to the
+standalone synthetic preview only. No live deletion endpoint, database mutation,
+competition cancellation or fund movement is implemented or authorized by a
+preview confirmation.
+
+Runtime deletion must target only the campaign wrapper. Preserve underlying market
+predictions, Five squads, transaction journals, recovery and payout obligations.
+Retain audit records and read-only access for existing entrants, including final
+standings and award status, while removing the campaign from active discovery.
+Recheck administrator identity, campaign ID/revision and current obligations at the
+final server-side action; a rename or state change invalidates stale confirmation.
+Treat repeated deletion safely. Pending payments and confirmed awards remain
+recoverable; deletion must not silently cancel published prize promises. Exact
+published-campaign cancellation rules and runtime enforcement remain implementation
+work. Keep rehearsal/operator evidence separate from community campaign evidence.
+
+5 November owner requires competition picks to exercise the existing prediction
+slip, review, signer, transaction journal and recovery flow. Five must reuse its
+existing editor, save and scoring flow. Campaign scoring consumes verified admitted
+positions and accepted squad records, never preview clicks or payment reviews.
+Registration still creates a ranked entry immediately. No second checkout or squad
+store is part of the implementation plan.
+
+The standalone [admin preview](../design/competition-review/README.md) now has
+guided setup, editable winning places/prizes, searchable fixture selection and
+live review. The approved $25/$15/$10 split is an editable preset, not a fixed
+winner count; fixture selection has no fixed campaign count. Existing eight-pick
+slips and 32-position markets retain their limits. Setup changes apply only to
+synthetic preview views. Published rules and exact CKB amounts must be frozen in
+the future runtime. The owner accepted organizer-controlled mainnet rewards with
+prepared, wallet-approved payouts; receiving-address setup and implementation are
+still outstanding.
+
+The admin Evidence view demonstrates participation, verified-payment categories
+and an explicitly synthetic export. The new
+[campaign evidence plan](product/campaign-evidence.md) covers durable records,
+optional PostHog funnels/retention, privacy boundaries and new-project setup.
+No PostHog project, tracking or production evidence collection is enabled. Resume
+with the refined preview review, then campaign runtime integration and separately
+verified mainnet awards. Preserve pending payment concurrency and post-grant
+monitoring commitments. No commit, push or fund movement in this design increment.
+
+Local verification: 20 Chromium/WebKit captures at 390px/1440px passed, with bulk
+fixture selection, configurable prizes, exact totals, player/admin propagation
+and the synthetic evidence export. Formatting, module syntax and repository
+static policies passed. This does not verify production campaign integration.
+
+5 November owner approved the competition UI, including the revised podium awards.
+Record that approval without requesting another design confirmation. Owner also
+asked whether mainnet prizes are user-claimed or manually sent. Clarify that the
+proposed owner-controlled wallet model requires owner-approved payouts; the admin
+page can prepare recipients and amounts while winners confirm addresses and track
+status. Automatic custodial claims require a separately secured signer; independent
+on-chain claims require funded claim cells and rules. UI approval does not choose
+either automatic-claim alternative, authorize mainnet fund movement or establish
+an implemented payout service. The later owner acceptance selects wallet-approved
+payouts for this first campaign. Production competition integration remains the
+next development increment; wallet configuration and publication remain outstanding.
+
+5 November owner approved a podium award structure: first $25, second $15, third
+$10 equivalent in CKB in each competition, keeping $50 per competition and $100
+overall before fees. This supersedes five $10 awards below. Update the standalone
+preview's winner eligibility, tables, personal award and payout counts together.
+Completed locally; all 28 desktop/mobile preview journeys passed after the change.
+Owner asked where to fund mainnet rewards; recommend a dedicated owner-controlled
+mainnet wallet with reviewed wallet-signed payouts and confirmed transaction
+tracking. The owner subsequently accepted this model; address setup and runtime
+implementation remain outstanding. Existing Five/Survivor rewards are explicitly testnet-only. No live
+wallet was created, configured, accessed or funded; no mainnet private key or
+transaction is part of the design preview.
+
+5 November owner requested an interactive competition design preview before
+implementation, with a state dropdown and special attention to finished results.
+The correction is explicit: registration creates a ranked entry immediately;
+non-participants remain at the bottom with zero points. The standalone
+[preview](../design/competition-review/README.md) covers predictions and Five,
+registration, live/full states, final verification, winners/non-winners/no entry,
+prize-paid status and an admin view. It uses synthetic data and changes no runtime
+routes, wallets, database or payment behavior. Local browser preview checks and
+screenshots are recorded with the design. No commit or push requested here.
+
+Campaign planning remains: two $50 pools, now $25/$15/$10-equivalent podium awards;
+prediction points are 3 for a correct first qualifying paid call per fixture and
+0 for wrong/missed calls, independent of stake. Ties use the earlier last qualifying
+prediction or earlier meaningful final Five squad/captain save. Five uses the
+following gameweek, GW11, with the official 21 November noon WAT deadline. Keep
+four shards and 32 positions per market, including non-campaign entries, with
+database-backed occupancy and final live validation at checkout. Registration does
+not reserve capacity. Public standings and private admin oversight are planned.
+Production campaign registration, scoring, occupancy, reward management and Survivor
+discovery changes remain unimplemented. Preserve payment concurrency and deferred
+post-grant monitoring commitments below.
+
+3 November owner places funding/capacity monitoring in the post-grant monitoring
+implementation. Record configurable alerts for usable versus total sponsor funds,
+cell fragmentation, selection limits, reservations and market/shard/registry
+headroom in the payment proposal's operational section. Include stale-data and
+recovery context so a healthy HTTP endpoint cannot hide exhausted funding.
+Monitoring is deferred; payment correctness and recovery guards remain required.
+No monitoring implementation, service activation or publication in this increment.
+
+3 November owner deferred funding-selection fixes: record multi-input sponsor
+funding in the concurrent-payments proposal, alongside per-cell reservations,
+exact contribution/change accounting and signed recovery. Also review the user
+collector's 16-input/256-candidate fragmentation limits without removing bounds
+blindly. Owner clarified the slip had three predictions; the number of new markets
+is unconfirmed. A read-only public query at 08:56 UTC observed the owner's
+100,000 tCKB transfer as one live sponsor cell. No agent fund movement, runtime
+change or successful slip retry is claimed. This is backlog work, not immediate
+implementation; resume with the planned payment concurrency increment.
+
+3 November hosted sponsor-capacity investigation: owner reported the complete-slip
+funding error on streakpitch.com. Read the public demand configuration and its
+advertised sponsor's plain testnet cells, without keys or transactions. At
+08:39:49 UTC, the bounded 64-cell page returned seven plain cells totaling
+7,271.09803104 tCKB; the largest held 4,070.99873903 tCKB. Current atomic preparation
+requires one funding cell covering 3,050 tCKB per new market plus 61 tCKB sponsor
+change for this lock. Two creations need 6,161 tCKB in one cell, so that snapshot
+cannot support them despite sufficient aggregate capacity. The owner's exact
+slip and its incident-time funding state remain unknown. Pending canonical
+recovery has a separate error. Do not claim a one-market failure is explained by
+this later snapshot. No funding, consolidation, runtime edit or publication was
+performed. Per-input allocation/concurrency work remains pending.
+
 2 November README architecture correction: replace the outdated product overview
 with the integrated Season direct-payment lifecycle, script-enforced claims and
 event-driven Activity boundary. Distinguish custodial Five/Survivor rewards and
@@ -12,6 +433,118 @@ formatting and repository static policies passed. No runtime tests were needed.
 Owner requested publication without tests. Publish only this README correction
 and its documentation entries, preserving unrelated local work. Prediction-placement
 concurrency remains next.
+
+1 November wallet chooser correction: define the CCC host's missing theme tokens
+so the wallet panel and secondary dialogs have an opaque dark surface, with
+readable wallet buttons, icons and dividers. Owner explicitly requested a fix,
+screenshots and push without checks or tests for this increment. Capture the real
+chooser locally with synthetic background content and no wallet transactions.
+Publish only this CSS correction and its delivery note; preserve unrelated local
+payment copy, proposals and private documents. Prediction-placement concurrency
+remains the next implementation priority. Completed local mobile WebKit and
+desktop Chromium captures, then pushed CSS and the delivery note in `06100dd`.
+No automated checks, tests or production deployment verification were run.
+
+1 November owner deferred large-scale Activity/indexing upgrades for later
+consideration, depending on actual demand and grant funding. Preserve incremental
+chain replay/checkpoints, changed-record or bulk writes, parallel per-market jobs,
+efficient paginated reads/totals and measured capacity testing as backlog. Current
+limits include full market reconstruction, participant snapshot replacement,
+sequential jobs, file relay delivery and bounded catalogue/history reads; no
+million-user readiness is claimed. Revisit using queue age, verification latency,
+RPC load, database cost and active usage, not registered accounts alone.
+Prediction-placement concurrency remains the active priority: independent funding
+inputs, exact cell reservations, fair shard allocation and safe signed recovery
+for different/same-market and mixed slips. Activity infrastructure expansion is
+not a prerequisite for that increment. Retain current admission checks in later
+deposits/settlement. This turn records prioritization only, with no implementation,
+deployment, commit or push. Resume from the payment proposal's v4 concurrency stages.
+
+1 November owner keeps admission checks in later deposits and existing settlement;
+a standalone admission/refund transition is only a possible future enhancement,
+preferably integrated with existing lifecycle work rather than a new worker.
+Record this boundary in the protocol candidate. Developer time/deadline tooling
+is exploratory only: existing header and since primitives can support libraries
+and tested patterns, but a package cannot expose the containing block timestamp
+or turn a lower-bound since condition into an upper inclusion deadline. No package
+implementation, extra service, runtime change or publication is authorized here.
+
+1 November owner requested a concise private technical guide explaining current
+on-chain flows, backend/database ownership, wallets and games for a Solidity/web
+developer. Drafted in the existing Git-ignored private reports directory, without
+adding it to public documentation links. Current v4 behavior and proposed scaling
+remain distinct. The guide has 14 sections with terms explained in context;
+formatting, all eight local source links and `git check-ignore` passed. The file
+is untracked and excluded by the existing private-directory rule. No runtime
+change, commit or publication is part of this task. Preserve earlier payment-copy
+and architecture-proposal work; the next step remains owner design review.
+
+1 November owner requested a complete proposal after the explanation of v4's
+capacity ceiling and stale-signature cancellation. Revise the recommendation to
+cover the entire payment lifecycle and provide a concrete larger-market settlement
+candidate, including its funding, deadlines and failure boundaries. This is design
+work, not authorization to deploy scripts or move funds. Preserve the earlier
+local payment-copy change and unrelated owner edits. The revised
+[payment proposal](architecture/concurrent-payments.md) now covers the operation
+matrix, narrow auction admission ordering, rejected-but-funded bid refunds,
+treasury liability categories, operational alerts and phased completion gates.
+The [larger-market candidate](architecture/payment-protocol-vnext.md) specifies
+pre-created lanes, sealing, complete tree reduction, cross-lane funding, bounded
+distribution, exact rounding and independent claims. Candidate 16-by-32 capacity
+is a prototype objective, not a verified limit. Permanent metadata capacity,
+data availability, permissionless execution costs and independent protocol review
+are explicit design boundaries. Formatting and static policies passed (69 docs,
+96 browser files, 105 syntax checks, 705 text files); no runtime tests, independent
+review, implementation, commit or push are claimed. Resume with owner design review
+and a complete protocol specification before any new-script implementation.
+
+1 November owner requested a meticulous concurrency architecture proposal before
+implementation. Draft: [concurrent payments](architecture/concurrent-payments.md).
+Source inspection confirmed that funded v4 entry permits owner-only authorization,
+but the client currently requires a sponsor and safe lease release differs when
+users can broadcast independently. Recommend per-cell co-signed coordination first,
+with sponsor-free checkout behind its own safety gate. Document four lanes and
+32 positions per v4 market; larger capacity needs a separately reviewed protocol
+and complete bounded settlement design. Includes resource schema, atomic multi-pick
+allocation, signer fencing, replenishment, deadlines, game sponsorship/payout
+boundaries, abuse controls, migration and measurable multi-owner tests. No runtime
+concurrency changes, deployment, fund movement or push in this proposal task.
+Owner and independent technical review remain pending; preserve the local wording
+edit and unrelated report/checklist changes. Documentation formatting and static
+policies passed; no concurrency tests or independent review are claimed.
+
+1 November concurrency investigation: the combined checkout calls the shared
+operator funding barrier before every offer, including already-funded markets.
+An active unsigned offer can block another owner until its 90-second lease ends;
+signed operator transactions must reach four canonical confirmations before the
+barrier clears. This can affect different fixtures sharing the operator journal.
+The first eligible shard is selected without parallel allocation in this path.
+The friendlier copy does not solve this throughput limit. A future concurrency
+increment needs separate funding-cell reservations, collision-free shard selection
+and preserved signed-byte/reorg recovery, with simultaneous-user regression tests.
+This is a source finding; no production concurrency experiment or runtime change
+was performed for this question.
+
+1 November owner requested friendlier payment-availability copy. The slip now
+explains a reserved payment review or first-payment confirmation separately, keeps
+saved picks explicit and asks users to review again shortly. Unknown/unavailable
+states do not promise reopening; they offer another review or another match.
+The pre-payment heading is "Let's get your slip ready". Availability guards,
+signing, retries and payment recovery are unchanged. Frontend strict TypeScript
+and production build, targeted ESLint and formatting passed. This copy-only change
+has not rerun the full runtime gate; no commit or push in this increment.
+
+1 November intermittent payment-review investigation: the screenshot message is
+thrown in `web/src/features/direct/batch-ui.tsx` before transaction preparation
+when fresh batch demand is neither available nor funded. Reserved, confirming and
+unavailable states share the same generic copy; the amount validation follows it.
+A public read of the hosted batch-demand endpoint found Liverpool vs Arsenal
+(`api-football-1557453`) funded with payments enabled. The historical state at the
+time of the screenshot is unknown. Temporary market reservation/confirmation is
+a plausible cause, not a confirmed incident diagnosis. Follow-up: distinguish
+temporary preparation from closure, expose useful progress/retry, and preserve
+server validation and signed-payment recovery. No runtime edits or payment actions
+were made during this investigation.
 
 1 November owner requested an immediate Week 23 terminology correction and push
 without checks. The report now distinguishes contention on one shared mutable
@@ -29,47 +562,197 @@ exclusions. Hosted CI stays paused. Remaining: verify the deployed frontend and
 physical Zerion interaction; fix inherited Git environment isolation before the
 next full hook-driven run. Earlier local-only entries are historical.
 
-1 November owner requests a GitHub link to [Week 23](../../../reports/week-23.md).
-Publish the public report with current release evidence and already published
-game screenshots. Keep private correspondence deleted and excluded. The broader
-local community gallery remains a separate unpublished draft.
+1 November implementation verified: the final mobile-only controls passed all 26
+Season Chromium/WebKit browser groups, including desktop preservation. All 64
+startup groups pass, including late-controller recovery. The required
+`npm run quality:major` passed all 79 checks in one run, 07:32:05 to 08:17:57 UTC,
+Node 24.14.0, exit 0. It ran outside Git hooks in
+`.quality-artifacts/release-nov1-dropdowns`, with copied source hashes recorded in
+`.quality-artifacts/nov1-mobile-startup-source.json`. Its log/report names are
+`nov1-mobile-startup-major.log` and `nov1-mobile-startup-major.json` within that
+checkout's `.quality-artifacts`. A first root run stopped on the owner's unrelated
+checklist formatting; that file was preserved and no check was waived. The final
+major run used only disposable PostgreSQL `streak-nov1-ui-pg` on port 55436,
+container ID `b1806b0cd564181959739f7097350a174e57116f3ff2173efff91da22e51b4a7`.
+That owned container was removed after verification; other development databases
+were left alone. No publication is requested in this increment; retain private-draft
+exclusions and unrelated report changes. Final evidence-only docs use separate
+formatting/static checks; runtime source remains identical to the successful gate.
+
+1 November steering during integration: preserve the existing desktop market
+filters. Apply the compact panel only at mobile widths (700px and below), with
+the original desktop labels, pill styling and placement. Startup fixes remain
+cross-device. Browser coverage now explicitly checks desktop preservation.
+
+1 November owner approved the mobile markets and button-free intro preview.
+Integration is complete locally: real status/search/league/sort controls share the compact
+glass panel; first-paint recovery is hidden with an independent CSS timeout for
+missing scripts. Genuine errors use a separate recovery screen. Preserve private
+draft exclusions, report edits and the existing acceptance checklist. Focused
+startup/market browsers and the full major gate passed. Publication is separate.
+
+1 November mobile markets preview prepared at `http://127.0.0.1:4197/`:
+compact glass status/search/league/sort panel and a button-free logo intro.
+Eight Chromium/WebKit preview journeys passed at 320/390/430/1280px. The real
+startup HTML reproduced visible recovery links before a delayed startup controller
+in both engines. Production files are unchanged. Await owner design approval,
+then integrate controls and fix first-paint recovery visibility; maintain separate
+real-error/no-JavaScript recovery, reduced motion and landing behavior. See the
+[preview and findings](../design/mobile-markets-review/README.md). No commit/push
+or live wallet/API calls in this increment. Earlier release and tooling follow-ups
+remain open.
+
+1 November public report publication: `e578df8` publishes Week 23 with current
+release evidence and existing public game screenshots, and removes the private
+draft and its links from the current branch. Documentation formatting/static
+checks passed. Private correspondence is excluded locally and prohibited by the
+agent contract; old Git history was not rewritten. The larger community gallery
+remains local. Follow-up tooling issue: running the full gate from a Git hook in
+the isolated worktree exposed inherited Git environment variables in temporary
+repository tests. They altered that detached worktree's HEAD/index and shared
+Git configuration. These were restored before publication; original main and
+owner files were preserved. Fix fixture Git environment isolation before the
+next full hook-driven run. The failed configuration-inclusive candidate was not
+published; the final candidate contains documentation only and passed its gate.
 
 1 November owner publication correction: private correspondence drafts must remain
 local and excluded from commits. Remove the previously tracked draft and its
 documentation links from the current branch; preserve owner deletions. Public
 weekly reports remain separate. Do not restore or publish private drafts.
 
-1 November release completed: `1dc53d8` published Survivor outcomes and readable
-pending loaders, including the previously local Five team/points and Survivor
-season scheduling. `30599d2` then published all ten compact in-page selectors.
-Its exact tree `95be163ef780` passed all 79 required checks in a single run,
-06:06:49.203 to 06:44:51.442 UTC, Node 24.14.0. Commit/push hooks reused the
-successful receipt. Evidence is retained under
-`.quality-artifacts/release-nov1-dropdowns/.quality-artifacts/`: `all.json`,
-`nov1-dropdown-gate.log` and the exact-tree hook receipt. The earlier Windows/WSL
-cache-link failure and repair preflight remain recorded separately. No failed
-check was waived. Physical Zerion Android and hosted wallet/settlement acceptance
-remain open; hosted CI remains paused. Owner report/gallery drafts and acceptance
-checklist changes were excluded. Earlier pending-release entries are historical.
+1 November release and public frontend verification completed: runtime `30599d2`
+and notes `dff2340` are pushed. All 79 required local checks passed in one run,
+06:06:49.203 to 06:44:51.442 UTC, Node 24.14.0, exact tree `95be163ef780`.
+The documentation follow-up passed its scoped formatting/static checks. Public
+Season HTML matched the verified frontend assets at 06:52:27 UTC. Evidence is
+retained in `.quality-artifacts/release-nov1-dropdowns/.quality-artifacts/`,
+including `all.json`, `nov1-dropdown-gate.log`, the exact-tree receipt and the
+earlier cache-link failure/repair logs. The original main checkout now points to
+the published revision; report/gallery drafts, owner deletions and the acceptance
+checklist were preserved. Only the disposable release PostgreSQL container was
+removed. Physical Zerion and hosted money/settlement acceptance remain open;
+hosted CI remains paused. Earlier pending-publication notes are historical.
 
-1 November dropdown follow-up: implemented all seven Season selectors and three retained-page filters using in-page menus, compact text and shared glass styling. Browser findings fixed touch selection inside dialogs, WebKit trigger focus, duplicate keyboard clicks and ancestor scrolling. The 16-journey shared matrix and focused Five/Survivor flows pass; the final exact-tree gate also covers the last CSS fallback and legacy typeahead reset. Independent interaction review accepted. Preserve the pending Survivor/loading publication and earlier hosted acceptance commitments. Physical Zerion verification remains separate. Final gate and publication evidence belong to the release commit.
+1 November publication completed for the first runtime increment: `1dc53d8`
+pushed to main after all 78 full-gate checks passed at 05:37:27 UTC. It publishes
+Five live teams/points, Survivor remaining-season rounds and creator prizes,
+versioned early winners/outcome handling and readable pending cell loaders.
+Independent reviews and isolated chain/database/browser evidence passed; no
+hosted deployment or physical wallet acceptance is inferred. The dropdown
+follow-up remains active in a separate exact-tree gate. Preserve report drafts,
+owner checklist edits and the outstanding production acceptance commitments.
 
-1 November added release scope: fix faded cells in disabled/pending buttons through
-the shared React/legacy stylesheet. Actual-style contrast and native-disabled
-interaction checks passed across Chromium/WebKit at 390/1440px; lowest measured
-outline contrast was 4.85:1. The real checkout also checks pending visibility.
-The preceding gate was interrupted before contracts for this steering, with its
-log retained. A fresh full gate covers the combined staged candidate.
+1 November added steering: owner reports dropdowns fail inside Zerion and requests
+compact, subtly glassy in-page menus with smaller interface text. Replace native
+pickers across Season and retained pages, preserving labels, selected values,
+keyboard navigation, touch targets and dialog focus. Test Chromium/WebKit with
+synthetic data; physical Zerion acceptance remains separate. The isolated
+Survivor/loading release gate continues unchanged while this increment is built
+in the working checkout. Preserve its earlier unfinished publication commitments.
 
-1 November Survivor v2 outcome implementation: early sole winners, all-loss
-rescue, pending/void safety, legacy published terms and idempotent prize recovery
-are documented in [the outcome table](delivery/survivor-outcomes.md). Focused unit
-and six Chromium/WebKit browser journeys passed; independent rules and money
-reviews accepted. The release includes the previously committed Five current
-team/points view and Survivor remaining-gameweek selector. The required full gate
-and push run from an isolated checkout, preserving report/gallery drafts and the
-owner acceptance checklist. Hosted CI remains paused; physical settlement, refunds
-and prize acceptance remain outstanding.
+1 November added steering: pending/disabled button opacity makes the three-cell
+loader hard to see. Fix shared React/legacy loader contrast without enabling
+disabled actions; verify filled, secondary and danger buttons, both loader shapes,
+reduced motion and mobile/desktop. The in-progress release gate was stopped before
+contracts so the final candidate can include this fix. Preserve its partial log;
+do not count that interrupted run as a full pass.
+
+1 November active follow-up: owner asks to publish Five's locked-team/points view
+and Survivor's remaining-gameweek round count, and make a sole remaining survivor
+win before the full round ends. Inspect existing result finality, all-loss/void
+rules and prize idempotency before implementing; cover missing picks, unsettled
+matches and recovery. Run the required gate, independent review and publish the
+intended runtime change with the already committed `948fb1c`/`cc994c6`. Preserve
+the report/gallery drafts and owner acceptance checklist. Hosted CI stays paused.
+
+1 November [Week 23 report](../../../reports/week-23.md) complete locally, covering
+work since the 26 October report: Activity indexing, wallet/mobile recovery,
+branding/loading, Five, Survivor and community publishing. Includes four paired
+actual-app screenshots with synthetic-data captions, a sanitized
+[77-check receipt summary](../../../reports/assets/week-23/validation.json).
+Read-only runtime and evidence reviews found no remaining blocker. Scoped
+formatting, static policies, 16 local report/evidence targets and diff whitespace
+checks passed. No new runtime gate is claimed for this documentation-only task.
+GitHub main was independently verified as `2839e9e`; local `948fb1c`/`cc994c6`
+remain unpublished. Owner reports the issue update is posted, without an
+independently verified public URL; Nervos Talk remains pending account permissions.
+No commit, push, deployment or external message was performed. Next: owner reviews
+the report; retain the outstanding hosted auction/refund/settlement, Survivor
+funding/progression/payout and final Five reward acceptance commitments.
+
+31 October forum permission follow-up complete locally: verified the media/link
+rejection against official Discourse validation and permission sources. The
+full introduction and gallery are preserved, with a separate
+[text-only fallback](../../../reports/community/nervos-talk-text-only.md) and
+formatted-copy tab. Source and copy payload checks confirm no URLs, hyperlinks,
+images or image markers; mobile layout and page-error checks passed. README
+recommends moderator review for the full showcase and avoids any promise of an
+automatic trust-level unlock. Actual account settings and forum submission were
+not tested; no external post or message was sent.
+
+31 October gallery correction complete locally: added Streak Five and Survivor
+desktop/mobile pairs using actual built components and isolated sample game data.
+Five shows a complete saved squad, captain and budget; Survivor shows a saved
+pick, used team and upcoming fixtures. All four new captures have no page errors
+or external network requests. Both drafts, formatted-copy page, five-board gallery
+and five-image upload folder/ZIP are updated. All exports are below 1.2 MB;
+390/1440px gallery layout, image loading, upload hashes and ZIP entries passed.
+The prediction journey remains first. No runtime change or external post was made.
+
+31 October publishing usability correction complete locally: removed internal
+notes from both drafts and documented the Markdown-mode repaste after the forum
+displayed pasted Markdown literally. The [formatted-copy page](../../../reports/community/copy-ready.html)
+separates title and body, with formatted/Markdown copy and manual-selection
+controls. Copy payloads passed with an isolated clipboard adapter; 390/1100px
+layouts and links passed with no page errors. The clean upload folder and ZIP
+contain only the three paired PNGs; hashes match the gallery originals and ZIP
+entries were verified. Content and synthetic captions are preserved. Live forum
+paste and publication remain the owner's next step; no external post was made.
+
+31 October publishing pack complete locally: separate GitHub issue and Nervos
+Talk Markdown drafts, three paired desktop/mobile PNGs and an HTML gallery are in
+the [community publishing pack](../../../reports/community/README.md). Actual
+built components use isolated sample data, including the compact mobile payment
+blob and collectible Activity return. Six source captures passed with no page
+errors or external requests. The 1920px paired exports passed image-size and
+390/1440px gallery-overflow checks. Capture provenance and composition evidence
+are retained with the images; Week 22 assets are unchanged. Both platforms can
+host editor-uploaded images, with instructions included. Nothing was posted,
+committed or pushed for this pack; no live transaction was performed. Keep the
+synthetic captions and undeployed-release wording when publishing. Next: owner
+reviews the drafts, uploads the paired PNGs in each composer and publishes.
+
+31 October positioning correction: the owner rejected a games-first forum story.
+Lead with Streak's core prediction journey, independent positions in one payment,
+stake/storage transparency, recoverable signatures and separate claims. Explain
+on-demand market capacity and the event-driven index through the user problems
+they solve. Five, Survivor and bounded sponsored rewards support onboarding and
+return visits; these are intended product effects, not measured adoption. Editorial
+review completed. Keep oracle/custody and undeployed-release boundaries accurate.
+No external post made; draft remains in the conversation.
+
+31 October Nervos Talk draft: researched CKBoost and Fiber Link proposals against
+the forum's funded-proposal list. Both list USD 20,000 approved budgets, distinct
+from fully disbursed funding. Their English proposal bodies are approximately
+1,750 and 900 words respectively, excluding translations/replies. Adapt the clear
+user journey, ecosystem purpose and linked evidence into a community introduction
+with weekly rewards, short game rules and concise architecture. No fixed weekly
+prize promise or mainnet availability claim; latest local changes remain undeployed.
+Draft delivered in the conversation only. No forum post or funding request made.
+
+31 October issue-draft refinement: explain the architectural journey, shared Rust
+scripts with separate market cells, event-driven wallet indexing, on-demand reserve
+funding, atomic slips, independent claims and recovery. Include the domain, short
+Five/Survivor explanations and rules links. Distinguish contract-enforced predictions
+from off-chain fantasy state and custodial rewards. Keep the draft concise and
+evidence-led for acceptance-team review; no external posting authorized or performed.
+
+31 October communication follow-up: Neon recommended an update on the existing
+GitHub issue and Nervos Talk, with acceptance-team visibility. Prepared separate
+technical and community drafts in the conversation from the Week 22 report and
+current delivery evidence. Nothing posted externally. Keep the verified local
+release distinct from hosted features; physical Survivor acceptance and publication
+of `948fb1c`/`cc994c6` remain outstanding.
 
 31 October post-deadline release completed: `948fb1c` commits the combined Survivor
 and Five work. All 77 checks passed in one complete gate through the commit hook,

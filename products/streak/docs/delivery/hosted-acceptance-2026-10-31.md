@@ -21,10 +21,10 @@ Aim to finish entries and bids by **11:30**.
 | E      | Another MetaMask address | Save a different squad; navigate away and return      |
 | F      | Zerion mobile            | Save five and a captain; reload and check they remain |
 
-- [ ] Use eligible players within **40 credits** and fill all required positions.
-- [ ] Save every wallet's team before spending time on optional UI checks.
-- [ ] On each wallet, reload once and confirm the saved team and correct address.
-- [ ] Disconnect before switching accounts. Confirm the new address before saving.
+- [x] Use eligible players within **40 credits** and fill all required positions.
+- [x] Save every wallet's team before spending time on optional UI checks.
+- [x] On each wallet, reload once and confirm the saved team and correct address.
+- [x] Disconnect before switching accounts. Confirm the new address before saving.
 - [ ] If the new build is still deploying, save teams on the current production app first.
 
 ## 2. Sponsor auction: finish by 11:30

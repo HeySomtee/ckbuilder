@@ -1,7 +1,14 @@
 import { useSyncExternalStore } from 'react';
 import type { MouseEvent } from 'react';
-export type Section = 'overview' | 'five' | 'survivor' | 'matchday' | 'clubhouse';
-const sections: readonly string[] = ['overview', 'five', 'survivor', 'matchday', 'clubhouse'];
+export type Section = 'overview' | 'five' | 'survivor' | 'matchday' | 'clubhouse' | 'competitions';
+const sections: readonly string[] = [
+  'overview',
+  'five',
+  'survivor',
+  'matchday',
+  'clubhouse',
+  'competitions',
+];
 const snapshot = (): Section | null => {
   const query = new URLSearchParams(location.search);
   if (query.has('direct') || query.has('market')) return null;

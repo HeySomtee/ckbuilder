@@ -13,10 +13,10 @@
  *   - leaderboard + public user view-models
  */
 
-import { purge, read, update } from "./store";
+import { pendingReceiptIds, read, readFixtureSlate, readReceiptSource, savePublishedReceipt,
+  update, updateFixtureRecords } from "./store";
 import {
   applyResult,
-  currentSlateDate,
   dayKey,
 } from "./matches";
 import { provider } from "./providers";
@@ -113,8 +113,11 @@ async function performSync(): Promise<Match[]> {
       .finally(() => { warmingInsights = null; });
   }
 
-  let pruned: PrunedIds = { markets: [], matches: [] };
-  const slate = await update((db) => {
+  await updateFixtureRecords({
+    fixtureIds: fixtures.map((fixture) => fixture.id), resultIds: Object.keys(live),
+    matchesSchema: MATCHES_SCHEMA_VERSION,
+    pruneBefore: new Date(Date.now() - SIM_RETENTION_MS).toISOString(),
+  }, (db, selectedIds) => {
     // Merge the provider's current fixtures: add any we haven't seen and refresh
     // the schedule of not-yet-final matches. A rolling feed (dummy) introduces
     // new upcoming fixtures every sync so open markets never run dry; a static
@@ -123,6 +126,7 @@ async function performSync(): Promise<Match[]> {
     const known = new Map(db.matches.map((m) => [m.id, m]));
     const marketByMatch = new Map(db.markets.map((m) => [m.matchId, m]));
     for (const fx of fixtures) {
+      if (selectedIds && !selectedIds.has(fx.id)) continue;
       const old = known.get(fx.id);
       if (!old) {
         db.matches.push(fx);
@@ -174,20 +178,11 @@ async function performSync(): Promise<Match[]> {
       );
     }
     settleMarkets(db);
-    pruned = pruneStaleSimMarkets(db);
-
-    const slateDate = currentSlateDate(db.matches, today);
-    return db.matches
-      .filter((m) => m.date === slateDate)
-      .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
+    // A partial PG working set must never infer absence of old bets. SQL
+    // pruning checks all persisted liabilities in the same transaction.
+    if (!selectedIds) pruneStaleSimMarkets(db);
   });
-
-  // Deletions are explicit under a relational store; the write above only
-  // upserts. Best-effort: a failure here just leaves stale sim rows behind.
-  if (pruned.markets.length || pruned.matches.length) {
-    await purge(pruned).catch((e) =>
-      console.warn("[game] prune failed:", (e as Error).message));
-  }
+  const slate = await readFixtureSlate(today);
 
   // Publish on-chain receipts for any newly-settled markets. Runs outside the
   // write lock because the CCC tx round-trip takes seconds. Failures are
@@ -213,41 +208,28 @@ export async function publishPendingReceipts(): Promise<void> {
   if (publishing) return publishing;
   publishing = (async () => {
     // Snapshot the outstanding work outside a write lock.
-    const pending = await read((db) =>
-      db.markets
-        .filter((m) => (m.status === "resolved" || m.status === "void") && !m.receipt)
-        .map((m) => m.id),
-    );
+    const pending = await pendingReceiptIds();
     if (pending.length === 0) return;
-    const treasury = await getTreasury();
 
     for (const marketId of pending) {
       try {
         // Rebuild the payload from the CURRENT DB state to avoid drift.
-        const built = await read((db) => {
-          const market = db.markets.find((m) => m.id === marketId);
-          if (!market) return null;
-          return buildReceiptPayload(db, market, treasury);
-        });
-        if (!built) continue;
+        const source = await readReceiptSource(marketId);
+        const market = source?.markets.find((item) => item.id === marketId);
+        if (!source || !market) continue;
+        const treasury = source.treasury ?? await getTreasury();
+        const built = buildReceiptPayload(source, market, treasury);
 
         const { txHash, index } = await publishReceipt(treasury, built.payloadHash);
 
         // Persist the receipt reference + full payload.
-        await update((db) => {
-          const m = db.markets.find((x) => x.id === marketId);
-          if (!m) return;
-          m.receipt = {
+        await savePublishedReceipt(marketId, {
             txHash,
             index,
             payloadHash: built.payloadHash,
             merkleRoot: built.payload.bets.merkleRoot,
             publishedAt: new Date().toISOString(),
-          };
-          // Replace any pre-existing payload (idempotent).
-          db.receipts = db.receipts.filter((r) => r.marketId !== marketId);
-          db.receipts.push(built.payload);
-        });
+          }, built.payload);
         // notify about published receipt (best-effort)
         (async () => {
           try {
@@ -264,7 +246,7 @@ export async function publishPendingReceipts(): Promise<void> {
             lastUnderfundedWarn = Date.now();
             console.warn(
               `[settlement] treasury underfunded — ${pending.length} receipt(s) waiting. ` +
-                `Fund ${treasury.address} from https://faucet.nervos.org/`,
+                "Fund the configured legacy receipt treasury before retrying.",
             );
           }
           return; // stop this batch; try again next tick

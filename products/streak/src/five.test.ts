@@ -16,6 +16,7 @@ import {
   type Round,
 } from './modules/five/domain';
 import { FiveService } from './modules/five/service';
+import { MemoryFiveProfiles } from './test-support/five-profiles';
 import { FplFiveFeed } from './modules/five/feed';
 import type { FiveStorage, Summary } from './modules/five/storage';
 const now = Date.now();
@@ -74,6 +75,41 @@ class MemoryStore implements FiveStorage {
   }
 }
 async function main() {
+  {
+    const round = newRound('meaningful-saves', 'admin', terms, now);
+    round.state = 'open';
+    const ids = players.map((player) => player.id);
+    saveEntry(round, actor, ids, 'p2', round.termsHash, now);
+    const original = round.entries[0].savedAt;
+    saveEntry(round, actor, ids, 'p2', round.termsHash, now + 1_000);
+    saveEntry(
+      round,
+      { ...actor, name: 'Renamed' },
+      [...ids].reverse(),
+      'p2',
+      round.termsHash,
+      now + 2_000,
+    );
+    assert.equal(
+      round.entries[0].savedAt,
+      original,
+      'retries, player reordering and display-name changes preserve final squad time',
+    );
+    assert.deepEqual(round.entries[0].players, ids);
+    saveEntry(round, actor, ids, 'p3', round.termsHash, now + 3_000);
+    assert.equal(round.entries[0].savedAt, new Date(now + 3_000).toISOString());
+    saveEntry(round, actor, ids, 'p2', round.termsHash, now + 4_000);
+    assert.equal(
+      round.entries[0].savedAt,
+      new Date(now + 4_000).toISOString(),
+      'reverting a meaningful captain edit is still a later final version',
+    );
+    assert.throws(
+      () => saveEntry(round, actor, ids, 'p2', round.termsHash, now + 600_000),
+      /closed/,
+      'unchanged saves cannot bypass the deadline',
+    );
+  }
   await editableBids();
   await fundingWitnesses();
   const metadataStore = new MemoryStore();
@@ -300,7 +336,15 @@ async function main() {
   assert.throws(() => allocate('100', [{ id: 'p', points: 10, pending: true }], 500), /complete/);
   assert.equal(allocate('100', [], 500).remainderShannons, '100');
   const store = new MemoryStore(),
-    svc = new FiveService(store, ['admin-wallet']);
+    svc = new FiveService(
+      store,
+      ['admin-wallet'],
+      undefined,
+      undefined,
+      undefined,
+      false,
+      new MemoryFiveProfiles([actor]),
+    );
   await assert.rejects(svc.action(actor, { action: 'create', id: 'r', terms }), /configured/);
   await svc.action(admin, { action: 'create', id: 'r', terms });
   assert.equal((await svc.read(actor)).rounds.length, 0);

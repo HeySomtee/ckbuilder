@@ -21,6 +21,7 @@
 
 import { Pool, type PoolClient } from "pg";
 import { postgresConfig } from "./infrastructure/postgres-config";
+import { upgradeUser } from "./infrastructure/legacy-user";
 
 import { DB_SCHEMA } from "./config";
 import type {
@@ -32,6 +33,7 @@ export function pgEnabled(): boolean {
 }
 
 let pool: Pool | null = null;
+let pendingReceiptCursor: string | undefined;
 export function getPool(): Pool {
   if (!pool) {
     const raw = process.env.DATABASE_URL;
@@ -50,6 +52,7 @@ export function getPool(): Pool {
 export async function closePool(): Promise<void> {
   const p = pool;
   pool = null;
+  pendingReceiptCursor = undefined;
   if (p) await p.end();
 }
 
@@ -85,7 +88,7 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(canon(a)) === J
 
 // ── row → object ────────────────────────────────────────────────────────────
 
-const toUser = (r: any): User => compact({
+const toUser = (r: any): User => upgradeUser(compact({
   id: r.id,
   walletIdentity: r.wallet_identity,
   walletType: r.wallet_type,
@@ -98,7 +101,7 @@ const toUser = (r: any): User => compact({
   creatorFeesShannons: amount(r.creator_fees_shannons),
   streak: r.streak,
   stats: r.stats,
-}) as User;
+}) as User);
 
 const toMatch = (r: any): Match => compact({
   id: r.id,
@@ -236,6 +239,202 @@ export async function pgLoadDB(): Promise<StreakDB | null> {
   } finally {
     client.release();
   }
+}
+
+/** A fixture pass only needs the current schedule and unfinished work. */
+export interface FixtureSyncSelection {
+  fixtureIds: string[];
+  resultIds: string[];
+  matchesSchema: number;
+  pruneBefore: string;
+}
+
+function emptyWorkingSet(): StreakDB {
+  return { schema: DB_SCHEMA, users: [], matches: [], markets: [], bets: [],
+    deposits: [], withdraws: [], protocolFeesShannons: "0", receipts: [],
+    crews: [], telegramLinks: [], renewalTxs: [] };
+}
+
+/**
+ * A bounded fixture working set, never a second financial ledger. The store's
+ * common write queue serializes this with legacy deposits, picks and withdrawals.
+ * All pages share one transaction, so balances, fees and settlement either commit
+ * together or roll back together. This does not authorize multiple API writers.
+ */
+export async function pgUpdateFixtureRecords(
+  selection: FixtureSyncSelection,
+  apply: (db: StreakDB, ids: ReadonlySet<string>) => void,
+): Promise<boolean> {
+  const client = await getPool().connect();
+  let changed = false;
+  try {
+    await client.query("begin transaction isolation level repeatable read");
+    const meta = (await client.query("select * from streak_meta where id='singleton' for update")).rows[0];
+    if (meta && meta.schema !== DB_SCHEMA) throw new Error("Fixture sync requires the current database schema.");
+    let protocolFees = amount(meta?.protocol_fees);
+    const requested = [...new Set([...selection.fixtureIds, ...selection.resultIds])];
+    let after: string | null = null;
+    for (;;) {
+      const page: { id: string }[] = (await client.query(
+        `select id from (
+           select unnest($1::text[]) as id
+           union select id from matches where status not in ('final','cancelled')
+           union select match_id from markets where status in ('open','closed')
+           union select f.id from matches f where not exists (select 1 from markets m where m.match_id=f.id)
+         ) candidates where ($2::text is null or id > $2) order by id limit 64`,
+        [requested, after],
+      )).rows;
+      if (!page.length) break;
+      const ids = page.map((row) => row.id);
+      after = ids[ids.length - 1];
+      const previous = emptyWorkingSet();
+      previous.protocolFeesShannons = protocolFees;
+      previous.matchesSchema = meta?.matches_schema ?? undefined;
+      previous.matches = (await client.query(
+        "select * from matches where id=any($1::text[]) order by id for update", [ids],
+      )).rows.map(toMatch);
+      previous.markets = (await client.query(
+        `select m.*, h.ticks, i.latest, i.snapshot from markets m
+         left join market_history h on h.market_id=m.id
+         left join market_insights i on i.market_id=m.id
+         where m.match_id=any($1::text[]) order by m.id for update of m`, [ids],
+      )).rows.map((row) => toMarket(row, row.ticks, row));
+      const active = previous.markets.filter((market) => market.status === "open" || market.status === "closed");
+      if (active.length) {
+        previous.bets = (await client.query(
+          "select * from bets where market_id=any($1::text[]) and not settled order by id for update",
+          [active.map((market) => market.id)],
+        )).rows.map(toBet);
+        const users = [...new Set([...previous.bets.map((bet) => bet.userId),
+          ...active.map((market) => market.creatorId).filter((id) => id !== "system")])];
+        if (users.length) previous.users = (await client.query(
+          "select * from users where id=any($1::text[]) order by id for update", [users],
+        )).rows.map(toUser);
+      }
+      const next = structuredClone(previous);
+      apply(next, new Set(ids));
+      if (!same(previous, next)) {
+        changed = true;
+        await syncCollection(client, USERS, previous.users, next.users);
+        await syncCollection(client, MATCHES, previous.matches, next.matches);
+        await syncCollection(client, MARKETS, previous.markets, next.markets);
+        await syncCollection(client, BETS, previous.bets, next.bets);
+        await syncMarketSideTables(client, previous.markets, next.markets);
+      }
+      protocolFees = next.protocolFeesShannons;
+    }
+    if (!meta || meta.matches_schema !== selection.matchesSchema || amount(meta.protocol_fees) !== protocolFees) {
+      changed = true;
+      // Preserve treasury, replay guards and unrelated metadata exactly.
+      await client.query(
+        `insert into streak_meta (id,schema,matches_schema,protocol_fees) values ('singleton',$1,$2,$3)
+         on conflict (id) do update set matches_schema=excluded.matches_schema,
+           protocol_fees=excluded.protocol_fees, updated_at=now()`,
+        [DB_SCHEMA, selection.matchesSchema, protocolFees],
+      );
+    }
+    // Pruning has database-side money/receipt guards, never a partially loaded
+    // bets array. Side tables cascade; real fixtures and funded history remain.
+    const removed = await client.query(
+      `delete from markets m using matches f where m.match_id=f.id and f.id like 'epl-s%'
+       and f.kickoff < $1 and m.status in ('resolved','void') and m.receipt_ref is null
+       and not exists (select 1 from bets b where b.market_id=m.id)
+       and not exists (select 1 from receipts r where r.market_id=m.id)`, [selection.pruneBefore],
+    );
+    const orphaned = await client.query(
+      `delete from matches f where f.id like 'epl-s%'
+       and not exists (select 1 from markets m where m.match_id=f.id)
+       and not exists (select 1 from bets b where b.match_id=f.id)`,
+    );
+    changed ||= !!removed.rowCount || !!orphaned.rowCount;
+    await client.query("commit");
+    return changed;
+  } catch (error) {
+    try { await client.query("rollback"); } catch {}
+    throw error;
+  } finally { client.release(); }
+}
+
+/** Preserve today's/rest-day selection without loading settled history. */
+export async function pgReadFixtureSlate(today: string): Promise<Match[]> {
+  return (await getPool().query(
+    `select * from matches where date=coalesce(
+       (select min(date) from matches where date >= $1),
+       (select max(date) from matches), $1) order by kickoff, id`, [today],
+  )).rows.map(toMatch);
+}
+
+/** No legacy receipt work means no loading of users, ledger or treasury. */
+export async function pgPendingReceiptIds(limit = 64): Promise<string[]> {
+  const count = Math.min(64, Math.max(1, Math.floor(limit) || 64));
+  const cursor = pendingReceiptCursor;
+  const ids = (await getPool().query(
+    `select id from markets where status in ('resolved','void') and receipt_ref is null
+     and ($1::text is null or id > $1) order by id limit $2`,
+    [cursor ?? null, count],
+  )).rows.map((row) => row.id as string);
+  if (cursor !== undefined && ids.length < count) {
+    const wrapped = await getPool().query(
+      `select id from markets where status in ('resolved','void') and receipt_ref is null
+       and id <= $1 order by id limit $2`,
+      [cursor, count - ids.length],
+    );
+    ids.push(...wrapped.rows.map((row) => row.id as string));
+  }
+  // Advance after selection, including when publication later fails. Failed
+  // receipts stay pending, but cannot starve every market beyond this page.
+  // Restart begins at the first pending id; this cursor is not money state.
+  pendingReceiptCursor = ids.at(-1);
+  return ids;
+}
+
+/** A recovery wake-up probe, never a balance or withdrawal authorization. */
+export async function pgHasPendingWithdrawals(): Promise<boolean> {
+  return (await getPool().query(
+    "select exists(select 1 from withdraws where status='pending') as pending",
+  )).rows[0].pending === true;
+}
+
+export async function pgReadReceiptSource(marketId: string): Promise<StreakDB | null> {
+  const client = await getPool().connect();
+  try {
+    await client.query("begin transaction isolation level repeatable read read only");
+    const db = emptyWorkingSet();
+    const rows = (await client.query(
+      `select m.*, h.ticks, i.latest, i.snapshot from markets m
+       left join market_history h on h.market_id=m.id left join market_insights i on i.market_id=m.id
+       where m.id=$1 and m.status in ('resolved','void') and m.receipt_ref is null`, [marketId],
+    )).rows;
+    if (rows.length) {
+      db.markets = rows.map((row) => toMarket(row, row.ticks, row));
+      db.matches = (await client.query("select * from matches where id=$1", [db.markets[0].matchId])).rows.map(toMatch);
+      db.bets = (await client.query("select * from bets where market_id=$1 order by id", [marketId])).rows.map(toBet);
+      db.treasury = (await client.query("select treasury from streak_meta where id='singleton'")).rows[0]?.treasury ?? undefined;
+    }
+    await client.query("commit");
+    return rows.length ? db : null;
+  } catch (error) {
+    try { await client.query("rollback"); } catch {}
+    throw error;
+  } finally { client.release(); }
+}
+
+export async function pgSavePublishedReceipt(
+  marketId: string, receipt: NonNullable<Market["receipt"]>, payload: SettlementReceipt,
+): Promise<void> {
+  const client = await getPool().connect();
+  try {
+    await client.query("begin");
+    const market = (await client.query("select receipt_ref from markets where id=$1 for update", [marketId])).rows[0];
+    if (!market) throw new Error("Published receipt market is missing.");
+    if (market.receipt_ref && !same(market.receipt_ref, receipt)) throw new Error("Published receipt changed during delivery.");
+    await client.query("update markets set receipt_ref=$2 where id=$1 and receipt_ref is null", [marketId, jsonb(receipt)]);
+    await syncCollection(client, RECEIPTS, [], [payload]);
+    await client.query("commit");
+  } catch (error) {
+    try { await client.query("rollback"); } catch {}
+    throw error;
+  } finally { client.release(); }
 }
 
 // ── diffed write ────────────────────────────────────────────────────────────

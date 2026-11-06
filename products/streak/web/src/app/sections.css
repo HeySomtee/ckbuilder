@@ -7,6 +7,43 @@
   border-radius: 4px;
   font-weight: 500;
 }
+.rail nav[aria-label] a.campaign-nav-link,
+.navigation-sheet a.campaign-nav-link {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 12px 9px 20px;
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.35;
+}
+.campaign-nav-link span {
+  overflow-wrap: anywhere;
+}
+.campaign-nav-link small {
+  font: 8px var(--mono);
+  color: var(--muted);
+}
+.rail:has(.campaign-nav-link) > .wordmark {
+  flex-shrink: 0;
+}
+.rail nav[aria-label]:has(.campaign-nav-link) {
+  min-height: 0;
+  margin-inline: -6px;
+  padding-inline: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  align-content: start;
+}
+.rail nav[aria-label]:has(.campaign-nav-link) > a {
+  min-width: 0;
+  gap: 6px;
+  padding-inline: 6px;
+}
+.rail nav[aria-label]:has(.campaign-nav-link) .nav-coming {
+  padding-inline: 3px;
+}
 .rail .nav-group {
   font: 8px var(--mono);
   color: var(--muted);
@@ -17,21 +54,27 @@
   padding-top: 0;
 }
 @media (min-width: 701px) and (max-height: 650px) {
-  .rail {
+  aside.rail {
     padding-block: 12px;
   }
   .rail .wordmark {
     margin-bottom: 12px;
   }
   .rail .nav-group {
-    padding-top: 5px;
+    padding: 3px 9px 2px;
     font-size: 7px;
   }
-  .rail nav {
+  .rail nav[aria-label] {
     gap: 1px;
   }
 }
 @media (min-width: 701px) and (max-height: 560px) {
+  aside.rail {
+    padding-block: 6px;
+  }
+  .rail .wordmark {
+    margin-bottom: 0;
+  }
   .rail .nav-group {
     display: none;
   }

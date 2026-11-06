@@ -11,6 +11,7 @@ import { localGameMode, requestGameMode } from './modules/games-test/mode';
  */
 
 import "./env";
+import { DueWork, IDLE_RECHECK_MS } from './infrastructure/due-work';
 import { rankFeaturedFixtures } from './fixture-ranking';
 import { findPublicPredictionMarket, InvalidSlip, parseSlip, reviewPredictions } from './modules/predictions/review';
 import { DirectRegistry, PUBLIC_DIRECT_CONFIG, LEGACY_DIRECT_CONFIG, V3_DIRECT_CONFIG, V4_DIRECT_CONFIG, PROVIDER_ORIGIN, RESULT_WINDOW_MS, termsDigest, object } from './modules/direct/registry';
@@ -25,6 +26,10 @@ import { survivorService, tickSurvivor } from './modules/survivor/runtime';
 import { SurvivorError } from './modules/survivor/domain';
 import { fiveService, startFiveProgression } from './modules/five/runtime';
 import { FiveError } from './modules/five/domain';
+import { campaignService, reconcileCampaigns, startCampaigns } from './modules/campaigns/runtime';
+import { CampaignError, identifier as campaignId, object as campaignObject } from './modules/campaigns/domain';
+import { campaignEvidenceExport, campaignEvidenceCsv } from './modules/campaigns/evidence';
+import { verifyCampaignPayout } from './modules/campaigns/payout-proof';
 
 import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
@@ -81,6 +86,7 @@ import {
   getTreasury,
   recoverUnsentWithdrawals,
   reconcilePendingWithdrawals,
+  hasPendingWithdrawals,
   withdraw,
 } from "./wallet";
 import { abbrevAddress, addressUrl, cachedBalance, getBalanceShannons, shannonsToCkb, txUrl, verifyWalletSignature } from "./chain";
@@ -192,6 +198,8 @@ async function readJson(req: IncomingMessage): Promise<any> {
 async function currentUserId(req: IncomingMessage): Promise<string | null> {
   return getSessionUserId(parseCookies(req)[SESSION_COOKIE]);
 }
+let wakeFixtureWork = () => {};
+let wakeWithdrawalWork = () => {};
 
 async function handleSurvivor(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   try {
@@ -207,6 +215,7 @@ async function handleSurvivor(req: IncomingMessage, res: ServerResponse, url: UR
         ? await controls.action(actor, { ...body, action: body.control, game: 'survivor' })
         : await service.action(actor, body)
       : await service.read(actor, url.searchParams.get('competition') ?? undefined);
+    if (req.method === 'POST' && !controls) wakeFixtureWork();
     sendJson(res, 200, { ...data, testMode: !!controls });
   } catch (error) {
     if (error instanceof SurvivorError || error instanceof FiveError) return sendJson(res, error.status, { error: error.message });
@@ -223,6 +232,10 @@ async function handleFive(req: IncomingMessage, res: ServerResponse, url: URL): 
     const actor = user?.wallet?.address ? { id: user.id, name: user.username || 'Player', wallet: user.wallet.address } : null;
     const controls = mode === 'test' ? await testGames() : null;
     const service = controls ? controls.five : fiveService();
+    if (req.method === 'GET' && url.searchParams.has('profile')) {
+      if (!actor) throw new FiveError('Sign in to choose your FPL name.', 401);
+      return sendJson(res, 200, { viewerId: actor.id, profile: await service.profile(actor) });
+    }
     if(req.method === 'GET' && (url.searchParams.has('scout') || url.searchParams.has('player') || url.searchParams.has('schedule'))) {
       if(!sponsorRate(`five-scout:${req.socket.remoteAddress}`,60))return sendJson(res,429,{error:'Please wait before refreshing player scouting.'});
       if(url.searchParams.has('schedule')) return sendJson(res,200,await service.schedule());
@@ -231,6 +244,14 @@ async function handleFive(req: IncomingMessage, res: ServerResponse, url: URL): 
       return sendJson(res,200,player===null?await service.scouting():await service.player(Number(player)));
     }
     const body = req.method === 'POST' ? await readJson(req) : null;
+    if (body?.action === 'profile') {
+      if (!actor) throw new FiveError('Sign in to choose your FPL name.', 401);
+      if (body.expectedAccountId !== actor.id)
+        throw new FiveError('Your signed-in account changed. Refresh before saving your FPL name.', 409);
+      if (!sponsorRate(`five-profile:${actor.id}`, 15))
+        throw new FiveError('Please wait a moment before changing your FPL name again.', 429);
+      return sendJson(res, 200, { viewerId: actor.id, profile: await service.saveProfile(actor, body.displayName) });
+    }
     const data = req.method === 'POST'
       ? controls && body?.action === 'testControl'
         ? await controls.action(actor, { ...body, action: body.control, game: 'five' })
@@ -241,6 +262,60 @@ async function handleFive(req: IncomingMessage, res: ServerResponse, url: URL): 
     if (error instanceof FiveError) return sendJson(res, error.status, { error: error.message });
     console.warn('[five] request unavailable');
     sendJson(res, 503, { error: 'Streak Five could not refresh. Your saved squad is safe. Please retry.' });
+  }
+}
+
+async function handleCampaigns(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  try {
+    if (localGameMode(req) !== 'api') throw new CampaignError('Competitions use regular API gameweeks. Use a labelled rehearsal competition with your test accounts.', 409);
+    const userId = await currentUserId(req);
+    const user = userId ? await read(db => db.users.find(u => u.id === userId)) : undefined;
+    const wallet = user?.wallet?.address;
+    const actor = user && wallet ? { id: user.id, name: user.username || 'Player', wallet,
+      ownerHash: (await activityOwner(wallet)).ownerHash } : null;
+    if (!actor && (req.method === 'POST' || ['options', 'export'].includes(url.searchParams.get('action') ?? '')))
+      throw new CampaignError('Sign in with your wallet to continue.', 403);
+    const service = campaignService();
+    if (req.method === 'POST') {
+      if (!actor) throw new CampaignError('Sign in with your wallet to continue.', 403);
+      if (!sponsorRate(`campaign-write:${actor.id}`, 30)) throw new CampaignError('Please wait a moment before trying again.', 429);
+      const body = campaignObject(await readJson(req));
+      if (body.action === 'prepare-gameweek') {
+        if (!service.isAdmin(actor)) throw new CampaignError('Administrator access is required.', 403);
+        if (typeof body.event !== 'number' || !Number.isSafeInteger(body.event) || body.event < 1 || body.event > 38)
+          throw new CampaignError('Choose a valid official gameweek.');
+        await fiveService().prepareGameweek(body.event);
+        return sendJson(res, 200, await service.options(actor));
+      }
+      if (body.action === 'record-payout') {
+        const id = campaignId(body.id), publicId = campaignId(body.publicId);
+        const campaign = await service.loadForAdmin(id, actor);
+        const proof = await verifyCampaignPayout(campaign, publicId, body.transactionHash, body.outputIndex);
+        return sendJson(res, 200, await service.recordPayout(id, publicId, proof, actor));
+      }
+      const data = await service.act(body, actor);
+      if (data.detail && ['join', 'publish'].includes(String(body.action))) void reconcileCampaigns();
+      return sendJson(res, 200, data);
+    }
+    const action = url.searchParams.get('action');
+    if (action === 'options') return sendJson(res, 200, await service.options(actor));
+    const id = url.searchParams.get('id');
+    if (action === 'export') {
+      const campaign = await service.loadForAdmin(campaignId(id), actor);
+      if (url.searchParams.get('format') === 'csv') {
+        res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store',
+          'Content-Disposition': `attachment; filename="streak-${campaign.id}-entries.csv"` });
+        res.end(campaignEvidenceCsv(campaign));
+        return;
+      }
+      res.setHeader('Content-Disposition', `attachment; filename="streak-${campaign.id}-evidence.json"`);
+      return sendJson(res, 200, campaignEvidenceExport(campaign));
+    }
+    return sendJson(res, 200, id ? await service.get(id, actor, Number(url.searchParams.get('offset') ?? '0')) : await service.list(actor));
+  } catch (error) {
+    if (error instanceof CampaignError || error instanceof FiveError) return sendJson(res, error.status, { error: error.message });
+    console.warn('[campaigns] request unavailable');
+    sendJson(res, 503, { error: 'Competitions could not refresh right now. Your saved entry is safe. Please retry.' });
   }
 }
 
@@ -738,7 +813,10 @@ async function handleSlipReview(req: IncomingMessage, res: ServerResponse): Prom
 }
 
 const insightRefreshes = new AsyncSnapshotCache<string, boolean>(60_000);
-const matchdayRefreshes = new AsyncSnapshotCache<string, MatchdayData>(15_000, 128, 20_000);
+const matchdayRefreshes = new AsyncSnapshotCache<string, MatchdayData>(15_000, 128, 20_000, {
+  maximumBytes: 4 * 1024 * 1024,
+  sizeOf: (value) => Buffer.byteLength(JSON.stringify(value), 'utf8'),
+});
 
 async function handleMatchday(_req: IncomingMessage, res: ServerResponse, marketId: string): Promise<void> {
   const context = await read((db) => {
@@ -934,6 +1012,8 @@ async function handleWithdraw(req: IncomingMessage, res: ServerResponse): Promis
   } catch (err) {
     if (err instanceof WalletError) return sendJson(res, 400, { error: err.message, code: err.code });
     sendJson(res, 502, { error: (err as Error).message || "Withdraw failed on-chain." });
+  } finally {
+    wakeWithdrawalWork();
   }
 }
 
@@ -1370,6 +1450,8 @@ const staticRoutes: Record<string, Handler> = {
   "POST /api/survivor": (req, res, url) => handleSurvivor(req, res, url),
   "GET /api/five": (req, res, url) => handleFive(req, res, url),
   "POST /api/five": (req, res, url) => handleFive(req, res, url),
+  "GET /api/campaigns": (req, res, url) => handleCampaigns(req, res, url),
+  "POST /api/campaigns": (req, res, url) => handleCampaigns(req, res, url),
   "POST /api/me/username": (req, res) => handleSetUsername(req, res),
   "POST /api/me/notify": (req, res) => handleSetNotify(req, res),
   "POST /api/integrations/telegram/connect": (req, res) => handleTelegramConnect(req, res),
@@ -1462,6 +1544,32 @@ export const server = createServer(async (req, res) => {
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
+/** Fixtures and Survivor keep independent retry/deadline obligations. */
+export async function tickFixtureProgression(state: { initialized: boolean }): Promise<number> {
+  let next = IDLE_RECHECK_MS;
+  try {
+    if (!state.initialized) {
+      await provider.init?.();
+      state.initialized = true;
+    }
+    await syncMatches();
+    providerStatus();
+    next = Math.min(next, provider.nextSyncAt ? provider.nextSyncAt() - Date.now() : SETTLE_INTERVAL_MS);
+  } catch (error) {
+    console.error("[streak] settle loop:", (error as Error).message);
+    next = Math.min(next, 30_000);
+  }
+  // Cached observations and deadline progression remain useful when the
+  // provider is unavailable. A failed fixture pass must never skip this stage.
+  try {
+    next = Math.min(next, (await tickSurvivor()) ?? IDLE_RECHECK_MS);
+  } catch {
+    console.warn('[survivor] progression delayed; will retry');
+    next = Math.min(next, 30_000);
+  }
+  return Math.max(1000, next);
+}
+
 async function boot(): Promise<void> {
   publicOrigin();
   await authStorage();
@@ -1478,32 +1586,23 @@ async function boot(): Promise<void> {
   server.once('close',stopFive);
   const stopActivity = startActivity();
   server.once('close',stopActivity);
+  server.once('close',startCampaigns());
 
   // A slow oracle or notification service must not hold the listener offline.
-  let initialized = false;
-  let ticking = false;
-  const tick = async () => {
-    void reconcilePendingWithdrawals().catch((error) => console.warn("[wallet] reconciliation failed:", error.message));
-    if (ticking) return;
-    ticking = true;
-    try {
-      if (!initialized) {
-        await provider.init?.();
-        initialized = true;
-      }
-      await syncMatches();
-      providerStatus();
-    } catch (error) {
-      console.error("[streak] settle loop:", (error as Error).message);
-    } finally {
-      await tickSurvivor().catch(() => console.warn('[survivor] progression delayed; will retry'));
-      ticking = false;
-    }
-  };
-  void tick();
-  const interval = setInterval(() => { void tick(); }, SETTLE_INTERVAL_MS);
-  interval.unref();
-  server.once("close", () => clearInterval(interval));
+  const fixtureState = { initialized: false };
+  const fixtureWork = new DueWork(() => tickFixtureProgression(fixtureState),
+    () => console.warn('[streak] saved work deferred'));
+  wakeFixtureWork = () => fixtureWork.wake();
+  fixtureWork.start();
+  server.once('close', () => { fixtureWork.stop(); wakeFixtureWork = () => {}; });
+  const withdrawalWork = new DueWork(async () => {
+    if (!(await hasPendingWithdrawals())) return IDLE_RECHECK_MS;
+    await reconcilePendingWithdrawals();
+    return (await hasPendingWithdrawals()) ? 20_000 : IDLE_RECHECK_MS;
+  }, () => console.warn('[wallet] saved withdrawal reconciliation delayed'));
+  wakeWithdrawalWork = () => withdrawalWork.wake();
+  withdrawalWork.start();
+  server.once('close', () => { withdrawalWork.stop(); wakeWithdrawalWork = () => {}; });
   void initNotifications().catch((error) => console.warn("[notifications] setup failed:", (error as Error).message));
 
   void configureTelegramWebhook();

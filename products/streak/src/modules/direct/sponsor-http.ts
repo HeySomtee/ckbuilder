@@ -20,6 +20,7 @@ import { provisioningCatalogueUrl } from './provision';
 import { createFixtureReader } from './fixture-reader';
 import { startHostedRecovery } from './hosted-drain';
 import { ActivityEventOutbox } from '../activity/outbox';
+import { readCampaignAbsence } from './campaign-absence';
 
 function secret(value: string | undefined): string {
   if (!value || !/^[0-9a-f]{64}$/.test(value))
@@ -65,6 +66,7 @@ export function createSponsorServer(
   legacy: SponsorService,
   ipcSecret: string,
   batch?: BatchService,
+  options: { campaignEmptyHistoryAcknowledged?: boolean } = {},
 ) {
   const expected = Buffer.from(`Bearer ${secret(ipcSecret)}`);
   const activity = new ActivityEventOutbox(legacy.options.journal);
@@ -82,6 +84,13 @@ export function createSponsorServer(
     let operation = 'unknown';
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      if (url.pathname === '/campaign/absence') {
+        operation = 'campaign-absence';
+        if (req.method !== 'POST' || !batch || options.campaignEmptyHistoryAcknowledged !== true)
+          return reply(res, 409, { error: 'Campaign operator verification is unavailable.' });
+        const payload = await body(req);
+        return reply(res, 200, await readCampaignAbsence(batch, payload.request));
+      }
       if (url.pathname.startsWith('/activity/')) {
         operation = 'activity';
         if (req.method === 'GET' && url.pathname === '/activity/events')
@@ -199,15 +208,17 @@ export function createSponsorServer(
       );
       reply(res, busy ? 429 : 409, {
         error:
-          operation === 'activity'
-            ? 'Activity relay is temporarily unavailable. Its durable observations remain recoverable.'
-            : busy
-              ? 'Sponsor queue is busy. Your picks and any saved payment are safe. Try again shortly.'
-              : safe
-                ? message
-                : operation === 'offer'
-                  ? 'Payment review is temporarily unavailable. No payment was sent by this review. Your picks are saved; try again shortly.'
-                  : 'Sponsor request could not complete. Your signed payment may still confirm. Check its saved status before retrying.',
+          operation === 'campaign-absence'
+            ? 'Campaign operator history is unavailable for absence verification.'
+            : operation === 'activity'
+              ? 'Activity relay is temporarily unavailable. Its durable observations remain recoverable.'
+              : busy
+                ? 'Sponsor queue is busy. Your picks and any saved payment are safe. Try again shortly.'
+                : safe
+                  ? message
+                  : operation === 'offer'
+                    ? 'Payment review is temporarily unavailable. No payment was sent by this review. Your picks are saved; try again shortly.'
+                    : 'Sponsor request could not complete. Your signed payment may still confirm. Check its saved status before retrying.',
       });
     } finally {
       if (['offer', 'submit', 'resume'].includes(operation))
@@ -296,7 +307,9 @@ export async function runSponsorService(): Promise<void> {
         ],
       })
     : undefined;
-  const server = createSponsorServer(service, ipc, batch);
+  const server = createSponsorServer(service, ipc, batch, {
+    campaignEmptyHistoryAcknowledged: process.env.STREAK_CAMPAIGNS_EMPTY_HISTORY_ACK === '1',
+  });
   server.requestTimeout = 65_000;
   server.headersTimeout = 10_000;
   await new Promise<void>((resolve, reject) => {

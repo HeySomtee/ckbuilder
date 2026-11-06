@@ -5,6 +5,7 @@ import { FiveError, identifier, newRound, object, parseTerms } from '../five/dom
 import { FiveService, type Actor } from '../five/service';
 import { FiveFunding } from '../five/funding';
 import { FiveRewards } from '../five/rewards';
+import { PgFiveProfiles } from '../five/profile';
 import { PgFiveStorage } from '../five/storage';
 import { lockTime, TEST_TIMING_POLICY } from '../five/timing';
 import { PgSurvivorStorage } from '../survivor/storage';
@@ -203,6 +204,8 @@ export function testGames() {
         feed,
         funding,
         rewards,
+        false,
+        new PgFiveProfiles(pool, true),
       );
       const survivor = new SurvivorService(
         survivorStore,

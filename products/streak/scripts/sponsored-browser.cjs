@@ -193,6 +193,7 @@ async function main() {
           return route.continue();
         });
         await context.routeWebSocket('**/*', (socket) => socket.close());
+        await require('./browser-campaign-fixture.cjs')(context, base);
         page = await context.newPage();
         activePage = page;
         const reads = observeReads(page, base);

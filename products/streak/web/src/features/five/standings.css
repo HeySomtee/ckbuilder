@@ -1,0 +1,455 @@
+.five-manager-table {
+  overflow: hidden;
+}
+.five-manager-table > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.five-manager-table h2 {
+  margin: 0 0 8px;
+}
+.five-manager-table header small {
+  color: var(--five-muted);
+  font-size: 11px;
+}
+.five-standings-tools {
+  display: flex;
+  gap: 12px;
+  padding: 4px 20px 20px;
+  align-items: center;
+}
+.five-manager-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  max-width: 400px;
+}
+.five-manager-search svg {
+  color: var(--five-muted);
+  flex: 0 0 18px;
+}
+.five-manager-search input {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+  min-height: 44px;
+}
+.five-manager-table .five-standings-tools .btn {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.five-manager-row,
+.five-table-labels {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto 24px;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px;
+}
+.five-table-labels {
+  border-block: 1px solid var(--five-line);
+  color: var(--five-muted);
+  font-size: 10px;
+  padding-block: 11px;
+  letter-spacing: 0.04em;
+}
+.five-table-labels > :nth-child(3) {
+  text-align: right;
+}
+.five-page .five-manager-row {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--five-line);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--text);
+  min-height: 78px;
+  cursor: pointer;
+}
+.five-manager-row:hover,
+.five-manager-row:focus-visible {
+  background: #a9cba612;
+}
+.five-manager-row:focus-visible {
+  outline: 2px solid var(--five-lime);
+  outline-offset: -3px;
+}
+.five-manager-row.own {
+  background: #b8eb890a;
+  box-shadow: inset 3px 0 var(--five-lime);
+}
+.five-manager-rank {
+  color: var(--five-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.five-manager-identity,
+.five-manager-result {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.five-manager-identity strong {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.five-manager-identity small {
+  font: 10px var(--mono, monospace);
+  color: var(--five-muted);
+}
+.five-manager-identity em,
+.five-name-preview em {
+  font: 10px var(--sans, sans-serif);
+  font-style: normal;
+  color: var(--five-lime);
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #b8eb8910;
+}
+.five-manager-result {
+  justify-items: end;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.five-manager-result small {
+  color: var(--five-lime);
+  font-size: 10px;
+}
+.five-standings-footnote {
+  font-size: 11px;
+}
+.five-chevron-back,
+.five-chevron-next {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.five-chevron-back {
+  transform: rotate(90deg);
+}
+.five-chevron-next {
+  transform: rotate(-90deg);
+}
+.five-page .five-squad-dialog {
+  width: 910px;
+  max-height: min(930px, 94dvh);
+  padding: 0;
+  overflow: auto;
+  background: #122219;
+}
+.five-squad-dialog > header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 14px 20px;
+  margin: 0;
+  border-bottom: 1px solid var(--five-line);
+  background: #14251e;
+}
+.five-page .five-squad-dialog > header h2 {
+  font-size: 14px;
+  margin: 0 8px 0 auto;
+}
+.five-dialog > header .five-dialog-back {
+  display: inline-flex;
+  width: auto;
+  min-width: 44px;
+  gap: 6px;
+  font-size: 12px;
+  padding-inline: 10px;
+  white-space: nowrap;
+}
+.five-squad-identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+}
+.five-squad-identity h3 {
+  font-size: 24px;
+  margin: 4px 0 7px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.five-squad-identity .eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--five-lime);
+  margin: 0;
+}
+.five-squad-identity small {
+  color: var(--five-muted);
+  font-size: 11px;
+}
+.five-squad-identity .five-live-total {
+  flex: 0 0 auto;
+}
+.five-squad-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1fr);
+  gap: 16px;
+  padding: 0 24px 18px;
+}
+.five-squad-pitch-panel {
+  min-width: 0;
+  border: 1px solid #a6d49f25;
+  border-radius: 16px;
+  background: radial-gradient(ellipse at 50% 40%, #315936, #183522);
+  overflow: hidden;
+}
+.five-squad-pitch-panel .five-pitch {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  height: 440px;
+  margin: 8px 10px 0;
+  padding-inline: 4px;
+}
+.five-squad-pitch-panel .five-slot {
+  width: min(112px, 100%);
+  min-width: 0;
+}
+.five-squad-pitch-panel > p {
+  padding: 0 14px;
+  font-size: 10px;
+  text-align: center;
+}
+.five-squad-pitch-panel .five-pitch-player .five-jersey {
+  width: 60px;
+  height: 56px;
+}
+.five-squad-pitch-panel .five-pitch-player[aria-pressed='true'] {
+  outline: 2px solid var(--five-lime);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.five-squad-points-panel {
+  min-width: 0;
+  border: 1px solid var(--five-line);
+  border-radius: 16px;
+  background: #ffffff03;
+  align-self: start;
+}
+.five-squad-points-panel .five-live-breakdown {
+  padding: 18px;
+}
+.five-squad-points-panel .five-live-breakdown h3 {
+  margin: 5px 0;
+  font-size: 22px;
+}
+.five-squad-help {
+  padding: 24px;
+  margin-block: 65px;
+}
+.five-squad-help > svg {
+  width: 30px;
+  height: 30px;
+  color: var(--five-lime);
+}
+.five-squad-help h3 {
+  font-size: 21px;
+}
+.five-squad-points-panel .five-return-pitch {
+  margin: 12px 14px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.five-squad-private {
+  padding: 45px 25px;
+  text-align: center;
+  max-width: 480px;
+  margin: auto;
+}
+.five-squad-private > svg {
+  width: 38px;
+  height: 38px;
+  color: var(--five-lime);
+}
+.five-squad-allocation {
+  margin-inline: 24px;
+  color: var(--five-lime);
+}
+.five-squad-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--five-line);
+}
+.five-squad-navigation .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  min-height: 44px;
+  font-size: 12px;
+}
+.five-squad-navigation small {
+  color: var(--five-muted);
+  font-size: 11px;
+}
+.five-name-dialog form > label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin: 20px 0 8px;
+}
+.five-name-dialog form > label span {
+  color: var(--five-lime);
+  font-size: 10px;
+}
+.five-name-dialog input {
+  width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+}
+.five-name-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--five-muted);
+  font-size: 10px;
+  margin: 8px 0 24px;
+}
+.five-name-preview {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #b8eb8935;
+  border-radius: 12px;
+  background: #b8eb8908;
+  font-size: 12px;
+}
+.five-name-preview strong {
+  overflow-wrap: anywhere;
+}
+.five-name-preview small {
+  display: block;
+  font: 10px monospace;
+  color: var(--five-muted);
+  margin-top: 6px;
+}
+.five-name-dialog .primary {
+  width: 100%;
+}
+@media (max-width: 760px) {
+  .five-manager-table > header {
+    padding: 20px 16px 16px;
+    align-items: start;
+    gap: 8px;
+  }
+  .five-manager-table > header > .five-tag {
+    font-size: 9px;
+    padding: 5px 7px;
+  }
+  .five-standings-tools {
+    padding: 0 14px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .five-manager-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .five-manager-table .five-standings-tools .btn {
+    margin-left: 0;
+  }
+  .five-manager-row,
+  .five-table-labels {
+    grid-template-columns: 22px minmax(0, 1fr) auto 16px;
+    gap: 8px;
+    padding-inline: 14px;
+  }
+  .five-manager-identity strong {
+    font-size: 12px;
+  }
+  .five-manager-result {
+    font-size: 12px;
+  }
+  .five-manager-result small {
+    font-size: 9px;
+  }
+  .five-page .five-squad-dialog {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: 0;
+    margin: 0;
+  }
+  .five-squad-dialog > header {
+    padding: max(10px, env(safe-area-inset-top)) 12px 10px;
+  }
+  .five-squad-dialog > header h2 {
+    position: absolute;
+    clip-path: inset(50%);
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+  .five-squad-identity {
+    padding: 20px 16px;
+    gap: 12px;
+  }
+  .five-squad-identity h3 {
+    font-size: 21px;
+  }
+  .five-squad-identity .five-live-total strong {
+    font-size: 32px;
+  }
+  .five-squad-identity .five-live-total span {
+    font-size: 9px;
+  }
+  .five-squad-layout {
+    display: block;
+    padding: 0 12px 16px;
+  }
+  .five-squad-pitch-panel .five-pitch {
+    height: clamp(380px, 55dvh, 500px);
+  }
+  .five-squad-points-panel {
+    margin-top: 12px;
+  }
+  .five-squad-help {
+    margin: 0;
+    padding: 16px;
+  }
+  .five-squad-help > svg {
+    display: none;
+  }
+  .five-squad-help h3 {
+    font-size: 16px;
+    margin: 0;
+  }
+  .five-squad-help p {
+    margin: 6px 0 12px;
+  }
+  .five-squad-layout[data-player-open='true'] .five-squad-pitch-panel {
+    display: none;
+  }
+  .five-squad-navigation {
+    padding: 14px 16px max(14px, env(safe-area-inset-bottom));
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .five-squad-dialog::backdrop {
+    background: #050c09ed;
+    backdrop-filter: none;
+  }
+}

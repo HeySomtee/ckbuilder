@@ -4,8 +4,17 @@ import { Icon } from '../components/icon';
 import { activityHref, followActivity, directHref, followDirect } from '../lib/direct-route';
 import { navigateMarket } from '../lib/market-route';
 import { sectionHref, followSection } from '../lib/section-route';
+import { campaignHref, followCampaign } from '../lib/campaign-route';
+import type { CampaignSummary } from '../../../shared/campaign-wire';
 
 const entries = [
+  {
+    id: 'competitions',
+    label: 'Competitions',
+    icon: 'shield',
+    href: campaignHref(),
+    follow: (e: MouseEvent<HTMLAnchorElement>) => followCampaign(e),
+  },
   {
     id: 'overview',
     label: 'Overview',
@@ -68,7 +77,17 @@ const entries = [
   },
 ] as const;
 
-export function AppNavigation({ active, mobile = false }: { active: string; mobile?: boolean }) {
+export function AppNavigation({
+  active,
+  mobile = false,
+  campaigns = [],
+  selectedCampaign,
+}: {
+  active: string;
+  mobile?: boolean;
+  campaigns?: CampaignSummary[];
+  selectedCampaign?: string | null;
+}) {
   const menu = useRef<HTMLDialogElement>(null);
   const main = mobile
     ? entries.filter((e) => ['overview', 'markets', 'activity', 'wallet'].includes(e.id))
@@ -78,12 +97,13 @@ export function AppNavigation({ active, mobile = false }: { active: string; mobi
         'matchday',
         'five',
         'survivor',
+        'competitions',
         'clubhouse',
         'activity',
         'wallet',
       ].flatMap((id) => entries.filter((e) => e.id === id));
   const additional = entries.filter((e) =>
-    ['five', 'survivor', 'matchday', 'clubhouse'].includes(e.id),
+    ['five', 'survivor', 'matchday', 'clubhouse', 'competitions'].includes(e.id),
   );
   const groups: Record<string, string> = {
     overview: 'YOUR TOUCHLINE',
@@ -91,6 +111,7 @@ export function AppNavigation({ active, mobile = false }: { active: string; mobi
     five: 'STREAK GAMES',
     clubhouse: 'COMMUNITY',
     activity: 'YOUR SPACE',
+    competitions: 'COMPETITIONS',
   };
   return (
     <>
@@ -105,7 +126,11 @@ export function AppNavigation({ active, mobile = false }: { active: string; mobi
               key={entry.id}
               href={entry.href}
               onClick={entry.follow}
-              aria-current={active === entry.id ? 'page' : undefined}
+              aria-current={
+                active === entry.id && (entry.id !== 'competitions' || !selectedCampaign)
+                  ? 'page'
+                  : undefined
+              }
             >
               <Icon name={entry.icon} />
               {mobile && entry.id === 'activity' ? 'Activity' : entry.label}
@@ -113,6 +138,38 @@ export function AppNavigation({ active, mobile = false }: { active: string; mobi
                 <small className="nav-coming">Beta</small>
               )}
             </a>
+            {!mobile &&
+              entry.id === 'competitions' &&
+              campaigns
+                .filter((c) => c.state !== 'deleted')
+                .map((campaign) => (
+                  <a
+                    key={campaign.id}
+                    className="campaign-nav-link"
+                    href={campaignHref(campaign.id)}
+                    onClick={(event) => followCampaign(event, campaign.id)}
+                    aria-current={
+                      active === 'competitions' && selectedCampaign === campaign.id
+                        ? 'page'
+                        : undefined
+                    }
+                  >
+                    <span>{campaign.name}</span>
+                    <small>
+                      {campaign.rehearsal
+                        ? 'Rehearsal'
+                        : campaign.state === 'finished'
+                          ? 'Finished'
+                          : campaign.state === 'draft'
+                            ? 'Draft'
+                            : campaign.state === 'live'
+                              ? 'Live'
+                              : campaign.state === 'finalizing'
+                                ? 'Finalizing'
+                                : 'Open'}
+                    </small>
+                  </a>
+                ))}
           </Fragment>
         ))}
         {mobile && (
@@ -154,6 +211,39 @@ export function AppNavigation({ active, mobile = false }: { active: string; mobi
                 )}
               </a>
             ))}
+            {campaigns
+              .filter((c) => c.state !== 'deleted')
+              .map((campaign) => (
+                <a
+                  key={campaign.id}
+                  className="campaign-nav-link"
+                  href={campaignHref(campaign.id)}
+                  aria-current={
+                    active === 'competitions' && selectedCampaign === campaign.id
+                      ? 'page'
+                      : undefined
+                  }
+                  onClick={(event) => {
+                    followCampaign(event, campaign.id);
+                    menu.current?.close();
+                  }}
+                >
+                  <span>{campaign.name}</span>
+                  <small>
+                    {campaign.rehearsal
+                      ? 'Rehearsal'
+                      : campaign.state === 'finished'
+                        ? 'Finished'
+                        : campaign.state === 'draft'
+                          ? 'Draft'
+                          : campaign.state === 'live'
+                            ? 'Live'
+                            : campaign.state === 'finalizing'
+                              ? 'Finalizing'
+                              : 'Open'}
+                  </small>
+                </a>
+              ))}
           </nav>
         </dialog>
       )}

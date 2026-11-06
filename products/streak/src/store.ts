@@ -14,13 +14,17 @@ import { mkdir, readFile, rename, writeFile } from "fs/promises";
 import { dirname } from "path";
 
 import { DB_FILE, DB_SCHEMA } from "./config";
-import type { SettlementReceipt, StreakDB } from "./types";
+import type { Market, Match, SettlementReceipt, StreakDB } from "./types";
 import { supaLoadDB, supaSaveDB, supaEnabled } from "./store_supabase";
 import {
   pgEnabled, pgLoadDB, pgSaveDB,
   getReceipt as pgGetReceipt, listReceipts as pgListReceipts,
   deleteMarkets as pgDeleteMarkets, deleteMatches as pgDeleteMatches,
+  pgUpdateFixtureRecords, pgReadFixtureSlate, pgPendingReceiptIds,
+  pgReadReceiptSource, pgSavePublishedReceipt, type FixtureSyncSelection,
 } from "./store_pg";
+import { currentSlateDate } from "./wcdata";
+import { upgradeUser } from "./infrastructure/legacy-user";
 
 const EMPTY: StreakDB = {
   schema: DB_SCHEMA,
@@ -62,10 +66,16 @@ async function loadSnapshot(): Promise<Snapshot> {
   if (cache && Date.now() - cache.at < READ_TTL_MS) return cache;
   if (loading) return loading;
   const startedAtRevision = revision;
-  const pending = (async () => {
+  let pending!: Promise<Snapshot>;
+  pending = (async () => {
     const db = await loadFromSource();
     // A fetch started before a committed mutation must not publish stale data.
-    if (revision !== startedAtRevision) return cache ?? loadSnapshot();
+    if (revision !== startedAtRevision) {
+      // A targeted transaction invalidates rather than rebuilding the complete
+      // cache. Do not let this old load await its own still-registered promise.
+      if (loading === pending) loading = null;
+      return cache ?? loadSnapshot();
+    }
     cache = { db: freezeSnapshot(db), serialized: JSON.stringify(db), at: Date.now() };
     return cache;
   })().finally(() => { if (loading === pending) loading = null; });
@@ -136,37 +146,6 @@ function normalizeDB(parsed: any): StreakDB {
   } as StreakDB;
 }
 
-/** Backfill any missing fields on a legacy User row. */
-function upgradeUser(u: any): any {
-  return {
-    id: u.id,
-    walletIdentity: u.walletIdentity ?? "",
-    walletType: u.walletType ?? "",
-    username: u.username,
-    telegramChatId: u.telegramChatId,
-    telegramUsername: u.telegramUsername,
-    createdAt: u.createdAt,
-    wallet: { address: u.wallet?.address },
-    escrowShannons: u.escrowShannons ?? "0",
-    creatorFeesShannons: u.creatorFeesShannons ?? "0",
-    streak: {
-      current: u.streak?.current ?? 0,
-      best: u.streak?.best ?? 0,
-      status: u.streak?.status ?? "active",
-      lastPickDate: u.streak?.lastPickDate,
-      failedBetId: u.streak?.failedBetId,
-    },
-    stats: {
-      totalBets: u.stats?.totalBets ?? 0,
-      wonBets: u.stats?.wonBets ?? 0,
-      lostBets: u.stats?.lostBets ?? 0,
-      renews: u.stats?.renews ?? 0,
-      netPnlShannons: u.stats?.netPnlShannons ?? "0",
-      turnoverShannons: u.stats?.turnoverShannons ?? "0",
-    },
-  };
-}
-
 async function saveDB(db: StreakDB, serialized: string, prev: StreakDB | null): Promise<void> {
   if (pgEnabled()) {
     // Only the rows that actually changed are sent, in one transaction.
@@ -222,6 +201,87 @@ export function update<T>(fn: (db: StreakDB) => T | Promise<T>): Promise<T> {
 export async function read<T>(fn: (db: StreakDB) => T | Promise<T>): Promise<T> {
   const db = await loadDB();
   return await fn(db);
+}
+
+/** All targeted SQL mutations share the legacy writer queue and cache epoch. */
+function targetedWrite<T>(mutate: () => Promise<{ result: T; changed: boolean }>): Promise<T> {
+  const run = writeQueue.then(async () => {
+    try {
+      const { result, changed } = await mutate();
+      if (changed) invalidateSnapshot();
+      return result;
+    } catch (error) {
+      // Includes an unknown commit response. No subsequent balance mutation can
+      // reuse the snapshot from before that potentially successful transaction.
+      invalidateSnapshot();
+      throw error;
+    }
+  });
+  writeQueue = run.then(() => {}, () => {});
+  return run;
+}
+
+function invalidateSnapshot(): void {
+  revision += 1;
+  cache = null;
+  loading = null;
+}
+
+/** The callback receives a bounded fixture page on PG, the full file elsewhere. */
+export function updateFixtureRecords(
+  selection: FixtureSyncSelection,
+  apply: (db: StreakDB, ids: ReadonlySet<string> | null) => void,
+): Promise<void> {
+  if (!pgEnabled()) return update((db) => apply(db, null));
+  return targetedWrite(async () => ({ result: undefined,
+    changed: await pgUpdateFixtureRecords(selection, apply) }));
+}
+
+export async function readFixtureSlate(today: string): Promise<Match[]> {
+  if (pgEnabled()) return pgReadFixtureSlate(today);
+  return read((db) => {
+    const date = currentSlateDate(db.matches, today);
+    return db.matches.filter((match) => match.date === date)
+      .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
+  });
+}
+
+let pendingReceiptCursor: string | undefined;
+export async function pendingReceiptIds(): Promise<string[]> {
+  if (pgEnabled()) return pgPendingReceiptIds();
+  return read((db) => {
+    const ids = db.markets.filter((market) =>
+      (market.status === "resolved" || market.status === "void") && !market.receipt)
+      .map((market) => market.id).sort();
+    const cursor = pendingReceiptCursor;
+    const ordered = cursor === undefined ? ids : [
+      ...ids.filter((id) => id > cursor), ...ids.filter((id) => id <= cursor),
+    ];
+    const page = ordered.slice(0, 64);
+    pendingReceiptCursor = page.at(-1);
+    return page;
+  });
+}
+
+export async function readReceiptSource(marketId: string): Promise<StreakDB | null> {
+  if (pgEnabled()) return pgReadReceiptSource(marketId);
+  return read((db) => db.markets.some((market) => market.id === marketId && !market.receipt) ? db : null);
+}
+
+export function savePublishedReceipt(
+  marketId: string, receipt: NonNullable<Market["receipt"]>, payload: SettlementReceipt,
+): Promise<void> {
+  if (pgEnabled()) return targetedWrite(async () => {
+    await pgSavePublishedReceipt(marketId, receipt, payload);
+    return { result: undefined, changed: true };
+  });
+  return update((db) => {
+    const market = db.markets.find((item) => item.id === marketId);
+    if (!market) throw new Error("Published receipt market is missing.");
+    market.receipt = receipt;
+    db.receipts = db.receipts.filter((item) => item.marketId !== marketId);
+    db.receipts.push(payload);
+  });
 }
 
 /**

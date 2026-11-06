@@ -6,6 +6,7 @@ const path = require('node:path');
 const { chromium, webkit } = require('playwright');
 const { chooseOption, openSelect } = require('./browser-select.cjs');
 const { FiveService } = require('../dist/modules/five/service');
+const { MemoryFiveProfiles } = require('../dist/test-support/five-profiles');
 const { parseTerms, newRound } = require('../dist/modules/five/domain');
 class Store {
   rows = new Map();
@@ -181,7 +182,15 @@ async function main() {
             }),
           };
           const actor = { id: 'player', name: 'Test Player', wallet: 'synthetic-wallet' };
-          const service = new FiveService(store, [], feed, undefined, undefined, true);
+          const service = new FiveService(
+            store,
+            [],
+            feed,
+            undefined,
+            undefined,
+            true,
+            new MemoryFiveProfiles([actor]),
+          );
           await service.progress();
           assert.equal(store.rows.size, 1, 'scheduler published the synthetic week');
           let failProfile = true,
@@ -241,7 +250,8 @@ async function main() {
               return json({ enabled: false, markets: [], fixtures: [] });
             return route.continue();
           });
-          await context.routeWebSocket('**/*', (s) => s.close());
+          await context.routeWebSocket('**/*', (socket) => socket.close());
+          await require('./browser-campaign-fixture.cjs')(context, origin);
           const page = await context.newPage();
           await page.clock.install();
           page.on('pageerror', (e) => errors.push(e.message));
@@ -404,7 +414,7 @@ async function main() {
           await page
             .getByRole('button', { name: 'View Creator gameweek points', exact: true })
             .click();
-          await dialog.getByRole('heading', { name: '10 points · Captain ×2' }).waitFor();
+          await dialog.getByText('10 points · Captain ×2', { exact: true }).waitFor();
           await page.keyboard.press('Escape');
           await store.change(activeId, (r) => {
             r.scores['3'] = {

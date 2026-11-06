@@ -18,6 +18,10 @@ That distinction matters throughout settlement. A submitted payment is not yet a
 
 Events are the normal update path, with durable replay and targeted reconciliation for missed notifications, pending transactions and chain reorganizations. This is not a claim that every background check has disappeared. A local benchmark read 24 synthetic markets in **17.6–33.6 ms with zero chain reads**; that is a database-path measurement, not a hosted speed guarantee.
 
+![Activity on desktop and mobile](assets/community-2026-10-31/03-activity.png)
+
+_Actual application, synthetic positions and returns. Collection shown here is not evidence of a live payout._
+
 Failed reads now show one useful retry state rather than three “Unavailable” totals. Previously loaded records remain visible and labelled. I also corrected a local launcher gap that had blocked the new Activity routes. [Architecture and verification](../products/streak/docs/delivery/event-driven-activity.md).
 
 ## Wallet feedback became concrete recovery work
@@ -31,6 +35,10 @@ The wallet work separates three states that the old UI blurred: an address being
 The owner confirmed Zerion Android sign-in worked after updating Zerion. That is useful physical-device feedback, but the app update was part of the resolution and this does not establish compatibility with every wallet. [Wallet changes and limits](../products/streak/docs/delivery/wallet-compatibility.md).
 
 On mobile, the wallet header now uses two compact rows, with balances rounded down to two decimal places. Finished or unsent payment notices can close. Pending payments keep monitoring but minimize into a **draggable, animated three-cell button**. Tap to expand; corner placement avoids the slip, navigation and dialogs.
+
+![Payment tracking on desktop and mobile](assets/community-2026-10-31/02-payment-tracking.png)
+
+_Synthetic pending payment in the real UI. The mobile button demonstrates minimized tracking, not a broadcast transaction._
 
 ## A recognizable identity, including while waiting
 
@@ -47,6 +55,10 @@ Streak Five is the free weekly five-player fantasy game introduced in Week 22, u
 - Unfinished bid amounts can be changed. New cumulative bids must exceed the highest submitted or confirmed total; top-ups still combine. Accepted signed contributions remain immutable and recoverable.
 - The current locked squad now remains visible with updating player points, captain scoring and provisional-score labels. **Pick next team** opens a separate upcoming-week editor. Squads do not carry over automatically.
 
+![Streak Five on desktop and mobile](assets/community-2026-10-31/04-streak-five.png)
+
+_Synthetic saved squad in the actual editor. This image shows the selection layout, not the new live-points view._
+
 The live-team change is now published. [Current team and next-week picks](../products/streak/docs/delivery/five-live-team.md).
 
 ## Survivor: visible deadlines and funded prizes
@@ -54,6 +66,10 @@ The live-team change is now published. [Current team and next-week picks](../pro
 Survivor asks players to pick one winning team each round without reusing a team. New competition schedules now follow the **official FPL deadline, normally 90 minutes before the first EPL fixture**, and show the closing time. Admins can enter a round count across the available remaining gameweeks instead of choosing from an unnecessarily short list.
 
 A positive creator prize now requires confirmed funding before publication. Following the approved approach, it uses the **existing custodial testnet rewards wallet**, not a new escrow contract. The implementation includes funding recovery, eligible cancellation refunds and winner payouts through the shared rewards journal. Old announced prizes are not retroactively treated as funded.
+
+![Streak Survivor on desktop and mobile](assets/community-2026-10-31/05-streak-survivor.png)
+
+_Synthetic competition showing a saved pick, used-team restrictions and upcoming fixtures. No funded public prize is demonstrated._
 
 This work is now published. New v2 competitions also finish early when one definite survivor remains. Pending results cannot decide a winner; if every actual picker loses, pickers are rescued with those teams still spent, while missed picks remain out. The final scheduled round can produce joint winners. Existing competitions retain their published timing. [Outcome rules](../products/streak/docs/delivery/survivor-outcomes.md). Hosted creator funding, refunds and final winner payouts still need acceptance. [Funding rules and verification](../products/streak/docs/delivery/survivor-creator-prizes.md).
 
@@ -67,18 +83,8 @@ The latest complete local gate passed **all 79 checks** on 1 November: builds an
 
 For the hosted campaign, six wallets were funded and the owner marked the squad-saving, reload and account-switch checks complete. The end-to-end auction, refunds, match settlement, Survivor progression and final rewards are not yet a completed acceptance campaign.
 
-I also prepared separate GitHub and Nervos Talk posts, five paired desktop/mobile boards, a copy-ready page and upload-ready images. The owner reports the GitHub issue update is posted. Nervos Talk publication remains blocked by the account's link/media permissions; the full draft and a text-only alternative are preserved.
+I also prepared separate GitHub and Nervos Talk posts, five paired desktop/mobile boards, a copy-ready page and upload-ready images. The owner reports the GitHub issue update is posted. Nervos Talk publication remains blocked by the account's link/media permissions; the full draft and a text-only alternative are preserved. [Publishing pack and screenshot provenance](community/README.md).
 
 **Release position, checked 1 November:** runtime `30599d2` and release notes `dff2340` are pushed to GitHub main. The public frontend matched the verified build at 06:52:27 UTC. Hosted CI remains paused; a deployed frontend does not prove successful live settlement.
 
 Next is to finish the hosted journeys through actual results, refunds and collection. Both games remain beta. Mainnet, BTC/USDC payments and fiat onboarding are not delivered features. The useful milestone is a complete matchday users can follow and recover, not another screen added to the menu.
-
-## Game screenshots
-
-These previously published captures show the actual game interfaces at the Week 22 milestone, before this week's live-points and outcome updates. They illustrate the games, not evidence of current payment or settlement acceptance.
-
-![Streak Five squad editor, desktop](assets/week-22/five-squad-1440.png)
-
-![Streak Five squad editor, mobile](assets/week-22/five-squad-390.png)
-
-![Streak Survivor board, synthetic competition](assets/week-22/survivor-board.png)

@@ -5,7 +5,7 @@ import { postgresConfig } from '../../infrastructure/postgres-config';
 import { getPool, pgEnabled } from '../../store_pg';
 import { DirectRegistry, V4_DIRECT_CONFIG } from '../direct/registry';
 import { sponsorProxy } from '../direct/sponsor-proxy';
-import { readActivityMarket } from './chain';
+import { canonicalActivityCheckpoint, readActivityMarket } from './chain';
 import { ActivityService } from './service';
 import { PgActivityStorage } from './storage';
 
@@ -45,10 +45,7 @@ export function activityService(): ActivityService | undefined {
     events: () => sponsorProxy('/activity/events'),
     acknowledge: (ids) => sponsorProxy('/activity/ack', { ids }),
     project: (descriptor, previous) => readActivityMarket(client, descriptor, previous),
-    canonicalCheckpoint: async (projection) => {
-      const header = await client.getHeaderByNumberNoCache(projection.checkpoint.blockNumber);
-      return !!header && header.hash === projection.checkpoint.blockHash;
-    },
+    canonicalCheckpoint: (projection) => canonicalActivityCheckpoint(client, projection),
   });
   return instance;
 }

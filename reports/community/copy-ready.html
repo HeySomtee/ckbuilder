@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Streak | Copy your community post</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f1f4ef;
+        color: #17251d;
+        font:
+          17px/1.65 Arial,
+          sans-serif;
+      }
+      main {
+        max-width: 900px;
+        margin: auto;
+        padding: 32px 24px 70px;
+      }
+      a {
+        color: #246348;
+        text-underline-offset: 3px;
+      }
+      header {
+        padding: 18px 0 24px;
+      }
+      header h1 {
+        font-size: 30px;
+        line-height: 1.2;
+        margin: 0 0 14px;
+      }
+      header p {
+        margin: 10px 0;
+      }
+      .files,
+      .tabs,
+      .tools {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .files {
+        margin: 18px 0;
+      }
+      .tabs {
+        margin: 28px 0 16px;
+      }
+      button,
+      .file-link {
+        border: 1px solid #9caea1;
+        border-radius: 8px;
+        padding: 11px 16px;
+        background: #fff;
+        color: #17251d;
+        font:
+          600 15px/1.35 Arial,
+          sans-serif;
+        cursor: pointer;
+        min-height: 44px;
+      }
+      button:hover {
+        background: #e6eee4;
+      }
+      button:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #24734e;
+        outline-offset: 3px;
+      }
+      button[aria-pressed='true'],
+      .primary {
+        background: #173b2b;
+        color: #fff;
+        border-color: #173b2b;
+      }
+      .primary:hover {
+        background: #24533c;
+      }
+      .file-link {
+        text-decoration: none;
+      }
+      .title-panel {
+        background: #e2eadd;
+        border-radius: 12px;
+        padding: 22px;
+      }
+      .title-panel h1 {
+        font-size: 24px;
+        line-height: 1.4;
+        margin: 8px 0 16px;
+      }
+      .title-panel small {
+        font-size: 12px;
+        letter-spacing: 1.4px;
+      }
+      .tools {
+        margin: 20px 0;
+      }
+      article {
+        background: #fff;
+        padding: 32px;
+        border: 1px solid #d3ddd0;
+        border-radius: 12px;
+        overflow-wrap: anywhere;
+      }
+      article p {
+        margin: 0 0 22px;
+      }
+      article h2 {
+        font-size: 23px;
+        line-height: 1.35;
+        margin: 32px 0 16px;
+      }
+      article li {
+        margin: 0 0 14px;
+      }
+      .image-slot {
+        border: 1px dashed #93a88a;
+        background: #f1f6ed;
+        padding: 18px;
+        color: #3d5737;
+      }
+      #status {
+        min-height: 1.7em;
+        color: #2b6240;
+        font-size: 15px;
+        margin: 8px 0;
+      }
+      code {
+        font-size: 0.9em;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (max-width: 500px) {
+        main {
+          padding: 18px 14px 40px;
+        }
+        article {
+          padding: 22px 18px;
+        }
+        .tools button {
+          flex: 1 1 145px;
+        }
+        .title-panel {
+          padding: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Copy a clean Streak post</h1>
+        <p>
+          <strong>Forum blocking links and images?</strong> Keep the full draft for when your
+          account permissions allow it, or choose the <b>Nervos Talk: text only</b> tab below. That
+          version contains no links or images. See the
+          <a href="README.md#when-the-forum-rejects-links-and-images">posting-permission guidance</a
+          >.
+        </p>
+        <p>
+          <strong>In Nervos Talk's A mode:</strong> choose <b>Copy formatted body</b>, then paste
+          into the empty post editor. Put the title in the separate title field.
+        </p>
+        <p>
+          For Markdown mode or GitHub, use <b>Copy Markdown body</b>. In the full versions, replace
+          each image marker or local image line by uploading its matching PNG. Keep the caption
+          beneath it.
+        </p>
+        <p>
+          The copy buttons include only the title or post body, never these instructions. If copying
+          is blocked, use <b>Select body</b>, then press Ctrl+C.
+        </p>
+        <div class="files">
+          <a class="file-link" href="upload-images/">Open upload folder</a
+          ><a class="file-link" href="streak-upload-images.zip" download
+            >Download all five images (ZIP)</a
+          ><a class="file-link" href="gallery.html">View gallery</a>
+        </div>
+        <div class="files">
+          <a href="upload-images/01-markets.png" download>1. Markets PNG</a
+          ><a href="upload-images/02-payment-tracking.png" download>2. Payment tracker PNG</a
+          ><a href="upload-images/03-activity.png" download>3. Activity PNG</a
+          ><a href="upload-images/04-streak-five.png" download>4. Streak Five PNG</a
+          ><a href="upload-images/05-streak-survivor.png" download>5. Survivor PNG</a>
+        </div>
+        <p>
+          Extract the ZIP if needed. Upload the PNGs, not the ZIP. The forum supplies the hosted
+          image links.
+        </p>
+      </header>
+      <nav class="tabs" aria-label="Choose draft">
+        <button type="button" data-show="forum" aria-pressed="true">Nervos Talk</button>
+        <button type="button" data-show="forum-text" aria-pressed="false">
+          Nervos Talk: text only
+        </button>
+        <button type="button" data-show="github" aria-pressed="false">GitHub issue</button>
+      </nav>
+      <p id="status" role="status" aria-live="polite"></p>
+      <section id="forum">
+        <div class="title-panel">
+          <small>TOPIC TITLE</small>
+          <h1>Introducing Streak: your matchday predictions, settled on CKB</h1>
+          <button type="button" data-copy="title" data-id="forum">Copy title</button>
+        </div>
+        <div class="tools">
+          <button type="button" class="primary" data-copy="formatted" data-id="forum">
+            Copy formatted body</button
+          ><button type="button" data-copy="markdown" data-id="forum">Copy Markdown body</button
+          ><button type="button" data-select="forum">Select body</button>
+        </div>
+        <article id="forum-body" tabindex="-1" aria-label="Nervos Talk post body">
+          <p>Home win, a stubborn draw, or the upset everyone else dismissed?</p>
+          <p>
+            I'm building <strong><a href="https://streakpitch.com">Streak</a></strong> to give your
+            predictions a complete on-chain journey: choose an outcome, fund your position, follow
+            the match and collect your return.
+          </p>
+          <p>
+            Streak is a football prediction platform on <strong>CKB testnet</strong>, with free
+            weekly fantasy and Survivor games alongside its markets. Payments and rewards currently
+            use <strong>testnet tCKB</strong>, not real-money prizes.
+          </p>
+          <p class="image-slot">[Upload image: <strong>01-markets.png</strong>]</p>
+          <p>
+            <em
+              >Desktop and mobile views of the actual app, using synthetic local fixtures for this
+              gallery.</em
+            >
+          </p>
+          <h2>One slip for your matchday</h2>
+          <p>
+            Browse by day or league, open a fixture and choose Home, Draw or Away. Pool information
+            shows how participating stakes are distributed; your potential return depends on the
+            final pool and published rules.
+          </p>
+          <p>
+            Put up to
+            <strong>eight predictions into one slip and approve one wallet payment</strong>. Each
+            settles independently: one wrong call does not cancel another winning position.
+          </p>
+          <p>
+            Before signing, review your stakes, network fee and refundable CKB storage. A 100 tCKB
+            prediction currently requires another
+            <strong>321 tCKB in refundable position storage</strong>, plus its fee. The wallet total
+            should never be a surprise.
+          </p>
+          <p>
+            Activity keeps accepted positions, pending transactions and collectable returns
+            together, without requiring you to become a blockchain explorer expert.
+          </p>
+          <h2>Keep browsing while your payment confirms</h2>
+          <p>
+            Recent wallet work covers restoring authorized connections, switching accounts,
+            retaining drafts and recovering interrupted submissions.
+          </p>
+          <p>
+            On mobile, minimize a pending payment into an animated
+            <strong>three-cell tracker</strong>. Move it to a corner and tap for details. Monitoring
+            continues while you browse, avoiding the slip, navigation and dialogs.
+          </p>
+          <p class="image-slot">[Upload image: <strong>02-payment-tracking.png</strong>]</p>
+          <p>
+            <em
+              >A synthetic pending payment demonstrates the tracker. This is an interface capture,
+              not a live transaction receipt.</em
+            >
+          </p>
+          <h2>What happens after the final whistle?</h2>
+          <p>
+            The configured football oracle reports results. CKB contracts enforce the resulting
+            settlement and payout rules, creating separate claims that users can collect
+            independently.
+          </p>
+          <p>
+            Winning positions receive their calculated return and recoverable storage. Losing
+            positions still recover their storage deposit. Collection also has a network fee, shown
+            before signing. Void, timeout and late-entry cases follow their respective refund rules.
+          </p>
+          <p>
+            Streak saves signed transaction bytes before submission and follows that original
+            payment during recovery. A lost response should not become another request to pay.
+          </p>
+          <p class="image-slot">[Upload image: <strong>03-activity.png</strong>]</p>
+          <p>
+            <em>The same Activity screen at both sizes, populated with synthetic local history.</em>
+          </p>
+          <h2>Building around CKB, and learning from slow screens</h2>
+          <p>
+            First, provisioning every fixture in advance tied up capacity in markets nobody might
+            use. Now <strong>the first prediction creates an eligible market</strong>, with Streak
+            supplying its reserve capacity. New and existing markets can share one payment.
+          </p>
+          <p>
+            Second, Activity originally searched market by market for a wallet's positions. A
+            central tracking cell looked tempting, but making every update consume and replace the
+            same cell would create contention.
+          </p>
+          <p>
+            The solution combines
+            <strong>shared Rust scripts and separate market, deposit and claim cells</strong> with
+            an event-driven wallet index. Payment and settlement observations update the affected
+            records, so opening Activity becomes a database read. Replay and targeted reconciliation
+            handle missed updates and chain reorganisations.
+          </p>
+          <p>
+            The index makes discovery faster; it cannot grant a payout. Collection still validates
+            actual on-chain spending conditions. The football oracle remains a trust assumption too:
+            the blockchain enforces the rules, but does not independently know the score.
+          </p>
+          <p>
+            <a
+              href="https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/atomic-slip-correction.md"
+              >Prediction architecture</a
+            >
+            ·
+            <a
+              href="https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/event-driven-activity.md"
+              >Activity design and measurements</a
+            >
+          </p>
+          <h2>A reason to come back every gameweek</h2>
+          <p>
+            Predictions are the foundation. Two beta games offer additional ways to join in without
+            placing a stake:
+          </p>
+          <ul>
+            <li>
+              <strong>Streak Five:</strong> pick five EPL players within 40 credits and choose a
+              double-points captain. Real performances earn points, and each gameweek starts fresh.
+              It uses FPL player data and official deadlines, with Streak's own scoring rules.
+              <a href="https://fantasy.premierleague.com/help/rules"
+                >How Fantasy Premier League works</a
+              >.
+            </li>
+            <li>
+              <strong>Survivor:</strong> choose one winning team each round, but never reuse a team.
+              Save a favourite for later or use it to stay alive now.
+              <a
+                href="https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/survivor-implementation.md"
+                >Full Survivor rules</a
+              >.
+            </li>
+          </ul>
+          <p class="image-slot">[Upload image: <strong>04-streak-five.png</strong>]</p>
+          <p>
+            <em>The actual Five interface at both sizes, using isolated sample gameweek data.</em>
+          </p>
+          <p class="image-slot">[Upload image: <strong>05-streak-survivor.png</strong>]</p>
+          <p>
+            <em
+              >The actual Survivor interface at both sizes, using an isolated sample
+              competition.</em
+            >
+          </p>
+          <p>
+            Sponsored Five gameweeks offer a <strong>fixed tCKB reward pool</strong>. Under the
+            default terms, the top 5% qualify and share it in proportion to their points. The
+            published gameweek rules govern eligibility; unsponsored weeks remain playable without a
+            promised prize.
+          </p>
+          <p>
+            Anyone can bid to sponsor an eligible week, subject to its minimum. Top-ups combine, the
+            winning eligible bid funds the pool, and losing bids are refunded. Sponsors can add a
+            logo, website and introduction, or contribute without branding. These rewards use a
+            disclosed <strong>custodial testnet wallet</strong>, separate from prediction contracts.
+          </p>
+          <h2>Come try one prediction</h2>
+          <p>
+            The latest local release passed <strong>77 required checks</strong>, covering databases,
+            browsers, Rust contracts and signed local-chain scenarios. Its newest Five live-points
+            view and Survivor creator prizes are committed but not yet deployed; hosted Survivor
+            funding and payout acceptance remain ahead.
+          </p>
+          <p>
+            Open <strong><a href="https://streakpitch.com">streakpitch.com</a></strong
+            >, head to <strong>Markets</strong>, and explore an open fixture. Make a testnet
+            prediction and follow it through Activity. Five offers a free alternative if you prefer
+            to start with fantasy football.
+          </p>
+          <p>
+            I'd welcome football fans trying the experience, developers reviewing the contracts, and
+            CKB projects interested in sponsoring a gameweek.
+          </p>
+          <p>
+            <strong>Try one prediction and tell me where the experience becomes unclear.</strong>
+          </p>
+          <p>
+            <a href="https://github.com/HeySomtee/ckbuilder">Source code</a> ·
+            <a href="https://github.com/HeySomtee/ckbuilder/blob/main/reports/week-22.md"
+              >Development report</a
+            >
+          </p>
+        </article>
+      </section>
+      <section id="forum-text" hidden>
+        <div class="title-panel">
+          <small>TOPIC TITLE</small>
+          <h1>Introducing Streak: your matchday predictions, settled on CKB</h1>
+          <button type="button" data-copy="title" data-id="forum-text">Copy title</button>
+        </div>
+        <div class="tools">
+          <button type="button" class="primary" data-copy="formatted" data-id="forum-text">
+            Copy formatted body</button
+          ><button type="button" data-copy="markdown" data-id="forum-text">
+            Copy Markdown body</button
+          ><button type="button" data-select="forum-text">Select body</button>
+        </div>
+        <article id="forum-text-body" tabindex="-1" aria-label="Nervos Talk: text only post body">
+          <p>Home win, a stubborn draw, or the upset everyone else dismissed?</p>
+          <p>
+            I'm building <strong>Streak</strong> to give your predictions a complete on-chain
+            journey: choose an outcome, fund your position, follow the match and collect your
+            return.
+          </p>
+          <p>
+            Streak is a football prediction platform on <strong>CKB testnet</strong>, with free
+            weekly fantasy and Survivor games alongside its markets. Payments and rewards currently
+            use <strong>testnet tCKB</strong>, not real-money prizes.
+          </p>
+          <h2>One slip for your matchday</h2>
+          <p>
+            Browse by day or league, open a fixture and choose Home, Draw or Away. Pool information
+            shows how participating stakes are distributed; your potential return depends on the
+            final pool and published rules.
+          </p>
+          <p>
+            Put up to
+            <strong>eight predictions into one slip and approve one wallet payment</strong>. Each
+            settles independently: one wrong call does not cancel another winning position.
+          </p>
+          <p>
+            Before signing, review your stakes, network fee and refundable CKB storage. A 100 tCKB
+            prediction currently requires another
+            <strong>321 tCKB in refundable position storage</strong>, plus its fee. The wallet total
+            should never be a surprise.
+          </p>
+          <p>
+            Activity keeps accepted positions, pending transactions and collectable returns
+            together, without requiring you to become a blockchain explorer expert.
+          </p>
+          <h2>Keep browsing while your payment confirms</h2>
+          <p>
+            Recent wallet work covers restoring authorized connections, switching accounts,
+            retaining drafts and recovering interrupted submissions.
+          </p>
+          <p>
+            On mobile, minimize a pending payment into an animated
+            <strong>three-cell tracker</strong>. Move it to a corner and tap for details. Monitoring
+            continues while you browse, avoiding the slip, navigation and dialogs.
+          </p>
+          <h2>What happens after the final whistle?</h2>
+          <p>
+            The configured football oracle reports results. CKB contracts enforce the resulting
+            settlement and payout rules, creating separate claims that users can collect
+            independently.
+          </p>
+          <p>
+            Winning positions receive their calculated return and recoverable storage. Losing
+            positions still recover their storage deposit. Collection also has a network fee, shown
+            before signing. Void, timeout and late-entry cases follow their respective refund rules.
+          </p>
+          <p>
+            Streak saves signed transaction bytes before submission and follows that original
+            payment during recovery. A lost response should not become another request to pay.
+          </p>
+          <h2>Building around CKB, and learning from slow screens</h2>
+          <p>
+            First, provisioning every fixture in advance tied up capacity in markets nobody might
+            use. Now <strong>the first prediction creates an eligible market</strong>, with Streak
+            supplying its reserve capacity. New and existing markets can share one payment.
+          </p>
+          <p>
+            Second, Activity originally searched market by market for a wallet's positions. A
+            central tracking cell looked tempting, but making every update consume and replace the
+            same cell would create contention.
+          </p>
+          <p>
+            The solution combines
+            <strong>shared Rust scripts and separate market, deposit and claim cells</strong> with
+            an event-driven wallet index. Payment and settlement observations update the affected
+            records, so opening Activity becomes a database read. Replay and targeted reconciliation
+            handle missed updates and chain reorganisations.
+          </p>
+          <p>
+            The index makes discovery faster; it cannot grant a payout. Collection still validates
+            actual on-chain spending conditions. The football oracle remains a trust assumption too:
+            the blockchain enforces the rules, but does not independently know the score.
+          </p>
+          <h2>A reason to come back every gameweek</h2>
+          <p>
+            Predictions are the foundation. Two beta games offer additional ways to join in without
+            placing a stake:
+          </p>
+          <ul>
+            <li>
+              <strong>Streak Five:</strong> pick five EPL players within 40 credits and choose a
+              double-points captain. Real performances earn points, and each gameweek starts fresh.
+              It uses FPL player data and official deadlines, with Streak's own scoring rules.
+            </li>
+            <li>
+              <strong>Survivor:</strong> choose one winning team each round, but never reuse a team.
+              Save a favourite for later or use it to stay alive now.
+            </li>
+          </ul>
+          <p>
+            Sponsored Five gameweeks offer a <strong>fixed tCKB reward pool</strong>. Under the
+            default terms, the top 5% qualify and share it in proportion to their points. The
+            published gameweek rules govern eligibility; unsponsored weeks remain playable without a
+            promised prize.
+          </p>
+          <p>
+            Anyone can bid to sponsor an eligible week, subject to its minimum. Top-ups combine, the
+            winning eligible bid funds the pool, and losing bids are refunded. Sponsors can add a
+            logo, website and introduction, or contribute without branding. These rewards use a
+            disclosed <strong>custodial testnet wallet</strong>, separate from prediction contracts.
+          </p>
+          <h2>Come try one prediction</h2>
+          <p>
+            The latest local release passed <strong>77 required checks</strong>, covering databases,
+            browsers, Rust contracts and signed local-chain scenarios. Its newest Five live-points
+            view and Survivor creator prizes are committed but not yet deployed; hosted Survivor
+            funding and payout acceptance remain ahead.
+          </p>
+          <p>
+            In Streak, head to <strong>Markets</strong> and explore an open fixture. Make a testnet
+            prediction and follow it through Activity. Five offers a free alternative if you prefer
+            to start with fantasy football.
+          </p>
+          <p>
+            I'd welcome football fans trying the experience, developers reviewing the contracts, and
+            CKB projects interested in sponsoring a gameweek.
+          </p>
+          <p>
+            <strong>Try one prediction and tell me where the experience becomes unclear.</strong>
+          </p>
+        </article>
+      </section>
+      <section id="github" hidden>
+        <div class="title-panel">
+          <small>TOPIC TITLE</small>
+          <h1>
+            Streak update: faster wallet history, recoverable payments and a growing football app
+          </h1>
+          <button type="button" data-copy="title" data-id="github">Copy title</button>
+        </div>
+        <div class="tools">
+          <button type="button" class="primary" data-copy="formatted" data-id="github">
+            Copy formatted body</button
+          ><button type="button" data-copy="markdown" data-id="github">Copy Markdown body</button
+          ><button type="button" data-select="github">Select body</button>
+        </div>
+        <article id="github-body" tabindex="-1" aria-label="GitHub issue post body">
+          <p>
+            Streak now has its own home:
+            <strong><a href="https://streakpitch.com">streakpitch.com</a></strong
+            >. Recent work has focused on the complete prediction journey: entering a market,
+            following a payment, finding a return and collecting it reliably.
+          </p>
+          <p class="image-slot">[Upload image: <strong>01-markets.png</strong>]</p>
+          <p>
+            <em
+              >Actual app components with synthetic local fixtures, shown on desktop and mobile.
+              These screenshots are interface demonstrations, not evidence of live payments.</em
+            >
+          </p>
+          <h2>One payment, independent positions</h2>
+          <p>
+            The latest prediction protocol supports
+            <strong>up to eight independent picks in one wallet payment</strong>, including a
+            mixture of new and existing markets. Each position later settles separately.
+          </p>
+          <p>
+            I changed provisioning so that the first prediction creates an eligible market, with
+            Streak supplying its reserve capacity. That avoids locking capacity into every scheduled
+            fixture before anyone participates.
+          </p>
+          <p>
+            The user supplies the stake,
+            <strong>321 tCKB of refundable position storage per pick</strong>, and the reviewed
+            network fee. Shared Rust scripts validate separate market, deposit-shard and claim
+            cells. Earlier contract versions retain their original recovery paths; refactoring the
+            app must not strand existing positions.
+          </p>
+          <p>
+            <a
+              href="https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/atomic-slip-correction.md"
+              >Contract architecture, deployment and verification</a
+            >
+          </p>
+          <h2>A slow Activity page changed the architecture</h2>
+          <p>
+            Originally, Activity searched market by market to find a wallet's positions. A central
+            on-chain registry seemed like a shortcut, but requiring every update to consume and
+            replace one shared cell would introduce contention between unrelated users.
+          </p>
+          <p>
+            I kept independent on-chain state and added an
+            <strong>event-driven wallet index</strong>. Payment and lifecycle observations update
+            PostgreSQL records; a changed market is reconstructed once for all its participants.
+            Activity retrieves the wallet's history in one request, with prefetch starting after
+            sign-in.
+          </p>
+          <p>
+            Durable event replay and targeted reconciliation cover missed updates and
+            reorganisations. The index helps discover a claim; it cannot authorize spending.
+            Collection still validates the live cells, recipient, amount and fee inputs.
+          </p>
+          <p>
+            A synthetic 24-market read measured roughly
+            <strong>18–34 ms locally with zero chain reads</strong>. That is an isolated
+            measurement, not a hosted latency promise.
+          </p>
+          <p class="image-slot">[Upload image: <strong>03-activity.png</strong>]</p>
+          <p>
+            <em
+              >Synthetic local history demonstrating the same Activity interface at both sizes.</em
+            >
+          </p>
+          <p>
+            <a
+              href="https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/event-driven-activity.md"
+              >Index design and evidence</a
+            >
+          </p>
+          <h2>Refunds, payouts and interrupted payments</h2>
+          <p>
+            The configured football oracle remains trusted for results. Contracts enforce settlement
+            accounting and create independently spendable claims: winners receive their calculated
+            returns and recoverable storage; losing positions recover their storage. Collection has
+            a separately reviewed network fee. Void, timeout and late-entry cases retain their
+            respective refund paths.
+          </p>
+          <p>
+            Signed transaction bytes are saved before submission. Interrupted requests recover the
+            original payment instead of immediately requesting another signature. On mobile, pending
+            tracking can shrink into a movable three-cell indicator while monitoring continues; it
+            expands on tap and avoids other controls.
+          </p>
+          <p class="image-slot">[Upload image: <strong>02-payment-tracking.png</strong>]</p>
+          <p><em>Synthetic pending-payment state, including the compact mobile tracker.</em></p>
+          <h2>Additional ways to participate</h2>
+          <p>
+            <strong>Five</strong> is free weekly fantasy football: five EPL players, a budget and a
+            double-points captain. It uses FPL player data and official deadlines, with Streak's own
+            scoring rules.
+            <a href="https://fantasy.premierleague.com/help/rules">FPL introduction and rules</a>.
+          </p>
+          <p class="image-slot">[Upload image: <strong>04-streak-five.png</strong>]</p>
+          <p>
+            <em>The actual Five interface at both sizes, using isolated sample gameweek data.</em>
+          </p>
+          <p>
+            <strong>Survivor</strong> asks players to choose a winning team each round without
+            reusing teams.
+            <a
+              href="https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/survivor-implementation.md"
+              >Rules and implementation</a
+            >.
+          </p>
+          <p class="image-slot">[Upload image: <strong>05-streak-survivor.png</strong>]</p>
+          <p>
+            <em
+              >The actual Survivor interface at both sizes, using an isolated sample
+              competition.</em
+            >
+          </p>
+          <p>
+            Five sponsorship auctions fund fixed reward pools, with losing bids refunded. Fantasy
+            state is off-chain, and rewards use a disclosed custodial testnet wallet, separate from
+            prediction contracts.
+          </p>
+          <h2>Verification and next milestone</h2>
+          <p>
+            The latest local release passed <strong>all 77 required checks</strong>, including
+            database, browser, contract and signed local-chain scenarios. Runtime commit
+            <code>948fb1c</code> adds Survivor creator prizes and Five's post-deadline team/points
+            view; <code>cc994c6</code> records verification. Both are
+            <strong>not yet pushed or deployed</strong>.
+          </p>
+          <p>
+            Hosted Survivor funding and payout acceptance remain outstanding. My next milestone is
+            completing those hosted journeys with traceable results. I welcome the acceptance team's
+            feedback on the architecture and evidence most useful for review.
+          </p>
+          <p>
+            <a href="https://github.com/HeySomtee/ckbuilder/blob/main/reports/week-22.md"
+              >Week 22 report</a
+            >
+            · <a href="https://github.com/HeySomtee/ckbuilder">Source code</a>
+          </p>
+        </article>
+      </section>
+    </main>
+    <script>
+      const drafts = {
+        forum: {
+          title: 'Introducing Streak: your matchday predictions, settled on CKB',
+          body: "Home win, a stubborn draw, or the upset everyone else dismissed?\n\nI'm building **[Streak](https://streakpitch.com)** to give your predictions a complete on-chain journey: choose an outcome, fund your position, follow the match and collect your return.\n\nStreak is a football prediction platform on **CKB testnet**, with free weekly fantasy and Survivor games alongside its markets. Payments and rewards currently use **testnet tCKB**, not real-money prizes.\n\n![Streak prediction market on desktop and mobile](../assets/community-2026-10-31/01-markets.png)\n\n_Desktop and mobile views of the actual app, using synthetic local fixtures for this gallery._\n\n## One slip for your matchday\n\nBrowse by day or league, open a fixture and choose Home, Draw or Away. Pool information shows how participating stakes are distributed; your potential return depends on the final pool and published rules.\n\nPut up to **eight predictions into one slip and approve one wallet payment**. Each settles independently: one wrong call does not cancel another winning position.\n\nBefore signing, review your stakes, network fee and refundable CKB storage. A 100 tCKB prediction currently requires another **321 tCKB in refundable position storage**, plus its fee. The wallet total should never be a surprise.\n\nActivity keeps accepted positions, pending transactions and collectable returns together, without requiring you to become a blockchain explorer expert.\n\n## Keep browsing while your payment confirms\n\nRecent wallet work covers restoring authorized connections, switching accounts, retaining drafts and recovering interrupted submissions.\n\nOn mobile, minimize a pending payment into an animated **three-cell tracker**. Move it to a corner and tap for details. Monitoring continues while you browse, avoiding the slip, navigation and dialogs.\n\n![Desktop payment tracking beside the mobile compact tracker](../assets/community-2026-10-31/02-payment-tracking.png)\n\n_A synthetic pending payment demonstrates the tracker. This is an interface capture, not a live transaction receipt._\n\n## What happens after the final whistle?\n\nThe configured football oracle reports results. CKB contracts enforce the resulting settlement and payout rules, creating separate claims that users can collect independently.\n\nWinning positions receive their calculated return and recoverable storage. Losing positions still recover their storage deposit. Collection also has a network fee, shown before signing. Void, timeout and late-entry cases follow their respective refund rules.\n\nStreak saves signed transaction bytes before submission and follows that original payment during recovery. A lost response should not become another request to pay.\n\n![Activity and collectable returns on desktop and mobile](../assets/community-2026-10-31/03-activity.png)\n\n_The same Activity screen at both sizes, populated with synthetic local history._\n\n## Building around CKB, and learning from slow screens\n\nFirst, provisioning every fixture in advance tied up capacity in markets nobody might use. Now **the first prediction creates an eligible market**, with Streak supplying its reserve capacity. New and existing markets can share one payment.\n\nSecond, Activity originally searched market by market for a wallet's positions. A central tracking cell looked tempting, but making every update consume and replace the same cell would create contention.\n\nThe solution combines **shared Rust scripts and separate market, deposit and claim cells** with an event-driven wallet index. Payment and settlement observations update the affected records, so opening Activity becomes a database read. Replay and targeted reconciliation handle missed updates and chain reorganisations.\n\nThe index makes discovery faster; it cannot grant a payout. Collection still validates actual on-chain spending conditions. The football oracle remains a trust assumption too: the blockchain enforces the rules, but does not independently know the score.\n\n[Prediction architecture](https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/atomic-slip-correction.md) · [Activity design and measurements](https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/event-driven-activity.md)\n\n## A reason to come back every gameweek\n\nPredictions are the foundation. Two beta games offer additional ways to join in without placing a stake:\n\n- **Streak Five:** pick five EPL players within 40 credits and choose a double-points captain. Real performances earn points, and each gameweek starts fresh. It uses FPL player data and official deadlines, with Streak's own scoring rules. [How Fantasy Premier League works](https://fantasy.premierleague.com/help/rules).\n- **Survivor:** choose one winning team each round, but never reuse a team. Save a favourite for later or use it to stay alive now. [Full Survivor rules](https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/survivor-implementation.md).\n\n![Streak Five on desktop and mobile](../assets/community-2026-10-31/04-streak-five.png)\n\n_The actual Five interface at both sizes, using isolated sample gameweek data._\n\n![Streak Survivor on desktop and mobile](../assets/community-2026-10-31/05-streak-survivor.png)\n\n_The actual Survivor interface at both sizes, using an isolated sample competition._\n\nSponsored Five gameweeks offer a **fixed tCKB reward pool**. Under the default terms, the top 5% qualify and share it in proportion to their points. The published gameweek rules govern eligibility; unsponsored weeks remain playable without a promised prize.\n\nAnyone can bid to sponsor an eligible week, subject to its minimum. Top-ups combine, the winning eligible bid funds the pool, and losing bids are refunded. Sponsors can add a logo, website and introduction, or contribute without branding. These rewards use a disclosed **custodial testnet wallet**, separate from prediction contracts.\n\n## Come try one prediction\n\nThe latest local release passed **77 required checks**, covering databases, browsers, Rust contracts and signed local-chain scenarios. Its newest Five live-points view and Survivor creator prizes are committed but not yet deployed; hosted Survivor funding and payout acceptance remain ahead.\n\nOpen **[streakpitch.com](https://streakpitch.com)**, head to **Markets**, and explore an open fixture. Make a testnet prediction and follow it through Activity. Five offers a free alternative if you prefer to start with fantasy football.\n\nI'd welcome football fans trying the experience, developers reviewing the contracts, and CKB projects interested in sponsoring a gameweek.\n\n**Try one prediction and tell me where the experience becomes unclear.**\n\n[Source code](https://github.com/HeySomtee/ckbuilder) · [Development report](https://github.com/HeySomtee/ckbuilder/blob/main/reports/week-22.md)",
+        },
+        'forum-text': {
+          title: 'Introducing Streak: your matchday predictions, settled on CKB',
+          body: "Home win, a stubborn draw, or the upset everyone else dismissed?\n\nI'm building **Streak** to give your predictions a complete on-chain journey: choose an outcome, fund your position, follow the match and collect your return.\n\nStreak is a football prediction platform on **CKB testnet**, with free weekly fantasy and Survivor games alongside its markets. Payments and rewards currently use **testnet tCKB**, not real-money prizes.\n\n## One slip for your matchday\n\nBrowse by day or league, open a fixture and choose Home, Draw or Away. Pool information shows how participating stakes are distributed; your potential return depends on the final pool and published rules.\n\nPut up to **eight predictions into one slip and approve one wallet payment**. Each settles independently: one wrong call does not cancel another winning position.\n\nBefore signing, review your stakes, network fee and refundable CKB storage. A 100 tCKB prediction currently requires another **321 tCKB in refundable position storage**, plus its fee. The wallet total should never be a surprise.\n\nActivity keeps accepted positions, pending transactions and collectable returns together, without requiring you to become a blockchain explorer expert.\n\n## Keep browsing while your payment confirms\n\nRecent wallet work covers restoring authorized connections, switching accounts, retaining drafts and recovering interrupted submissions.\n\nOn mobile, minimize a pending payment into an animated **three-cell tracker**. Move it to a corner and tap for details. Monitoring continues while you browse, avoiding the slip, navigation and dialogs.\n\n## What happens after the final whistle?\n\nThe configured football oracle reports results. CKB contracts enforce the resulting settlement and payout rules, creating separate claims that users can collect independently.\n\nWinning positions receive their calculated return and recoverable storage. Losing positions still recover their storage deposit. Collection also has a network fee, shown before signing. Void, timeout and late-entry cases follow their respective refund rules.\n\nStreak saves signed transaction bytes before submission and follows that original payment during recovery. A lost response should not become another request to pay.\n\n## Building around CKB, and learning from slow screens\n\nFirst, provisioning every fixture in advance tied up capacity in markets nobody might use. Now **the first prediction creates an eligible market**, with Streak supplying its reserve capacity. New and existing markets can share one payment.\n\nSecond, Activity originally searched market by market for a wallet's positions. A central tracking cell looked tempting, but making every update consume and replace the same cell would create contention.\n\nThe solution combines **shared Rust scripts and separate market, deposit and claim cells** with an event-driven wallet index. Payment and settlement observations update the affected records, so opening Activity becomes a database read. Replay and targeted reconciliation handle missed updates and chain reorganisations.\n\nThe index makes discovery faster; it cannot grant a payout. Collection still validates actual on-chain spending conditions. The football oracle remains a trust assumption too: the blockchain enforces the rules, but does not independently know the score.\n\n## A reason to come back every gameweek\n\nPredictions are the foundation. Two beta games offer additional ways to join in without placing a stake:\n\n- **Streak Five:** pick five EPL players within 40 credits and choose a double-points captain. Real performances earn points, and each gameweek starts fresh. It uses FPL player data and official deadlines, with Streak's own scoring rules.\n- **Survivor:** choose one winning team each round, but never reuse a team. Save a favourite for later or use it to stay alive now.\n\nSponsored Five gameweeks offer a **fixed tCKB reward pool**. Under the default terms, the top 5% qualify and share it in proportion to their points. The published gameweek rules govern eligibility; unsponsored weeks remain playable without a promised prize.\n\nAnyone can bid to sponsor an eligible week, subject to its minimum. Top-ups combine, the winning eligible bid funds the pool, and losing bids are refunded. Sponsors can add a logo, website and introduction, or contribute without branding. These rewards use a disclosed **custodial testnet wallet**, separate from prediction contracts.\n\n## Come try one prediction\n\nThe latest local release passed **77 required checks**, covering databases, browsers, Rust contracts and signed local-chain scenarios. Its newest Five live-points view and Survivor creator prizes are committed but not yet deployed; hosted Survivor funding and payout acceptance remain ahead.\n\nIn Streak, head to **Markets** and explore an open fixture. Make a testnet prediction and follow it through Activity. Five offers a free alternative if you prefer to start with fantasy football.\n\nI'd welcome football fans trying the experience, developers reviewing the contracts, and CKB projects interested in sponsoring a gameweek.\n\n**Try one prediction and tell me where the experience becomes unclear.**",
+        },
+        github: {
+          title:
+            'Streak update: faster wallet history, recoverable payments and a growing football app',
+          body: "Streak now has its own home: **[streakpitch.com](https://streakpitch.com)**. Recent work has focused on the complete prediction journey: entering a market, following a payment, finding a return and collecting it reliably.\n\n![Streak prediction market, desktop and mobile side by side](../assets/community-2026-10-31/01-markets.png)\n\n_Actual app components with synthetic local fixtures, shown on desktop and mobile. These screenshots are interface demonstrations, not evidence of live payments._\n\n## One payment, independent positions\n\nThe latest prediction protocol supports **up to eight independent picks in one wallet payment**, including a mixture of new and existing markets. Each position later settles separately.\n\nI changed provisioning so that the first prediction creates an eligible market, with Streak supplying its reserve capacity. That avoids locking capacity into every scheduled fixture before anyone participates.\n\nThe user supplies the stake, **321 tCKB of refundable position storage per pick**, and the reviewed network fee. Shared Rust scripts validate separate market, deposit-shard and claim cells. Earlier contract versions retain their original recovery paths; refactoring the app must not strand existing positions.\n\n[Contract architecture, deployment and verification](https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/atomic-slip-correction.md)\n\n## A slow Activity page changed the architecture\n\nOriginally, Activity searched market by market to find a wallet's positions. A central on-chain registry seemed like a shortcut, but requiring every update to consume and replace one shared cell would introduce contention between unrelated users.\n\nI kept independent on-chain state and added an **event-driven wallet index**. Payment and lifecycle observations update PostgreSQL records; a changed market is reconstructed once for all its participants. Activity retrieves the wallet's history in one request, with prefetch starting after sign-in.\n\nDurable event replay and targeted reconciliation cover missed updates and reorganisations. The index helps discover a claim; it cannot authorize spending. Collection still validates the live cells, recipient, amount and fee inputs.\n\nA synthetic 24-market read measured roughly **18–34 ms locally with zero chain reads**. That is an isolated measurement, not a hosted latency promise.\n\n![Streak wallet activity, desktop and mobile side by side](../assets/community-2026-10-31/03-activity.png)\n\n_Synthetic local history demonstrating the same Activity interface at both sizes._\n\n[Index design and evidence](https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/event-driven-activity.md)\n\n## Refunds, payouts and interrupted payments\n\nThe configured football oracle remains trusted for results. Contracts enforce settlement accounting and create independently spendable claims: winners receive their calculated returns and recoverable storage; losing positions recover their storage. Collection has a separately reviewed network fee. Void, timeout and late-entry cases retain their respective refund paths.\n\nSigned transaction bytes are saved before submission. Interrupted requests recover the original payment instead of immediately requesting another signature. On mobile, pending tracking can shrink into a movable three-cell indicator while monitoring continues; it expands on tap and avoids other controls.\n\n![Streak payment tracking, desktop and mobile side by side](../assets/community-2026-10-31/02-payment-tracking.png)\n\n_Synthetic pending-payment state, including the compact mobile tracker._\n\n## Additional ways to participate\n\n**Five** is free weekly fantasy football: five EPL players, a budget and a double-points captain. It uses FPL player data and official deadlines, with Streak's own scoring rules. [FPL introduction and rules](https://fantasy.premierleague.com/help/rules).\n\n![Streak Five on desktop and mobile](../assets/community-2026-10-31/04-streak-five.png)\n\n_The actual Five interface at both sizes, using isolated sample gameweek data._\n\n**Survivor** asks players to choose a winning team each round without reusing teams. [Rules and implementation](https://github.com/HeySomtee/ckbuilder/blob/main/products/streak/docs/delivery/survivor-implementation.md).\n\n![Streak Survivor on desktop and mobile](../assets/community-2026-10-31/05-streak-survivor.png)\n\n_The actual Survivor interface at both sizes, using an isolated sample competition._\n\nFive sponsorship auctions fund fixed reward pools, with losing bids refunded. Fantasy state is off-chain, and rewards use a disclosed custodial testnet wallet, separate from prediction contracts.\n\n## Verification and next milestone\n\nThe latest local release passed **all 77 required checks**, including database, browser, contract and signed local-chain scenarios. Runtime commit `948fb1c` adds Survivor creator prizes and Five's post-deadline team/points view; `cc994c6` records verification. Both are **not yet pushed or deployed**.\n\nHosted Survivor funding and payout acceptance remain outstanding. My next milestone is completing those hosted journeys with traceable results. I welcome the acceptance team's feedback on the architecture and evidence most useful for review.\n\n[Week 22 report](https://github.com/HeySomtee/ckbuilder/blob/main/reports/week-22.md) · [Source code](https://github.com/HeySomtee/ckbuilder)",
+        },
+      };
+      const status = document.getElementById('status');
+      function selectBody(id) {
+        const body = document.getElementById(id + '-body');
+        body.focus({ preventScroll: true });
+        const range = document.createRange();
+        range.selectNodeContents(body);
+        const selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return body;
+      }
+      for (const button of document.querySelectorAll('[data-show]'))
+        button.addEventListener('click', () => {
+          for (const section of document.querySelectorAll('main>section'))
+            section.hidden = section.id !== button.dataset.show;
+          for (const tab of document.querySelectorAll('[data-show]'))
+            tab.setAttribute('aria-pressed', String(tab === button));
+          status.textContent = '';
+        });
+      for (const button of document.querySelectorAll('[data-select]'))
+        button.addEventListener('click', () => {
+          selectBody(button.dataset.select);
+          status.textContent =
+            'Post body selected. Press Ctrl+C, then paste into the rich-text editor.';
+        });
+      for (const button of document.querySelectorAll('[data-copy]'))
+        button.addEventListener('click', async () => {
+          const id = button.dataset.id;
+          const mode = button.dataset.copy;
+          const body = document.getElementById(id + '-body');
+          try {
+            if (mode === 'formatted') {
+              if (navigator.clipboard?.write && window.ClipboardItem) {
+                await navigator.clipboard.write([
+                  new ClipboardItem({
+                    'text/html': new Blob([body.innerHTML], { type: 'text/html' }),
+                    'text/plain': new Blob([body.innerText], { type: 'text/plain' }),
+                  }),
+                ]);
+              } else {
+                selectBody(id);
+                if (!document.execCommand('copy')) throw new Error('Copy blocked');
+              }
+            } else {
+              await navigator.clipboard.writeText(
+                mode === 'title' ? drafts[id].title : drafts[id].body,
+              );
+            }
+            status.textContent =
+              mode === 'title'
+                ? 'Title copied. Paste it into the topic title field.'
+                : mode === 'formatted'
+                  ? id === 'forum-text'
+                    ? 'Formatted body copied. Paste into A / rich-text mode. This version has no links or images.'
+                    : 'Formatted body copied. Paste into A / rich-text mode, then upload the images.'
+                  : id === 'forum-text'
+                    ? 'Markdown body copied. Paste into Markdown mode. This version has no links or images.'
+                    : 'Markdown body copied. Paste into Markdown mode, then upload the images.';
+          } catch {
+            if (mode === 'formatted') {
+              selectBody(id);
+              status.textContent =
+                'Automatic copying was blocked. The body is selected: press Ctrl+C.';
+            } else {
+              status.textContent =
+                'Automatic copying was blocked. Select the title above or open the Markdown draft from the publishing guide.';
+            }
+          }
+        });
+    </script>
+  </body>
+</html>

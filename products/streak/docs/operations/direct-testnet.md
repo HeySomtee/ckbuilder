@@ -2,6 +2,12 @@
 
 This runbook covers direct positions, sponsored creation, atomic v4 entry and recovery across retained generations. Market descriptors retain the `testnet-v1` format and pinned deployment hashes; atomic offers and browser records use `atomic-predictions-v1`. The API serves real fixture terms and proxies authenticated requests to a separate sponsor. Wallets authorize their own exact contribution, and claims remain independent CKB transactions.
 
+6 November 2026 update: Linux settlement scheduling now uses an OS-held lock that
+releases when its worker dies. Financial mutation and publication locks retain
+their separate recovery requirements. See [hosted worker recovery and readiness](../delivery/hosted-worker-efficiency.md)
+for implementation and isolated process-test evidence. This update does not claim
+that the refactor has been deployed.
+
 The current v4 deployment is output 0 of [transaction 930bba6c](https://pudge.explorer.nervos.org/transaction/0x930bba6cce8cd6b1dc254cc3469249d7ba32f09b44bc20ea784f45e172cd606f), with 13 canonical confirmations observed for the delivery record. Its protocol hash is `0x6c03d7942bd133c713c501df7a6e263699a0ea731339eda993548640e900405c`. The unchanged guard remains at output 1 of transaction `0xb05048b11a78fc9697c1235ec4e114f2f762559cb9652b61552bc87e8c3fde11`. V1, v2 and v3 mappings remain pinned for existing positions and exits. Public code deployment and local application activation are complete. All 47 local major-gate steps passed at 19:33 UTC on 16 October. The API, separate sponsor and lifecycle worker are active locally. Phone and desktop live-provider checks passed with no page errors, distinct Wallet/Activity routes and preserved drafts. Exact-candidate commit and push gates remain mandatory. See the [atomic delivery record](../delivery/atomic-slip-correction.md).
 
 ## Protocol and pilot bounds
@@ -181,7 +187,17 @@ The worker handles lifecycle duties before provisioning. It selects at most four
 
 Four due records and one creation are work budgets, not a one-minute completion guarantee. An overlapping invocation fails the worker lease. If all 256 current markets become due together, one lifecycle round still needs 64 successful invocations; future markets do not add that delay. Creation also waits for confirmations and can require hours for a large catalogue. Monitor actual deadline coverage and funding progress before inviting a cohort. Closed markets remain discoverable for claims; do not delete funded mappings to improve polling speed.
 
-The worker holds only `worker-lease/operator.lock` while scheduling. Each signing command separately acquires the shared journal's `operator.lock`, then releases it before returning. The worker does not acquire that mutation lease around a recursive `runOperator` call. This permits the serial workflow while excluding a competing signer. A local supervisor can invoke `--once` repeatedly without registering a service; stopping that supervisor or suspending the computer stops automated processing.
+On Linux, the worker holds an OS lock on
+`worker-lease/scheduler.flock` throughout its scheduling pass. The file remains on
+disk after the lock releases; its existence does not indicate a running worker.
+Never unlink or replace it to clear a lock, because competing processes could then
+lock different inodes. The worker requires `flock` at `/usr/bin/flock` or
+`/bin/flock`. Windows and other local platforms retain the conservative
+`worker-lease/operator.lock` fallback. Each signing command separately acquires the
+shared journal's financial `operator.lock`, then releases it before returning. The
+worker does not acquire that mutation lease around a recursive `runOperator` call.
+A local supervisor can invoke `--once` repeatedly without registering a service;
+stopping that supervisor or suspending the computer stops automated processing.
 
 Provider failure cannot become a winning result and does not disable the timeout path. Pending, rejected, conflicting or uncertain signed jobs need review. The worker never assumes that an unknown broadcast failed and silently creates another spend. Monitor failures and deadline coverage. No worker is started by the API or installed as a service by this change.
 
@@ -203,7 +219,21 @@ Before a new signature, every proposed input is also compared against immutable 
 
 A signed creation that remains unconfirmed after its pinned kickoff, or a signed report that remains unconfirmed after the six-hour reporting window, needs manual intervention. Expiry does not cancel signed bytes or release their input reservations. Automatic creation/report resubmission stops when the applicable window closes; the worker cannot silently discard the operation or issue another signature using its funds. Preserve the journal, inspect the canonical original and consuming transactions, and resolve the case before resuming operator funding. An independent keeper can still use the permissionless closure path with its own wallet and journal.
 
-Mutation leases fail closed after a crash. Operator `status` and `reconcile` remain available without that lease. Verify that the old process has stopped and no replacement is running before manually removing an orphan `operator.lock`. The worker lease is under `worker-lease/operator.lock`. There is no automatic stale-lock deletion that could race another process.
+Financial mutation leases fail closed after a crash. Operator `status` and
+`reconcile` remain available without that lease. Verify the old process has stopped,
+no replacement is running and financial recovery requirements are satisfied before
+retiring only its orphan financial `operator.lock`. Signed records and reservations
+must remain intact.
+
+Linux releases the new scheduling lock when the owning descriptor closes, including
+after `SIGKILL`. Leave `worker-lease/scheduler.flock` in place across restarts. An
+older deployment's `worker-lease/operator.lock`, and the Windows fallback, still
+require explicit ownership verification. Startup refuses an existing legacy lock;
+it does not automatically adopt or delete it based on age or PID. Once the prior
+worker is proven stopped, archive that exact scheduling file before migration.
+This does not clear a financial or publication lock, authorize another signature,
+or establish that pending transactions completed. Do not run mixed old/new workers
+against one journal.
 
 This is a single-operator file adapter. Replicated workers need transactional jobs, leases and fencing in PostgreSQL or another reviewed coordinator.
 

@@ -1,0 +1,51 @@
+.five-refund-status {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 12px;
+  font-size: 12px;
+}
+.five-refund-status .five-refund-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.five-refund-heading > svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.five-refund-heading > span:last-child {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.five-refund-status[data-state='returned'] .five-refund-heading {
+  color: var(--mint);
+}
+.five-refund-status summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  min-height: 44px;
+  list-style: none;
+}
+.five-refund-status summary::-webkit-details-marker {
+  display: none;
+}
+.five-refund-status details[open] summary > svg {
+  transform: rotate(180deg);
+}
+.five-refund-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+.five-refund-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+}

@@ -1,5 +1,11 @@
 # Five sponsor auction, 24 October 2026
 
+6 November [refund correction](five-names-pitch-refunds.md): the aggregate sponsor
+banner now follows exact owner credit/payout records instead of treating every
+losing bid as perpetually refunding. Paid refunds stop requeueing; failed unsigned
+requests receive a persisted retry delay so unrelated wallets can proceed.
+Signed-payout recovery and canonical confirmation rules remain unchanged.
+
 The owner requested a highest-bidder sponsorship auction after completing a
 100 tCKB contribution to Gameweek 9. Repeat payments combine into one bid,
 explicitly approved by the owner. Existing published rounds retain their

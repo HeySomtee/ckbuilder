@@ -1,0 +1,95 @@
+{
+  "capturedAt": "2026-10-31T17:42:22.697Z",
+  "sourceCommit": "cc994c69f82cbb3931fd2f81b44bef34580a2e17",
+  "application": "Actual built React Season application from products/streak/public/season",
+  "environment": "Isolated local HTTP server, mocked API responses and synthetic EVM transport. No live chain, wallet, provider, or production funds. No app markup or CSS modifications.",
+  "clubCrests": "Existing local design/account-slip-review/assets club images",
+  "states": {
+    "market": "Representative synthetic Liverpool vs Everton market with synthetic pool chart and scouting",
+    "payment": "Same Liverpool vs Everton market while a synthetic signed Arsenal vs Chelsea payment is held before submission. Actual app payment tracker, minimized mobile orbit loader and saved-slip dock.",
+    "activity": "Representative synthetic indexed wallet record with one open position, one collectible return, and one collected return"
+  },
+  "screenshots": [
+    {
+      "file": "markets-desktop.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "screen": "market",
+      "scrollY": 0,
+      "sha256": "6a98c74f6f9a4f633350b4797acf6c73a418c2a82ebd2da298262a5059fd14b4"
+    },
+    {
+      "file": "payment-tracking-desktop.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "screen": "payment",
+      "scrollY": 0,
+      "sha256": "a3d90c0e52d4477953a9f2178689a7b83aac45cb876a1868abd78c02896bfc9c"
+    },
+    {
+      "file": "activity-desktop.png",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "screen": "activity",
+      "scrollY": 0,
+      "sha256": "77282d77b267144d0fb7bcf19405478778c91917b28fdca4a8efa90d2d003053"
+    },
+    {
+      "file": "markets-mobile.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "screen": "market",
+      "scrollY": 0,
+      "sha256": "2a7dec94ca5ed5e92b2ef2ed172785168fee93fe5de5e7e8fb1f643948e9dbc1"
+    },
+    {
+      "file": "payment-tracking-mobile.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "screen": "payment",
+      "scrollY": 0,
+      "sha256": "47c42d5f258605ca0f46d1f15ebebddf90fcf1239968d1ced4d0a75bc7bf0161"
+    },
+    {
+      "file": "activity-mobile.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "screen": "activity",
+      "scrollY": 285,
+      "sha256": "45d3cc0dc0e47506346de66a0e78ab92a625e55e3da33cb9561f16bf56236af9"
+    }
+  ],
+  "limits": "These images illustrate the implemented UI and synthetic states. They are not evidence of hosted deployment, physical wallet compatibility, actual football predictions, public payments, or return performance.",
+  "timezone": "Africa/Lagos",
+  "sourceHarness": ".quality-artifacts/community-gallery-capture.cjs",
+  "harnessGenerator": ".quality-artifacts/build-community-capture.cjs",
+  "command": "node --require ./scripts/quality/test-env.cjs .quality-artifacts/community-gallery-capture.cjs",
+  "derivedFrom": [
+    "products/streak/scripts/checkout-browser.cjs",
+    "products/streak/scripts/checkout-browser-wallet.mjs",
+    "products/streak/scripts/batch-browser-fixture.mjs",
+    "products/streak/scripts/direct-browser-fixture.mjs"
+  ],
+  "verification": {
+    "browser": "Chromium",
+    "viewports": 2,
+    "pageErrors": 0,
+    "externalRequests": 0,
+    "signedSyntheticPayments": 2,
+    "productionPayments": 0,
+    "sourceOrStyleRewrites": false
+  },
+  "builtDocumentSha256": "a403b343e89943e08143a22098dcd039d1cdb40b8fa9cec948bcc39bba38b170"
+}

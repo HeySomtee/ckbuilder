@@ -75,6 +75,7 @@ module.exports = async function predictionJourney({
       return route.continue();
     });
     await context.routeWebSocket('**/*', (socket) => socket.close());
+    await require('./browser-campaign-fixture.cjs')(context, base);
     const page = await context.newPage();
     const reads = observeReads(page, base);
     let phase = 'load weekend';

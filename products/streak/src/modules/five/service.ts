@@ -20,11 +20,13 @@ import {
   type Score,
   type Stats,
   type Terms,
+  type Round,
 } from './domain';
 import type { FplSeason, ScoutData, PlayerProfile, FixtureSchedule } from './scouting';
 import type { FiveStorage } from './storage';
 import type { FiveFunding } from './funding';
 import type { FiveRewards } from './rewards';
+import type { FiveProfile, FiveProfiles } from './profile';
 export type Actor = { id: string; name: string; wallet: string } | null;
 export interface FiveFeed {
   available: boolean;
@@ -33,6 +35,7 @@ export interface FiveFeed {
   scouting?(): Promise<ScoutData>;
   schedule?(): Promise<FixtureSchedule>;
   profile?(id: number): Promise<PlayerProfile>;
+  nextUpdateAt?(): Promise<number>;
   results(
     event: number,
     terms: Terms,
@@ -46,6 +49,10 @@ export interface FiveFeed {
 export class FiveService {
   private syncing = false;
   private roundCursor = '';
+  private progressDelay = 60_000;
+  nextProgressDelay(): number {
+    return this.progressDelay;
+  }
   private automationState = { state: 'checking', lastSyncedAt: null as string | null, message: '' };
   constructor(
     private readonly store: FiveStorage,
@@ -54,7 +61,13 @@ export class FiveService {
     private readonly funding?: FiveFunding,
     private readonly rewards?: FiveRewards,
     readonly automatic = false,
+    private readonly profiles?: FiveProfiles,
   ) {}
+
+  /** Internal read port; campaign integration cannot mutate the gameweek aggregate. */
+  get campaignStore(): Pick<FiveStorage, 'load' | 'clock' | 'list' | 'subscribe'> {
+    return this.store;
+  }
 
   private async updateScores(
     id: string,
@@ -138,33 +151,126 @@ export class FiveService {
       throw new FiveError('Fixture outlook is temporarily unavailable.', 503);
     return this.feed.schedule();
   }
+  private async scheduledSeason() {
+    if (!this.automatic || !this.feed?.available || !this.feed.season)
+      throw new FiveError(
+        'Automatic EPL gameweeks must be enabled before preparing a gameweek.',
+        503,
+      );
+    const [season, now] = await Promise.all([this.feed.season(), this.store.clock()]);
+    if (
+      !/^\d{4}$/.test(season.season) ||
+      !Array.isArray(season.events) ||
+      !season.events.length ||
+      season.events.length > 38 ||
+      new Set(season.events.map((event) => event.id)).size !== season.events.length ||
+      season.events.some(
+        (event) =>
+          !Number.isSafeInteger(event.id) ||
+          event.id < 1 ||
+          event.id > 38 ||
+          !Number.isFinite(Date.parse(event.deadline)),
+      )
+    )
+      throw new FiveError('The official gameweek schedule is incomplete. Please retry.', 503);
+    return { season, now };
+  }
+
+  /** Real future FPL events; reading the list never opens or freezes a player pool. */
+  async upcomingGameweeks(): Promise<
+    Array<{ id: string; event: number; name: string; lockAt: string }>
+  > {
+    const { season, now } = await this.scheduledSeason();
+    return season.events
+      .filter((event) => !event.finished && Date.parse(event.deadline) > now + 60_000)
+      .sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline))
+      .map((event) => ({
+        id: `fpl-${season.season}-${event.id}`,
+        event: event.id,
+        name: event.name,
+        lockAt: new Date(event.deadline).toISOString(),
+      }));
+  }
+
+  private async ensureScheduledGameweek(
+    season: FplSeason,
+    event: FplSeason['events'][number],
+  ): Promise<Round> {
+    const id = `fpl-${season.season}-${event.id}`;
+    const matches = (round: Round) =>
+      round.id === id &&
+      round.creator === 'fpl-scheduler' &&
+      !round.terms.testingPolicy &&
+      round.terms.source === `FPL event ${event.id}` &&
+      Date.parse(round.terms.lockAt) === Date.parse(event.deadline);
+    const previous = await this.store.load(id);
+    if (previous) {
+      if (!matches(previous))
+        throw new FiveError(
+          'This saved gameweek differs from the official schedule. Review it before continuing.',
+          409,
+        );
+      return previous;
+    }
+    const catalogue = await this.feed!.catalogue(event.id);
+    if (catalogue.testingPolicy)
+      throw new FiveError('Test player pools cannot prepare an official EPL gameweek.', 409);
+    const terms = parseTerms({
+      ...catalogue,
+      sponsorship: true,
+      sponsorshipMode: 'auction',
+    });
+    if (
+      terms.testingPolicy ||
+      terms.source !== `FPL event ${event.id}` ||
+      Date.parse(terms.lockAt) !== Date.parse(event.deadline)
+    )
+      throw new FiveError(
+        'The player pool does not match this official gameweek. Please retry.',
+        503,
+      );
+    if (!affordableSquad(terms.players))
+      throw new FiveError('Player prices cannot form a legal squad.', 503);
+    const round = await this.store.create(id, 'fpl-scheduler', (time) => {
+      if (Date.parse(terms.lockAt) <= time + 60_000)
+        throw new FiveError('The official gameweek deadline is too close.', 409);
+      const created = newRound(id, 'fpl-scheduler', terms, time);
+      created.state = 'open';
+      return created;
+    });
+    if (!matches(round))
+      throw new FiveError('The saved gameweek changed during preparation. Please refresh.', 409);
+    return round;
+  }
+
+  /** Caller must authorize the administrator before invoking this preparation port. */
+  async prepareGameweek(event: number): Promise<void> {
+    integer(event, 1, 38);
+    const { season, now } = await this.scheduledSeason();
+    const selected = season.events.find((item) => item.id === event);
+    if (!selected || selected.finished || Date.parse(selected.deadline) <= now + 60_000)
+      throw new FiveError('Choose an upcoming official gameweek with time left to enter.', 409);
+    const round = await this.ensureScheduledGameweek(season, selected);
+    if (round.state !== 'open')
+      throw new FiveError(
+        'This gameweek is already closed or cancelled and cannot be reopened.',
+        409,
+      );
+  }
+
   async progress() {
     if (!this.automatic || !this.feed?.available || !this.feed.season || this.syncing) return;
     this.syncing = true;
+    this.progressDelay = 60_000;
     try {
-      const season = await this.feed.season(),
-        now = await this.store.clock();
+      const { season, now } = await this.scheduledSeason();
       const next = season.events
         .filter((e) => !e.finished && Date.parse(e.deadline) > now + 60000)
         .sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline))[0];
       let delayed = false;
       if (next) {
         try {
-          const id = 'fpl-' + season.season + '-' + next.id;
-          if (!(await this.store.load(id))) {
-            const terms = parseTerms({
-              ...(await this.feed.catalogue(next.id)),
-              sponsorship: true,
-              sponsorshipMode: 'auction',
-            });
-            if (!affordableSquad(terms.players))
-              throw new FiveError('Player prices cannot form a legal squad.', 503);
-            await this.store.create(id, 'fpl-scheduler', (time) => {
-              const round = newRound(id, 'fpl-scheduler', terms, time);
-              round.state = 'open';
-              return round;
-            });
-          }
+          await this.ensureScheduledGameweek(season, next);
         } catch {
           delayed = true;
         }
@@ -177,6 +283,15 @@ export class FiveService {
             Date.parse(r.lockAt) <= now,
         )
         .sort((a, b) => a.id.localeCompare(b.id));
+      let nextAt = Math.min(
+        now + 15 * 60_000,
+        ...season.events.map((event) => Date.parse(event.deadline)).filter((at) => at > now),
+      );
+      if (pending.length)
+        nextAt = Math.min(
+          nextAt,
+          this.feed.nextUpdateAt ? await this.feed.nextUpdateAt() : now + 60_000,
+        );
       const pivot = pending.findIndex((r) => r.id > this.roundCursor);
       const start = pivot < 0 ? 0 : pivot;
       const rounds = [...pending.slice(start), ...pending.slice(0, start)].slice(0, 6);
@@ -185,6 +300,7 @@ export class FiveService {
         try {
           const current = await this.store.load(summary.id);
           if (!current || current.creator !== 'fpl-scheduler') continue;
+          if (finalizationTime(current) > now) nextAt = Math.min(nextAt, finalizationTime(current));
           const event = season.events.find(
             (e) => String(e.id) === /^FPL event (\d+)$/.exec(current.terms.source)?.[1],
           );
@@ -228,6 +344,7 @@ export class FiveService {
           ? 'Some results are awaiting verified data. Saved squads and points are retained.'
           : '',
       };
+      this.progressDelay = delayed ? 60_000 : Math.max(1000, nextAt - now);
     } catch {
       this.automationState = {
         ...this.automationState,
@@ -246,6 +363,23 @@ export class FiveService {
     if (!this.isAdmin(actor))
       throw new FiveError('Only the configured gameweek admin can do this.', 403);
   }
+  async profile(actor: Actor) {
+    if (!actor) throw new FiveError('Sign in to choose your FPL name.', 401);
+    if (!this.profiles)
+      throw new FiveError('FPL names are temporarily unavailable. Please retry.', 503);
+    return this.profiles.get(actor.id);
+  }
+  async saveProfile(actor: Actor, displayName: unknown) {
+    if (!actor) throw new FiveError('Sign in to choose your FPL name.', 401);
+    if (!this.profiles)
+      throw new FiveError('FPL names are temporarily unavailable. Please retry.', 503);
+    return this.profiles.save(actor.id, displayName);
+  }
+  async requireProfile(actor: Actor): Promise<string> {
+    const profile = await this.profile(actor);
+    if (!profile) throw new FiveError('Choose your FPL name before saving your five.', 409);
+    return profile.displayName;
+  }
   async read(actor: Actor, selection?: string) {
     const admin = this.isAdmin(actor),
       all = (await this.store.list()).filter((r) => admin || r.state !== 'draft');
@@ -263,16 +397,37 @@ export class FiveService {
     if (selection && !chosen) throw new FiveError('Gameweek not found.', 404);
     const round = chosen ? await this.store.load(chosen.id) : null;
     const detail = round ? project(round, actor?.id ?? null, admin, now) : null;
+    const [profile, names] = await Promise.all([
+      actor && this.profiles ? this.profiles.get(actor.id) : null,
+      round && this.profiles
+        ? this.profiles.getMany(round.entries.map((entry) => entry.accountId))
+        : new Map<string, FiveProfile>(),
+    ]);
+    if (round && detail) {
+      const publicNames = new Map(
+        round.entries.map((entry) => [
+          entry.publicId,
+          names.get(entry.accountId)?.displayName ?? entry.name,
+        ]),
+      );
+      for (const entry of detail.entries) entry.name = publicNames.get(entry.id) ?? entry.name;
+      for (const row of detail.standings) row.name = publicNames.get(row.id) ?? row.name;
+    }
     if (round && detail && actor && this.rewards && isAuction(round)) {
-      const refunds = await this.rewards.refundStates(round.id, actor.wallet);
+      const [refunds, workerAvailable] = await Promise.all([
+        this.rewards.refundStates(round.id, actor.wallet),
+        this.rewards.active(),
+      ]);
       for (const s of detail.ownSponsorships)
         s.auctionOutcome = refunds.get(s.id) ?? s.auctionOutcome;
+      detail.sponsorRefund = await this.rewards.sponsorRefund(round, actor.wallet, workerAvailable);
     }
     return {
       automation: { enabled: this.automatic, ...this.automationState },
       now: new Date(now).toISOString(),
       admin,
       viewerId: actor?.id ?? null,
+      profile,
       rounds: all,
       currentRoundId: current?.id ?? null,
       nextRoundId: upcoming[0]?.id ?? null,
@@ -322,8 +477,9 @@ export class FiveService {
         r.state = 'open';
       });
     } else if (b.action === 'enter') {
+      const name = await this.requireProfile(actor);
       await this.store.change(id, (r, now) =>
-        saveEntry(r, actor, b.players, b.captain, b.termsHash, now),
+        saveEntry(r, { ...actor, name }, b.players, b.captain, b.termsHash, now),
       );
     } else if (b.action === 'sponsor' || b.action === 'revise-sponsor') {
       if (!this.funding || !this.rewards || !(await this.rewards.active()))

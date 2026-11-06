@@ -3,6 +3,11 @@
 28 October 2026. Implemented locally with all 75 required checks covered by passing results.
 No commit, deployment or live payment is included in this change.
 
+6 November update: [background efficiency](background-efficiency.md) replaces the
+five-second database queue poll with due-time scheduling and suppresses unchanged
+owner writes. The original verification record below remains historical. These
+new changes are local; hosted cost and memory improvements remain unverified.
+
 Activity reads a saved list from PostgreSQL after sign-in. It does not need an
 active wallet provider or a browser scan across every market. Startup prefetch
 shares the same request without delaying the splash or shell.
@@ -12,8 +17,19 @@ shares the same request without delaying the splash or shell.
 The isolated operator relays public payment and lifecycle observations from its
 durable journals. Signatures and keys never enter the index. The API commits each
 event receipt and affected jobs before acknowledging delivery. Replays do not
-duplicate positions. One canonical read updates every participant in a changed
+duplicate positions. One canonical read reconstructs the participants in a changed
 market, preserving original deposit identities through settlement and collection.
+Only changed owner snapshots are written; reorgs still remove invalidated owners.
+The market row records the latest successful check separately, and wallet reads
+apply that freshness to saved records. An unchanged check therefore remains visible
+without deleting and reinserting every participant's history. Failed checks retain
+previous records as stale.
+
+Source notifications identify affected fixtures and distinguish semantic changes
+from successful freshness-only checks. Competition scoring keeps verification
+timestamps separately from audited revisions, so merely rechecking the same result
+does not create a new score history. Freshness-only recovery can still wake a
+competition whose source evidence was unavailable or under review.
 
 Submitted payments, accepted bets, reported results, funded claims and collected
 returns remain distinct. A football result does not itself create a claim. Reads
@@ -24,12 +40,28 @@ and wallet-lifetime checks. Indexed amounts never authorize spending.
 ## Recovery and bounds
 
 Published catalogues bootstrap once. Events are the normal update path. A
-30-second relay check recovers missed notifications without scanning the chain;
-backlogs continue in bounded batches with a short yield. Known pending/refundable
-tickets and uncollected claims get targeted recovery at two minutes, open markets
-at five minutes. Failed reads back off from 15 seconds to ten minutes. Collected
-history gets a daily canonical checkpoint check, replaying only if its block
-changed. The idle database queue issues no chain reads.
+30-second local relay check recovers missed notifications without scanning the
+chain. After initialization, an empty relay response does not query PostgreSQL or
+wake its job runner. Backlogs continue in bounded batches after a 250 ms yield.
+Saved due times and leases determine the next database check, with a fifteen-minute
+fallback for missed notifications. Startup resumes persisted work; local wakes
+during an active pass are retained rather than lost.
+
+Targeted canonical recovery follows the market's state:
+
+| Evidence still needed                                            | Follow-up interval               |
+| ---------------------------------------------------------------- | -------------------------------- |
+| Submitted prediction                                             | 20 seconds                       |
+| Admission, refund or uncollected claim                           | 2 minutes                        |
+| Open market before cutoff                                        | Earlier of cutoff or 15 minutes  |
+| Accepted position after cutoff, reported result or unknown state | 5 minutes                        |
+| Fully collected history                                          | Daily canonical checkpoint audit |
+
+Failed market reads back off from 15 seconds to ten minutes; infrastructure/queue
+failures back off up to fifteen minutes. A changed historical checkpoint triggers
+canonical replay. Active competition verification can request an earlier check
+of its specific sources while respecting failed-read backoff. These checks retain
+external claims and reorg recovery; no one-job-per-user scan is introduced.
 
 Each changed market is reconstructed once for all owners, up to 512 transactions.
 This version does not incrementally replay only its newest transactions. Missing

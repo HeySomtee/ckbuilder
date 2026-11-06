@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { auctionView, isAuction, winningSponsors } from './auction';
 import { lockTime } from './timing';
+import type { SponsorRefund } from './refunds';
 
 export class FiveError extends Error {
   constructor(
@@ -326,13 +327,20 @@ export function saveEntry(
     throw new FiveError('This wallet already has an entry.', 409);
   if (!old && round.entries.length >= round.terms.limit)
     throw new FiveError('This gameweek is full.', 409);
+  const unchanged =
+    old &&
+    old.captain === squad.captain &&
+    old.players.length === squad.players.length &&
+    old.players.every((id) => squad.players.includes(id));
   const entry = {
     accountId: actor.id,
     publicId: createHash('sha256').update(`${round.id}:${actor.id}`).digest('hex').slice(0, 24),
     wallet: actor.wallet,
     name: actor.name.slice(0, 64),
     ...squad,
-    savedAt: new Date(now).toISOString(),
+    // Retries, display-name changes and player ordering cannot reset a tie-break.
+    players: unchanged ? old.players : squad.players,
+    savedAt: unchanged ? old.savedAt : new Date(now).toISOString(),
   };
   if (old) Object.assign(old, entry);
   else round.entries.push(entry);
@@ -383,6 +391,12 @@ export function scorePlayer(position: Position, raw: unknown): Score {
   add('Penalty misses', -s.penaltyMisses * 2);
   return { points: lines.reduce((n, l) => n + l.points, 0), lines };
 }
+/** Public disambiguation only; never expose the entry's complete private wallet field. */
+export function fiveWalletLabel(wallet: string): string {
+  return wallet.length > 16
+    ? `${wallet.slice(0, 8)}…${wallet.slice(-6)}`
+    : `Wallet …${wallet.slice(-4)}`;
+}
 export function standings(round: Round) {
   return round.entries
     .map((e) => {
@@ -396,7 +410,13 @@ export function standings(round: Round) {
             (id === e.captain ? 2 : 1),
         0,
       );
-      return { id: e.publicId, name: e.name, points, pending: missing };
+      return {
+        id: e.publicId,
+        name: e.name,
+        walletLabel: fiveWalletLabel(e.wallet),
+        points,
+        pending: missing,
+      };
     })
     .sort((a, b) => b.points - a.points || a.id.localeCompare(b.id));
 }
@@ -442,6 +462,7 @@ export function project(round: Round, accountId: string | null, admin: boolean, 
     entries: round.entries.map((e) => ({
       id: e.publicId,
       name: e.name,
+      walletLabel: fiveWalletLabel(e.wallet),
       ...(unlocked || e.accountId === accountId ? { players: e.players, captain: e.captain } : {}),
     })),
     standings: unlocked ? standings(round) : [],
@@ -454,6 +475,7 @@ export function project(round: Round, accountId: string | null, admin: boolean, 
     rewards: round.rewards,
     poolShannons: fundedPool(round),
     auction: auctionView(round, accountId, now),
+    sponsorRefund: null as SponsorRefund | null,
     cancellationReason: round.cancellationReason ?? '',
     sponsors: (isAuction(round)
       ? winningSponsors(round)

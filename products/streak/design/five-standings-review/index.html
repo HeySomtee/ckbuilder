@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111914" />
+    <title>Five standings · Streak design preview</title>
+    <link rel="icon" href="/brand/on-form-favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/select-controls.css" />
+    <link rel="stylesheet" href="/review.css" />
+    <script type="module" src="/app.mjs"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to standings</a>
+    <aside class="preview-bar" aria-label="Design preview controls">
+      <p>
+        <span class="preview-dot"></span><strong>Design preview</strong
+        ><span class="sample-label">Sample names, squads & scores</span>
+      </p>
+      <label
+        >Preview state
+        <select id="scenario" data-streak-select aria-label="Preview state">
+          <option value="final">Finished gameweek</option>
+          <option value="live">Live points</option>
+          <option value="private">Before the deadline</option>
+          <option value="join">First entry · name required</option>
+        </select>
+      </label>
+    </aside>
+    <div class="shell">
+      <aside class="rail" aria-label="App navigation preview">
+        <img class="brand" src="/brand/on-form-wordmark.svg" alt="Streak" />
+        <p class="rail-label">YOUR TOUCHLINE</p>
+        <span class="nav-item" data-icon="home">Overview</span>
+        <p class="rail-label">PREDICTIONS</p>
+        <span class="nav-item" data-icon="chart">Markets</span>
+        <span class="nav-item" data-icon="calendar">Matchday</span>
+        <p class="rail-label">STREAK GAMES</p>
+        <span class="nav-item current" data-icon="shirt">Streak Five <small>Beta</small></span>
+        <span class="nav-item" data-icon="shield">Streak Survivor</span>
+        <p class="rail-label">YOUR SPACE</p>
+        <span class="nav-item" data-icon="activity">My activity</span>
+        <span class="nav-item" data-icon="user">My Account</span>
+        <div class="rail-bottom"><span class="network-dot"></span> CKB Pudge testnet</div>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <img class="mobile-brand" src="/brand/on-form-wordmark.svg" alt="Streak" />
+          <span class="breadcrumb">Your touchline <i>/</i> <strong>Streak Five</strong></span>
+          <div class="wallet">
+            <span data-icon="wallet"></span><span>Demo wallet</span><code>ckt1q…8m4k</code>
+          </div>
+        </header>
+        <main id="main" tabindex="-1">
+          <header class="page-heading">
+            <div>
+              <p class="eyebrow">PREMIER LEAGUE · FANTASY</p>
+              <h1>Streak <span>Five.</span></h1>
+            </div>
+            <span class="game-badge">Gameweek 9</span>
+          </header>
+          <nav class="tabs" aria-label="Streak Five preview tabs">
+            <button type="button" data-action="my-five">My five</button
+            ><button type="button" class="selected" data-action="standings" aria-current="page">
+              Standings</button
+            ><button type="button" data-action="sponsors">Sponsors</button>
+          </nav>
+          <div id="content"></div>
+          <p class="sample-footer">
+            Design preview only. No entry, wallet connection or payment is submitted.
+          </p>
+        </main>
+      </div>
+    </div>
+    <dialog id="squad-dialog" class="squad-dialog" aria-labelledby="squad-title"></dialog>
+    <dialog id="name-dialog" class="name-dialog" aria-labelledby="name-title"></dialog>
+    <div id="toast" role="status" hidden></div>
+  </body>
+</html>

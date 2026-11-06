@@ -26,6 +26,11 @@ Updated 2 November 2026. Start with the [documentation map](docs/README.md),
 - **Five and Survivor:** entries, scores and progression are application/database
   features. Sponsorships, creator-funded prizes, refunds and rewards use a separate
   **custodial testnet rewards wallet**, not the direct prediction scripts.
+- **Competitions:** the new local implementation wraps existing prediction and
+  Five flows with registration, configurable prizes, public standings and admin
+  evidence exports. Campaign mainnet prizes are separate organizer-wallet transfers,
+  verified against exact confirmed outputs. No mainnet signing key is held by the
+  campaign API. See [configuration and release status](docs/delivery/competitions.md).
 - **Legacy accounts:** the retained account application has a custodial treasury
   ledger for earlier deposits, virtual bets and withdrawals. Those liabilities
   are separate from Season direct positions.

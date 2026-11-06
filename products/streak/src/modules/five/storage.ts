@@ -1,9 +1,13 @@
 import type { Pool } from 'pg';
 import { assertGameScope } from '../games-test/scope';
-import { FiveError, type Round } from './domain';
+import { FiveError, type Entry, type Round } from './domain';
 import { TEST_TIMING_POLICY } from './timing';
+import { enqueueRewardWork, rewardSchemaGuard, rewardWorkSchema } from './work-queue';
+import { notifyRewardsWorker } from '../../infrastructure/worker-health';
 export type Summary = Pick<Round, 'id' | 'state' | 'createdAt'> & { name: string; lockAt: string };
 export interface FiveStorage {
+  /** A wake hint only. Durable round revisions remain the replay source after restart. */
+  subscribe?(listener: (roundId: string) => void): () => void;
   clock(): Promise<number>;
   list(): Promise<Summary[]>;
   load(id: string): Promise<Round | null>;
@@ -16,10 +20,25 @@ export interface FiveStorage {
 }
 export class PgFiveStorage implements FiveStorage {
   private ready?: Promise<void>;
+  private readonly listeners = new Set<(roundId: string) => void>();
   constructor(
     private readonly pool: Pool,
     private readonly testing = false,
   ) {}
+  subscribe(listener: (roundId: string) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  private changed(roundId: string): void {
+    void notifyRewardsWorker(this.testing);
+    for (const listener of this.listeners) {
+      try {
+        listener(roundId);
+      } catch {
+        console.warn('[five] saved source notification deferred');
+      }
+    }
+  }
   async clock() {
     const row = await this.pool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
     return row.rows[0].now.getTime();
@@ -28,13 +47,19 @@ export class PgFiveStorage implements FiveStorage {
     this.ready ??= assertGameScope(this.pool, this.testing)
       .then(() =>
         this.pool.query(
-          `CREATE TABLE IF NOT EXISTS streak_five_rounds (
+          `${rewardSchemaGuard}
+      CREATE TABLE IF NOT EXISTS streak_five_rounds (
       id text PRIMARY KEY, creator text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
       data jsonb NOT NULL);
       CREATE TABLE IF NOT EXISTS streak_five_audit (
         round_id text NOT NULL REFERENCES streak_five_rounds(id), revision integer NOT NULL,
         recorded_at timestamptz NOT NULL DEFAULT now(), data jsonb NOT NULL,
         PRIMARY KEY(round_id,revision));
+      CREATE TABLE IF NOT EXISTS streak_five_entry_history (
+        round_id text NOT NULL REFERENCES streak_five_rounds(id), account_id text NOT NULL,
+        revision integer NOT NULL, saved_at timestamptz NOT NULL, entry jsonb NOT NULL,
+        PRIMARY KEY(round_id,account_id,revision));
+      ${rewardWorkSchema}
       CREATE TABLE IF NOT EXISTS streak_five_funding_inputs (
         outpoint text PRIMARY KEY,intent text NOT NULL);`,
         ),
@@ -110,7 +135,9 @@ export class PgFiveStorage implements FiveStorage {
         round.revision,
         JSON.stringify(round),
       ]);
+      await enqueueRewardWork(client, 'five', id);
       await client.query('COMMIT');
+      this.changed(id);
       return round;
     } catch (error) {
       await client.query('ROLLBACK');
@@ -135,7 +162,16 @@ export class PgFiveStorage implements FiveStorage {
       );
       if (!rows.rows[0]) throw new FiveError('Gameweek not found.', 404);
       const round = rows.rows[0].data,
-        before = JSON.stringify(round);
+        before = JSON.stringify(round),
+        priorEntries = new Map(
+          round.entries.map((entry) => [
+            entry.accountId,
+            {
+              players: [...entry.players],
+              captain: entry.captain,
+            },
+          ]),
+        );
       if (reservation)
         for (const outpoint of [...reservation.outpoints].sort()) {
           await client.query(
@@ -160,7 +196,23 @@ export class PgFiveStorage implements FiveStorage {
           id,
           JSON.stringify(round),
         ]);
-        // Retain scoring, auction closure and final allocation; squad edits stay in the aggregate.
+        await enqueueRewardWork(client, 'five', id);
+        for (const entry of round.entries) {
+          const previous = priorEntries.get(entry.accountId);
+          if (
+            previous &&
+            previous.captain === entry.captain &&
+            previous.players.length === entry.players.length &&
+            previous.players.every((id) => entry.players.includes(id))
+          )
+            continue;
+          await client.query(
+            `INSERT INTO streak_five_entry_history(round_id,account_id,revision,saved_at,entry)
+             VALUES($1,$2,$3,$4,$5)`,
+            [id, entry.accountId, round.revision, entry.savedAt, JSON.stringify(entry)],
+          );
+        }
+        // Scores and financial transitions have their own audit; meaningful squad edits are above.
         if (
           round.scoreRevision !== JSON.parse(before).scoreRevision ||
           round.state !== JSON.parse(before).state ||
@@ -197,6 +249,7 @@ export class PgFiveStorage implements FiveStorage {
           );
       }
       await client.query('COMMIT');
+      if (before !== JSON.stringify(round)) this.changed(id);
       return round;
     } catch (error) {
       await client.query('ROLLBACK');
@@ -204,5 +257,18 @@ export class PgFiveStorage implements FiveStorage {
     } finally {
       client.release();
     }
+  }
+
+  async entryHistory(
+    id: string,
+    accountId: string,
+  ): Promise<Array<{ revision: number; entry: Entry }>> {
+    await this.init();
+    const rows = await this.pool.query<{ revision: number; entry: Entry }>(
+      `SELECT revision,entry FROM streak_five_entry_history
+       WHERE round_id=$1 AND account_id=$2 ORDER BY revision DESC LIMIT 100`,
+      [id, accountId],
+    );
+    return rows.rows;
   }
 }

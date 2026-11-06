@@ -28,8 +28,14 @@ export type FiveRound = {
   termsHash: string;
   revision: number;
   ownId: string | null;
-  entries: { id: string; name: string; players?: string[]; captain?: string }[];
-  standings: { id: string; name: string; points: number; pending: boolean }[];
+  entries: {
+    id: string;
+    name: string;
+    walletLabel?: string;
+    players?: string[];
+    captain?: string;
+  }[];
+  standings: { id: string; name: string; walletLabel?: string; points: number; pending: boolean }[];
   scores: Record<string, { points: number; lines: { label: string; points: number }[] }>;
   scoresAt: string | null;
   scoresComplete: boolean;
@@ -38,6 +44,13 @@ export type FiveRound = {
   finalizedAt: string | null;
   rewards: Record<string, string>;
   poolShannons: string;
+  sponsorRefund?: {
+    state: 'owed' | 'queued' | 'paused' | 'confirming' | 'delayed' | 'returned' | 'review';
+    totalShannons: string;
+    returnedShannons: string;
+    pendingShannons: string;
+    transactionHashes: string[];
+  } | null;
   auction?: {
     state: string;
     closesAt: string;
@@ -88,6 +101,7 @@ export type RewardAccount = {
   status: string;
 };
 export type FiveData = {
+  profile?: FiveProfile | null;
   currentRoundId?: string | null;
   nextRoundId?: string | null;
   testMode?: boolean;
@@ -101,6 +115,7 @@ export type FiveData = {
   rounds: { id: string; state: string; name: string; lockAt: string }[];
   detail: FiveRound | null;
 };
+export type FiveProfile = { displayName: string; updatedAt: string };
 const bad = (): never => {
   throw new Error('Five returned incomplete data. Please refresh.');
 };
@@ -177,6 +192,7 @@ export function parseFive(value: unknown): FiveData {
         return {
           id: str(e.id),
           name: str(e.name),
+          walletLabel: e.walletLabel === undefined ? '' : str(e.walletLabel, 48),
           ...(e.players === undefined
             ? {}
             : { players: arr(e.players, 5).map((v) => str(v)), captain: str(e.captain) }),
@@ -187,6 +203,7 @@ export function parseFive(value: unknown): FiveData {
         return {
           id: str(s.id),
           name: str(s.name),
+          walletLabel: s.walletLabel === undefined ? '' : str(s.walletLabel, 48),
           points: num(s.points),
           pending: bool(s.pending),
         };
@@ -199,6 +216,32 @@ export function parseFive(value: unknown): FiveData {
       finalizedAt: nil(r.finalizedAt),
       rewards,
       poolShannons: amt(r.poolShannons),
+      sponsorRefund:
+        r.sponsorRefund == null
+          ? null
+          : (() => {
+              const refund = obj(r.sponsorRefund),
+                state = str(refund.state);
+              if (
+                ![
+                  'owed',
+                  'queued',
+                  'paused',
+                  'confirming',
+                  'delayed',
+                  'returned',
+                  'review',
+                ].includes(state)
+              )
+                bad();
+              return {
+                state: state as NonNullable<FiveRound['sponsorRefund']>['state'],
+                totalShannons: amt(refund.totalShannons),
+                returnedShannons: amt(refund.returnedShannons),
+                pendingShannons: amt(refund.pendingShannons),
+                transactionHashes: arr(refund.transactionHashes, 100).map((hash) => str(hash, 66)),
+              };
+            })(),
       auction:
         r.auction == null
           ? null
@@ -264,6 +307,7 @@ export function parseFive(value: unknown): FiveData {
   }
   const reward = d.rewardsAccount == null ? null : obj(d.rewardsAccount);
   return {
+    profile: d.profile == null ? null : parseProfile(d.profile),
     currentRoundId: d.currentRoundId == null ? null : str(d.currentRoundId, 100),
     nextRoundId: d.nextRoundId == null ? null : str(d.nextRoundId, 100),
     ...(d.automation === undefined
@@ -305,6 +349,28 @@ export const loadFive = async (id: string, signal: AbortSignal) =>
   );
 export const actFive = async (body: Record<string, unknown>) =>
   parseFive(await request(gamesPath('/five'), undefined, body));
+function parseProfile(value: unknown): FiveProfile {
+  const p = obj(value);
+  return { displayName: str(p.displayName, 96), updatedAt: str(p.updatedAt, 40) };
+}
+export const saveFiveProfile = async (displayName: string, expectedAccountId: string) => {
+  const data = obj(
+    await request(gamesPath('/five'), undefined, {
+      action: 'profile',
+      displayName,
+      expectedAccountId,
+    }),
+  );
+  if (data.viewerId !== expectedAccountId)
+    throw Error('Your sign-in changed. Refresh before continuing.');
+  return parseProfile(data.profile);
+};
+export const loadFiveProfile = async (expectedAccountId: string, signal: AbortSignal) => {
+  const data = obj(await request(gamesPath('/five?profile=1'), signal));
+  if (data.viewerId !== expectedAccountId)
+    throw Error('Your sign-in changed. Refresh before continuing.');
+  return data.profile == null ? null : parseProfile(data.profile);
+};
 export function shannons(input: string): string {
   if (!/^(0|[1-9]\d{0,8})(\.\d{1,8})?$/.test(input))
     throw new Error('Enter a valid tCKB amount with up to 8 decimal places.');
