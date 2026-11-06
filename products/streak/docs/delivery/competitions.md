@@ -6,6 +6,12 @@ separate from that local evidence.
 
 ## Competition testing feedback, 6 November
 
+Published in `938078c`. All 95 exact-tree local stages passed at 16:48 UTC,
+including PostgreSQL, Chromium/WebKit and signed isolated-chain checks. The first
+full attempt timed out in the Five standings browser suite; it passed unchanged
+in isolation and in the subsequent full run. No checks were waived. GitHub `main`
+was verified after push; deployment and physical-wallet testing remain separate.
+
 The shared slip's **Add matches** returns to its source competition, including
 after switching tabs or reloading. Adding regular picks preserves that context.
 Account changes and removed source picks invalidate stale navigation preferences.

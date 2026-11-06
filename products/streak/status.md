@@ -1,5 +1,12 @@
 # Streak status
 
+6 November competition refinements and mixed-slip behavior are published in
+`938078c`. Its complete 95-stage local gate passed at 16:48 UTC; GitHub `main` was
+verified after push. The previous timed-out Five browser run remains failed
+evidence, followed by successful unchanged focused and full reruns. Hosted
+deployment and physical-wallet acceptance remain separate. The entry below
+describes the delivered scope; older checkpoints remain historical.
+
 6 November [competition testing refinements](docs/delivery/competitions.md#competition-testing-feedback-6-november)
 keep Add matches inside its competition, show selected draft outcomes, refine the
 join dialog and input focus, and replace transient competition banners with

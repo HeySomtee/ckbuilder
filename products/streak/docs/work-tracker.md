@@ -1,5 +1,16 @@
 # Streak work tracker
 
+6 November competition release complete: `938078c` was pushed to `main` and the
+remote revision verified. All 95 stages passed on its exact tree at 16:48 UTC,
+including the expanded competition/mixed-slip journeys and signed local-chain
+claims, sponsorships and refunds. Push reused that successful receipt. The earlier
+Five browser timeout is retained as failed evidence; all six isolated journeys and
+the subsequent full run passed unchanged. Local artifacts are listed in
+`.quality-artifacts/competition-ux-release-2026-11-06.json`. Hosted deployment and
+physical-wallet acceptance are not claimed. Restore the owner's checklist after
+publication; preserve the open hosted acceptance, measured savings and prediction
+concurrency commitments below.
+
 6 November further owner steering before push: competition context must remain
 visible in a saved or mixed slip outside the competition page. Registered players'
 first qualifying listed prediction may precede registration; regular wagers still
