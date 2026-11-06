@@ -56,6 +56,10 @@ const fixtures = Array.from({ length: 8 }, (_, index) => ({
   marketKey: `market-key-${index}`,
   home: `Home ${index + 1}`,
   away: `Away ${index + 1}`,
+  homeLogo: index === 0 ? '/brand/on-form-mark.svg' : null,
+  awayLogo: index === 0 ? '/brand/on-form-mark.svg' : null,
+  homeForm: index === 0 ? 'WLWLD' : null,
+  awayForm: index === 0 ? 'DWWDL' : null,
   league: index % 2 ? 'Premier League' : 'Champions League',
   kickoffAt: iso(48 + index),
   cutoffAt: iso(47 + index),
@@ -101,6 +105,7 @@ function createCampaign(id = 'calls', kind = 'predictions') {
     leaderboardTotal: 0,
     leaderboardOffset: 0,
     own: null,
+    predictionEntryPolicy: kind === 'predictions' ? 'first-admitted-v2' : null,
     awards: [],
     scoreStatus: 'waiting',
     verifiedAt: null,
@@ -147,8 +152,8 @@ function publicMarket(f) {
         kickoff: f.kickoffAt,
         status: 'scheduled',
         stage: 'Synthetic matchweek',
-        home: { name: f.home, code: 'HOM' },
-        away: { name: f.away, code: 'AWY' },
+        home: { name: f.home, code: 'HOM', logo: f.homeLogo },
+        away: { name: f.away, code: 'AWY', logo: f.awayLogo },
         competition: { name: f.league },
       },
     },
@@ -202,13 +207,24 @@ async function main() {
             if (url.pathname === '/api/me') return json({ user: account });
             if (url.pathname === '/api/direct/entry-mode') return json({ mode: 'atomic' });
             if (url.pathname === '/api/campaigns') {
-              const result = (id = null) => ({
-                admin,
-                viewerId,
-                now: iso(),
-                campaigns,
-                detail: campaigns.find((c) => c.id === id) ?? null,
-              });
+              const result = (id = null) => {
+                for (const row of campaigns) {
+                  if (row.kind === 'predictions' && row.joined) {
+                    row.joinedFixtureIds = row.fixtures.map((fixture) => fixture.fixtureId);
+                    row.qualifyingFixtureIds = row.own?.calls.map((call) => call.fixtureId) ?? [];
+                  } else {
+                    delete row.joinedFixtureIds;
+                    delete row.qualifyingFixtureIds;
+                  }
+                }
+                return {
+                  admin,
+                  viewerId,
+                  now: iso(),
+                  campaigns,
+                  detail: campaigns.find((c) => c.id === id) ?? null,
+                };
+              };
               if (req.method() === 'GET') {
                 if (url.searchParams.get('action') === 'options') optionsReads++;
                 return json(
@@ -323,12 +339,90 @@ async function main() {
             await page.goto(base + '/season/?view=competitions&campaign=calls');
             await page.getByRole('heading', { name: 'Fixture Challenge', exact: true }).waitFor();
             await page.getByRole('button', { name: 'Join competition', exact: true }).click();
+            await page.locator('.campaign-join-dialog').waitFor();
+            await page.screenshot({
+              path: path.join(output, `${engineName}-${width}-join-dialog.png`),
+            });
+            await page.emulateMedia({ reducedMotion: 'no-preference' });
             await page
               .getByRole('button', { name: 'Agree & join competition', exact: true })
               .click();
             await page.getByText('You are registered · Rank #1', { exact: true }).waitFor();
+            const joinedToast = page
+              .locator('.campaign-toast')
+              .filter({ hasText: 'You are registered. Your place is now on the table.' });
+            await joinedToast.waitFor();
+            assert.equal(
+              await joinedToast.evaluate((node) => getComputedStyle(node).animationName),
+              'campaign-toast-in',
+            );
+            const toastBounds = await page.locator('.campaign-toast-stack').boundingBox();
+            const visibleWidth = await page.evaluate(() => window.innerWidth);
+            assert.ok(
+              Math.abs(toastBounds.x + toastBounds.width / 2 - visibleWidth / 2) < 2,
+              `Toasts are centered in the visible viewport: ${JSON.stringify({ toastBounds, visibleWidth })}`,
+            );
+            if (width <= 390) {
+              const navBounds = await page.locator('.mobile-dock').boundingBox();
+              assert.ok(
+                toastBounds.y + toastBounds.height <= navBounds.y,
+                'Toasts clear mobile navigation.',
+              );
+            }
+            await page.screenshot({ path: path.join(output, `${engineName}-${width}-toast.png`) });
+            const beforeToastDismiss = await page
+              .locator('.campaign-match-card')
+              .first()
+              .boundingBox();
+            assert.equal(
+              await page
+                .locator('.campaign-toast-stack')
+                .evaluate((node) => getComputedStyle(node).position),
+              'fixed',
+            );
+            await joinedToast.getByRole('button', { name: /Dismiss/ }).click();
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            await joinedToast.waitFor({ state: 'detached' });
+            const afterToastDismiss = await page
+              .locator('.campaign-match-card')
+              .first()
+              .boundingBox();
+            assert.equal(
+              afterToastDismiss.y,
+              beforeToastDismiss.y,
+              'Dismissing an alert does not shift the fixtures.',
+            );
             assert.equal(campaigns[0].own.points, 0);
             assert.equal(campaigns[0].leaderboard[0].participated, false);
+            const firstMatch = page.locator('.campaign-match-card').first();
+            await firstMatch.locator('.team-logo').first().waitFor();
+            assert.equal(await firstMatch.locator('.team-logo').count(), 2);
+            await page.waitForFunction(() => {
+              const images = [
+                ...document.querySelectorAll('.campaign-match-card:first-child .team-logo'),
+              ];
+              return (
+                images.length === 2 &&
+                images.every((image) => image.complete && image.naturalWidth > 0)
+              );
+            });
+            assert.equal(
+              (await firstMatch.locator('.campaign-team-form').first().innerText()).replace(
+                /\s/g,
+                '',
+              ),
+              'WLWLD',
+              'The card displays provider form in its received order.',
+            );
+            assert.equal(
+              await page
+                .locator('.campaign-match-card')
+                .nth(1)
+                .getByText('Form unavailable')
+                .count(),
+              2,
+              'Missing form does not create synthetic results.',
+            );
             await page.getByRole('button', { name: 'Home 1 to win', exact: true }).click();
             await page.locator('dialog[open] #slip-title').waitFor();
             assert.match(
@@ -347,7 +441,174 @@ async function main() {
               'market-0',
               'Uses the existing persisted slip draft.',
             );
+            await page
+              .locator('.slip-campaign-context')
+              .getByText('Fixture Challenge', { exact: true })
+              .waitFor();
+            await page.getByRole('button', { name: 'Add matches', exact: true }).click();
+            await page.getByRole('heading', { name: 'Fixture Challenge', exact: true }).waitFor();
+            assert.equal(new URL(page.url()).searchParams.get('view'), 'competitions');
+            assert.equal(new URL(page.url()).searchParams.get('campaign'), 'calls');
+            assert.equal(
+              await page
+                .getByRole('button', { name: 'Home 1 to win', exact: true })
+                .getAttribute('aria-pressed'),
+              'true',
+              'The existing slip selection remains visibly active in the competition.',
+            );
+            assert.equal(
+              await firstMatch.locator('.campaign-outcomes button:disabled').count(),
+              3,
+              'A saved competition draft prevents a second selection from the fixture card.',
+            );
+            await firstMatch.getByText('Your draft pick', { exact: true }).waitFor();
+            await firstMatch
+              .getByText('Not entered yet. Complete payment in your slip for verification.', {
+                exact: true,
+              })
+              .waitFor();
+            await firstMatch.getByRole('button', { name: 'Open slip', exact: true }).click();
+            await page
+              .getByRole('button', { name: 'Remove Home 1 vs Away 1', exact: true })
+              .click();
+            await page.getByRole('button', { name: 'Add matches', exact: true }).click();
+            assert.equal(
+              await firstMatch.locator('.campaign-outcomes button:disabled').count(),
+              0,
+              'Removing the unpaid draft makes the fixture selectable again.',
+            );
+            await firstMatch.getByRole('button', { name: 'Draw', exact: true }).click();
+            await page.waitForFunction(
+              () =>
+                document
+                  .querySelector('.campaign-match-card .campaign-outcomes button:nth-child(2)')
+                  ?.getAttribute('aria-pressed') === 'true',
+            );
+            assert.equal(
+              await page
+                .getByRole('button', { name: 'Home 1 to win', exact: true })
+                .getAttribute('aria-pressed'),
+              'false',
+              'Selecting after removing the draft clears the previous active outcome.',
+            );
+            if (await page.locator('dialog[open] #slip-title').count())
+              await page
+                .getByRole('button', { name: 'Close prediction slip', exact: true })
+                .click();
+            await page.screenshot({
+              path: path.join(output, `${engineName}-${width}-selected-outcome.png`),
+              fullPage: true,
+            });
+            await page.getByRole('button', { name: 'Rules & prizes', exact: true }).click();
+            await page.locator('.prediction-dock').click();
+            await page.getByRole('button', { name: 'Add matches', exact: true }).click();
+            await page.getByRole('button', { name: 'Home 1 to win', exact: true }).waitFor();
+            assert.equal(
+              await page
+                .locator('.campaign-tabs')
+                .getByRole('button', { name: 'Play', exact: true })
+                .getAttribute('aria-pressed'),
+              'true',
+              'Returning from the slip reopens playable fixtures rather than leaving the rules tab selected.',
+            );
+            await page.goto(base + '/season/?market=market-2');
+            await page.locator('.detail-outcomes button[data-outcome="home"]').click();
+            await page.locator('.prediction-dock').click();
+            await page.locator('dialog[open] #slip-title').waitFor();
+            await page
+              .locator('.slip-campaign-context')
+              .getByText('Mixed slip', { exact: true })
+              .waitFor();
+            assert.equal(await page.locator('.slip-pick').count(), 2);
+            await page
+              .locator('.slip-pick')
+              .filter({ hasText: 'Home 1 vs Away 1' })
+              .getByRole('button', {
+                name: 'Open competition: Fixture Challenge',
+                exact: true,
+              })
+              .waitFor();
+            await page
+              .locator('.slip-pick')
+              .filter({ hasText: 'Home 3 vs Away 3' })
+              .getByText('Regular prediction', { exact: true })
+              .waitFor();
+            await page.getByRole('button', { name: 'Clear slip', exact: true }).click();
+            await page.getByText(/Includes your picks for Fixture Challenge/).waitFor();
+            await page.getByRole('button', { name: 'Keep predictions', exact: true }).click();
             await page.getByRole('button', { name: 'Close prediction slip', exact: true }).click();
+            await page
+              .locator('.prediction-dock')
+              .getByText('Fixture Challenge + 1 regular', { exact: true })
+              .waitFor();
+            await page.screenshot({
+              path: path.join(output, `${engineName}-${width}-mixed-dock.png`),
+            });
+            await page.reload();
+            await page
+              .locator('.prediction-dock')
+              .getByText('Fixture Challenge + 1 regular', { exact: true })
+              .waitFor();
+            await page.locator('.prediction-dock').click();
+            await page
+              .locator('.slip-campaign-context')
+              .getByText('Mixed slip', { exact: true })
+              .waitFor();
+            await page.screenshot({
+              path: path.join(output, `${engineName}-${width}-mixed-slip.png`),
+            });
+            await page.getByRole('button', { name: 'Add matches', exact: true }).click();
+            assert.match(page.url(), /view=competitions&campaign=calls/);
+            await page.getByRole('button', { name: 'Home 1 to win', exact: true }).waitFor();
+            campaigns[0].activeCount = 1;
+            campaigns[0].own.participated = true;
+            campaigns[0].own.calls = [
+              {
+                fixtureId: fixtures[0].fixtureId,
+                outcome: 1,
+                points: 0,
+                status: 'pending',
+                transactionHash: '0x' + 'a'.repeat(64),
+              },
+            ];
+            campaigns[0].leaderboard[0].participated = true;
+            campaigns[0].leaderboard[0].qualifyingEntries = 1;
+            await page.reload();
+            await firstMatch.getByText('Your competition pick', { exact: true }).waitFor();
+            await firstMatch.getByText('Entered', { exact: true }).waitFor();
+            assert.equal(await firstMatch.locator('.campaign-outcomes button:disabled').count(), 3);
+            assert.equal(
+              await firstMatch
+                .getByRole('button', { name: 'Draw', exact: true })
+                .getAttribute('aria-pressed'),
+              'true',
+            );
+            await firstMatch.getByText('Awaiting result', { exact: true }).waitFor();
+            await page.screenshot({
+              path: path.join(output, `${engineName}-${width}-entered-card.png`),
+              fullPage: true,
+            });
+            await firstMatch.getByRole('button', { name: 'View market', exact: true }).click();
+            await page.locator('.detail-outcomes button[data-outcome="away"]').click();
+            await page.locator('.prediction-dock').click();
+            assert.equal(new URL(page.url()).searchParams.get('market'), 'market-0');
+            const existingCallSlip = page
+              .locator('.slip-pick')
+              .filter({ hasText: 'Home 1 vs Away 1' });
+            await existingCallSlip.getByText('Already entered', { exact: true }).waitFor();
+            await existingCallSlip.getByText('Normal prediction', { exact: true }).waitFor();
+            await page.getByRole('button', { name: 'Add matches', exact: true }).click();
+            await firstMatch.getByText('Your competition pick', { exact: true }).waitFor();
+            assert.equal(
+              await firstMatch
+                .getByRole('button', { name: 'Draw', exact: true })
+                .getAttribute('aria-pressed'),
+              'true',
+              'A further normal bet does not change the qualifying competition prediction.',
+            );
+            await firstMatch
+              .getByText('Further bets here do not add competition points.', { exact: true })
+              .waitFor();
             await page.getByRole('button', { name: 'Back to competitions', exact: true }).click();
             await page.getByRole('button', { name: 'Create competition', exact: true }).click();
             await page
@@ -390,6 +651,19 @@ async function main() {
               .getByLabel('Registration deadline', { exact: true })
               .fill('2030-01-06T12:00');
             await page.getByRole('button', { name: 'Choose fixtures', exact: true }).click();
+            await page.getByRole('textbox', { name: 'Search fixtures', exact: true }).focus();
+            const searchFocus = await page.locator('.campaign-search').evaluate((label) => ({
+              outer: getComputedStyle(label).boxShadow,
+              inner: getComputedStyle(label.querySelector('input')).outlineStyle,
+              innerShadow: getComputedStyle(label.querySelector('input')).boxShadow,
+            }));
+            assert.notEqual(
+              searchFocus.outer,
+              'none',
+              'Search focus belongs to the whole control.',
+            );
+            assert.equal(searchFocus.inner, 'none');
+            assert.equal(searchFocus.innerShadow, 'none');
             await page.getByRole('button', { name: 'Select visible', exact: true }).click();
             assert.equal(
               await page.locator('.campaign-fixture-choice[aria-pressed="true"]').count(),
@@ -410,6 +684,16 @@ async function main() {
                 .getByLabel(`Place ${i} reward in CKB`, { exact: true })
                 .fill(i === 1 ? '1000.12345678' : '500');
             }
+            const prizeFocus = await page
+              .getByLabel('Place 4 reward in CKB', { exact: true })
+              .evaluate((input) => ({
+                outer: getComputedStyle(input.parentElement).boxShadow,
+                inner: getComputedStyle(input).outlineStyle,
+                innerShadow: getComputedStyle(input).boxShadow,
+              }));
+            assert.notEqual(prizeFocus.outer, 'none');
+            assert.equal(prizeFocus.inner, 'none');
+            assert.equal(prizeFocus.innerShadow, 'none');
             assert.equal(
               await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1),
               false,
@@ -434,6 +718,20 @@ async function main() {
             await page
               .getByRole('heading', { name: 'Campaign <Cup>', exact: true, level: 1 })
               .waitFor();
+            if (width === 390) {
+              const publishedToast = page
+                .locator('.campaign-toast')
+                .filter({ hasText: 'Your competition is published.' });
+              await publishedToast.waitFor();
+              assert.equal(
+                await publishedToast.evaluate((node) => getComputedStyle(node).animationName),
+                'none',
+                'Reduced motion skips toast movement.',
+              );
+              await page.mouse.move(0, 0);
+              await page.clock.runFor(10500);
+              await publishedToast.waitFor({ state: 'detached' });
+            }
             assert.ok(
               writes.some(
                 (w) =>
@@ -471,6 +769,12 @@ async function main() {
               .click();
             await page
               .getByRole('heading', { name: 'Your matchweek. Your moment.', exact: true })
+              .waitFor();
+            await page
+              .locator('.campaign-toast')
+              .filter({
+                hasText: 'Competition archived. Existing entries and obligations are preserved.',
+              })
               .waitFor();
             assert.equal(campaigns[2].state, 'deleted');
             assert.equal(

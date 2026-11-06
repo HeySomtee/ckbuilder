@@ -1,5 +1,11 @@
 # Streak documentation
 
+6 November [competition testing refinements](delivery/competitions.md#competition-testing-feedback-6-november):
+shared-slip return routing, active outcomes, compact join/focus/status styling,
+bottom-center toast alerts and public player labels. Local browser and identity
+checks accompany the implementation; hosted acceptance remains separate. The
+earlier combined release was published as `c0a1199` after its 94-stage local gate.
+
 6 November [Five names, pitch standings and refunds](delivery/five-names-pitch-refunds.md):
 the approved preview is integrated into the app, including required public manager
 names, saved squad pitches and accurate refund status. Independent review and

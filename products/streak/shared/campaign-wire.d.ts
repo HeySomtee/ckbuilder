@@ -1,5 +1,6 @@
 /** Public campaign transport. Chain evidence, wallet links and private squads stay server-side. */
 export type CampaignKind = 'predictions' | 'five';
+export type CampaignPredictionEntryPolicy = 'after-registration-v1' | 'first-admitted-v2';
 export type CampaignState = 'draft' | 'open' | 'live' | 'finalizing' | 'finished' | 'deleted';
 export interface CampaignPrize {
   place: number;
@@ -24,6 +25,12 @@ export interface CampaignFixture {
   marketKey: string;
   home: string;
   away: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
+  /** Recent league form in provider order. Missing history stays absent. */
+  homeForm?: string | null;
+  awayForm?: string | null;
+  formFetchedAt?: string | null;
   league: string;
   kickoffAt: string;
   cutoffAt: string;
@@ -80,6 +87,10 @@ export interface CampaignSummary {
   prizeTotalShannons: string;
   prizePlaces: number;
   joined: boolean;
+  /** Only present for this authenticated entrant's joined prediction competitions. */
+  joinedFixtureIds?: string[];
+  /** Subset already represented by a verified qualifying call for this entrant. */
+  qualifyingFixtureIds?: string[];
 }
 export interface CampaignOwnEntry {
   publicId: string;
@@ -104,6 +115,7 @@ export interface CampaignAdminEntry extends CampaignStanding {
 export interface CampaignDetail extends CampaignSummary {
   revision: number;
   termsHash: string | null;
+  predictionEntryPolicy: CampaignPredictionEntryPolicy | null;
   draft: CampaignDraftInput;
   fixtures: CampaignFixture[];
   gameweek: CampaignGameweek | null;

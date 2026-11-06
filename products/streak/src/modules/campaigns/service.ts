@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CampaignOptions, CampaignPage } from '../../../shared/campaign-wire';
+import type { CampaignFixture, CampaignOptions, CampaignPage } from '../../../shared/campaign-wire';
 import {
   CampaignError,
   assertRevision,
@@ -31,6 +31,12 @@ export class CampaignService {
     private readonly admins: readonly string[],
     private readonly sources: CampaignSources,
     private readonly fiveProfileName?: (actor: Actor) => Promise<string>,
+    private readonly fiveProfileNames?: (
+      accountIds: readonly string[],
+    ) => Promise<ReadonlyMap<string, string>>,
+    private readonly fixturePresentation?: (
+      fixtures: readonly CampaignFixture[],
+    ) => Promise<CampaignFixture[]>,
   ) {}
   isAdmin(actor: CampaignActor): boolean {
     return !!actor && (this.admins.includes(actor.id) || this.admins.includes(actor.wallet));
@@ -72,6 +78,52 @@ export class CampaignService {
     const [page, c] = await Promise.all([this.list(actor), this.store.load(id)]);
     if (!c || !this.visible(c, actor)) throw new CampaignError('Competition not found.', 404);
     page.detail = project(c, actor, page.admin, Date.parse(page.now), offset, limit);
+    if (c.draft.kind === 'five' && this.fiveProfileNames) {
+      // Fetch only the displayed page and award recipients, never every entrant.
+      // A page is at most 100 rows and published prizes at most 256 places.
+      const visible = new Set([
+        ...page.detail.leaderboard.map((row) => row.publicId),
+        ...page.detail.awards.flatMap((award) => (award.publicId ? [award.publicId] : [])),
+      ]);
+      const entrants = c.entries.filter((entry) => visible.has(entry.publicId));
+      if (entrants.length) {
+        let names: ReadonlyMap<string, string> = new Map();
+        try {
+          names = await this.fiveProfileNames(entrants.map((entry) => entry.accountId));
+        } catch {
+          // Name freshness must not erase saved scores or block entry recovery.
+          console.warn('[campaigns] public names unavailable; saved labels retained');
+        }
+        const publicNames = new Map(
+          entrants.map((entry) => [entry.publicId, names.get(entry.accountId)]),
+        );
+        for (const row of [...page.detail.leaderboard, ...(page.detail.adminEntries ?? [])])
+          row.name = publicNames.get(row.publicId) ?? row.name;
+        for (const award of page.detail.awards)
+          if (award.publicId) award.name = publicNames.get(award.publicId) ?? award.name;
+      }
+    }
+    if (page.detail.fixtures.length && this.fixturePresentation) {
+      try {
+        const presented = await this.fixturePresentation(structuredClone(page.detail.fixtures));
+        const presentation = new Map(presented.map((fixture) => [fixture.fixtureId, fixture]));
+        page.detail.fixtures = page.detail.fixtures.map((fixture) => {
+          const extra = presentation.get(fixture.fixtureId);
+          return extra
+            ? {
+                ...fixture,
+                homeLogo: extra.homeLogo ?? null,
+                awayLogo: extra.awayLogo ?? null,
+                homeForm: extra.homeForm ?? null,
+                awayForm: extra.awayForm ?? null,
+                formFetchedAt: extra.formFetchedAt ?? null,
+              }
+            : fixture;
+        });
+      } catch {
+        console.warn('[campaigns] fixture presentation unavailable; saved fixtures retained');
+      }
+    }
     return page;
   }
   async options(actor: CampaignActor): Promise<CampaignOptions> {

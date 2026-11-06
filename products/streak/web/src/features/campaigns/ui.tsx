@@ -6,7 +6,7 @@ import { Notice } from '../../components/notice';
 import { useNow } from '../../lib/use-now';
 import type { Account } from '../account/api';
 import type { Market } from '../markets/api';
-import type { Outcome } from '../predictions/draft';
+import type { Outcome, Pick } from '../predictions/draft';
 import { getPublicMarket } from '../predictions/api';
 import { actCampaign, loadCampaignOptions, loadCampaigns, prepareCampaignGameweek } from './api';
 import type {
@@ -20,7 +20,10 @@ import { CampaignList, CampaignPlay } from './play';
 import { CampaignSetup } from './setup';
 import { CampaignAdmin, DeleteCampaign } from './admin';
 import { FiveEntryName } from './five-entry-name';
-import { Badge, Busy, ckb, Dialog } from './presentation';
+import { CampaignJoinDialog } from './join-dialog';
+import { ToastViewport } from './toasts';
+import type { CampaignToast } from './toasts';
+import { Busy, ckb, Dialog } from './presentation';
 import './campaigns.css';
 
 export interface CampaignsProps {
@@ -28,10 +31,13 @@ export interface CampaignsProps {
   accountReady: boolean;
   onSignIn: () => void;
   signInPending: boolean;
-  onPick: (market: Market, outcome: Outcome) => void;
+  onPick: (market: Market, outcome: Outcome, campaignId: string) => void;
+  selectedPicks: readonly Pick[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onOpenFive: (roundId: string) => void;
+  onOpenMarket: (marketId: string) => void;
+  onOpenSlip: () => void;
   initialAdmin?: boolean;
 }
 export function Campaigns({
@@ -40,9 +46,12 @@ export function Campaigns({
   onSignIn,
   signInPending,
   onPick,
+  selectedPicks,
   selectedId,
   onSelect,
   onOpenFive,
+  onOpenMarket,
+  onOpenSlip,
   initialAdmin = false,
 }: CampaignsProps) {
   const queryClient = useQueryClient();
@@ -53,8 +62,15 @@ export function Campaigns({
   const [adminTab, setAdminTab] = useState<'monitor' | 'evidence'>('monitor');
   const [creating, setCreating] = useState(false),
     [editing, setEditing] = useState(false);
-  const [error, setError] = useState(''),
-    [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNoticeState] = useState<{
+    message: string;
+    targetId: string | null;
+    scope: string;
+  } | null>(null);
+  function setNotice(message: string, targetId = selectedId) {
+    setNoticeState(message ? { message, targetId, scope } : null);
+  }
   const [deleting, setDeleting] = useState(false),
     [joining, setJoining] = useState(false),
     [finalizing, setFinalizing] = useState(false),
@@ -86,7 +102,9 @@ export function Campaigns({
     setAddressOpen(false);
     setPayout(null);
     setError('');
-    setNotice('');
+    setNoticeState((previous) =>
+      previous?.targetId === selectedId && previous.scope === scope ? previous : null,
+    );
   }, [selectedId, scope]);
   const queryKey = selectedId
     ? ['private', 'campaigns', scope, 'detail', selectedId, offset]
@@ -184,7 +202,7 @@ export function Campaigns({
       result = await mutate({ action: 'publish', id: saved.id, revision: saved.revision });
       if (!result) {
         onSelect(saved.id);
-        setNotice('Your draft is saved. Publishing needs another check.');
+        setNotice('Your draft is saved. Publishing needs another check.', saved.id);
         return;
       }
     }
@@ -192,7 +210,7 @@ export function Campaigns({
     setEditing(false);
     setAdminView(!publish);
     onSelect(saved.id);
-    setNotice(publish ? 'Your competition is published.' : 'Competition draft saved.');
+    setNotice(publish ? 'Your competition is published.' : 'Competition draft saved.', saved.id);
   }
   async function pick(fixture: CampaignFixture, outcome: Outcome) {
     if (!detail || pickPending) return;
@@ -213,7 +231,8 @@ export function Campaigns({
         queryFn: ({ signal }) => getPublicMarket(fixture.marketId, signal),
         staleTime: 5000,
       });
-      if (!active.current || currentId.current !== targetId) return;
+      if (!active.current || activeScope.current !== scope || currentId.current !== targetId)
+        return;
       if (
         market.market.matchId !== fixture.fixtureId ||
         !market.accepting ||
@@ -223,16 +242,16 @@ export function Campaigns({
         throw Error(
           'This match is not accepting a new prediction right now. Your other picks are safe.',
         );
-      onPick(market.market, outcome);
+      onPick(market.market, outcome, targetId);
     } catch (failure) {
-      if (active.current && currentId.current === targetId)
+      if (active.current && activeScope.current === scope && currentId.current === targetId)
         setError(
           failure instanceof Error
             ? failure.message
             : 'The match could not be opened. Please try again.',
         );
     } finally {
-      if (active.current) setPickPending(null);
+      if (active.current && activeScope.current === scope) setPickPending(null);
     }
   }
   if (!accountReady || (!page && query.isPending))
@@ -265,6 +284,55 @@ export function Campaigns({
   const ownAward = detail?.awards.find(
     (award) => award.publicId !== null && award.publicId === detail.own?.publicId,
   );
+  const toasts: CampaignToast[] = [];
+  if (error && !showEditor)
+    toasts.push({
+      id: `error:${error}`,
+      title: 'This action needs attention',
+      description: error,
+      tone: 'attention',
+    });
+  if (notice?.targetId === selectedId && notice.scope === scope)
+    toasts.push({ id: `success:${notice.message}`, title: notice.message });
+  if (query.isError)
+    toasts.push({
+      id: `refresh:${selectedId ?? 'list'}`,
+      title: 'Showing your last loaded view',
+      description: 'The latest update could not be loaded. Your entries are preserved.',
+      tone: 'attention',
+      action: (
+        <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
+          {query.isFetching && <CellLoader />}Retry
+        </button>
+      ),
+    });
+  if (detail && !showEditor && !adminView) {
+    if (detail.notice)
+      toasts.push({
+        id: `${detail.id}:scores:${detail.scoreStatus}:${detail.notice}`,
+        title:
+          detail.scoreStatus === 'unavailable' || detail.scoreStatus === 'review-required'
+            ? 'Scores are being checked'
+            : 'Competition update',
+        description: detail.notice,
+        tone:
+          detail.scoreStatus === 'unavailable' || detail.scoreStatus === 'review-required'
+            ? 'attention'
+            : 'info',
+      });
+    if (detail.rehearsal)
+      toasts.push({
+        id: `${detail.id}:rehearsal`,
+        title: 'Rehearsal competition',
+        description: 'Test awards only. No mainnet payout or payout address is required.',
+      });
+    if (detail.state === 'deleted')
+      toasts.push({
+        id: `${detail.id}:archived`,
+        title: 'Competition archived',
+        description: 'Registration is closed. Existing results and prizes remain available.',
+      });
+  }
   return (
     <section className="campaign-page">
       <div className="campaign-route-controls">
@@ -295,25 +363,6 @@ export function Campaigns({
           </button>
         )}
       </div>
-      {query.isError && (
-        <Notice
-          title="Showing the last loaded competition"
-          tone="attention"
-          actions={
-            <button className="btn" type="button" onClick={() => void query.refetch()}>
-              Refresh
-            </button>
-          }
-        >
-          The latest update could not be loaded. Existing entries are preserved.
-        </Notice>
-      )}
-      {notice && <Notice title={notice} dismissible />}
-      {error && !deleting && !showEditor && !joining && !finalizing && !addressOpen && !payout && (
-        <Notice title="This action needs attention" tone="attention">
-          {error}
-        </Notice>
-      )}
       {showEditor ? (
         options.data ? (
           <CampaignSetup
@@ -450,6 +499,8 @@ export function Campaigns({
           now={now}
           pending={pending}
           pickPending={pickPending}
+          selectedPicks={selectedPicks}
+          refreshing={query.isFetching}
           onJoin={() => {
             setError('');
             setJoining(true);
@@ -458,6 +509,8 @@ export function Campaigns({
           signInPending={signInPending}
           onPick={(fixture, outcome) => void pick(fixture, outcome)}
           onOpenFive={onOpenFive}
+          onOpenMarket={onOpenMarket}
+          onOpenSlip={onOpenSlip}
           onAddress={() => {
             setAddress(ownAward?.receivingAddress ?? '');
             setAddressConfirmed(false);
@@ -468,30 +521,7 @@ export function Campaigns({
         />
       )}
       {joining && detail && (
-        <Dialog title={`Join ${detail.name}`} onClose={() => setJoining(false)} pending={pending}>
-          <p>Join for free and take your place on the leaderboard immediately.</p>
-          <div className="campaign-join-summary">
-            <Badge>
-              {detail.kind === 'five' ? 'Streak Five' : `${detail.fixtureCount} fixtures`}
-            </Badge>
-            <strong>{ckb(detail.prizeTotalShannons)} CKB</strong>
-            <span>{detail.prizePlaces} winning places</span>
-          </div>
-          <p>
-            {detail.kind === 'five'
-              ? 'Your saved team for the selected gameweek counts. Earlier final squad saves break a points tie.'
-              : 'Only your first qualifying paid prediction per fixture counts. Correct calls earn 3 points. Stake size does not affect points.'}
-          </p>
-          <p>
-            {detail.rehearsal
-              ? 'This is a rehearsal. It does not offer mainnet rewards or collect payout addresses.'
-              : 'Playing uses testnet tCKB. Campaign prizes use mainnet CKB and require organizer-approved payouts.'}
-          </p>
-          {error && (
-            <Notice title="Registration was not completed" tone="attention">
-              {error}
-            </Notice>
-          )}
+        <CampaignJoinDialog detail={detail} onClose={() => setJoining(false)} pending={pending}>
           {detail.kind === 'five' && account ? (
             <FiveEntryName
               key={`${account.id}:${detail.id}`}
@@ -531,19 +561,21 @@ export function Campaigns({
               {pending && <CellLoader />} Agree & join competition
             </button>
           )}
-        </Dialog>
+        </CampaignJoinDialog>
       )}
       {deleting && detail && admin && (
         <DeleteCampaign
           detail={detail}
           pending={pending}
-          error={error}
           onClose={() => setDeleting(false)}
           onDelete={async (target) => {
             const result = await mutate({ action: 'delete', ...target });
             if (result) {
               setDeleting(false);
-              setNotice('Competition archived. Existing entries and obligations are preserved.');
+              setNotice(
+                'Competition archived. Existing entries and obligations are preserved.',
+                null,
+              );
               onSelect(null);
             }
           }}
@@ -562,11 +594,6 @@ export function Campaigns({
             <Notice title="Final source results are still required">
               Refresh the competition after all results are verified. Provisional scores cannot
               create final awards.
-            </Notice>
-          )}
-          {error && (
-            <Notice title="Finalization was not completed" tone="attention">
-              {error}
             </Notice>
           )}
           <button
@@ -629,11 +656,6 @@ export function Campaigns({
             This address cannot be changed after confirmation. Check it carefully. Saving an address
             does not send funds or mark the prize paid.
           </p>
-          {error && (
-            <Notice title="Address could not be saved" tone="attention">
-              {error}
-            </Notice>
-          )}
           {!ownAward.receivingAddress && (
             <button
               type="button"
@@ -692,11 +714,6 @@ export function Campaigns({
             The first output is index 0. Streak checks the recipient, exact amount, organizer wallet
             and 24 confirmations. This action does not send funds.
           </p>
-          {error && (
-            <Notice title="Payment proof could not be verified" tone="attention">
-              {error}
-            </Notice>
-          )}
           <button
             type="button"
             className="btn primary"
@@ -728,6 +745,7 @@ export function Campaigns({
           </button>
         </Dialog>
       )}
+      <ToastViewport items={toasts} />
     </section>
   );
 }

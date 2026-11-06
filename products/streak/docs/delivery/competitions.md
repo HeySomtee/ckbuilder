@@ -1,6 +1,55 @@
 # Competitions
 
-5 November 2026. Implemented and verified locally in the runs below. Not deployed.
+The original competition release was pushed in `c0a1199` on 6 November 2026 after
+the complete 94-stage local gate. Deployment and physical-wallet acceptance are
+separate from that local evidence.
+
+## Competition testing feedback, 6 November
+
+The shared slip's **Add matches** returns to its source competition, including
+after switching tabs or reloading. Adding regular picks preserves that context.
+Account changes and removed source picks invalidate stale navigation preferences.
+Home, Draw and Away buttons show the draft selection with a checkmark and
+`aria-pressed`. Once selected, competition choices disable; **Open slip** lets the
+player remove an unpaid draft and choose again. Verified entered cards show the
+actual qualifying outcome and result state. **View market** remains available for
+ordinary additional predictions, which cannot replace the first qualifying call.
+
+The saved-slip dock, header and individual picks identify joined competitions.
+Mixed slips distinguish regular picks and retain competition return links through
+navigation and reload. Labels come from the signed-in entrant's verified fixture
+membership, without adding anything to payment signatures or saved transaction
+journals. No competition entry is created for an unregistered wallet. Points are
+additional to ordinary market settlement: losing predictions still recover only
+their available storage, while winners collect the normal market return.
+
+Cards use actual team logos and recent league form from the same saved fixtures
+and cached analytics as Markets. Missing form stays unavailable. The presentation
+does not fetch new provider data or change market identity, deadlines or capacity;
+frozen pre-match analytics take priority over later updates.
+
+Competition alerts slide up from the bottom center as closable toasts, without
+changing page height. Informational messages dismiss after ten seconds, paused
+while hovered or focused. Errors and messages requiring action remain until
+dismissed. Toasts clear mobile navigation and the saved slip, respect native
+dialogs and yield to expanded payment tracking. Pending payment controls still
+cannot be dismissed. Rehearsal labels, score freshness and action restrictions
+remain visible after a toast closes.
+
+The join dialog has compact prize facts and readable rules. Composite search and
+prize controls use one focus ring. Standings show compact refresh/finality labels,
+short wallet addresses for predictions and saved public FPL names for Five, with
+short-address fallback. Public responses do not gain full addresses or owner locks;
+names do not change squad-save timestamps, scores, ties or awards.
+
+Focused verification covers the actual built app in Chromium and WebKit at 320,
+390 and 1440 pixels, route/reload behavior, selected outcomes, input focus, join
+and finished states, toast placement, motion and dismissal. Identity regressions
+and independent reviews cover public naming, async account changes and retained
+payment restrictions. All browser fixtures are synthetic. Exact-tree release
+results are recorded locally in
+`.quality-artifacts/competition-ux-release-2026-11-06.json`; physical mobile wallets
+and hosted deployment must still be checked after publication.
 
 ## Play and administration
 
@@ -18,13 +67,25 @@ all users share each market's four lanes and 32 positions. Occupancy comes from 
 verified Activity read model; checkout still checks live capacity.
 
 Predictions award 3 points for a correct first qualifying admitted prediction per
-fixture, 0 otherwise. Deposits must commit after registration and before the frozen
-cutoff. Stake size has no effect. Ties use the earlier final qualifying prediction
+fixture, 0 otherwise. New competitions use `first-admitted-v2`: a registered player
+can qualify through a valid earlier prediction, including one placed before joining
+or from ordinary Markets. The prediction must still commit before the frozen market
+cutoff and pass canonical admission checks. Registration must finish before its own
+published deadline. Later predictions and unlisted fixtures cannot add points.
+Stake size has no effect. Ties use the earlier final qualifying prediction
 in canonical block/transaction/output order, with timestamps shown for inspection.
 Five uses its actual squad scores and earlier meaningful final squad/captain save.
 Unchanged saves, reordering and display-name changes do not reset that time.
 Inactive registrants rank below participants, including participants with negative
 Five scores. Only participants receive awards; unused places remain unawarded.
+
+Published non-rehearsal competitions retain their original `after-registration-v1`
+rules, so their qualifying prediction must also commit after registration. The
+owner's active unfinished rehearsals upgrade to v2 only during a complete verified
+reconciliation, with the new policy, terms hash and scores written in one audited
+transaction. Stale join reviews must refresh. Finished or deleted rehearsals and
+their awards stay frozen. Public rules and private evidence exports identify the
+policy instead of silently changing a published prize promise.
 
 Public standings refresh while a competition is active. An administrator reviews
 verified final results before freezing winners. Provider completion alone cannot

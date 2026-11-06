@@ -88,6 +88,77 @@ async function main() {
       });
     }
     const c = await create('concurrent');
+    const legacyRehearsal = await create('legacy-rehearsal');
+    await storage.change(
+      legacyRehearsal.id,
+      (current, now) => {
+        current.draft.rehearsal = true;
+        delete current.predictionEntryPolicy;
+        current.termsHash = 'synthetic-legacy-reviewed-hash';
+        joinCampaign(current, actor(1), current.termsHash, now);
+      },
+      { actorId: 'synthetic-fixture', action: 'restore-legacy-rehearsal' },
+    );
+    const priorPolicy = await storage.load(legacyRehearsal.id);
+    const oldPrediction = {
+      id: 'before-registration',
+      ownerHash: hex(1),
+      fixtureId: 'fixture-1',
+      marketKey: 'canonical-1',
+      outcome: 2,
+      committedAt: new Date(Date.parse(priorPolicy.entries[0].joinedAt) - 1000).toISOString(),
+      blockNumber: '5',
+      transactionIndex: 0,
+      outputIndex: 1,
+      transactionHash: hex(50),
+      blockHash: hex(60),
+      principalShannons: '10000000000',
+      status: 'accepted',
+    };
+    const policyEvidence = {
+      revision: 'existing-market-history',
+      verifiedAt: new Date(await storage.clock()).toISOString(),
+      complete: true,
+      final: false,
+      predictions: [oldPrediction],
+      results: [],
+      five: [],
+    };
+    const upgradedPolicy = await storage.change(
+      legacyRehearsal.id,
+      (current, now) => reconcileCampaign(current, policyEvidence, now),
+      { actorId: 'system', action: 'reconcile' },
+    );
+    assert.equal(upgradedPolicy.predictionEntryPolicy, 'first-admitted-v2');
+    assert.notEqual(upgradedPolicy.termsHash, priorPolicy.termsHash);
+    assert.equal(upgradedPolicy.entries[0].calls[0].outcome, 2);
+    assert.equal(upgradedPolicy.entries[0].calls[0].status, 'pending');
+    assert.equal(upgradedPolicy.entries[0].joinedAt, priorPolicy.entries[0].joinedAt);
+    const ruleAudit = await pool.query(
+      'SELECT data FROM streak_campaign_audit WHERE campaign_id=$1 AND revision=$2',
+      [legacyRehearsal.id, upgradedPolicy.revision],
+    );
+    assert.equal(ruleAudit.rows[0].data.campaign.predictionEntryPolicy, 'first-admitted-v2');
+    assert.equal(ruleAudit.rows[0].data.changedEntries[0].calls[0].transactionHash, hex(50));
+    await assert.rejects(
+      storage.change(
+        legacyRehearsal.id,
+        (current, now) => joinCampaign(current, actor(2), priorPolicy.termsHash, now),
+        { actorId: actor(2).id, action: 'join' },
+      ),
+      /Review/,
+    );
+    assert.equal((await storage.load(legacyRehearsal.id)).revision, upgradedPolicy.revision);
+    const repeatedPolicy = await storage.change(
+      legacyRehearsal.id,
+      (current, now) => reconcileCampaign(current, policyEvidence, now),
+      { actorId: 'system', action: 'reconcile' },
+    );
+    assert.equal(
+      repeatedPolicy.revision,
+      upgradedPolicy.revision,
+      'policy migration and replay stay idempotent',
+    );
     const retry = await storage.create(c.id, actor(99).id, (now) =>
       newCampaign(c.id, actor(99), draft(created + 60_000), now),
     );
@@ -434,9 +505,11 @@ async function main() {
       ['award-a', 'award-b', 'concurrent', 'cutoff'],
       'Newer drafts never starve old open, deleted or finished campaigns from obligation reconciliation.',
     );
-    assert.deepEqual(await storage.reconciliationIds(secondPage[secondPage.length - 1], 2), []);
+    const thirdPage = await storage.reconciliationIds(secondPage[secondPage.length - 1], 2);
+    assert.deepEqual(thirdPage, ['legacy-rehearsal']);
+    assert.deepEqual(await storage.reconciliationIds(thirdPage[thirdPage.length - 1], 2), []);
     console.log(
-      'Campaign PostgreSQL checks passed: concurrent/idempotent joins, cutoff lock, rollback, archive, authorization, output reuse, audits and reconciliation paging.',
+      'Campaign PostgreSQL checks passed: concurrent/idempotent joins, cutoff lock, rollback, archive, authorization, output reuse, audited rehearsal policy upgrade and reconciliation paging.',
     );
   } finally {
     if (pool) await pool.end();

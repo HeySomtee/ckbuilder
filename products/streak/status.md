@@ -1,5 +1,20 @@
 # Streak status
 
+6 November [competition testing refinements](docs/delivery/competitions.md#competition-testing-feedback-6-november)
+keep Add matches inside its competition, show selected draft outcomes, refine the
+join dialog and input focus, and replace transient competition banners with
+closable bottom-center toasts. Standings use compact freshness labels and public
+FPL names or shortened addresses. The expanded scope adds competition labels in
+mixed saved slips, entered outcomes, team logos and cached recent form. New
+prediction competitions count earlier qualifying bets when the wallet joins on
+time; active rehearsals upgrade through audited reconciliation, while published
+community rules and frozen awards remain unchanged. Ordinary market settlement
+is unaffected. Publication requires the exact-tree local gate;
+the result is recorded in the ignored competition UX release artifact. Hosted
+acceptance remains separate. Earlier competitions, efficiency, Five and Zerion
+work below was pushed together as `c0a1199` after all 94 local stages passed;
+older unpublished statements describe their original checkpoints.
+
 6 November [Zerion RPC compatibility](docs/delivery/wallet-compatibility.md): the
 optional reconnect account picker now tolerates the reported exact unsupported
 method message while required account access, signing and account checks stay

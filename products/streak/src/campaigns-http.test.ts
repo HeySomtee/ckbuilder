@@ -91,18 +91,34 @@ async function main() {
     ],
     gameweeks: [],
   };
-  const service = new CampaignService(store, [wallets[0]], {
-    options: async () => options,
-    observe: async () => ({
-      revision: 'synthetic',
-      verifiedAt: new Date(store.now).toISOString(),
-      complete: false,
-      final: false,
-      predictions: [],
-      results: [],
-      five: [],
-    }),
-  });
+  const service = new CampaignService(
+    store,
+    [wallets[0]],
+    {
+      options: async () => options,
+      observe: async () => ({
+        revision: 'synthetic',
+        verifiedAt: new Date(store.now).toISOString(),
+        complete: false,
+        final: false,
+        predictions: [],
+        results: [],
+        five: [],
+      }),
+    },
+    undefined,
+    undefined,
+    async (fixtures) =>
+      fixtures.map((fixture) => ({
+        ...fixture,
+        marketKey: 'untrusted-presentation-cannot-change-market',
+        cutoffAt: new Date(0).toISOString(),
+        capacity: 999,
+        homeLogo: 'https://synthetic.invalid/home.png',
+        homeForm: 'WDLWW',
+        formFetchedAt: new Date(store.now).toISOString(),
+      })),
+  );
   // CommonJS exports are replaced only in this isolated test process; server routing is unchanged.
   const runtime: typeof import('./modules/campaigns/runtime') = require('./modules/campaigns/runtime');
   const originalService = runtime.campaignService;
@@ -377,6 +393,28 @@ async function main() {
         `public detail excludes ${privateValue}`,
       );
     assert.equal(JSON.parse(publicText).detail.leaderboard.length, 2);
+    const publicFixture = (JSON.parse(publicText) as CampaignPage).detail!.fixtures[0];
+    assert.equal(publicFixture.homeLogo, 'https://synthetic.invalid/home.png');
+    assert.equal(publicFixture.homeForm, 'WDLWW');
+    assert.equal(publicFixture.marketKey, options.fixtures[0].marketKey);
+    assert.equal(publicFixture.cutoffAt, options.fixtures[0].cutoffAt);
+    assert.equal(
+      publicFixture.capacity,
+      32,
+      'presentation cannot alter paid-market identity or limits',
+    );
+    assert.equal(
+      (JSON.parse(publicText) as CampaignPage).detail!.predictionEntryPolicy,
+      'first-admitted-v2',
+    );
+    assert.deepEqual(
+      (JSON.parse(publicText) as CampaignPage).detail!.leaderboard.map((row) => row.name).sort(),
+      wallets
+        .slice(1)
+        .map((wallet) => `${wallet.slice(0, 8)}\u2026${wallet.slice(-6)}`)
+        .sort(),
+      'prediction standings show short verified wallets instead of login usernames',
+    );
     assert.equal((await get('?id=http-campaign&offset=-1')).status, 400);
     assert.equal((await get('?action=export&id=http-campaign')).status, 403);
     assert.equal((await get('?action=export&id=http-campaign', cookies[1])).status, 403);

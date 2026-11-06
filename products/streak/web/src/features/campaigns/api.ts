@@ -35,6 +35,22 @@ const date = (v: unknown) => {
 const nullableDate = (v: unknown) => (v === null ? null : date(v));
 const draftDeadline = (v: unknown) => (v === '' ? '' : date(v));
 const nullableString = (v: unknown) => (v === null ? null : string(v));
+function optionalLogo(value: unknown): string | null {
+  if (typeof value !== 'string' || /[\\\u0000-\u0020\u007f]/.test(value)) return null;
+  try {
+    const url = new URL(value, location.origin);
+    return !url.username &&
+      !url.password &&
+      (url.protocol === 'https:' ||
+        (url.origin === location.origin && value.startsWith('/') && !value.startsWith('//')))
+      ? url.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+const optionalForm = (value: unknown) =>
+  typeof value === 'string' && /^[WDL]{1,5}$/.test(value) ? value : undefined;
 const amount = (v: unknown) => {
   const s = string(v, 30);
   return /^(0|[1-9]\d*)$/.test(s) ? s : invalid();
@@ -74,6 +90,11 @@ function fixture(v: unknown): CampaignFixture {
     capacity: integer(x.capacity),
     occupied: x.occupied === null ? null : integer(x.occupied),
     updatedAt: nullableDate(x.updatedAt),
+    homeLogo: optionalLogo(x.homeLogo),
+    awayLogo: optionalLogo(x.awayLogo),
+    homeForm: optionalForm(x.homeForm),
+    awayForm: optionalForm(x.awayForm),
+    formFetchedAt: x.formFetchedAt == null ? null : date(x.formFetchedAt),
   };
 }
 function gameweek(v: unknown): CampaignGameweek {
@@ -119,6 +140,12 @@ function summary(v: unknown): CampaignSummary {
     prizeTotalShannons: amount(x.prizeTotalShannons),
     prizePlaces: integer(x.prizePlaces),
     joined: boolean(x.joined),
+    joinedFixtureIds:
+      x.joinedFixtureIds === undefined ? [] : list(x.joinedFixtureIds).map((id) => string(id)),
+    qualifyingFixtureIds:
+      x.qualifyingFixtureIds === undefined
+        ? []
+        : list(x.qualifyingFixtureIds).map((id) => string(id)),
   };
 }
 function award(v: unknown): CampaignAward {
@@ -169,6 +196,15 @@ function detail(v: unknown): CampaignDetail {
     revision: integer(x.revision),
     termsHash: nullableString(x.termsHash),
     draft: draft(x.draft),
+    predictionEntryPolicy:
+      x.kind === 'five'
+        ? null
+        : x.predictionEntryPolicy === undefined
+          ? 'after-registration-v1'
+          : choice(x.predictionEntryPolicy, [
+              'after-registration-v1',
+              'first-admitted-v2',
+            ] as const),
     fixtures: list(x.fixtures).map(fixture),
     gameweek: x.gameweek === null ? null : gameweek(x.gameweek),
     leaderboard: list(x.leaderboard).map(standing),

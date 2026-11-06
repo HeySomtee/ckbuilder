@@ -8,6 +8,7 @@ import { CampaignService } from './modules/campaigns/service';
 import type { CampaignStorage } from './modules/campaigns/storage';
 import {
   newCampaign,
+  joinCampaign,
   parseDraft,
   publishCampaign,
   type Campaign,
@@ -233,8 +234,16 @@ async function main() {
       throw Error('No observation needed');
     },
   };
-  const campaigns = new CampaignService(campaignStore, [], sources, (who) =>
-    service.requireProfile(who),
+  const nameReads: string[][] = [];
+  const campaigns = new CampaignService(
+    campaignStore,
+    [],
+    sources,
+    (who) => service.requireProfile(who),
+    (ids) => {
+      nameReads.push([...ids]);
+      return service.publicProfileNames(ids);
+    },
   );
   const join = { id: campaign.id, action: 'join', termsHash: campaign.termsHash };
   await assert.rejects(
@@ -257,6 +266,60 @@ async function main() {
     existing,
     'existing registration retry does not require or rewrite the profile',
   );
+  const legacy = campaignStore.rows.get(campaign.id)!;
+  legacy.entries[0].name = 'Player';
+  legacy.entries[0].participated = true;
+  legacy.entries[0].points = 42;
+  legacy.entries[0].tieBreakAt = new Date(campaignStore.now - 1000).toISOString();
+  const unnamed = { ...nameless, name: 'Player', wallet: `ckt1${'c'.repeat(80)}` };
+  joinCampaign(legacy, unnamed, legacy.termsHash, campaignStore.now + 1);
+  joinCampaign(
+    legacy,
+    { ...other, ownerHash: `0x${'ef'.repeat(32)}` },
+    legacy.termsHash,
+    campaignStore.now + 2,
+  );
+  legacy.awards = [
+    {
+      place: 1,
+      publicId: legacy.entries[0].publicId,
+      name: 'Player',
+      amountShannons: '10000000000',
+      usdReference: '10',
+      status: 'address-needed',
+      transactionHash: null,
+    },
+  ];
+  legacy.state = 'finished';
+  const savedCampaign = structuredClone(legacy);
+  await service.saveProfile(user, 'Updated FPL Name');
+  const publicCampaign = (await campaigns.get(campaign.id, null)).detail!;
+  assert.equal(publicCampaign.leaderboard[0].name, 'Updated FPL Name');
+  assert.equal(publicCampaign.awards[0].name, 'Updated FPL Name');
+  assert.equal(publicCampaign.leaderboard[1].name, 'ckt1cccc\u2026cccccc');
+  assert.equal(publicCampaign.leaderboard[2].name, 'Old Squad New Name');
+  for (const entry of legacy.entries) {
+    for (const value of [entry.accountId, entry.wallet, entry.ownerHash])
+      assert.equal(JSON.stringify(publicCampaign).includes(value), false);
+  }
+  nameReads.length = 0;
+  const paged = (await campaigns.get(campaign.id, null, 1, 1)).detail!;
+  assert.equal(paged.leaderboard.length, 1);
+  assert.deepEqual(
+    nameReads,
+    [[user.id, unnamed.id]],
+    'only displayed rows and award recipients load names',
+  );
+  assert.deepEqual(await campaignStore.load(campaign.id), savedCampaign);
+  await assert.rejects(service.publicProfileNames(Array(1001).fill(user.id)), /Too many/);
+  const failingNames = new CampaignService(campaignStore, [], sources, undefined, async () => {
+    throw Error('Synthetic profile-store outage');
+  });
+  const retained = (await failingNames.get(campaign.id, null)).detail!;
+  assert.equal(retained.leaderboard[0].points, 42);
+  assert.equal(retained.leaderboard[0].name, 'ckt1aaaa\u2026aaaaaa');
+  assert.equal(retained.awards[0].amountShannons, '10000000000');
+  assert.deepEqual(await campaignStore.load(campaign.id), savedCampaign);
   console.log(
     'Five profiles passed: normalization, required identity, public short labels, pre-lock privacy, immutable snapshots/tie timestamps, locked names and Five registration gates.',
   );

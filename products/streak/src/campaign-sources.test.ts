@@ -5,7 +5,13 @@ import type { ActivitySourceSnapshot } from './modules/activity/storage';
 import { V4_DIRECT_CONFIG, type DirectMarketDescriptor } from './modules/direct/registry';
 import { newRound, parseTerms, saveEntry } from './modules/five/domain';
 import { TEST_TIMING_POLICY } from './modules/five/timing';
-import { newCampaign, publishCampaign, type Campaign } from './modules/campaigns/domain';
+import {
+  joinCampaign,
+  newCampaign,
+  publishCampaign,
+  reconcileCampaign,
+  type Campaign,
+} from './modules/campaigns/domain';
 import { parseCampaignAbsenceSnapshot } from './modules/campaigns/absence';
 import type { CampaignAbsenceSnapshot } from './modules/direct/campaign-absence';
 import {
@@ -296,6 +302,41 @@ async function main() {
   });
   assert.equal((await adapter.observe(c)).predictions.length, 1);
   assert.equal(reads, 1, 'one bulk read serves all registered wallets without wallet chain scans');
+  const history = structuredClone(row);
+  history.projection!.owners[H(1)].positions[0].commit!.timestamp = now - 60_000;
+  history.projection!.owners[H(99)] = {
+    ...structuredClone(history.projection!.owners[H(1)]),
+    positions: [position(99)],
+  };
+  const historicalCampaign = campaign();
+  joinCampaign(historicalCampaign, actor, historicalCampaign.termsHash, now + 10_000);
+  const historicalAdapter = createCampaignSources({
+    activity: () => ({
+      readSources: async (ids) => {
+        reads++;
+        assert.deepEqual(ids, ['123']);
+        return [history];
+      },
+    }),
+    five: () => undefined,
+    options: async () => options,
+    now: () => now + 10_000,
+  });
+  reconcileCampaign(
+    historicalCampaign,
+    await historicalAdapter.observe(historicalCampaign),
+    now + 10_000,
+  );
+  assert.equal(reads, 2, 'pre-registration history reuses one market snapshot read');
+  assert.equal(
+    historicalCampaign.entries.length,
+    1,
+    'unregistered owners in Activity cannot enter the competition',
+  );
+  assert.equal(historicalCampaign.entries[0].calls[0].status, 'pending');
+  assert.equal(historicalCampaign.entries[0].calls[0].outcome, 0);
+  assert.equal(historicalCampaign.entries[0].tieBreakAt, iso(now - 60_000));
+  assert.equal(historicalCampaign.entries[0].qualifyingEntries, 1);
   assert.equal((await adapter.observe(fc)).complete, false, 'unavailable Five DB fails closed');
 
   const absentCampaign = structuredClone(c);

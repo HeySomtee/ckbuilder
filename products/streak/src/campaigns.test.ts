@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import {
   assertRevision,
   deleteCampaign,
@@ -13,6 +14,7 @@ import {
   reconcileCampaign,
   recordPayout,
   saveReceivingAddress,
+  summary,
   type Actor,
   type Campaign,
   type CampaignEvidence,
@@ -64,6 +66,22 @@ function campaign(kind: 'predictions' | 'five' = 'predictions'): Campaign {
   const c = newCampaign(`test-${kind}`, actor(99), parseDraft(draft(kind)), start);
   publishCampaign(c, options, start);
   for (const id of [1, 2, 3]) joinCampaign(c, actor(id), c.termsHash, start + id * 1000);
+  return c;
+}
+function legacyPredictionCampaign(rehearsal = false): Campaign {
+  const c = campaign();
+  delete c.predictionEntryPolicy;
+  c.draft.rehearsal = rehearsal;
+  c.termsHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        version: 1,
+        draft: c.draft,
+        fixtures: c.fixtures.map(({ occupied: _o, updatedAt: _u, ...fixture }) => fixture),
+        gameweek: c.gameweek,
+      }),
+    )
+    .digest('hex');
   return c;
 }
 const prediction = (
@@ -164,6 +182,34 @@ check('registration deadline and current rules are checked at write time', () =>
   assert.throws(() => joinCampaign(c, actor(4), 'wrong', start + 50_000), /Review/);
   assert.throws(() => joinCampaign(c, actor(4), c.termsHash, start + 200_000), /closed/);
 });
+check('public prediction names use short wallets without rewriting identities or awards', () => {
+  const c = campaign();
+  c.entries.forEach((entry, i) => {
+    entry.name = 'Player';
+    entry.wallet = `ckt1${String(i + 1).repeat(80)}`;
+  });
+  reconcileCampaign(c, evidence([prediction(1, 0, 1)]), start + 500_000);
+  finalizeCampaign(c, start + 500_000);
+  const saved = structuredClone(c);
+  const detail = project(c, null, false, start + 500_000);
+  assert.equal(detail.leaderboard[0].name, 'ckt11111\u2026111111');
+  assert.equal(detail.awards[0].name, detail.leaderboard[0].name);
+  assert.equal(detail.awards[1].name, null);
+  assert.equal(new Set(detail.leaderboard.map((row) => row.name)).size, 3);
+  for (const entry of c.entries) {
+    assert.equal(JSON.stringify(detail).includes(entry.wallet), false);
+    assert.equal(JSON.stringify(detail).includes(entry.ownerHash), false);
+    assert.equal(JSON.stringify(detail).includes(entry.accountId), false);
+  }
+  assert.deepEqual(c, saved, 'public labels cannot change stored scoring or finalized awards');
+  const five = campaign('five');
+  five.entries[0].name = 'Player';
+  five.entries[0].wallet = c.entries[0].wallet;
+  five.entries[1].name = 'Saved FPL Name';
+  const managers = project(five, null, false, start).leaderboard;
+  assert.equal(managers[0].name, detail.leaderboard[0].name);
+  assert.equal(managers[1].name, 'Saved FPL Name');
+});
 check(
   'first canonical qualifying prediction counts, independent of later outcome or larger stake',
   () => {
@@ -180,8 +226,9 @@ check(
     assert.equal(c.entries[0].qualifyingEntries, 1);
   },
 );
-check('pre-registration and late deposits never qualify', () => {
-  const c = campaign();
+check('legacy published mainnet rules retain the registration boundary and frozen hash', () => {
+  const c = legacyPredictionCampaign();
+  const originalHash = c.termsHash;
   reconcileCampaign(
     c,
     evidence([prediction(1, 0, 1, 0, 0), prediction(1, 1, 2, 0, 300)]),
@@ -189,7 +236,120 @@ check('pre-registration and late deposits never qualify', () => {
   );
   assert.equal(c.entries[0].participated, false);
   assert.equal(c.entries[0].points, 0);
+  assert.equal(c.termsHash, originalHash);
+  assert.equal(c.predictionEntryPolicy, undefined);
+  assert.equal(project(c, null, false, start).predictionEntryPolicy, 'after-registration-v1');
 });
+check('v2 first admitted prediction counts before registration and can never be replaced', () => {
+  const c = campaign();
+  assert.equal(c.predictionEntryPolicy, 'first-admitted-v2');
+  const old = prediction(1, 0, 1, 2, -30);
+  const later = prediction(1, 0, 2, 0, 40);
+  const unregistered = prediction(99, 1, 3, 0, 50);
+  const late = prediction(1, 1, 4, 0, 300);
+  const wrongMarket = { ...prediction(2, 1, 5, 0, 60), marketKey: 'another-market' };
+  const e = evidence([later, unregistered, late, wrongMarket, old], 'v2-live', false);
+  const evidenceBefore = structuredClone(e);
+  reconcileCampaign(c, e, start + 500_000);
+  assert.equal(c.entries.length, 3, 'paid predictions do not auto-register other wallets');
+  assert.deepEqual(
+    c.entries[0].calls,
+    [
+      {
+        fixtureId: 'fixture-0',
+        outcome: 2,
+        points: 0,
+        status: 'pending',
+        transactionHash: old.transactionHash,
+      },
+    ],
+    'the owner sees the entered outcome before a result exists',
+  );
+  assert.equal(c.entries[0].tieBreakAt, at(-30));
+  assert.equal(c.entries[0].qualifyingEntries, 1);
+  assert.equal(c.entries[1].participated, false);
+  reconcileCampaign(c, evidence(e.predictions, 'v2-final'), start + 500_000);
+  assert.equal(c.entries[0].calls[0].status, 'incorrect');
+  assert.equal(c.entries[0].points, 0, 'a later correct duplicate cannot replace the first loss');
+  assert.equal(c.entries[0].evidence[0].id, old.id);
+  assert.deepEqual(
+    e,
+    evidenceBefore,
+    'competition projection never mutates ordinary payment evidence',
+  );
+  const empty = campaign();
+  empty.entries = [];
+  reconcileCampaign(empty, evidence([old]), start + 500_000);
+  assert.deepEqual(
+    empty.entries,
+    [],
+    'unregistered wallets have no ranked entry or competition points',
+  );
+});
+check(
+  'active legacy rehearsals upgrade atomically; incomplete, final and archived runs retain rules',
+  () => {
+    const c = legacyPredictionCampaign(true);
+    const originalHash = c.termsHash;
+    const positions = [prediction(1, 0, 1, 0, 0)];
+    reconcileCampaign(c, { ...evidence(positions), complete: false }, start + 500_000);
+    assert.equal(c.predictionEntryPolicy, undefined);
+    assert.equal(
+      c.termsHash,
+      originalHash,
+      'unavailable evidence cannot announce an unscored rules upgrade',
+    );
+    reconcileCampaign(c, evidence(positions), start + 500_000);
+    assert.equal(c.predictionEntryPolicy, 'first-admitted-v2');
+    assert.equal(c.entries[0].points, 3);
+    assert.notEqual(c.termsHash, originalHash);
+    assert.throws(() => joinCampaign(c, actor(4), originalHash, start + 50_000), /Review/);
+    const upgraded = structuredClone(c);
+    reconcileCampaign(c, evidence(positions), start + 500_000);
+    assert.deepEqual(c, upgraded, 'upgrading once does not keep rewriting rules or scores');
+    const archived = legacyPredictionCampaign(true);
+    deleteCampaign(archived, actor(99), archived.revision, archived.draft.name, start + 1000);
+    reconcileCampaign(archived, evidence(positions), start + 500_000);
+    assert.equal(archived.predictionEntryPolicy, undefined);
+    assert.equal(archived.entries[0].points, 0);
+    const finished = legacyPredictionCampaign();
+    reconcileCampaign(finished, evidence(positions), start + 500_000);
+    finalizeCampaign(finished, start + 500_000);
+    finished.draft.rehearsal = true;
+    const awards = structuredClone(finished.awards);
+    const finishedHash = finished.termsHash;
+    reconcileCampaign(finished, evidence(positions), start + 500_000);
+    assert.equal(finished.predictionEntryPolicy, undefined);
+    assert.equal(finished.termsHash, finishedHash);
+    assert.deepEqual(finished.awards, awards);
+    assert.equal(finished.entries[0].points, 0);
+  },
+);
+check(
+  'a mixed slip counts only the whitelisted first call, independent of ordinary settlement',
+  () => {
+    const c = campaign();
+    const first = prediction(1, 0, 1, 0, 0);
+    const outside = { ...prediction(1, 2, 1, 0, 0), transactionHash: first.transactionHash };
+    const duplicate = prediction(1, 0, 2, 2, 80);
+    const e = evidence([outside, duplicate, first]);
+    const original = structuredClone(e);
+    reconcileCampaign(c, e, start + 500_000);
+    assert.equal(c.entries[0].points, 3);
+    assert.equal(c.entries[0].qualifyingEntries, 1);
+    assert.equal(c.entries[0].calls[0].outcome, 0);
+    assert.deepEqual(e, original);
+    const ownSummary = summary(c, actor(1), start + 500_000);
+    assert.deepEqual(ownSummary.joinedFixtureIds, ['fixture-0', 'fixture-1']);
+    assert.deepEqual(ownSummary.qualifyingFixtureIds, ['fixture-0']);
+    for (const viewer of [null, actor(99)]) {
+      const publicSummary = summary(c, viewer, start + 500_000);
+      assert.equal(publicSummary.joinedFixtureIds, undefined);
+      assert.equal(publicSummary.qualifyingFixtureIds, undefined);
+    }
+    assert.equal(summary(campaign('five'), actor(1), start).joinedFixtureIds, undefined);
+  },
+);
 check('a multi-pick payment has separate positions and only one score per fixture', () => {
   const c = campaign();
   reconcileCampaign(c, evidence([prediction(1, 0, 1), prediction(1, 1, 1)]), start + 500_000);

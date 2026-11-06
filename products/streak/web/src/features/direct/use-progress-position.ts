@@ -17,7 +17,7 @@ import {
 } from './progress-position';
 
 const obstaclesSelector =
-  '.topbar, .network-strip, .prediction-dock, .mobile-dock, dialog[open], [role="dialog"]:not([hidden])';
+  '.topbar, .network-strip, .prediction-dock, .mobile-dock, .campaign-toast-stack, dialog[open], [role="dialog"]:not([hidden])';
 const mobileQuery = '(max-width: 1050px), (max-height: 620px)';
 type Geometry = {
   bounds: ProgressBounds;

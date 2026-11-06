@@ -91,11 +91,15 @@ export function Dialog({
   children,
   onClose,
   pending = false,
+  className = '',
+  eyebrow,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   pending?: boolean;
+  className?: string;
+  eyebrow?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null),
     id = useId();
@@ -110,7 +114,7 @@ export function Dialog({
   }, []);
   return (
     <dialog
-      className="campaign-dialog"
+      className={`campaign-dialog ${className}`.trim()}
       ref={ref}
       aria-labelledby={id}
       onCancel={(e) => {
@@ -119,7 +123,10 @@ export function Dialog({
       }}
     >
       <header>
-        <h2 id={id}>{title}</h2>
+        <div className="campaign-dialog-title">
+          {eyebrow && <span className="campaign-eyebrow">{eyebrow}</span>}
+          <h2 id={id}>{title}</h2>
+        </div>
         <button
           type="button"
           className="campaign-icon-button"

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Icon } from '../../components/icon';
-import { Notice } from '../../components/notice';
 import { CellLoader } from '../../components/cell-loader';
-import type { Outcome } from '../predictions/draft';
+import { TeamBadge } from '../../components/team-badge';
+import type { Outcome, Pick } from '../predictions/draft';
 import type { CampaignDetail, CampaignFixture, CampaignStanding, CampaignSummary } from './api';
 import { Badge, ckb, dateTime, Dialog, label, Standings, Trophy } from './presentation';
 
@@ -103,74 +103,155 @@ export function CampaignList({
   );
 }
 
+function RecentForm({ name, form }: { name: string; form?: string | null }) {
+  const results = form?.match(/[WDL]/g)?.slice(-5) ?? [];
+  const meaning = (result: string) => (result === 'W' ? 'Win' : result === 'D' ? 'Draw' : 'Loss');
+  if (!results.length) return <small className="campaign-form-empty">Form unavailable</small>;
+  return (
+    <div
+      className="campaign-team-form"
+      role="img"
+      aria-label={`${name}, recent league results: ${results.map(meaning).join(', ')}`}
+    >
+      {results.map((result, index) => (
+        <span
+          key={index}
+          className={`campaign-form-result result-${result.toLowerCase()}`}
+          title={meaning(result)}
+          aria-hidden="true"
+        >
+          {result}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function CompetitionTeam({
+  name,
+  logo,
+  form,
+  side,
+}: {
+  name: string;
+  logo?: string | null;
+  form?: string | null;
+  side: 'home' | 'away';
+}) {
+  const initials = name
+    .split(/\s+/u)
+    .map((part) => Array.from(part)[0] ?? '')
+    .join('')
+    .slice(0, 3)
+    .toUpperCase();
+  return (
+    <div className="campaign-match-team">
+      <TeamBadge key={logo ?? name} logo={logo ?? null} code={initials} side={side} />
+      <strong>{name}</strong>
+      <RecentForm name={name} form={form} />
+    </div>
+  );
+}
+
 function FixtureCard({
   fixture,
   detail,
   now,
   pending,
   onPick,
+  selected,
+  onOpenMarket,
+  onOpenSlip,
 }: {
   fixture: CampaignFixture;
   detail: CampaignDetail;
   now: number;
   pending: string | null;
   onPick: (fixture: CampaignFixture, outcome: Outcome) => void;
+  selected?: Outcome;
+  onOpenMarket: (marketId: string) => void;
+  onOpenSlip: () => void;
 }) {
+  const [pendingOutcome, setPendingOutcome] = useState<Outcome | null>(null);
   const own = detail.own?.calls.find((call) => call.fixtureId === fixture.fixtureId);
+  const selectedOutcome = own ? (['home', 'draw', 'away'] as const)[own.outcome] : selected;
   const full = fixture.occupied !== null && fixture.occupied >= fixture.capacity;
   const locked =
     now >= Date.parse(fixture.cutoffAt) ||
     ['draft', 'finished', 'finalizing', 'deleted'].includes(detail.state);
-  const unavailable = full || locked || pending !== null;
+  const unavailable = full || locked || pending !== null || !!selectedOutcome;
+  const selectedLabel =
+    selectedOutcome === 'home'
+      ? `${fixture.home} to win`
+      : selectedOutcome === 'away'
+        ? `${fixture.away} to win`
+        : 'Draw';
   return (
     <article className="campaign-match-card">
       <div className="campaign-card-meta">
         <span>{fixture.league}</span>
         <Badge tone={own ? 'mint' : ''}>
-          {own ? 'Qualifying pick' : full ? 'Full' : locked ? 'Locked' : 'Open'}
+          {own ? 'Entered' : selected ? 'In your slip' : full ? 'Full' : locked ? 'Locked' : 'Open'}
         </Badge>
       </div>
       <time dateTime={fixture.kickoffAt}>{dateTime(fixture.kickoffAt)}</time>
       <div className="campaign-match-teams">
-        <strong>{fixture.home}</strong>
+        <CompetitionTeam
+          name={fixture.home}
+          logo={fixture.homeLogo}
+          form={fixture.homeForm}
+          side="home"
+        />
         <span>vs</span>
-        <strong>{fixture.away}</strong>
+        <CompetitionTeam
+          name={fixture.away}
+          logo={fixture.awayLogo}
+          form={fixture.awayForm}
+          side="away"
+        />
       </div>
-      {own ? (
-        <div className="campaign-call-status">
-          <span>
-            {[fixture.home, 'Draw', fixture.away][own.outcome]}
-            {own.outcome === 1 ? '' : ' to win'}
-          </span>
-          <Badge tone={own.status === 'correct' ? 'mint' : ''}>
-            {own.status === 'pending'
-              ? 'Awaiting result'
-              : own.status === 'void'
-                ? 'Void · 0 pts'
-                : `${own.points} pts`}
-          </Badge>
-        </div>
-      ) : (
-        <div className="campaign-outcomes">
-          {(['home', 'draw', 'away'] as const).map((outcome) => (
-            <button
-              type="button"
-              key={outcome}
-              disabled={unavailable}
-              onClick={() => onPick(fixture, outcome)}
-              aria-label={`${outcome === 'home' ? fixture.home : outcome === 'away' ? fixture.away : 'Draw'}${outcome === 'draw' ? '' : ' to win'}`}
-            >
-              {pending === fixture.fixtureId ? (
-                <CellLoader />
-              ) : outcome === 'home' ? (
-                'Home'
-              ) : outcome === 'away' ? (
-                'Away'
-              ) : (
-                'Draw'
-              )}
+      {(fixture.homeForm || fixture.awayForm) && (
+        <p className="campaign-form-order">Recent league form</p>
+      )}
+      <div className={`campaign-outcomes${selectedOutcome ? ' is-picked' : ''}`}>
+        {(['home', 'draw', 'away'] as const).map((outcome) => (
+          <button
+            type="button"
+            key={outcome}
+            disabled={unavailable}
+            aria-pressed={selectedOutcome === outcome}
+            onClick={() => {
+              setPendingOutcome(outcome);
+              onPick(fixture, outcome);
+            }}
+            aria-label={`${outcome === 'home' ? fixture.home : outcome === 'away' ? fixture.away : 'Draw'}${outcome === 'draw' ? '' : ' to win'}`}
+          >
+            {selectedOutcome === outcome && <Icon name="check" />}
+            {pending === fixture.fixtureId && pendingOutcome === outcome && <CellLoader />}
+            {outcome === 'home' ? 'Home' : outcome === 'away' ? 'Away' : 'Draw'}
+          </button>
+        ))}
+      </div>
+      {selectedOutcome && (
+        <div className={`campaign-pick-summary${own ? ' is-entered' : ''}`}>
+          <div>
+            <small>{own ? 'Your competition pick' : 'Your draft pick'}</small>
+            <strong>{selectedLabel}</strong>
+          </div>
+          {own ? (
+            <Badge tone={own.status === 'correct' ? 'mint' : ''}>
+              {own.status === 'pending'
+                ? 'Awaiting result'
+                : own.status === 'void'
+                  ? 'Void · 0 pts'
+                  : `${own.points} pts`}
+            </Badge>
+          ) : (
+            <button type="button" className="btn campaign-pick-open" onClick={onOpenSlip}>
+              Open slip
             </button>
-          ))}
+          )}
+          {!own && <p>Not entered yet. Complete payment in your slip for verification.</p>}
         </div>
       )}
       <div className="campaign-capacity">
@@ -192,11 +273,27 @@ function FixtureCard({
             : 'Final availability is checked in your slip.'}
         </small>
       </div>
+      <div className="campaign-match-footer">
+        <button
+          type="button"
+          className="btn campaign-market-link"
+          onClick={() => onOpenMarket(fixture.marketId)}
+        >
+          View market <Icon name="arrow" />
+        </button>
+        {own && <small>Further bets here do not add competition points.</small>}
+      </div>
     </article>
   );
 }
 
-function OwnCalls({ detail }: { detail: CampaignDetail }) {
+function OwnCalls({
+  detail,
+  onOpenMarket,
+}: {
+  detail: CampaignDetail;
+  onOpenMarket: (marketId: string) => void;
+}) {
   if (!detail.own?.participated)
     return (
       <div className="campaign-empty compact">
@@ -220,6 +317,8 @@ function OwnCalls({ detail }: { detail: CampaignDetail }) {
                 {fixture ? `${fixture.home} vs ${fixture.away}` : 'Competition match'}
               </strong>
               <small>
+                {fixture &&
+                  `Your pick: ${[fixture.home, 'Draw', fixture.away][call.outcome]}${call.outcome === 1 ? '' : ' to win'} · `}
                 {call.status === 'pending'
                   ? 'Awaiting verified result'
                   : call.status === 'correct'
@@ -229,7 +328,18 @@ function OwnCalls({ detail }: { detail: CampaignDetail }) {
                       : 'Incorrect prediction'}
               </small>
             </span>
-            <strong>{call.status === 'pending' ? 'Pending' : `${call.points} pts`}</strong>
+            <span className="campaign-call-result">
+              <strong>{call.status === 'pending' ? 'Pending' : `${call.points} pts`}</strong>
+              {fixture && (
+                <button
+                  type="button"
+                  className="btn campaign-market-link"
+                  onClick={() => onOpenMarket(fixture.marketId)}
+                >
+                  View market <Icon name="arrow" />
+                </button>
+              )}
+            </span>
           </div>
         );
       })}
@@ -250,6 +360,10 @@ export function CampaignPlay({
   onOpenFive,
   onAddress,
   onPage,
+  selectedPicks,
+  refreshing,
+  onOpenMarket,
+  onOpenSlip,
 }: {
   detail: CampaignDetail;
   authenticated: boolean;
@@ -263,6 +377,10 @@ export function CampaignPlay({
   onOpenFive: (roundId: string) => void;
   onAddress: () => void;
   onPage: (offset: number) => void;
+  selectedPicks: readonly Pick[];
+  refreshing: boolean;
+  onOpenMarket: (marketId: string) => void;
+  onOpenSlip: () => void;
 }) {
   const [tab, setTab] = useState<'play' | 'leaderboard' | 'rules'>('play');
   const [person, setPerson] = useState<CampaignStanding | null>(null);
@@ -294,33 +412,6 @@ export function CampaignPlay({
           <span>{detail.prizePlaces} prize places</span>
         </div>
       </header>
-      {detail.rehearsal && (
-        <Notice title="Rehearsal competition">
-          This competition is excluded from community statistics. Its awards are for testing only.
-          No mainnet rewards are paid and no payout addresses are collected.
-        </Notice>
-      )}
-      {detail.state === 'deleted' && (
-        <Notice title="Competition archived">
-          Existing results and prizes remain available here. Registration is closed.
-        </Notice>
-      )}
-      {detail.notice && (
-        <Notice
-          title={
-            detail.scoreStatus === 'unavailable' || detail.scoreStatus === 'review-required'
-              ? 'Scores need another check'
-              : 'Competition update'
-          }
-          tone={
-            detail.scoreStatus === 'unavailable' || detail.scoreStatus === 'review-required'
-              ? 'attention'
-              : 'info'
-          }
-        >
-          {detail.notice}
-        </Notice>
-      )}
       {finished ? (
         <section className="campaign-finish-hero" aria-label="Competition final result">
           <div className="campaign-finish-icon">
@@ -405,7 +496,7 @@ export function CampaignPlay({
           )}
         </section>
       ) : (
-        <div className="campaign-entry-strip">
+        <div className={`campaign-entry-strip${own ? ' is-registered' : ''}`}>
           <div>
             <strong>
               {own
@@ -510,7 +601,7 @@ export function CampaignPlay({
                   )}
                 </div>
               ) : own ? (
-                <OwnCalls detail={detail} />
+                <OwnCalls detail={detail} onOpenMarket={onOpenMarket} />
               ) : (
                 <div className="campaign-empty compact">
                   <p>You did not register for this competition.</p>
@@ -565,6 +656,11 @@ export function CampaignPlay({
                         now={now}
                         pending={pickPending}
                         onPick={onPick}
+                        onOpenMarket={onOpenMarket}
+                        onOpenSlip={onOpenSlip}
+                        selected={
+                          selectedPicks.find((pick) => pick.matchId === fixture.fixtureId)?.outcome
+                        }
                       />
                     ))}
                   </div>
@@ -577,9 +673,21 @@ export function CampaignPlay({
               )}
             </section>
             <aside className="campaign-panel campaign-live-table">
-              <div className="campaign-panel-heading">
+              <div className="campaign-panel-heading campaign-table-heading">
                 <h2>The standings</h2>
-                <Badge>{detail.scoreStatus === 'final' ? 'Final' : 'Updating'}</Badge>
+                <span className="campaign-score-status" role="status">
+                  {refreshing && <CellLoader />}
+                  {refreshing
+                    ? 'Refreshing'
+                    : detail.scoreStatus === 'final'
+                      ? 'Final'
+                      : detail.scoreStatus === 'unavailable' ||
+                          detail.scoreStatus === 'review-required'
+                        ? detail.verifiedAt
+                          ? 'Last checked scores'
+                          : 'Awaiting scores'
+                        : 'Live table'}
+                </span>
               </div>
               <Standings entries={detail.leaderboard.slice(0, 5)} compact />
               <button
@@ -651,12 +759,16 @@ export function CampaignPlay({
             <p>
               Registration is free. Join before {dateTime(detail.registrationClosesAt)}. You get a
               ranked entry immediately.
+              {detail.kind === 'predictions' &&
+                (detail.predictionEntryPolicy === 'first-admitted-v2'
+                  ? ' Earlier valid predictions for these fixtures can count when you join before registration closes.'
+                  : ' Only predictions admitted after you register count for this competition.')}
             </p>
             <h3>2. Make your picks</h3>
             <p>
               {detail.kind === 'five'
                 ? `Use the existing Streak Five squad builder for ${detail.gameweek?.name ?? 'the selected gameweek'}. Picks lock ${dateTime(detail.gameweek?.lockAt ?? null)}.`
-                : 'Only the listed fixtures count. Your first qualifying paid prediction per fixture earns 3 points for a correct result, or 0 for an incorrect or missed match. Stake size does not affect points. A pending payment is not yet a qualifying prediction.'}
+                : 'Only the listed fixtures count. Your first qualifying paid prediction per fixture earns 3 points for a correct result, or 0 for an incorrect or missed match. Stake size does not affect points. A pending payment is not yet a qualifying prediction. Further bets settle normally but do not add competition points.'}
             </p>
             <h3>3. Follow the table</h3>
             <p>
@@ -706,7 +818,9 @@ export function CampaignPlay({
               ? `Tie-break time: ${dateTime(person.tieBreakAt)}`
               : 'Registered with no qualifying entry. This player remains on the table.'}
           </p>
-          {person.own && detail.kind === 'predictions' && <OwnCalls detail={detail} />}
+          {person.own && detail.kind === 'predictions' && (
+            <OwnCalls detail={detail} onOpenMarket={onOpenMarket} />
+          )}
         </Dialog>
       )}
     </>

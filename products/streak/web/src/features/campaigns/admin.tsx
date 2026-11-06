@@ -8,13 +8,11 @@ import { Badge, ckb, dateTime, Dialog, exportCsv, label } from './presentation';
 export function DeleteCampaign({
   detail,
   pending,
-  error,
   onDelete,
   onClose,
 }: {
   detail: CampaignDetail;
   pending: boolean;
-  error: string;
   onDelete: (snapshot: { id: string; revision: number; confirmName: string }) => Promise<void>;
   onClose: () => void;
 }) {
@@ -35,11 +33,6 @@ export function DeleteCampaign({
       {!current && (
         <Notice tone="attention" title="The competition changed">
           Close this dialog and review the latest details before deleting.
-        </Notice>
-      )}
-      {error && (
-        <Notice tone="attention" title="The competition was not deleted">
-          {error}
         </Notice>
       )}
       {step === 1 ? (

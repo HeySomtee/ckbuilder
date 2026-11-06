@@ -13,6 +13,8 @@ import { MarketDetail } from '../features/markets/detail';
 import { createDraftStore } from '../features/predictions/draft';
 import type { Outcome } from '../features/predictions/draft';
 import { PredictionSlip } from '../features/predictions/slip';
+import { SlipSource } from '../features/predictions/slip-source';
+import { slipCampaignLabels } from '../features/predictions/campaign-labels';
 import { Brand } from '../components/brand';
 import { followMarket, marketHref, navigateMarket, useMarketRoute } from '../lib/market-route';
 import { navigateActivity, useDirectRoute } from '../lib/direct-route';
@@ -215,10 +217,12 @@ export function App() {
         ? 'markets'
         : (section ?? 'markets');
   const [draftStore] = useState(createDraftStore);
+  const [slipSource] = useState(() => new SlipSource());
+  const [campaignReturnRevision, setCampaignReturnRevision] = useState(0);
   const draftState = useSyncExternalStore(draftStore.subscribe, draftStore.getSnapshot);
   const [slipOpen, setSlipOpen] = useState(false);
   const [selectionNotice, setSelectionNotice] = useState('');
-  function pick(market: Market, outcome: Outcome) {
+  function pick(market: Market, outcome: Outcome, campaignId: string | null = null) {
     if (
       market.status !== 'open' ||
       market.fixtureStatus !== 'scheduled' ||
@@ -233,6 +237,16 @@ export function App() {
     const existing = picks.find((pick) => pick.matchId === market.matchId);
     const openSlip = picks.length === 0 || existing?.outcome === outcome;
     const added = draftStore.select(market.id, market.matchId, outcome);
+    const selectedPicks = draftStore.getSnapshot().draft.picks;
+    const selectedPick = selectedPicks.find((row) => row.matchId === market.matchId);
+    if (added && selectedPick) {
+      slipSource.selected(
+        navigationScope,
+        campaignId,
+        selectedPick.lineId,
+        selectedPicks.map((row) => row.lineId),
+      );
+    }
     setSelectionNotice(
       added
         ? `Prediction added: ${market.home} vs ${market.away}. ${draftStore.getSnapshot().draft.picks.length} in your slip.`
@@ -279,6 +293,23 @@ export function App() {
     retry: false,
     staleTime: 30_000,
   });
+  const navigationScope = `${account.data?.id ?? 'guest'}:${wallet.revision}`;
+  useEffect(() => {
+    slipSource.clear();
+  }, [slipSource, navigationScope]);
+  function addMatches() {
+    const campaignId = slipSource.campaign(
+      navigationScope,
+      draftStore.getSnapshot().draft.picks.map((row) => row.lineId),
+      section === 'competitions' && !directRoute && !marketId ? selectedCampaign : null,
+      campaignList.isError ? undefined : campaignLabels.map((campaign) => campaign.id),
+    );
+    if (campaignId) {
+      // A return from the shared slip always opens the competition's playable fixtures.
+      setCampaignReturnRevision((revision) => revision + 1);
+      navigateCampaign(campaignId);
+    } else navigateMarket(null);
+  }
   useEffect(() => {
     if (account.isSuccess) void restoreWallet(account.data?.walletAddress);
   }, [account.isSuccess, account.data?.walletAddress]);
@@ -347,13 +378,19 @@ export function App() {
     enabled: !account.isPending,
     staleTime: 30_000,
     retry: false,
-    refetchInterval: section === 'competitions' ? 30_000 : false,
+    refetchInterval: section === 'competitions' || slipOpen ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
   const navCampaigns =
     !campaignList.isError && campaignList.data?.viewerId === (account.data?.id ?? null)
       ? campaignList.data?.campaigns
       : [];
+  const campaignLabels = slipCampaignLabels(draftState.draft.picks, navCampaigns ?? []);
+  function openSlipCampaign(id: string) {
+    setSlipOpen(false);
+    setCampaignReturnRevision((revision) => revision + 1);
+    navigateCampaign(id);
+  }
   const login = useMutation({
     mutationFn: () => signIn(setSignInStage),
     retry: false,
@@ -584,7 +621,7 @@ export function App() {
           {section === 'competitions' && !directRoute && !marketId && (
             <Suspense fallback={<BusyState label="Opening competitions" />}>
               <CampaignsPage
-                key={`campaigns:${account.data?.id ?? 'public'}:${wallet.revision}`}
+                key={`campaigns:${account.data?.id ?? 'public'}:${wallet.revision}:${campaignReturnRevision}`}
                 account={account.data ?? null}
                 accountReady={!account.isPending}
                 onSignIn={() => {
@@ -592,9 +629,12 @@ export function App() {
                 }}
                 signInPending={login.isPending || logout.isPending}
                 onPick={pick}
+                selectedPicks={draftState.draft.picks}
                 selectedId={selectedCampaign}
                 onSelect={navigateCampaign}
                 onOpenFive={openCampaignFive}
+                onOpenMarket={navigateMarket}
+                onOpenSlip={() => setSlipOpen(true)}
               />
             </Suspense>
           )}
@@ -913,7 +953,9 @@ export function App() {
         open={slipOpen}
         onOpen={() => setSlipOpen(true)}
         onDismiss={() => setSlipOpen(false)}
-        onAddMatches={() => navigateMarket(null)}
+        onAddMatches={addMatches}
+        campaignLabels={campaignLabels}
+        onOpenCampaign={openSlipCampaign}
         account={account.data ?? null}
         accountReady={!account.isPending}
         onSignIn={() => {

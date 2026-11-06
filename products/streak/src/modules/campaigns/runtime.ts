@@ -14,6 +14,7 @@ import { PgCampaignStorage, campaignCheckDelay } from './storage';
 import { campaignMarketPin, createCampaignSources } from './sources';
 import { validateCampaignAddress } from './payout-proof';
 import type { CampaignOptions } from '../../../shared/campaign-wire';
+import { presentCampaignFixtures } from './fixture-presentation';
 
 let instance: CampaignService | undefined;
 let storage: PgCampaignStorage | undefined;
@@ -125,6 +126,13 @@ export function campaignService(): CampaignService {
       validateReceivingAddress: validateCampaignAddress,
     }),
     (actor) => fiveService().requireProfile(actor),
+    (accountIds) => fiveService().publicProfileNames(accountIds),
+    (fixtures) =>
+      read((db) =>
+        presentCampaignFixtures(fixtures, db.markets, db.matches, (match) =>
+          provider.peekInsights?.(match),
+        ),
+      ),
   );
   return instance;
 }

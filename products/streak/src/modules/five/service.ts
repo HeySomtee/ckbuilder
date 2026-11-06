@@ -380,6 +380,14 @@ export class FiveService {
     if (!profile) throw new FiveError('Choose your FPL name before saving your five.', 409);
     return profile.displayName;
   }
+  /** Internal public-label projection; profile timestamps and account IDs stay server-side. */
+  async publicProfileNames(accountIds: readonly string[]): Promise<ReadonlyMap<string, string>> {
+    if (accountIds.length > 1000) throw new FiveError('Too many manager profiles requested.');
+    if (!this.profiles)
+      throw new FiveError('FPL names are temporarily unavailable. Please retry.', 503);
+    const profiles = await this.profiles.getMany(accountIds);
+    return new Map([...profiles].map(([id, profile]) => [id, profile.displayName]));
+  }
   async read(actor: Actor, selection?: string) {
     const admin = this.isAdmin(actor),
       all = (await this.store.list()).filter((r) => admin || r.state !== 'draft');

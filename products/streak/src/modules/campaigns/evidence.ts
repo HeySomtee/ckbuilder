@@ -1,4 +1,4 @@
-import { rankedEntries, type Campaign } from './domain';
+import { predictionEntryPolicy, rankedEntries, type Campaign } from './domain';
 
 /** Explicit allowlist: never export signatures, sessions, raw transactions or testnet private keys. */
 export function campaignEvidenceExport(c: Campaign) {
@@ -16,6 +16,7 @@ export function campaignEvidenceExport(c: Campaign) {
       state: c.state,
       deletedAt: c.deletedAt,
       termsHash: c.termsHash,
+      predictionEntryPolicy: predictionEntryPolicy(c),
       terms: c.draft,
       scoreStatus: c.scoreStatus,
       verifiedAt: c.verifiedAt,
@@ -87,6 +88,7 @@ export function campaignEvidenceCsv(c: Campaign): string {
     [
       'campaign_id',
       'mode',
+      'prediction_entry_policy',
       'rank',
       'public_id',
       'name',
@@ -106,6 +108,7 @@ export function campaignEvidenceCsv(c: Campaign): string {
     rows.push([
       c.id,
       c.draft.rehearsal ? 'rehearsal' : 'community',
+      predictionEntryPolicy(c),
       index + 1,
       e.publicId,
       e.name,

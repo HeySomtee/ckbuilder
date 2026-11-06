@@ -3,6 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 import { getPublicMarket } from './api';
 import { DRAFT_KEY, displayShannons, totalShannons } from './draft';
 import type { DraftStore } from './draft';
+import type { SlipCampaignLabel } from './slip-source';
 import type { Account } from '../account/api';
 import { useNow } from '../../lib/use-now';
 import { TeamBadge } from '../../components/team-badge';
@@ -27,6 +28,8 @@ export function PredictionSlip({
   signInStage,
   signInError,
   onAddMatches,
+  campaignLabels = [],
+  onOpenCampaign,
 }: {
   store: DraftStore;
   open: boolean;
@@ -40,9 +43,21 @@ export function PredictionSlip({
   signInStage?: string;
   signInError?: string;
   onAddMatches?: () => void;
+  campaignLabels?: readonly SlipCampaignLabel[];
+  onOpenCampaign?: (id: string) => void;
 }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { draft } = snapshot;
+  const campaigns = campaignLabels.filter((campaign) =>
+    draft.picks.some((pick) => campaign.lineIds.includes(pick.lineId)),
+  );
+  const competitionPickCount = draft.picks.filter((pick) =>
+    campaigns.some((campaign) => campaign.lineIds.includes(pick.lineId)),
+  ).length;
+  const regularPickCount = draft.picks.length - competitionPickCount;
+  const competitionTitle = campaigns.map((campaign) => campaign.name).join(', ');
+  const competitionSummary =
+    campaigns.length === 1 ? campaigns[0].name : `${campaigns.length} competitions`;
   const dialog = useRef<HTMLDialogElement>(null);
   const closeControl = useRef<HTMLButtonElement>(null);
   const dock = useRef<HTMLButtonElement>(null);
@@ -150,6 +165,12 @@ export function PredictionSlip({
               {total === null ? 'Check amounts' : `${displayShannons(total)} tCKB`} ·{' '}
               {snapshot.saved ? 'Saved draft' : 'Draft in this tab'}
             </small>
+            {campaigns.length > 0 && (
+              <span className="dock-campaign-label" title={competitionTitle}>
+                {competitionSummary}
+                {regularPickCount > 0 && ` + ${regularPickCount} regular`}
+              </span>
+            )}
           </span>
           <svg
             className="dock-arrow"
@@ -196,6 +217,12 @@ export function PredictionSlip({
             <h2 id="slip-title">
               Your slip <span className="slip-title-count">{draft.picks.length}</span>
             </h2>
+            {campaigns.length > 0 && (
+              <p className="slip-campaign-context" title={competitionTitle}>
+                <span>{competitionSummary}</span>
+                {regularPickCount > 0 && <small>Mixed slip</small>}
+              </p>
+            )}
           </div>
           <div className="slip-toolbar">
             <div className="slip-tabs" role="tablist" aria-label="Slip views">
@@ -259,6 +286,11 @@ export function PredictionSlip({
             </button>
           </div>
           <div ref={setFeedbackTarget} />
+          {campaigns.length > 0 && (
+            <p className="slip-campaign-note">
+              Only your first qualifying pick counts for points. Every prediction settles normally.
+            </p>
+          )}
           {confirmClear && (
             <Notice
               title="Clear your slip?"
@@ -280,7 +312,9 @@ export function PredictionSlip({
               }
             >
               Remove {draft.picks.length} saved {draft.picks.length === 1 ? 'pick' : 'picks'} from
-              this slip. Submitted payments stay in My activity.
+              this slip.
+              {campaigns.length > 0 && ` Includes your picks for ${competitionTitle}.`} Submitted
+              payments stay in My activity.
             </Notice>
           )}
           {snapshot.warning && (
@@ -320,6 +354,14 @@ export function PredictionSlip({
               const invalidAmount = totalShannons([pick]) === null;
               const errorId = `pick-errors-${pick.lineId}`;
               const allowedPresets = ['100', '200', '500'];
+              const pickCampaigns = campaigns.filter((campaign) =>
+                campaign.lineIds.includes(pick.lineId),
+              );
+              const alreadyEntered =
+                pickCampaigns.length > 0 &&
+                pickCampaigns.every((campaign) =>
+                  campaign.alreadyCountedLineIds?.includes(pick.lineId),
+                );
               return (
                 <article key={pick.lineId} className="slip-pick">
                   <div className="slip-pick-heading">
@@ -371,6 +413,34 @@ export function PredictionSlip({
                       </svg>
                     </button>
                   </div>
+                  {pickCampaigns.length > 0 ? (
+                    <div className="slip-pick-campaigns" aria-label={`Competitions for ${label}`}>
+                      {pickCampaigns.map((campaign) => (
+                        <button
+                          type="button"
+                          key={campaign.id}
+                          className="slip-pick-campaign"
+                          disabled={!onOpenCampaign}
+                          title={campaign.name}
+                          aria-label={`Open competition: ${campaign.name}`}
+                          onClick={() => {
+                            dismiss();
+                            onOpenCampaign?.(campaign.id);
+                          }}
+                        >
+                          <span>{campaign.name}</span>
+                          {campaign.alreadyCountedLineIds?.includes(pick.lineId) && (
+                            <small>Already entered</small>
+                          )}
+                        </button>
+                      ))}
+                      {alreadyEntered && (
+                        <small className="slip-regular-label">Normal prediction</small>
+                      )}
+                    </div>
+                  ) : campaigns.length > 0 ? (
+                    <small className="slip-regular-label">Regular prediction</small>
+                  ) : null}
                   {query.isPending && (
                     <p className="slip-loading" role="status">
                       <CellLoader variant="wave" />

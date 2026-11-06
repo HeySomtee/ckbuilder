@@ -1,5 +1,48 @@
 # Streak work tracker
 
+6 November further owner steering before push: competition context must remain
+visible in a saved or mixed slip outside the competition page. Registered players'
+first qualifying listed prediction may precede registration; regular wagers still
+settle normally and unregistered accounts get no competition entries. Show each
+entrant's chosen outcomes, disable repeat competition selection while retaining
+ordinary market access, and add team logos plus real recent form. The in-progress
+release gate was deliberately stopped before commit to include these requirements.
+Version the new eligibility rule; preserve existing published non-rehearsal terms
+and frozen awards. Active rehearsals may upgrade with an audit event and complete
+canonical recheck. Payment and draft metadata remain separate from scoring authority.
+The owner's checklist has been restored for continued testing; its backup and
+stash remain private. Rerun the complete final-tree gate before the authorized push.
+
+Expanded implementation is ready: owner-scoped summary membership drives saved
+and mixed-slip labels without persisting new payment metadata; competition cards
+show real logos/form, draft locks and verified choices. Canonical scoring accepts
+pre-registration predictions under v2 and retains published v1 community terms.
+Twenty-two domain checks, source/HTTP/profile checks, nine slip-label/navigation
+checks, eight fixture-presentation checks and the disposable PostgreSQL audited
+upgrade regression passed. Independent identity/scoring reviews found no blocker.
+The expanded built-app browser run covers mixed slips, reloads and ordinary extra
+bets. No hosted or physical-wallet result is inferred from those synthetic checks.
+
+6 November competition testing feedback: keep the shared slip's Add matches inside
+its source competition and show selected Home/Draw/Away outcomes. Refine composite
+input focus, join-dialog hierarchy and compact standings freshness. Replace
+competition alert banners with dismissible bottom-center toasts that slide upward
+without changing page height; respect dialogs, mobile navigation and payment
+controls. Prediction standings use shortened addresses, Five standings use saved
+FPL names with a shortened-address fallback. Preserve payment/scoring authority
+and the owner's existing test-checklist edits. Owner authorizes push after checks.
+The earlier release is published as `c0a1199`; its exact-tree 94-stage gate passed.
+Hosted wallet/refund acceptance, measured savings and concurrency work remain open.
+
+Implementation is complete, including the competition-route fallback after reload,
+route-scoped publication notices and account guards for delayed picks. Independent
+UI/identity reviews found no blocker. Focused built-app evidence and screenshots
+are under `.quality-artifacts/campaigns-runtime`; exact-candidate publication is
+the next step, recorded in
+`.quality-artifacts/competition-ux-release-2026-11-06.json`. Do not include the
+owner's checked-off hosted acceptance guide in this UI commit. Preserve prior
+hosted acceptance, savings measurement and concurrency commitments after push.
+
 6 November publication gate stopped twice on the unchanged WebKit late-controller
 startup recovery case: the CSS watchdog did not expose the retry link within its
 existing deadline. Add an independent 10-second entry-script watchdog, cancelled

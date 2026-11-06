@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { CampaignAbsenceSnapshot } from '../direct/campaign-absence';
+import { fiveWalletLabel } from '../five/domain';
 import type {
   CampaignAward,
   CampaignDetail,
@@ -9,6 +10,7 @@ import type {
   CampaignGameweek,
   CampaignOptions,
   CampaignOwnEntry,
+  CampaignPredictionEntryPolicy,
   CampaignStanding,
   CampaignSummary,
 } from '../../../shared/campaign-wire';
@@ -108,6 +110,8 @@ export interface Campaign {
   draft: CampaignDraftInput;
   publishedAt: string | null;
   termsHash: string | null;
+  /** Missing on historical records means the original post-registration rule. */
+  predictionEntryPolicy?: CampaignPredictionEntryPolicy;
   fixtures: CampaignFixture[];
   gameweek: CampaignGameweek | null;
   bindings: Record<string, string>;
@@ -251,6 +255,22 @@ export function editCampaign(c: Campaign, draft: CampaignDraftInput, revision: u
     throw new CampaignError('Published competition rules cannot be edited.', 409);
   c.draft = draft;
 }
+export function predictionEntryPolicy(c: Campaign): CampaignPredictionEntryPolicy | null {
+  if (c.draft.kind !== 'predictions') return null;
+  return c.state === 'draft'
+    ? 'first-admitted-v2'
+    : (c.predictionEntryPolicy ?? 'after-registration-v1');
+}
+function publishedTermsHash(c: Campaign): string {
+  const policy = predictionEntryPolicy(c);
+  return hash({
+    version: policy === 'first-admitted-v2' ? 2 : 1,
+    draft: c.draft,
+    fixtures: c.fixtures.map(({ occupied: _o, updatedAt: _u, ...f }) => f),
+    gameweek: c.gameweek,
+    ...(policy === 'first-admitted-v2' ? { predictionEntryPolicy: policy } : {}),
+  });
+}
 export function publishCampaign(c: Campaign, options: CampaignOptions, now: number): void {
   if (c.deletedAt || c.state !== 'draft')
     throw new CampaignError('Only an active draft can be published.', 409);
@@ -301,12 +321,8 @@ export function publishCampaign(c: Campaign, options: CampaignOptions, now: numb
       throw new CampaignError('Registration must close by the Five deadline.', 409);
     c.gameweek = w;
   }
-  c.termsHash = hash({
-    version: 1,
-    draft: d,
-    fixtures: c.fixtures.map(({ occupied: _o, updatedAt: _u, ...f }) => f),
-    gameweek: c.gameweek,
-  });
+  if (d.kind === 'predictions') c.predictionEntryPolicy = 'first-admitted-v2';
+  c.termsHash = publishedTermsHash(c);
   c.publishedAt = iso(now);
   c.state = 'published';
 }
@@ -433,6 +449,16 @@ export function reconcileCampaign(c: Campaign, evidence: CampaignEvidence, now: 
     c.evidenceFinal = false;
     return;
   }
+  // The owner approved this eligibility correction for ongoing rehearsal runs.
+  // Mainnet prize promises and finalized/archived rehearsal results stay frozen.
+  // Persist policy, new terms hash and recalculated entries in the same audited write.
+  const upgradeRehearsal =
+    c.draft.kind === 'predictions' &&
+    c.draft.rehearsal &&
+    c.state === 'published' &&
+    !c.deletedAt &&
+    predictionEntryPolicy(c) === 'after-registration-v1';
+  const policy = upgradeRehearsal ? 'first-admitted-v2' : predictionEntryPolicy(c);
   const bindings = { ...c.bindings };
   for (const b of evidence.bindings ?? []) {
     if (
@@ -471,7 +497,8 @@ export function reconcileCampaign(c: Campaign, evidence: CampaignEvidence, now: 
               p.ownerHash === entry.ownerHash &&
               p.fixtureId === f.fixtureId &&
               p.marketKey === ownValue(bindings, f.fixtureId) &&
-              Date.parse(p.committedAt) >= Date.parse(entry.joinedAt) &&
+              (policy === 'first-admitted-v2' ||
+                Date.parse(p.committedAt) >= Date.parse(entry.joinedAt)) &&
               Date.parse(p.committedAt) < Date.parse(f.cutoffAt),
           )
           .sort(predictionOrder);
@@ -540,6 +567,10 @@ export function reconcileCampaign(c: Campaign, evidence: CampaignEvidence, now: 
     return;
   }
   c.entries = projected;
+  if (upgradeRehearsal) {
+    c.predictionEntryPolicy = 'first-admitted-v2';
+    c.termsHash = publishedTermsHash(c);
+  }
   c.bindings = bindings;
   c.evidenceRevision = evidence.revision;
   c.absenceProofs = structuredClone(evidence.absenceProofs ?? []);
@@ -661,6 +692,7 @@ export function recordPayout(c: Campaign, publicId: string, proof: PayoutProof):
   award.transactionHash = proof.transactionHash;
 }
 export function summary(c: Campaign, actor: CampaignActor, now: number): CampaignSummary {
+  const ownEntry = actor ? c.entries.find((entry) => entry.accountId === actor.id) : undefined;
   return {
     id: c.id,
     name: c.draft.name,
@@ -687,7 +719,13 @@ export function summary(c: Campaign, actor: CampaignActor, now: number): Campaig
       .reduce((n, p) => n + BigInt(p.amountShannons), 0n)
       .toString(),
     prizePlaces: c.draft.prizes.length,
-    joined: c.entries.some((e) => e.accountId === actor?.id),
+    joined: !!ownEntry,
+    ...(ownEntry && c.draft.kind === 'predictions'
+      ? {
+          joinedFixtureIds: c.fixtures.map((fixture) => fixture.fixtureId),
+          qualifyingFixtureIds: [...new Set(ownEntry.calls.map((call) => call.fixtureId))],
+        }
+      : {}),
   };
 }
 export function project(
@@ -699,9 +737,19 @@ export function project(
   limit = 100,
 ): CampaignDetail {
   const sorted = rankedEntries(c);
+  // Prediction registrations use wallet identity, not the login's generic name.
+  // Five may have a saved public name; older unnamed entries retain a short label.
+  const publicNames = new Map(
+    sorted.map((e) => [
+      e.publicId,
+      c.draft.kind === 'five' && e.name.trim() && !/^player$/i.test(e.name.trim())
+        ? e.name
+        : fiveWalletLabel(e.wallet),
+    ]),
+  );
   const standings: CampaignStanding[] = sorted.map((e, i) => ({
     publicId: e.publicId,
-    name: e.name,
+    name: publicNames.get(e.publicId)!,
     rank: i + 1,
     points: e.points,
     participated: e.participated,
@@ -716,6 +764,7 @@ export function project(
     ...summary(c, actor, now),
     revision: c.revision,
     termsHash: c.termsHash,
+    predictionEntryPolicy: predictionEntryPolicy(c),
     draft: structuredClone(c.draft),
     fixtures: structuredClone(c.fixtures),
     gameweek: structuredClone(c.gameweek),
@@ -736,6 +785,7 @@ export function project(
       : null,
     awards: c.awards.map(({ receivingAddress, ...award }) => ({
       ...award,
+      name: award.publicId ? (publicNames.get(award.publicId) ?? award.name) : award.name,
       ...(receivingAddress && (admin || award.publicId === ownEntry?.publicId)
         ? { receivingAddress }
         : {}),

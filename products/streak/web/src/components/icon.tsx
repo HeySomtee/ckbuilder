@@ -15,6 +15,8 @@ export function Icon({
     | 'account'
     | 'more'
     | 'close'
+    | 'check'
+    | 'alert'
     | 'chevron-down'
     | 'chevron-up';
 }) {
@@ -33,6 +35,8 @@ export function Icon({
     account: 'M4 21a8 8 0 0 1 16 0 M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8',
     more: 'M5 11v2 M12 11v2 M19 11v2',
     close: 'm6 6 12 12M6 18 18 6',
+    check: 'm5 12 4 4L19 6',
+    alert: 'M12 8v5m0 3h.01M12 3l10 18H2L12 3z',
     'chevron-down': 'm6 9 6 6 6-6',
     'chevron-up': 'm6 15 6-6 6 6',
   };
