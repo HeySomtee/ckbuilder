@@ -8,9 +8,10 @@ no database backfill. Custom uploads replace it and removal restores it. The
 final CSS passes strict frontend compilation/build, static/format checks and
 six focused Chromium/WebKit layout journeys at 320/390/1440px. Long-title testing
 found and resolved WebKit intrinsic sizing; missing images keep the default.
-Screenshots are in `.quality-artifacts/banner-overlay/`. The owner requested
-publication on 7 November. Run the scoped CSS/documentation gates and exclude
-the owner's checklist and private state; hosted rollout remains separate.
+Screenshots are in `.quality-artifacts/banner-overlay/`. At the owner's request,
+`e3b2e20` was pushed to GitHub `main` on 7 November. Scoped formatting, static,
+frontend TypeScript and production-build gates passed; push reused that receipt.
+The owner's checklist and private state were excluded. Hosted rollout remains separate.
 
 7 November owner requested publication. Artwork and navigation implementation
 `6ad5368` is pushed to GitHub `main`. All 42 release file hashes matched the

@@ -4,8 +4,9 @@
 overlay dimmed imagery instead of following a separate image block. Missing
 banners use the owner-selected Streak logo, without changing saved artwork.
 Frontend type/build and scoped static/format checks passed, with six focused
-Chromium/WebKit layout journeys and responsive screenshot review. The owner
-requested publication on 7 November; hosted rollout remains unverified.
+Chromium/WebKit layout journeys and responsive screenshot review. Published to
+GitHub `main` as `e3b2e20` on 7 November after the scoped CSS gates passed.
+Hosted rollout remains unverified.
 
 6 November [optional competition artwork and navigation](docs/delivery/competition-artwork-navigation.md)
 are implemented locally after approval. Existing rehearsals remain image-free

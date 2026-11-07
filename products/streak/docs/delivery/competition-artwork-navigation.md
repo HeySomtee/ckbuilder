@@ -84,7 +84,10 @@ in `.quality-artifacts/banner-overlay/` show defaults, custom art, list cards
 and mobile layouts. The owner requested publication on 7 November. Scoped CSS
 and documentation gates apply to this follow-up; the earlier 96-stage release
 evidence below applies to the preceding implementation. Hosted rollout remains
-separate from local verification.
+separate from local verification. Commit `e3b2e20` was pushed to GitHub `main`
+on 7 November after scoped formatting/static, frontend TypeScript and production
+build checks passed. The push reused that exact-tree receipt. The owner's
+checklist and private local state were excluded.
 
 ## Verification and release
 
