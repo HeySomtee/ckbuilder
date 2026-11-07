@@ -1,5 +1,17 @@
 # Streak work tracker
 
+7 November banner correction implemented locally: competition title, status,
+description and prize overlay dimmed artwork in one compact header. Cards also
+overlay their artwork without added height. The owner then selected the Streak
+logo as the default for missing banners; this is a presentation fallback, with
+no database backfill. Custom uploads replace it and removal restores it. The
+final CSS passes strict frontend compilation/build, static/format checks and
+six focused Chromium/WebKit layout journeys at 320/390/1440px. Long-title testing
+found and resolved WebKit intrinsic sizing; missing images keep the default.
+Screenshots are in `.quality-artifacts/banner-overlay/`. The owner requested
+publication on 7 November. Run the scoped CSS/documentation gates and exclude
+the owner's checklist and private state; hosted rollout remains separate.
+
 7 November owner requested publication. Artwork and navigation implementation
 `6ad5368` is pushed to GitHub `main`. All 42 release file hashes matched the
 6 November evidence; commit and push reused its successful 96-stage gate within

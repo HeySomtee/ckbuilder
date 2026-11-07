@@ -4,7 +4,8 @@
 stores presentation metadata outside frozen entry terms. Authenticated admin
 uploads produce bounded, immutable image files on the existing persistent disk;
 PostgreSQL stores references. Artwork changes do not schedule scoring or introduce
-a worker. Existing competitions keep their image-free fallback until explicitly edited.
+a worker. Existing records receive no artwork backfill. The 7 November owner
+correction uses the Streak logo as a presentation fallback for absent banners.
 
 6 November [Five manager identity and refund status](../delivery/five-names-pitch-refunds.md)
 adds scoped public profiles without changing login identity or squad save times.

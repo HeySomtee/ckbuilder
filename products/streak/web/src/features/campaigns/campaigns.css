@@ -285,7 +285,9 @@
   text-align: left;
   border: 1px solid var(--c-line-strong);
   border-top-color: #dce8d745;
-  background: linear-gradient(120deg, #ffffff06, #ffffff02);
+  background:
+    linear-gradient(135deg, #07100de8, #07100dc4 55%, #07100df5),
+    url('/brand/on-form-icon-512.png') center / cover no-repeat #0c1712;
   border-radius: 18px;
   padding: 25px;
   cursor: pointer;
@@ -377,7 +379,27 @@
   object-fit: cover;
 }
 .campaign-card-banner {
-  margin-bottom: 20px;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  margin: 0;
+  aspect-ratio: auto;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.campaign-list-card:has(> .campaign-card-banner) {
+  position: relative;
+  isolation: isolate;
+  background: #0c1712;
+}
+.campaign-card-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #07100de8, #07100dc4 55%, #07100df5);
+}
+.campaign-card-banner img {
+  filter: brightness(0.7) saturate(0.75);
 }
 .campaign-card-identity,
 .campaign-detail-identity {
@@ -394,9 +416,55 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.campaign-detail-banner {
-  max-height: 260px;
-  margin-bottom: 23px;
+.campaign-page:has(> .campaign-detail-banner) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.campaign-page:has(> .campaign-detail-banner) > * {
+  grid-column: 1;
+}
+.campaign-page:has(> .campaign-detail-banner) > .campaign-route-controls {
+  grid-row: 1;
+}
+.campaign-page > .campaign-detail-banner {
+  position: relative;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: auto;
+  margin: 0 0 24px;
+  border-radius: 16px;
+  pointer-events: none;
+}
+.campaign-detail-banner img {
+  position: absolute;
+  inset: 0;
+  filter: brightness(0.7) saturate(0.75);
+}
+.campaign-heading:has(.campaign-detail-identity) {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  height: max-content;
+  min-height: 180px;
+  padding: 24px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 16px;
+  background:
+    linear-gradient(105deg, #07100de8, #07100dcc 65%, #07100de0),
+    url('/brand/on-form-icon-512.png') center / cover no-repeat #0c1712;
+  text-shadow: 0 1px 3px #0008;
+}
+.campaign-detail-banner + .campaign-heading {
+  grid-row: 2;
+  background: linear-gradient(105deg, #07100de8, #07100d99 65%, #07100dcc);
+}
+.campaign-heading:has(.campaign-detail-identity) p,
+.campaign-list-card p {
+  color: #cad6ce;
+}
+.campaign-heading:has(.campaign-detail-identity) .campaign-badge {
+  background: #0c1712c9;
 }
 .campaign-art-editor {
   margin-block: 0 22px;
@@ -586,8 +654,9 @@
     height: 44px;
     border-radius: 12px;
   }
-  .campaign-detail-banner {
-    margin-bottom: 16px;
+  .campaign-heading:has(.campaign-detail-identity) {
+    min-height: 160px;
+    padding: 18px 16px;
   }
 }
 .campaign-empty {
@@ -2250,6 +2319,9 @@
   .campaign-heading {
     flex-wrap: wrap;
     gap: 16px;
+  }
+  .campaign-heading:has(.campaign-detail-identity) {
+    grid-template-columns: minmax(0, 1fr);
   }
   .campaign-heading h1 {
     font-size: 28px;

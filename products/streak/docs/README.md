@@ -1,5 +1,10 @@
 # Streak documentation
 
+7 November [banner refinement](delivery/competition-artwork-navigation.md#compact-banner-refinement-7-november):
+compact dimmed artwork behind titles, descriptions and prizes; Streak logo
+fallback when no custom banner is selected. Verified locally across mobile and
+desktop Chromium/WebKit. Publication requested; hosted rollout remains separate.
+
 6 November [optional artwork and navigation](delivery/competition-artwork-navigation.md):
 approved design integrated with add/replace/remove controls for new and existing
 competitions. No default images are added to rehearsals. Independent review,

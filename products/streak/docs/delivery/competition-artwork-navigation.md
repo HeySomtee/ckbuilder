@@ -12,7 +12,8 @@ can be replaced or removed, including after the competition finishes. Deleted
 competitions retain their archive and cannot be edited.
 
 No sample images are installed into competition records. Missing icons use the
-game-type symbol; a missing or broken banner leaves the compact normal heading.
+game-type symbol. Following the 7 November owner correction, a missing or broken
+banner displays the dimmed Streak logo behind the compact heading.
 The four generated originals remain in `design/navigation-artwork-review/assets/`
 for the owner to upload explicitly.
 
@@ -61,6 +62,29 @@ The mobile payment controls still use the existing dock geometry.
 Image previews use browser object URLs, permitted only by the image CSP. They
 are released on replacement/unmount. Account and route epochs prevent delayed
 requests from updating another competition or reviving after an account switch.
+
+## Compact banner refinement, 7 November
+
+Public competition titles, status, description and prize sit over a darkened
+banner. The image no longer adds a separate row above the heading. Competition
+cards use the same background treatment without extra height. Admin image
+previews remain unobscured so uploaded files can be inspected.
+
+The owner selected the Streak insignia as the default banner. This is a CSS
+fallback using the existing brand asset, not an upload or database migration.
+Custom artwork replaces it; removing an upload or an image-load failure restores
+the default. Icons remain separately optional.
+
+The synthetic short-title fixture measures 185px on desktop and 205 to 226px
+on phones. Longer content grows naturally rather than being clipped. A WebKit
+intrinsic-sizing issue found with long titles was resolved with content-sized
+headings. Strict frontend compilation and build, scoped formatting/static checks
+and six focused Chromium/WebKit journeys at 320, 390 and 1440px passed. Screenshots
+in `.quality-artifacts/banner-overlay/` show defaults, custom art, list cards
+and mobile layouts. The owner requested publication on 7 November. Scoped CSS
+and documentation gates apply to this follow-up; the earlier 96-stage release
+evidence below applies to the preceding implementation. Hosted rollout remains
+separate from local verification.
 
 ## Verification and release
 
