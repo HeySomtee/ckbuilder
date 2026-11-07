@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
+import sharp from 'sharp';
+import { request } from 'node:http';
 import * as ccc from '@ckb-ccc/core';
 import type { CampaignPage, CampaignOptions } from '../shared/campaign-wire';
 import type { Campaign } from './modules/campaigns/domain';
@@ -46,6 +48,7 @@ async function main() {
   const directory = mkdtempSync(join(tmpdir(), 'streak-campaigns-http-'));
   process.env.STREAK_SKIP_ENV_FILE = '1';
   process.env.STREAK_DB_FILE = join(directory, 'db.json');
+  process.env.STREAK_CAMPAIGNS_ARTWORK_DIR = join(directory, 'artwork');
   process.env.STREAK_GAMES_DATA_MODE = 'api';
   process.env.MATCH_PROVIDER = 'worldcup';
   for (const name of [
@@ -182,6 +185,11 @@ async function main() {
     );
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const shell = await fetch(`${base}/season/`);
+    const policy = shell.headers.get('content-security-policy') ?? '';
+    assert.match(policy, /img-src[^;]*blob:/, 'local selected artwork previews are allowed');
+    assert.doesNotMatch(policy, /script-src[^;]*blob:/, 'blob script execution remains denied');
+    await shell.text();
     const profilePost = (body: unknown, cookie?: string, origin = base) =>
       fetch(`${base}/api/five`, {
         method: 'POST',
@@ -339,6 +347,141 @@ async function main() {
       await post({ action: 'create', id: 'http-campaign', draft }, cookies[0]),
     );
     assert.equal(created.detail?.state, 'draft');
+    assert.equal(
+      JSON.stringify(created.detail?.artwork),
+      JSON.stringify({ icon: null, banner: null }),
+    );
+    const raster = await sharp({
+      create: { width: 256, height: 256, channels: 3, background: '#11281d' },
+    })
+      .png()
+      .toBuffer();
+    const upload = (
+      revision: number,
+      cookie?: string,
+      origin = base,
+      bytes = raster,
+      extra: Record<string, string> = {},
+    ) =>
+      fetch(
+        `${base}/api/campaigns?action=upload-artwork&id=http-campaign&slot=icon&revision=${revision}`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'image/png',
+            'x-streak-account-id': cookie === cookies[1] ? 'http-user-1' : 'http-user-0',
+            origin,
+            ...(cookie ? { cookie } : {}),
+            ...extra,
+          },
+          body: new Uint8Array(bytes),
+        },
+      );
+    assert.equal((await upload(created.detail!.revision)).status, 403);
+    assert.equal((await upload(created.detail!.revision, cookies[1])).status, 403);
+    assert.equal(
+      (await upload(created.detail!.revision, cookies[0], 'https://attacker.invalid')).status,
+      403,
+    );
+    assert.equal((await upload(created.detail!.revision, cookies[0], '')).status, 403);
+    assert.equal(
+      (
+        await upload(created.detail!.revision, cookies[0], base, raster, {
+          'sec-fetch-site': 'cross-site',
+        })
+      ).status,
+      403,
+    );
+    assert.equal((await upload(99, cookies[0])).status, 409);
+    assert.equal(
+      (
+        await fetch(
+          `${base}/api/campaigns?action=upload-artwork&id=http-campaign&slot=icon&revision=${created.detail!.revision}&expectedAccountId=http-user-0`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'image/png', origin: base, cookie: cookies[0] },
+            body: new Uint8Array(raster),
+          },
+        )
+      ).status,
+      409,
+      'account binding must come from the private header, never a URL parameter',
+    );
+    assert.equal(
+      (
+        await fetch(
+          `${base}/api/campaigns?action=upload-artwork&id=http-campaign&slot=icon&revision=${created.detail!.revision}`,
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'image/png',
+              'x-streak-account-id': 'http-user-1',
+              origin: base,
+              cookie: cookies[0],
+            },
+            body: new Uint8Array(raster),
+          },
+        )
+      ).status,
+      409,
+      'a stale account cannot upload with a newly signed-in cookie',
+    );
+    assert.equal(
+      (await upload(created.detail!.revision, cookies[0], base, Buffer.from('<svg/>'))).status,
+      415,
+    );
+    assert.equal(
+      (
+        await upload(created.detail!.revision, cookies[0], base, raster, {
+          'content-encoding': 'gzip',
+        })
+      ).status,
+      415,
+    );
+    const oversizedStatus = await new Promise<number>((done, reject) => {
+      const req = request(
+        `${base}/api/campaigns?action=upload-artwork&id=http-campaign&slot=icon&revision=${created.detail!.revision}`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'image/png',
+            'x-streak-account-id': 'http-user-0',
+            origin: base,
+            cookie: cookies[0],
+            'content-length': String(3 * 1024 * 1024 + 1),
+          },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => done(res.statusCode!));
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+    assert.equal(
+      oversizedStatus,
+      413,
+      'oversized declared length is rejected before reading its body',
+    );
+    created = await page(await upload(created.detail!.revision, cookies[0]));
+    const iconUrl = created.detail!.artwork!.icon!.url;
+    const iconRead = await fetch(base + iconUrl);
+    assert.equal(iconRead.status, 200);
+    assert.equal(iconRead.headers.get('content-type'), 'image/webp');
+    assert.match(iconRead.headers.get('cache-control') ?? '', /immutable/);
+    await iconRead.arrayBuffer();
+    assert.equal(
+      (
+        await fetch(`${base}/api/five?action=upload-artwork`, {
+          method: 'POST',
+          headers: { 'content-type': 'image/png', origin: base, cookie: cookies[0] },
+          body: new Uint8Array(raster),
+        })
+      ).status,
+      403,
+      'binary upload exception cannot apply to another API',
+    );
     assert.equal((await page(await get())).campaigns.length, 0);
     assert.equal((await get('?id=http-campaign')).status, 404, 'draft detail is private');
     created = await page(
@@ -348,6 +491,46 @@ async function main() {
       ),
     );
     const termsHash = created.detail!.termsHash;
+    const beforeArtwork = structuredClone(store.rows.get('http-campaign'))!;
+    assert.equal(
+      (
+        await post(
+          {
+            action: 'remove-artwork',
+            id: 'http-campaign',
+            slot: 'icon',
+            revision: created.detail!.revision,
+            expectedAccountId: 'http-user-1',
+          },
+          cookies[0],
+        )
+      ).status,
+      409,
+    );
+    created = await page(
+      await post(
+        {
+          action: 'remove-artwork',
+          id: 'http-campaign',
+          slot: 'icon',
+          revision: created.detail!.revision,
+          expectedAccountId: 'http-user-0',
+        },
+        cookies[0],
+      ),
+    );
+    assert.equal(created.detail!.artwork!.icon, null);
+    assert.equal(
+      created.detail!.termsHash,
+      termsHash,
+      'removing artwork after publication cannot alter terms',
+    );
+    assert.deepEqual(store.rows.get('http-campaign')!.draft, beforeArtwork.draft);
+    assert.equal(
+      (await fetch(base + iconUrl)).status,
+      200,
+      'replacement/removal preserves immutable URLs',
+    );
     assert.equal((await page(await get())).campaigns[0].rehearsal, true);
     assert.equal(
       (await post({ action: 'join', id: 'http-campaign', termsHash: 'wrong' }, cookies[1])).status,

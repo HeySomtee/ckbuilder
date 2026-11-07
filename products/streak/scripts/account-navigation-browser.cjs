@@ -10,9 +10,9 @@ const expectedNavigation = [
   ['Matchday', '/season/?view=matchday'],
   ['Streak Five', '/season/?view=five'],
   ['Streak Survivor', '/season/?view=survivor'],
-  ['Competitions', '/season/?view=competitions'],
-  ['Clubhouse', '/season/?view=clubhouse'],
+  ['Browse competitions', '/season/?view=competitions'],
   ['My activity', '/season/?view=activity'],
+  ['Clubhouse', '/season/?view=clubhouse'],
   ['My Account', '/season/?view=account'],
 ];
 
@@ -85,7 +85,7 @@ async function main() {
     ]) {
       const browser = await engine.launch();
       try {
-        // Density is a viewport requirement, not browser zoom or clipped navigation.
+        // The approved grouped rail scrolls internally and preserves every 44px target.
         for (const [width, height] of [
           [1279, 663],
           [1024, 600],
@@ -140,14 +140,21 @@ async function main() {
               exact: true,
             });
             for (const [label, href] of expectedNavigation) {
-              assert.equal(
-                await mainNavigation
-                  .getByRole('link', { name: new RegExp('^' + label + '(?:\\s*Beta)?$') })
-                  .getAttribute('href'),
-                href,
+              const link = mainNavigation.getByRole('link', {
+                name: new RegExp('^' + label + '(?:\\s*Beta)?$'),
+              });
+              assert.equal(await link.getAttribute('href'), href);
+              await link.focus();
+              const bounds = await link.boundingBox();
+              const navBounds = await mainNavigation.boundingBox();
+              assert.ok(
+                bounds.height >= 44 &&
+                  bounds.y >= navBounds.y &&
+                  bounds.y + bounds.height <= navBounds.y + navBounds.height + 1,
+                `${label} remains keyboard reachable with its complete touch target`,
               );
             }
-            assert.ok(rail.links.every((r) => r.top >= 0 && r.bottom <= height && r.height >= 44));
+            assert.ok(rail.links.every((r) => r.height >= 44));
             await page.evaluate(() => window.scrollTo(0, 500));
             const account = await page
               .getByRole('navigation', { name: 'Main navigation', exact: true })
@@ -158,20 +165,38 @@ async function main() {
               'Account stays available after page scroll',
             );
             await page.evaluate(() => window.scrollTo(0, 0));
+            await mainNavigation.evaluate((node) => {
+              node.scrollTop = 0;
+            });
           } else {
             assert.equal(await page.locator('.rail').isVisible(), false);
             const nav = page.getByRole('navigation', { name: 'Mobile navigation', exact: true });
+            assert.deepEqual(await nav.getByRole('link').allTextContents(), [
+              'Home',
+              'Markets',
+              'Compete',
+              'Activity',
+            ]);
             await nav.getByRole('button', { name: 'More pages' }).click();
             const menu = page.getByRole('dialog', { name: 'More pages' });
             assert.equal(
               await menu
-                .getByRole('link', { name: 'Competitions', exact: true })
+                .getByRole('link', { name: 'Browse competitions', exact: true })
                 .getAttribute('href'),
               '/season/?view=competitions',
             );
+            await page.keyboard.press('Escape');
+            assert.equal(await menu.isVisible(), false);
+            assert.equal(
+              await nav
+                .getByRole('button', { name: 'More pages' })
+                .evaluate((button) => document.activeElement === button),
+              true,
+            );
+            await nav.getByRole('button', { name: 'More pages' }).click();
             await menu.getByRole('link', { name: 'Clubhouse' }).click();
             await page.getByRole('heading', { name: 'Clubhouse', exact: true }).waitFor();
-            await nav.getByRole('link', { name: 'Overview', exact: true }).click();
+            await nav.getByRole('link', { name: 'Home', exact: true }).click();
             await page.locator('.overview-fixture').first().waitFor();
           }
           await page.screenshot({ path: path.join(out, `${name}-${width}x${height}-density.png`) });
@@ -384,12 +409,16 @@ async function main() {
           });
           assert.equal(
             await nav
-              .getByRole('link', { name: 'Overview', exact: true })
+              .getByRole('link', { name: width < 700 ? 'Home' : 'Overview', exact: true })
               .getAttribute('aria-current'),
             'page',
           );
           async function section(label) {
-            if (width < 700 && ['Streak Five', 'Matchday', 'Clubhouse'].includes(label)) {
+            if (width < 700 && label === 'Overview') label = 'Home';
+            if (
+              width < 700 &&
+              ['Streak Five', 'Matchday', 'Clubhouse', 'My Account'].includes(label)
+            ) {
               await nav.getByRole('button', { name: 'More pages' }).click();
               await page
                 .getByRole('dialog', { name: 'More pages' })

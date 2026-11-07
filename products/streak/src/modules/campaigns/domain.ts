@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { CampaignAbsenceSnapshot } from '../direct/campaign-absence';
 import { fiveWalletLabel } from '../five/domain';
 import type {
+  CampaignArtwork,
   CampaignAward,
   CampaignDetail,
   CampaignDraftInput,
@@ -102,6 +103,8 @@ export interface PayoutProof {
 }
 export interface Campaign {
   id: string;
+  /** Admin-managed presentation only. Historical records have no artwork. */
+  artwork?: CampaignArtwork;
   creator: string;
   revision: number;
   createdAt: string;
@@ -695,6 +698,7 @@ export function summary(c: Campaign, actor: CampaignActor, now: number): Campaig
   const ownEntry = actor ? c.entries.find((entry) => entry.accountId === actor.id) : undefined;
   return {
     id: c.id,
+    artwork: c.artwork ?? { icon: null, banner: null },
     name: c.draft.name,
     description: c.draft.description,
     kind: c.draft.kind,

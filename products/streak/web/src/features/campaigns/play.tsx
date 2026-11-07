@@ -5,6 +5,7 @@ import { TeamBadge } from '../../components/team-badge';
 import type { Outcome, Pick } from '../predictions/draft';
 import type { CampaignDetail, CampaignFixture, CampaignStanding, CampaignSummary } from './api';
 import { Badge, ckb, dateTime, Dialog, label, Standings, Trophy } from './presentation';
+import { CampaignBanner, CampaignIcon } from './artwork';
 
 export function CampaignList({
   campaigns,
@@ -61,11 +62,15 @@ export function CampaignList({
             className="campaign-list-card"
             onClick={() => onSelect(c.id)}
           >
+            <CampaignBanner url={c.artwork?.banner?.url} className="campaign-card-banner" />
             <span className="campaign-card-meta">
               <span>{c.kind === 'five' ? 'STREAK FIVE' : 'PREDICTIONS'}</span>
               <Badge tone={c.state === 'open' ? 'mint' : ''}>{label(c.state)}</Badge>
             </span>
-            <h2>{c.name}</h2>
+            <div className="campaign-card-identity">
+              <CampaignIcon kind={c.kind} url={c.artwork?.icon?.url} />
+              <h2>{c.name}</h2>
+            </div>
             <p>{c.description}</p>
             <div className="campaign-list-prize">
               <Trophy />
@@ -394,6 +399,7 @@ export function CampaignPlay({
   const awards = detail.awards;
   return (
     <>
+      <CampaignBanner url={detail.artwork?.banner?.url} className="campaign-detail-banner" />
       <header className="campaign-heading">
         <div>
           <div className="campaign-eyebrow">
@@ -401,7 +407,10 @@ export function CampaignPlay({
             <Badge tone={detail.state === 'open' ? 'mint' : ''}>{label(detail.state)}</Badge>
             {detail.rehearsal && <Badge>Rehearsal</Badge>}
           </div>
-          <h1>{detail.name}</h1>
+          <div className="campaign-detail-identity">
+            <CampaignIcon kind={detail.kind} url={detail.artwork?.icon?.url} />
+            <h1>{detail.name}</h1>
+          </div>
           <p>{detail.description}</p>
         </div>
         <div className="campaign-heading-prize">

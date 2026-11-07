@@ -8,14 +8,23 @@ import type { Account } from '../account/api';
 import type { Market } from '../markets/api';
 import type { Outcome, Pick } from '../predictions/draft';
 import { getPublicMarket } from '../predictions/api';
-import { actCampaign, loadCampaignOptions, loadCampaigns, prepareCampaignGameweek } from './api';
+import {
+  actCampaign,
+  loadCampaignOptions,
+  loadCampaigns,
+  prepareCampaignGameweek,
+  uploadCampaignArtwork,
+} from './api';
 import type {
   CampaignAction,
   CampaignAward,
   CampaignDraftInput,
   CampaignFixture,
   CampaignPage,
+  CampaignDetail,
 } from './api';
+import { ArtworkEditor } from './artwork';
+import type { ArtworkApplied, ArtworkChanges } from './artwork';
 import { CampaignList, CampaignPlay } from './play';
 import { CampaignSetup } from './setup';
 import { CampaignAdmin, DeleteCampaign } from './admin';
@@ -62,6 +71,10 @@ export function Campaigns({
   const [adminTab, setAdminTab] = useState<'monitor' | 'evidence'>('monitor');
   const [creating, setCreating] = useState(false),
     [editing, setEditing] = useState(false);
+  const [savedDraft, setSavedDraft] = useState<CampaignDetail | null>(null);
+  const [artworkPending, setArtworkPending] = useState(false);
+  const artworkController = useRef<AbortController | null>(null);
+  const saving = useRef(false);
   const [error, setError] = useState('');
   const [notice, setNoticeState] = useState<{
     message: string;
@@ -83,6 +96,11 @@ export function Campaigns({
   const [pickPending, setPickPending] = useState<string | null>(null);
   const activeScope = useRef(scope);
   activeScope.current = scope;
+  const contextKey = `${scope}:${selectedId ?? ''}`;
+  const context = useRef({ key: contextKey, epoch: 0 });
+  if (context.current.key !== contextKey)
+    context.current = { key: contextKey, epoch: context.current.epoch + 1 };
+  const epoch = context.current.epoch;
   const active = useRef(true),
     currentId = useRef(selectedId);
   currentId.current = selectedId;
@@ -102,10 +120,16 @@ export function Campaigns({
     setAddressOpen(false);
     setPayout(null);
     setError('');
+    setSavedDraft(null);
+    setArtworkPending(false);
+    saving.current = false;
+    artworkController.current?.abort();
+    artworkController.current = null;
     setNoticeState((previous) =>
       previous?.targetId === selectedId && previous.scope === scope ? previous : null,
     );
   }, [selectedId, scope]);
+  useEffect(() => () => artworkController.current?.abort(), []);
   const queryKey = selectedId
     ? ['private', 'campaigns', scope, 'detail', selectedId, offset]
     : listKey;
@@ -144,7 +168,7 @@ export function Campaigns({
   const preparation = useMutation({ mutationFn: prepareCampaignGameweek });
   const localNow = useNow(!!detail && ['open', 'live'].includes(detail.state));
   const now = localNow + (page ? Date.parse(page.now) - query.dataUpdatedAt : 0);
-  const pending = mutation.isPending || preparation.isPending;
+  const pending = mutation.isPending || preparation.isPending || artworkPending;
   async function prepareGameweek(event: number) {
     if (pending || !admin) return;
     setError('');
@@ -169,7 +193,13 @@ export function Campaigns({
     setNotice('');
     try {
       const result = await mutation.mutateAsync(action);
-      if (!active.current || activeScope.current !== scope) return null;
+      if (
+        !active.current ||
+        activeScope.current !== scope ||
+        currentId.current !== selectedId ||
+        context.current.epoch !== epoch
+      )
+        return null;
       if (result.viewerId !== account.id)
         throw Error('Your sign-in changed. Refresh before continuing.');
       queryClient.setQueryData(listKey, { ...result, detail: null });
@@ -179,9 +209,21 @@ export function Campaigns({
           result,
         );
       await queryClient.invalidateQueries({ queryKey: ['private', 'campaigns', scope] });
+      if (
+        !active.current ||
+        activeScope.current !== scope ||
+        currentId.current !== selectedId ||
+        context.current.epoch !== epoch
+      )
+        return null;
       return result;
     } catch (failure) {
-      if (active.current && activeScope.current === scope)
+      if (
+        active.current &&
+        activeScope.current === scope &&
+        currentId.current === selectedId &&
+        context.current.epoch === epoch
+      )
         setError(
           failure instanceof Error
             ? failure.message
@@ -190,27 +232,134 @@ export function Campaigns({
       return null;
     }
   }
-  async function save(draft: CampaignDraftInput, publish: boolean) {
-    let result = await mutate(
-      creating || !detail
-        ? { action: 'create', draft }
-        : { action: 'update', id: detail.id, revision: detail.revision, draft },
-    );
-    const saved = result?.detail;
-    if (!saved) return;
-    if (publish) {
-      result = await mutate({ action: 'publish', id: saved.id, revision: saved.revision });
-      if (!result) {
-        onSelect(saved.id);
-        setNotice('Your draft is saved. Publishing needs another check.', saved.id);
-        return;
+  const operationCurrent = () =>
+    active.current &&
+    activeScope.current === scope &&
+    currentId.current === selectedId &&
+    context.current.epoch === epoch;
+  async function applyArtwork(
+    saved: CampaignDetail,
+    changes: ArtworkChanges,
+    onApplied: ArtworkApplied,
+  ) {
+    let current = saved;
+    for (const slot of ['icon', 'banner'] as const) {
+      if (!operationCurrent()) return null;
+      const file = changes[slot];
+      if (file === undefined) continue;
+      if (file === null && !current.artwork?.[slot]) {
+        onApplied(slot);
+        continue;
+      }
+      const controller = new AbortController();
+      artworkController.current = controller;
+      const result =
+        file === null
+          ? await actCampaign({
+              action: 'remove-artwork',
+              id: current.id,
+              slot,
+              revision: current.revision,
+              expectedAccountId: scope,
+            })
+          : await uploadCampaignArtwork(
+              current.id,
+              slot,
+              current.revision,
+              file,
+              scope,
+              controller.signal,
+            );
+      if (!operationCurrent()) return null;
+      if (result.viewerId !== account?.id || result.detail?.id !== current.id)
+        throw new Error('Your sign-in or competition changed. Refresh before continuing.');
+      current = result.detail;
+      queryClient.setQueryData(listKey, { ...result, detail: null });
+      queryClient.setQueryData(['private', 'campaigns', scope, 'detail', current.id, 0], result);
+      if (creating) setSavedDraft(current);
+      onApplied(slot);
+    }
+    return current;
+  }
+  async function save(
+    draft: CampaignDraftInput,
+    publish: boolean,
+    changes: ArtworkChanges,
+    onApplied: ArtworkApplied,
+  ) {
+    if (pending || saving.current || !admin) return;
+    saving.current = true;
+    setArtworkPending(true);
+    try {
+      let target = creating ? savedDraft : detail;
+      if (creating && savedDraft) {
+        const latest = await loadCampaigns(savedDraft.id);
+        if (!operationCurrent()) return;
+        if (latest.viewerId !== account?.id || latest.detail?.id !== savedDraft.id)
+          throw new Error('Your saved draft could not be loaded. Refresh before continuing.');
+        target = latest.detail;
+      }
+      const result = await mutate(
+        target
+          ? { action: 'update', id: target.id, revision: target.revision, draft }
+          : { action: 'create', draft },
+      );
+      if (!result?.detail || !operationCurrent()) return;
+      if (creating) setSavedDraft(result.detail);
+      const saved = await applyArtwork(result.detail, changes, onApplied);
+      if (!saved || !operationCurrent()) return;
+      if (publish) {
+        const published = await mutate({
+          action: 'publish',
+          id: saved.id,
+          revision: saved.revision,
+        });
+        if (!published || !operationCurrent()) return;
+      }
+      setCreating(false);
+      setEditing(false);
+      setSavedDraft(null);
+      setAdminView(!publish);
+      onSelect(saved.id);
+      setNotice(publish ? 'Your competition is published.' : 'Competition draft saved.', saved.id);
+    } catch (failure) {
+      if (operationCurrent())
+        setError(
+          `Your draft is saved. ${failure instanceof Error ? failure.message : 'The artwork could not be saved.'} Retry to finish with the same draft.`,
+        );
+    } finally {
+      if (operationCurrent()) {
+        saving.current = false;
+        setArtworkPending(false);
       }
     }
-    setCreating(false);
-    setEditing(false);
-    setAdminView(!publish);
-    onSelect(saved.id);
-    setNotice(publish ? 'Your competition is published.' : 'Competition draft saved.', saved.id);
+  }
+  async function saveArtwork(changes: ArtworkChanges, onApplied: ArtworkApplied): Promise<boolean> {
+    if (pending || saving.current || !detail || !admin || detail.state === 'deleted') return false;
+    saving.current = true;
+    setArtworkPending(true);
+    setError('');
+    setNotice('');
+    try {
+      const saved = await applyArtwork(detail, changes, onApplied);
+      if (!saved || !operationCurrent()) return false;
+      setNotice('Competition artwork saved.');
+      return true;
+    } catch (failure) {
+      if (operationCurrent())
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : 'Your artwork could not be saved. Please try again.',
+        );
+      return false;
+    } finally {
+      if (operationCurrent()) {
+        saving.current = false;
+        setArtworkPending(false);
+        void queryClient.invalidateQueries({ queryKey: ['private', 'campaigns', scope] });
+      }
+    }
   }
   async function pick(fixture: CampaignFixture, outcome: Outcome) {
     if (!detail || pickPending) return;
@@ -366,8 +515,9 @@ export function Campaigns({
       {showEditor ? (
         options.data ? (
           <CampaignSetup
-            key={creating ? 'new' : detail?.id}
-            initial={creating ? undefined : detail?.draft}
+            key={`${scope}:${creating ? 'new' : detail?.id}`}
+            initial={creating ? savedDraft?.draft : detail?.draft}
+            artwork={creating ? savedDraft?.artwork : detail?.artwork}
             options={options.data}
             pending={pending}
             error={error}
@@ -376,6 +526,7 @@ export function Campaigns({
             onCancel={() => {
               setCreating(false);
               setEditing(false);
+              setSavedDraft(null);
             }}
           />
         ) : options.isError || !options.isPending ? (
@@ -405,6 +556,7 @@ export function Campaigns({
           onSelect={onSelect}
           onCreate={() => {
             setCreating(true);
+            setSavedDraft(null);
             setAdminView(true);
             setError('');
           }}
@@ -454,6 +606,17 @@ export function Campaigns({
             detail={detail}
             tab={adminTab}
             pending={pending || query.isFetching}
+            artwork={
+              adminTab === 'monitor' && detail.state !== 'deleted' ? (
+                <ArtworkEditor
+                  key={`${scope}:${detail.id}`}
+                  campaign={detail}
+                  pending={pending}
+                  onSave={saveArtwork}
+                  onError={setError}
+                />
+              ) : undefined
+            }
             onEdit={() => setEditing(true)}
             onFinalize={() => {
               setError('');

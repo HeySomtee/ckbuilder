@@ -330,12 +330,14 @@ export class PgCampaignStorage implements CampaignStorage {
         campaignSemantics(before),
         campaignSemantics(campaign),
       );
+      // Presentation changes are audited without waking chain/Five reconciliation.
+      const refreshSources = audit.action !== 'reconcile' && !audit.action.startsWith('artwork-');
       if (semanticChange) {
         campaign.revision++;
         campaign.updatedAt = new Date(now).toISOString();
         await client.query(
           `UPDATE streak_campaigns SET data=$2,checks=$3
-          ${audit.action !== 'reconcile' ? ',due_at=clock_timestamp(),wake_generation=wake_generation+1' : ''} WHERE id=$1`,
+          ${refreshSources ? ',due_at=clock_timestamp(),wake_generation=wake_generation+1' : ''} WHERE id=$1`,
           [id, JSON.stringify(metadata(campaign)), JSON.stringify(freshness(campaign))],
         );
         const changed: CampaignEntry[] = [];
@@ -372,7 +374,7 @@ export class PgCampaignStorage implements CampaignStorage {
         ]);
       }
       await client.query('COMMIT');
-      if (semanticChange && audit.action !== 'reconcile') this.changed();
+      if (semanticChange && refreshSources) this.changed();
       return campaign;
     } catch (error) {
       await client.query('ROLLBACK');

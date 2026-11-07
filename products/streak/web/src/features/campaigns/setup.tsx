@@ -4,7 +4,9 @@ import { Select } from '../../components/select';
 import { Notice } from '../../components/notice';
 import { CellLoader } from '../../components/cell-loader';
 import { ToastViewport } from './toasts';
-import type { CampaignDraftInput, CampaignOptions } from './api';
+import type { CampaignDraftInput, CampaignOptions, CampaignSummary } from './api';
+import { ArtworkFields, CampaignBanner, CampaignIcon, useArtworkPreview } from './artwork';
+import type { ArtworkApplied, ArtworkChanges } from './artwork';
 import {
   Badge,
   ckb,
@@ -20,6 +22,7 @@ type PrizeInput = { id: string; amount: string; reference: string };
 type Step = 'basics' | 'fixtures' | 'prizes' | 'review';
 export function CampaignSetup({
   initial,
+  artwork,
   options,
   pending,
   error,
@@ -28,10 +31,16 @@ export function CampaignSetup({
   onCancel,
 }: {
   initial?: CampaignDraftInput;
+  artwork?: CampaignSummary['artwork'];
   options: CampaignOptions;
   pending: boolean;
   error: string;
-  onSave: (draft: CampaignDraftInput, publish: boolean) => Promise<void>;
+  onSave: (
+    draft: CampaignDraftInput,
+    publish: boolean,
+    changes: ArtworkChanges,
+    onApplied: ArtworkApplied,
+  ) => Promise<void>;
   onPrepareGameweek: (event: number) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -56,6 +65,8 @@ export function CampaignSetup({
     [league, setLeague] = useState('all'),
     [selectedOnly, setSelectedOnly] = useState(false);
   const [validation, setValidation] = useState('');
+  const [artworkChanges, setArtworkChanges] = useState<ArtworkChanges>({});
+  const art = useArtworkPreview(artwork, artworkChanges);
   const five = kind === 'five';
   const selectedWeek = options.gameweeks.find((w) => w.id === fiveRoundId);
   const total = prizes.reduce((sum, p) => sum + BigInt(shannons(p.amount) ?? '0'), 0n);
@@ -127,7 +138,14 @@ export function CampaignSetup({
   };
   const save = async (publish: boolean) => {
     const draft = readDraft(publish);
-    if (draft) await onSave(draft, publish);
+    if (draft)
+      await onSave(draft, publish, artworkChanges, (slot) =>
+        setArtworkChanges((previous) => {
+          const next = { ...previous };
+          delete next[slot];
+          return next;
+        }),
+      );
   };
   const steps: [Step, string][] = [
     ['basics', 'The invitation'],
@@ -231,6 +249,16 @@ export function CampaignSetup({
                   <span>{rehearsal ? 'Rehearsal awards' : 'Mainnet CKB prizes'}</span>
                 </div>
               </div>
+              <ArtworkFields
+                artwork={artwork}
+                changes={artworkChanges}
+                kind={kind}
+                pending={pending}
+                onChange={(slot, file) =>
+                  setArtworkChanges((previous) => ({ ...previous, [slot]: file }))
+                }
+                onError={setValidation}
+              />
               <div className="campaign-deadline-field">
                 <div>
                   <h3>Registration closes</h3>
@@ -602,6 +630,8 @@ export function CampaignSetup({
                 <p>Published terms are fixed, so players can join with confidence.</p>
               </div>
               <div className="campaign-invitation campaign-review-card">
+                <CampaignBanner url={art.banner} />
+                <CampaignIcon kind={kind} url={art.icon} />
                 <span className="campaign-eyebrow">
                   {five ? 'STREAK FIVE' : 'MATCH PREDICTIONS'}
                 </span>
@@ -679,7 +709,8 @@ export function CampaignSetup({
         </div>
         <aside className="campaign-setup-summary">
           <span className="campaign-eyebrow">AT A GLANCE</span>
-          <Trophy />
+          <CampaignBanner url={art.banner} />
+          <CampaignIcon kind={kind} url={art.icon} />
           <h3>{name || 'Your competition'}</h3>
           <p>{five ? 'Streak Five' : 'Match predictions'}</p>
           <strong className="campaign-total">

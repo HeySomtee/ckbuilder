@@ -83,6 +83,10 @@ test('hosted child environments isolate signer, database, Telegram and inherited
   assert.equal(api.STREAK_DIRECT_PRIVATE_KEY, undefined);
   assert.equal(api.STREAK_DIRECT_OPERATOR_DIR, undefined);
   assert.equal(api.TREASURY_PRIVATE_KEY, env.TREASURY_PRIVATE_KEY);
+  assert.equal(
+    api.STREAK_CAMPAIGNS_ARTWORK_DIR,
+    path.join(env.STREAK_HOST_STATE_DIR, 'campaign-artwork'),
+  );
   for (const child of [api, sponsor, worker]) {
     assert.equal(child.NODE_OPTIONS, undefined);
     assert.equal(child.AWS_SECRET_ACCESS_KEY, undefined);
@@ -90,6 +94,7 @@ test('hosted child environments isolate signer, database, Telegram and inherited
     assert.equal(child.STREAK_SKIP_ENV_FILE, '1');
   }
   for (const child of [sponsor, worker]) {
+    assert.equal(child.STREAK_CAMPAIGNS_ARTWORK_DIR, undefined);
     assert.equal(child.DATABASE_URL, undefined);
     assert.equal(child.TREASURY_PRIVATE_KEY, undefined);
     assert.equal(child.TELEGRAM_BOT_TOKEN, undefined);

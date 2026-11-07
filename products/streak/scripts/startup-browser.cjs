@@ -361,7 +361,9 @@ async function main() {
               name: width < 700 ? 'Mobile navigation' : 'Main navigation',
               exact: true,
             });
-            await nav.getByRole('link', { name: 'Overview', exact: true }).click();
+            await nav
+              .getByRole('link', { name: width < 700 ? 'Home' : 'Overview', exact: true })
+              .click();
             await f.page.waitForURL(/view=overview/);
             assert.equal(
               await f.page.locator('#streak-startup').count(),

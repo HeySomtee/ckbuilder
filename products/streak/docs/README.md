@@ -1,5 +1,16 @@
 # Streak documentation
 
+6 November [optional artwork and navigation](delivery/competition-artwork-navigation.md):
+approved design integrated with add/replace/remove controls for new and existing
+competitions. No default images are added to rehearsals. Independent review,
+responsive visual inspection and all 96 major-gate stages passed locally.
+This increment remains uncommitted and unpublished.
+
+6 November [navigation and competition artwork preview](../design/navigation-artwork-review/README.md):
+separated desktop navigation, mobile Compete tab and grouped More sheet, optional
+icon/banner controls, four generated images, finished and no-artwork states.
+Preview verification passed and the owner approved integration, recorded above.
+
 6 November [competition testing refinements](delivery/competitions.md#competition-testing-feedback-6-november):
 shared-slip return routing, active outcomes, compact join/focus/status styling,
 bottom-center toast alerts and public player labels. Local browser and identity

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Icon } from '../../components/icon';
 import { Notice } from '../../components/notice';
 import { CellLoader } from '../../components/cell-loader';
@@ -138,6 +139,7 @@ export function CampaignAdmin({
   onFinalize,
   onRefresh,
   onRecordPayout,
+  artwork,
 }: {
   detail: CampaignDetail;
   tab: 'monitor' | 'evidence';
@@ -146,6 +148,7 @@ export function CampaignAdmin({
   onFinalize: () => void;
   onRefresh: () => void;
   onRecordPayout: (award: CampaignAward) => void;
+  artwork?: ReactNode;
 }) {
   const [search, setSearch] = useState(''),
     [copied, setCopied] = useState('');
@@ -197,6 +200,7 @@ export function CampaignAdmin({
           {pending && <CellLoader />} Refresh records
         </button>
       </header>
+      {artwork}
       {detail.state === 'deleted' && (
         <Notice title="This competition is archived">
           Deleted {dateTime(detail.deletedAt)}. Entries, results and existing awards are retained.

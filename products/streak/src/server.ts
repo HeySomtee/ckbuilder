@@ -30,6 +30,7 @@ import { campaignService, reconcileCampaigns, startCampaigns } from './modules/c
 import { CampaignError, identifier as campaignId, object as campaignObject } from './modules/campaigns/domain';
 import { campaignEvidenceExport, campaignEvidenceCsv } from './modules/campaigns/evidence';
 import { verifyCampaignPayout } from './modules/campaigns/payout-proof';
+import { artworkMutationAllowed, artworkRevision, artworkSlot, campaignArtworkStore, optimizeArtwork, readArtworkBody, withArtworkUpload } from './modules/campaigns/artwork';
 
 import { readFile, stat } from "fs/promises";
 import { createServer, IncomingMessage, ServerResponse } from "http";
@@ -279,7 +280,29 @@ async function handleCampaigns(req: IncomingMessage, res: ServerResponse, url: U
     if (req.method === 'POST') {
       if (!actor) throw new CampaignError('Sign in with your wallet to continue.', 403);
       if (!sponsorRate(`campaign-write:${actor.id}`, 30)) throw new CampaignError('Please wait a moment before trying again.', 429);
+      if (url.searchParams.get('action') === 'upload-artwork') {
+        if (!artworkMutationAllowed(req, url)) throw new CampaignError('Upload an image from this site.', 403);
+        if (req.headers['x-streak-account-id'] !== actor.id)
+          throw new CampaignError('Your signed-in account changed. Refresh before changing competition artwork.', 409);
+        const id = campaignId(url.searchParams.get('id'));
+        const slot = artworkSlot(url.searchParams.get('slot'));
+        const revision = artworkRevision(url.searchParams.get('revision'));
+        await service.requireArtworkEdit(id, revision, actor);
+        if (!sponsorRate(`campaign-artwork:${actor.id}`, 10)) throw new CampaignError('Please wait before changing another image.', 429);
+        const data = await withArtworkUpload(async () => {
+          const store = campaignArtworkStore();
+          const bytes = await readArtworkBody(req, slot);
+          const image = await optimizeArtwork(bytes, slot, req.headers['content-type']!.split(';')[0].trim().toLowerCase());
+          // Recheck after decoding so a deleted/stale edit cannot consume persistent space.
+          await service.requireArtworkEdit(id, revision, actor);
+          const asset = await store.put(image);
+          return service.setArtwork(id, slot, asset, revision, actor);
+        });
+        return sendJson(res, 200, data);
+      }
       const body = campaignObject(await readJson(req));
+      if (body.action === 'remove-artwork' && body.expectedAccountId !== actor.id)
+        throw new CampaignError('Your signed-in account changed. Refresh before changing competition artwork.', 409);
       if (body.action === 'prepare-gameweek') {
         if (!service.isAdmin(actor)) throw new CampaignError('Administrator access is required.', 403);
         if (typeof body.event !== 'number' || !Number.isSafeInteger(body.event) || body.event < 1 || body.event > 38)
@@ -313,6 +336,8 @@ async function handleCampaigns(req: IncomingMessage, res: ServerResponse, url: U
     }
     return sendJson(res, 200, id ? await service.get(id, actor, Number(url.searchParams.get('offset') ?? '0')) : await service.list(actor));
   } catch (error) {
+    if (req.method === 'POST' && url.searchParams.get('action') === 'upload-artwork' && !req.complete)
+      res.setHeader('Connection', 'close');
     if (error instanceof CampaignError || error instanceof FiveError) return sendJson(res, error.status, { error: error.message });
     console.warn('[campaigns] request unavailable');
     sendJson(res, 503, { error: 'Competitions could not refresh right now. Your saved entry is safe. Please retry.' });
@@ -327,7 +352,7 @@ const assetCache = new Map<string, { stamp: string; body: Promise<Buffer>; gzip?
 async function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
   const isWelcome = pathname === "/" || pathname === "/welcome" || pathname === "/welcome/";
   if (isWelcome || pathname === "/season" || pathname.startsWith("/season/")) {
-    res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-src https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+    res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-src https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "same-origin");
   }
@@ -1485,6 +1510,7 @@ export const server = createServer(async (req, res) => {
     if (url.pathname.startsWith("/api/")) {
       if (!["GET", "HEAD", "OPTIONS"].includes(req.method ?? "") &&
           !/^\/api\/integrations\/telegram\/webhook\/[^/]+$/.test(url.pathname) && !mutationAllowed(req)) {
+        if (!artworkMutationAllowed(req, url))
         return sendJson(res, 403, { error: "Use this site's JSON API to submit this request." });
       }
       const direct = staticRoutes[key];
@@ -1532,6 +1558,11 @@ export const server = createServer(async (req, res) => {
       }
 
       return sendJson(res, 404, { error: "Unknown endpoint." });
+    }
+    if (url.pathname.startsWith('/media/competitions/')) {
+      try { await campaignArtworkStore().serve(req, res, url.pathname); }
+      catch { res.writeHead(404).end('Image not found'); }
+      return;
     }
     await serveStatic(req, res, url.pathname);
   } catch (err) {

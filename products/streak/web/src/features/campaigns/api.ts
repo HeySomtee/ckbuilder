@@ -1,4 +1,4 @@
-import { isRecord, request } from '../../lib/http';
+import { ApiError, isRecord, request } from '../../lib/http';
 import type {
   CampaignAdminEntry,
   CampaignAward,
@@ -12,6 +12,7 @@ import type {
   CampaignPrize,
   CampaignStanding,
   CampaignSummary,
+  CampaignArtworkAsset,
 } from '../../../../shared/campaign-wire';
 export type * from '../../../../shared/campaign-wire';
 
@@ -51,6 +52,22 @@ function optionalLogo(value: unknown): string | null {
 }
 const optionalForm = (value: unknown) =>
   typeof value === 'string' && /^[WDL]{1,5}$/.test(value) ? value : undefined;
+function artworkAsset(value: unknown): CampaignArtworkAsset | null {
+  if (!isRecord(value) || typeof value.url !== 'string') return null;
+  if (!/^\/media\/competitions\/[a-f0-9]{64}\.webp$/.test(value.url)) return null;
+  if (
+    !Number.isSafeInteger(value.width) ||
+    !Number.isSafeInteger(value.height) ||
+    typeof value.width !== 'number' ||
+    typeof value.height !== 'number' ||
+    value.width < 1 ||
+    value.height < 1 ||
+    value.width > 4096 ||
+    value.height > 4096
+  )
+    return null;
+  return { url: value.url, width: value.width, height: value.height };
+}
 const amount = (v: unknown) => {
   const s = string(v, 30);
   return /^(0|[1-9]\d*)$/.test(s) ? s : invalid();
@@ -140,6 +157,10 @@ function summary(v: unknown): CampaignSummary {
     prizeTotalShannons: amount(x.prizeTotalShannons),
     prizePlaces: integer(x.prizePlaces),
     joined: boolean(x.joined),
+    artwork: {
+      icon: artworkAsset(isRecord(x.artwork) ? x.artwork.icon : null),
+      banner: artworkAsset(isRecord(x.artwork) ? x.artwork.banner : null),
+    },
     joinedFixtureIds:
       x.joinedFixtureIds === undefined ? [] : list(x.joinedFixtureIds).map((id) => string(id)),
     qualifyingFixtureIds:
@@ -264,6 +285,13 @@ export type CampaignAction =
   | { action: 'delete'; id: string; revision: number; confirmName: string }
   | { action: 'payout-address'; id: string; address: string }
   | {
+      action: 'remove-artwork';
+      id: string;
+      slot: 'icon' | 'banner';
+      revision: number;
+      expectedAccountId: string;
+    }
+  | {
       action: 'record-payout';
       id: string;
       publicId: string;
@@ -272,4 +300,36 @@ export type CampaignAction =
     };
 export function actCampaign(action: CampaignAction): Promise<CampaignPage> {
   return request('/campaigns', undefined, action).then(parseCampaignPage);
+}
+export async function uploadCampaignArtwork(
+  id: string,
+  slot: 'icon' | 'banner',
+  revision: number,
+  file: File,
+  expectedAccountId: string,
+  signal?: AbortSignal,
+): Promise<CampaignPage> {
+  const query = new URLSearchParams({
+    action: 'upload-artwork',
+    id,
+    slot,
+    revision: String(revision),
+  });
+  const timeout = AbortSignal.timeout(60_000);
+  const response = await fetch(`/api/campaigns?${query}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': file.type, 'X-Streak-Account-Id': expectedAccountId },
+    body: file,
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
+  const result: unknown = await response.json();
+  if (!response.ok)
+    throw new ApiError(
+      isRecord(result) && typeof result.error === 'string'
+        ? result.error
+        : 'Your image could not be saved. Please try again.',
+      response.status,
+    );
+  return parseCampaignPage(result);
 }

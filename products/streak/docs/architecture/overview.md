@@ -1,5 +1,11 @@
 # Architecture and migration
 
+6 November [optional competition artwork](../delivery/competition-artwork-navigation.md)
+stores presentation metadata outside frozen entry terms. Authenticated admin
+uploads produce bounded, immutable image files on the existing persistent disk;
+PostgreSQL stores references. Artwork changes do not schedule scoring or introduce
+a worker. Existing competitions keep their image-free fallback until explicitly edited.
+
 6 November [Five manager identity and refund status](../delivery/five-names-pitch-refunds.md)
 adds scoped public profiles without changing login identity or squad save times.
 The sponsor banner projects exact owner credits/payouts; unsigned retry scheduling

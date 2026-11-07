@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { CampaignFixture, CampaignOptions, CampaignPage } from '../../../shared/campaign-wire';
+import type {
+  CampaignArtworkAsset,
+  CampaignArtworkSlot,
+  CampaignFixture,
+  CampaignOptions,
+  CampaignPage,
+} from '../../../shared/campaign-wire';
 import {
   CampaignError,
   assertRevision,
@@ -136,6 +142,44 @@ export class CampaignService {
     if (!c) throw new CampaignError('Competition not found.', 404);
     return c;
   }
+  /** Validate before reading an upload body and again inside the row-locked mutation. */
+  async requireArtworkEdit(id: string, revision: unknown, actor: CampaignActor): Promise<void> {
+    const c = await this.loadForAdmin(id, actor);
+    assertRevision(c, revision);
+    if (c.deletedAt) throw new CampaignError('Deleted competitions cannot change artwork.', 409);
+  }
+  async setArtwork(
+    id: string,
+    slot: CampaignArtworkSlot,
+    asset: CampaignArtworkAsset | null,
+    revision: unknown,
+    actor: CampaignActor,
+  ): Promise<CampaignPage> {
+    const user = this.admin(actor);
+    if (slot !== 'icon' && slot !== 'banner') throw new CampaignError('Choose an icon or banner.');
+    if (
+      asset &&
+      (!/^\/media\/competitions\/[a-f0-9]{64}\.webp$/.test(asset.url) ||
+        !Number.isInteger(asset.width) ||
+        !Number.isInteger(asset.height) ||
+        asset.width < 1 ||
+        asset.height < 1 ||
+        asset.width > 1440 ||
+        asset.height > 480)
+    )
+      throw new CampaignError('Choose a valid competition image.');
+    await this.store.change(
+      identifier(id),
+      (c) => {
+        assertRevision(c, revision);
+        if (c.deletedAt)
+          throw new CampaignError('Deleted competitions cannot change artwork.', 409);
+        c.artwork = { icon: null, banner: null, ...c.artwork, [slot]: asset };
+      },
+      { actorId: user.id, action: asset ? `artwork-${slot}-replace` : `artwork-${slot}-remove` },
+    );
+    return this.get(id, user);
+  }
   async act(raw: unknown, actor: CampaignActor): Promise<CampaignPage> {
     const b = object(raw),
       user = this.signedIn(actor);
@@ -153,6 +197,10 @@ export class CampaignService {
         actorId: user.id,
         action,
       });
+    } else if (action === 'remove-artwork') {
+      if (b.slot !== 'icon' && b.slot !== 'banner')
+        throw new CampaignError('Choose an icon or banner.');
+      return this.setArtwork(identifier(id), b.slot, null, b.revision, user);
     } else if (action === 'publish') {
       this.admin(user);
       const options = await this.sources.options();

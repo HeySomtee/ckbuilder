@@ -490,6 +490,83 @@ async function main() {
     );
     assert.ok(audits.rows.some((row) => row.action === 'delete'));
     assert.equal(audits.rows.filter((row) => row.action === 'join').length, 12);
+    const beforeArtwork = await storage.load(first.id);
+    assert.equal(
+      beforeArtwork.artwork,
+      undefined,
+      'historical finished competition has no implicit artwork',
+    );
+    const scheduleBefore = (
+      await pool.query('SELECT due_at,wake_generation FROM streak_campaigns WHERE id=$1', [
+        first.id,
+      ])
+    ).rows[0];
+    const immutableArtworkBoundary = (campaign) => ({
+      draft: campaign.draft,
+      termsHash: campaign.termsHash,
+      entries: campaign.entries,
+      awards: campaign.awards,
+      payouts: campaign.payouts,
+      finalAt: campaign.finalAt,
+      evidenceRevision: campaign.evidenceRevision,
+    });
+    const image = { url: `/media/competitions/${'1'.repeat(64)}.webp`, width: 128, height: 128 };
+    let artworkWakes = 0;
+    const stopArtworkWake = storage.subscribe(() => {
+      artworkWakes++;
+    });
+    const simultaneousArtwork = await Promise.allSettled([
+      service.setArtwork(first.id, 'icon', image, beforeArtwork.revision, actor(99)),
+      service.setArtwork(
+        first.id,
+        'banner',
+        { ...image, width: 1440, height: 480 },
+        beforeArtwork.revision,
+        actor(99),
+      ),
+    ]);
+    assert.equal(
+      simultaneousArtwork.filter((result) => result.status === 'fulfilled').length,
+      1,
+      'row lock prevents simultaneous stale edits overwriting each other',
+    );
+    const reloadArtwork = await new PgCampaignStorage(pool).load(first.id);
+    assert.ok(
+      reloadArtwork.artwork.icon || reloadArtwork.artwork.banner,
+      'artwork survives a fresh storage instance',
+    );
+    assert.deepEqual(
+      immutableArtworkBoundary(reloadArtwork),
+      immutableArtworkBoundary(beforeArtwork),
+    );
+    assert.deepEqual(
+      (
+        await pool.query('SELECT due_at,wake_generation FROM streak_campaigns WHERE id=$1', [
+          first.id,
+        ])
+      ).rows[0],
+      scheduleBefore,
+      'image edits do not cause new source work',
+    );
+    assert.equal(artworkWakes, 0);
+    const artworkAudit = (
+      await pool.query(
+        'SELECT action,data FROM streak_campaign_audit WHERE campaign_id=$1 AND revision=$2',
+        [first.id, reloadArtwork.revision],
+      )
+    ).rows[0];
+    assert.match(artworkAudit.action, /^artwork-(icon|banner)-replace$/);
+    assert.deepEqual(artworkAudit.data.changedEntries, []);
+    await service.setArtwork(
+      first.id,
+      reloadArtwork.artwork.icon ? 'icon' : 'banner',
+      null,
+      reloadArtwork.revision,
+      actor(99),
+    );
+    assert.deepEqual((await storage.load(first.id)).artwork, { icon: null, banner: null });
+    assert.equal(artworkWakes, 0);
+    stopArtworkWake();
     const drafts = Array.from({ length: 105 }, (_, i) =>
       newCampaign(`newer-draft-${i}`, actor(99), draft(Date.now() + 60_000), Date.now()),
     );

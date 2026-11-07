@@ -1,5 +1,20 @@
 # Streak status
 
+6 November [optional competition artwork and navigation](docs/delivery/competition-artwork-navigation.md)
+are implemented locally after approval. Existing rehearsals remain image-free
+until explicit admin uploads. Creation and existing/finished competition editing
+support replacement/removal independently of frozen terms. Independent review,
+responsive visual inspection and all 96 major-gate stages passed at 18:39 UTC.
+Evidence includes disposable PostgreSQL and signed local-chain checks. No commit,
+push or hosted deployment for this increment is claimed.
+
+6 November [navigation and artwork preview](design/navigation-artwork-review/README.md)
+was approved: clearer desktop sections, mobile Compete/More navigation,
+optional competition icons/banners and four generated assets. Finished, no-artwork
+and admin states are interactive. All 24 focused browser groups passed across
+Chromium and WebKit. The integration is recorded above. No push or deployment
+was performed for the standalone preview.
+
 6 November competition refinements and mixed-slip behavior are published in
 `938078c`. Its complete 95-stage local gate passed at 16:48 UTC; GitHub `main` was
 verified after push. The previous timed-out Five browser run remains failed

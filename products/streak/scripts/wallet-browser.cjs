@@ -154,11 +154,20 @@ async function main() {
         const signOut = page.getByRole('button', { name: 'Disconnect', exact: true });
         const connect = page.getByRole('button', { name: 'Connect testnet wallet', exact: true });
         const disconnect = page.getByRole('button', { name: 'Disconnect wallet', exact: true });
-        const walletNav = () =>
-          page
+        async function openAccount() {
+          if (
+            await page
+              .getByRole('navigation', { name: 'Mobile navigation', exact: true })
+              .isVisible()
+          ) {
+            await page.getByRole('button', { name: 'More pages', exact: true }).click();
+          }
+          await page
             .getByRole('link', { name: 'My Account', exact: true })
             .filter({ visible: true })
-            .first();
+            .first()
+            .click();
+        }
         async function choose(options = {}) {
           await page.locator('ccc-connector').waitFor();
           await page.evaluate(
@@ -216,7 +225,7 @@ async function main() {
             0,
             'An unchanged provider account notification retains the signer.',
           );
-          await walletNav().click();
+          await openAccount();
           await disconnect.waitFor();
           const overview = page.getByRole('region', { name: 'My Account overview', exact: true });
           await overview.getByRole('heading', { name: 'My Account', exact: true }).waitFor();
@@ -295,7 +304,7 @@ async function main() {
           );
           await page.getByRole('button', { name: /Payments & recovery/ }).click();
           await page.getByRole('heading', { name: 'Recent transactions', exact: true }).waitFor();
-          await walletNav().click();
+          await openAccount();
           await disconnect.waitFor();
           await page
             .getByRole('link', { name: 'Markets', exact: true })
@@ -303,7 +312,7 @@ async function main() {
             .first()
             .click();
           await page.getByRole('heading', { name: 'You know the game.', exact: true }).waitFor();
-          await walletNav().click();
+          await openAccount();
           await disconnect.waitFor();
           assert.equal(
             await page.evaluate(

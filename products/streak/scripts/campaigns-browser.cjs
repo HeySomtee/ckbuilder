@@ -5,6 +5,7 @@ const path = require('node:path');
 const http = require('node:http');
 const { chromium, webkit } = require('playwright');
 const { chooseOption } = require('./browser-select.cjs');
+const { artworkJourney } = require('./campaigns-artwork-browser.cjs');
 
 const publicRoot = path.resolve(__dirname, '../public');
 const output = path.resolve(__dirname, '../../../.quality-artifacts/campaigns-runtime');
@@ -188,6 +189,7 @@ async function main() {
           let viewerId = account.id;
           let fiveProfile = null;
           let profileWrites = 0;
+          const artworkState = { uploads: [], images: new Map(), failNext: false, broken: false };
           const availableGameweeks = gameweeks.map((week) => ({ ...week }));
           let optionsReads = 0;
           const campaigns = [createCampaign(), createCampaign('five', 'five')];
@@ -196,6 +198,14 @@ async function main() {
             const req = route.request(),
               url = new URL(req.url());
             if (url.origin !== base) return route.abort();
+            if (url.pathname.startsWith('/media/competitions/')) {
+              const bytes = artworkState.images.get(url.pathname);
+              return route.fulfill({
+                status: bytes && !artworkState.broken ? 200 : 404,
+                contentType: 'image/png',
+                body: bytes && !artworkState.broken ? bytes : '',
+              });
+            }
             if (!url.pathname.startsWith('/api/')) return route.continue();
             requests.push(url.pathname);
             const json = (value, status = 200) =>
@@ -233,6 +243,56 @@ async function main() {
                     : result(url.searchParams.get('id')),
                 );
               }
+              if (url.searchParams.get('action') === 'upload-artwork') {
+                const id = url.searchParams.get('id'),
+                  slot = url.searchParams.get('slot');
+                const target = campaigns.find((row) => row.id === id);
+                assert.equal(req.headers()['x-streak-account-id'], account.id);
+                assert.equal(url.searchParams.has('expectedAccountId'), false);
+                assert.equal(Number(url.searchParams.get('revision')), target.revision);
+                // WebKit's interception protocol omits File request bytes. The
+                // real HTTP suite validates binary uploads; this mock supplies
+                // a local raster so both engines exercise rendered responses.
+                const capturedBytes = req.postDataBuffer();
+                const bytes =
+                  capturedBytes ??
+                  fs.readFileSync(path.join(publicRoot, 'brand/on-form-icon-512.png'));
+                assert.equal(req.headers()['content-type'], 'image/png');
+                artworkState.uploads.push({ id, slot });
+                if (artworkState.holdNext) {
+                  artworkState.holdNext = false;
+                  await new Promise((resolve) => {
+                    artworkState.release = resolve;
+                    artworkState.onHeld?.();
+                  });
+                  artworkState.released = true;
+                }
+                if (artworkState.failNext) {
+                  artworkState.failNext = false;
+                  return json(
+                    { error: 'Synthetic upload unavailable. Retry the same image.' },
+                    503,
+                  );
+                }
+                const hash = require('node:crypto')
+                  .createHash('sha256')
+                  .update(bytes)
+                  .update(slot)
+                  .update(capturedBytes ? '' : String(artworkState.uploads.length))
+                  .digest('hex');
+                const file = `/media/competitions/${hash}.webp`;
+                artworkState.images.set(file, bytes);
+                target.artwork ??= { icon: null, banner: null };
+                target.artwork[slot] = {
+                  url: file,
+                  width: slot === 'icon' ? 128 : 1440,
+                  height: slot === 'icon' ? 128 : 480,
+                };
+                target.revision++;
+                await json(result(id));
+                artworkState.onCompleted?.();
+                return;
+              }
               const body = req.postDataJSON();
               writes.push(body);
               if (body.action === 'prepare-gameweek') {
@@ -249,6 +309,12 @@ async function main() {
                 campaigns.push(campaign);
               } else if (!campaign) return json({ error: 'Missing campaign' }, 404);
               if (body.action === 'update') applyDraft(campaign, body.draft, availableGameweeks);
+              if (body.action === 'remove-artwork') {
+                assert.equal(body.expectedAccountId, account.id);
+                assert.equal(body.revision, campaign.revision);
+                campaign.artwork ??= { icon: null, banner: null };
+                campaign.artwork[body.slot] = null;
+              }
               if (body.action === 'publish') campaign.state = 'open';
               if (body.action === 'delete') {
                 if (body.confirmName !== campaign.name)
@@ -975,6 +1041,17 @@ async function main() {
                 .count(),
               0,
             );
+            admin = true;
+            await artworkJourney({
+              page,
+              base,
+              campaigns,
+              writes,
+              artworkState,
+              width,
+              engineName,
+              output,
+            });
             viewerId = 'different-account';
             await page.reload();
             await page.getByText('Competitions could not be loaded', { exact: true }).waitFor();

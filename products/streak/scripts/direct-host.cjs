@@ -110,7 +110,8 @@ function buildConfig(env) {
     ...pick(env, ['STREAK_DIRECT_LEGACY_REGISTRY_DIR']),
   };
   const operatorDir = requireValue(env, 'STREAK_DIRECT_OPERATOR_DIR');
-  const directories = [operatorDir, ...Object.values(registry)];
+  const artworkDir = path.join(stateRoot, 'campaign-artwork');
+  const directories = [operatorDir, ...Object.values(registry), artworkDir];
   if (
     directories.some(
       (dir) => !path.isAbsolute(dir) || !contained(path.resolve(stateRoot), path.resolve(dir)),
@@ -246,6 +247,7 @@ function buildConfig(env) {
         ...ipc,
         PORT: String(apiPort),
         MATCH_PROVIDER: 'football',
+        STREAK_CAMPAIGNS_ARTWORK_DIR: artworkDir,
       },
       sponsor: {
         ...operator,

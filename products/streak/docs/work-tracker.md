@@ -1,5 +1,47 @@
 # Streak work tracker
 
+6 November owner approved navigation/artwork integration. Implement the reviewed
+desktop rail and mobile dock/menu, plus optional icon/banner selection during
+creation and editing of existing competitions. Existing records, including
+rehearsals, must receive no generated artwork automatically. Admins can add,
+replace or remove either image without changing frozen terms or participation.
+Preserve ordinary payment/scoring flows and the owner's hosted checklist. Work
+includes bounded persistent uploads, image optimization, focused regressions,
+independent security/terms review and the required major gate before completion.
+
+Implementation and local verification are complete. Optional admin uploads are
+separate from frozen terms; existing records retain no artwork, failed creation
+uploads resume the saved draft, and finished competitions remain editable.
+Independent review resolved image CSP and upload identity-log concerns. Focused
+HTTP/domain, disposable PostgreSQL, navigation/wallet/startup checks passed.
+All 96 major-gate stages passed at 18:39 UTC, including expanded artwork browser
+journeys and signed local-chain checks. Responsive screenshots were inspected.
+See `docs/delivery/competition-artwork-navigation.md` and the ignored
+`.quality-artifacts/artwork-release-2026-11-06.json` evidence. The owner's checklist
+was restored byte-for-byte. No commit or push was requested for this increment;
+publication, hosted image persistence and physical-wallet acceptance remain separate.
+
+Earlier preview checkpoints below are historical; approval and integration are
+recorded above. Existing hosted acceptance, measured savings and prediction
+concurrency commitments remain open.
+
+6 November competition artwork and navigation design requested: prepare a
+standalone desktop/mobile preview with clearer navigation sections, optional
+competition icons and banners, and four reusable generated assets for Five and
+Predictions. Show artwork-present and fallback states plus the admin controls.
+This is preview work only; production media storage and navigation integration
+await design approval. Preserve the owner's hosted checklist and all outstanding
+acceptance, efficiency measurement and prediction concurrency commitments below.
+
+Preview complete at `http://127.0.0.1:4204/`, documented in
+`design/navigation-artwork-review/README.md`. Four original generated PNGs and
+their prompts are saved beside the preview. All 24 scenario/interaction groups
+passed in Chromium (1440/390/320) and WebKit (390), with an independent mobile
+review. Optional upload/remove, finished labels, fallbacks, custom selectors and
+focus return were verified without app/API/wallet access. Next: owner design
+review, then implement optional media separately from frozen competition terms
+and integrate approved navigation. No publication or deployment for this work.
+
 6 November competition release complete: `938078c` was pushed to `main` and the
 remote revision verified. All 95 stages passed on its exact tree at 16:48 UTC,
 including the expanded competition/mixed-slip journeys and signed local-chain

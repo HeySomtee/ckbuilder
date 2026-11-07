@@ -2,6 +2,17 @@
 export type CampaignKind = 'predictions' | 'five';
 export type CampaignPredictionEntryPolicy = 'after-registration-v1' | 'first-admitted-v2';
 export type CampaignState = 'draft' | 'open' | 'live' | 'finalizing' | 'finished' | 'deleted';
+export type CampaignArtworkSlot = 'icon' | 'banner';
+export interface CampaignArtworkAsset {
+  /** Same-origin content-addressed optimized image. Never an external upload URL. */
+  url: string;
+  width: number;
+  height: number;
+}
+export interface CampaignArtwork {
+  icon: CampaignArtworkAsset | null;
+  banner: CampaignArtworkAsset | null;
+}
 export interface CampaignPrize {
   place: number;
   amountShannons: string;
@@ -74,6 +85,8 @@ export interface CampaignAward {
 }
 export interface CampaignSummary {
   id: string;
+  /** Optional presentation metadata, separate from frozen participation/prize terms. */
+  artwork?: CampaignArtwork;
   name: string;
   description: string;
   kind: CampaignKind;
