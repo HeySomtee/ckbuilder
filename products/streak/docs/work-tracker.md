@@ -1,5 +1,12 @@
 # Streak work tracker
 
+7 November owner requested publication. Artwork and navigation implementation
+`6ad5368` is pushed to GitHub `main`. All 42 release file hashes matched the
+6 November evidence; commit and push reused its successful 96-stage gate within
+24 hours on Node 24.14.0. The owner's checklist and nested private state were
+excluded. Hosted rollout, image persistence and physical-wallet acceptance are
+still separate; retain all earlier open commitments below.
+
 6 November owner approved navigation/artwork integration. Implement the reviewed
 desktop rail and mobile dock/menu, plus optional icon/banner selection during
 creation and editing of existing competitions. Existing records, including
@@ -18,8 +25,8 @@ All 96 major-gate stages passed at 18:39 UTC, including expanded artwork browser
 journeys and signed local-chain checks. Responsive screenshots were inspected.
 See `docs/delivery/competition-artwork-navigation.md` and the ignored
 `.quality-artifacts/artwork-release-2026-11-06.json` evidence. The owner's checklist
-was restored byte-for-byte. No commit or push was requested for this increment;
-publication, hosted image persistence and physical-wallet acceptance remain separate.
+was restored byte-for-byte. Publication was subsequently requested and completed
+as recorded above; hosted image persistence and physical-wallet acceptance remain separate.
 
 Earlier preview checkpoints below are historical; approval and integration are
 recorded above. Existing hosted acceptance, measured savings and prediction

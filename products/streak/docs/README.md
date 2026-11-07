@@ -4,7 +4,8 @@
 approved design integrated with add/replace/remove controls for new and existing
 competitions. No default images are added to rehearsals. Independent review,
 responsive visual inspection and all 96 major-gate stages passed locally.
-This increment remains uncommitted and unpublished.
+Published to GitHub `main` as `6ad5368` on 7 November with the verified gate reused.
+Hosted deployment and acceptance remain separate.
 
 6 November [navigation and competition artwork preview](../design/navigation-artwork-review/README.md):
 separated desktop navigation, mobile Compete tab and grouped More sheet, optional

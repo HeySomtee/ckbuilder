@@ -85,5 +85,10 @@ The owner's hosted checklist was restored byte-for-byte after gate formatting.
 Local evidence is in `.quality-artifacts/artwork-major.log`, `all.json`,
 `artwork-release-2026-11-06.json`, `campaigns-runtime/` and
 `navigation-integration/`. Earlier failed harness iterations remain recorded;
-the final combined gate passed without skipped suites. No commit, push, hosted
-upload, physical-wallet test or deployment is claimed by this record.
+the final combined gate passed without skipped suites.
+
+On 7 November the owner requested publication. Commit `6ad5368` was pushed to
+GitHub `main` after all 42 release file hashes matched the saved evidence. Commit
+and push reused the successful gate within 24 hours on the same Node runtime.
+The owner's testing checklist and private local state were excluded. No hosted
+upload, physical-wallet test or deployment verification is claimed by this record.

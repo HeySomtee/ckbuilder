@@ -5,8 +5,9 @@ are implemented locally after approval. Existing rehearsals remain image-free
 until explicit admin uploads. Creation and existing/finished competition editing
 support replacement/removal independently of frozen terms. Independent review,
 responsive visual inspection and all 96 major-gate stages passed at 18:39 UTC.
-Evidence includes disposable PostgreSQL and signed local-chain checks. No commit,
-push or hosted deployment for this increment is claimed.
+Evidence includes disposable PostgreSQL and signed local-chain checks. Published
+to GitHub `main` as `6ad5368` on 7 November after all release file hashes matched
+the still-valid evidence. Hosted deployment and acceptance are not yet verified.
 
 6 November [navigation and artwork preview](design/navigation-artwork-review/README.md)
 was approved: clearer desktop sections, mobile Compete/More navigation,
