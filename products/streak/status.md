@@ -1,10 +1,12 @@
 # Streak status
 
-9 November publication authorized: the release combines Home carousels, explicit
+9 November published to GitHub `main` as `bb152d2`: the release combines Home carousels, explicit
 competition entry, queued payment review, faster verification and stale-payment
-recovery. The tested runtime hashes are being revalidated for commit and push;
-hosted deployment and real-wallet acceptance remain separate. No private drafts
-or owner acceptance-checklist edits belong to this release.
+recovery. The tested runtime hashes were revalidated, both Git hooks accepted the
+fresh exact-tree evidence and the remote commit was verified. Hosted deployment
+and real-wallet acceptance remain separate. Private drafts and owner acceptance
+checklist edits were excluded; the checklist was restored byte-for-byte.
+Earlier unpublished checkpoints below are historical.
 
 9 November [queued payment reviews](docs/delivery/queued-payment-reviews.md), bounded
 parallel verification and automatic stale-offer recovery are verified locally.

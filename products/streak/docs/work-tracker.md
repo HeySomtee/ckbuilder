@@ -1,11 +1,13 @@
 # Streak work tracker
 
-9 November owner authorized commit and push of the completed release. Revalidate
-the 62 runtime/test hashes against the fresh combined 98-stage evidence, run scoped
-checks for publication notes and preserve the owner's checklist byte-for-byte.
-Include the already approved Home and competition-entry work. Keep hosted CI
-paused and private correspondence out of Git. After publication, verify the remote
-commit; hosted recovery and the three-wallet queue rehearsal remain acceptance work.
+9 November release published as `bb152d242be6d788a0bbe9ba7a71ec3b3a88e77a` on
+GitHub `main`; the remote hash is verified. Revalidated all 62 runtime/test hashes
+against the combined 98-stage evidence and passed scoped publication-doc checks.
+Both Git hooks accepted the fresh exact-tree receipt. The release includes the
+approved Home and competition-entry work. Hosted CI remains paused. No private
+correspondence or owner checklist edits were committed; checklist bytes are restored.
+Hosted recovery, deployment verification and the three-wallet queue rehearsal remain
+acceptance work. Earlier unpublished checkpoints below are historical.
 
 9 November final recovery verification: implementation and independent review are
 complete. The final major run passed 87 stages, including every browser journey,

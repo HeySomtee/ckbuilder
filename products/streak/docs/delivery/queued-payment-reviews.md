@@ -1,6 +1,7 @@
 # Queued payment reviews
 
-9 November 2026. Implemented and verified locally. Not pushed or deployed.
+9 November 2026. Implemented and verified locally; published to GitHub `main` as
+`bb152d2`. Hosted deployment and real-wallet acceptance remain unverified.
 
 ## What users experience
 
