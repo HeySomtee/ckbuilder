@@ -515,6 +515,21 @@
   width: 100%;
   margin-top: 10px;
 }
+.review-wait {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 0.8125rem;
+}
+.review-wait p {
+  margin: 8px 0;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.review-wait button {
+  min-height: 44px;
+}
 .batch-hint,
 .batch-review > p {
   color: var(--muted);

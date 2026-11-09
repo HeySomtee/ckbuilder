@@ -28,7 +28,7 @@ async function setup(options = {}) {
     submit: chain.submit,
     status: chain.status,
     resume: chain.finish,
-    resolve: chain.status,
+    resolve: async (identity) => ({ ...chain.status(identity), state: 'cancelled' }),
   };
   const client = new BatchClient(signer, transport, journal, {
     now: () => now,
@@ -67,6 +67,93 @@ function alter(offer, change) {
   value.descriptor = value.lines[0].descriptor;
   return value;
 }
+
+test('Leaving during delayed wallet preparation releases unsigned metadata and private offer', async () => {
+  const s = await setup();
+  const controller = new AbortController();
+  const released = [],
+    cancelled = [];
+  s.transport.release = async (identity) => {
+    released.push(identity);
+    return true;
+  };
+  s.transport.cancelReview = async (requestId) => {
+    cancelled.push(requestId);
+  };
+  const prepareTransaction = s.signer.prepareTransaction.bind(s.signer);
+  s.signer.prepareTransaction = async (tx) => {
+    const prepared = await prepareTransaction(tx);
+    controller.abort();
+    return prepared;
+  };
+  await assert.rejects(
+    s.client.prepare(picks(s.chain.fixtures(), 1), undefined, {
+      signal: controller.signal,
+      beforeAttempt() {},
+      onWait() {},
+    }),
+    { name: 'AbortError' },
+  );
+  assert.equal(released.length, 1);
+  assert.equal(cancelled.length, 1);
+  assert.match(cancelled[0], /^[0-9a-f-]{36}$/);
+  assert.equal((await s.client.history()).length, 0, 'no signed payment exists');
+});
+test('Competition selection freezes before async review and signed journal preserves it', async () => {
+  const s = await setup();
+  const requested = picks(s.chain.fixtures(), 1);
+  const selection = {
+    accountId: 'alice',
+    lines: [{ fixtureId: requested[0].fixture.fixtureId, campaignIds: ['cup'] }],
+  };
+  const prepare = s.transport.offer;
+  let sent;
+  s.transport.offer = async (request) => {
+    sent = structuredClone(request.competitionSelection);
+    selection.lines[0].campaignIds = [];
+    return prepare(request);
+  };
+  const review = await s.client.prepare(requested, selection);
+  assert.deepEqual(sent.lines[0].campaignIds, ['cup']);
+  const source = [
+    {
+      lineId: 'line',
+      marketId: 'market',
+      matchId: requested[0].fixture.fixtureId,
+      outcome: 'home',
+      amountCkb: '100',
+      competition: { accountId: 'alice', ids: [] },
+    },
+  ];
+  await assert.rejects(
+    s.client.signAndPersist(review, s.chain.fixtures(), source),
+    /Competition choices changed/,
+  );
+  source[0].competition.ids = ['cup'];
+  const record = await s.client.signAndPersist(review, s.chain.fixtures(), source);
+  assert.deepEqual(record.sourcePicks[0].competition.ids, ['cup']);
+});
+
+test('Rejected wallet and failed post-offer validation release unsigned competition reviews', async () => {
+  const s = await setup(),
+    released = [];
+  s.transport.release = async (identity) => {
+    released.push(identity);
+    return true;
+  };
+  const review = await s.client.prepare(picks(s.chain.fixtures(), 1));
+  s.signer.signTransaction = async () => {
+    throw Error('Synthetic wallet rejection');
+  };
+  await assert.rejects(s.client.signAndPersist(review, s.chain.fixtures()), /wallet rejection/);
+  await s.client.releaseReview(review);
+  assert.equal(released[0].rawHash, review.hash);
+  s.signer.prepareTransaction = async () => {
+    throw Error('Synthetic preparation failed');
+  };
+  await assert.rejects(s.client.prepare(picks(s.chain.fixtures(), 1)), /preparation failed/);
+  assert.equal(released.length, 2);
+});
 test('All eight independent predictions have exact participant contributions and one signed transaction', async () => {
   const s = await setup(),
     review = await s.client.prepare(picks(s.chain.fixtures(), 8));
@@ -161,6 +248,183 @@ test('Mixed funded and new markets parse 172-byte types, preserve pending ticket
     'confirmed',
   );
 });
+
+test('Independent market reads overlap while every later signing pass rechecks live inputs', async () => {
+  const s = await setup();
+  const first = await s.client.prepare(picks(s.chain.fixtures(), 3));
+  await s.client.submit(await s.client.signAndPersist(first, s.chain.fixtures()));
+  const read = s.rpc.getCellLiveNoCache.bind(s.rpc);
+  let active = 0,
+    maximum = 0,
+    reads = 0;
+  s.rpc.getCellLiveNoCache = async (...args) => {
+    reads++;
+    maximum = Math.max(maximum, ++active);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return await read(...args);
+    } finally {
+      active--;
+    }
+  };
+  const review = await s.client.prepare(picks(s.chain.fixtures(), 3));
+  assert.ok(maximum >= 2 && maximum <= 8, `bounded parallel reads observed: ${maximum}`);
+  assert.equal(active, 0);
+  const previousReads = reads;
+  await s.client.signAndPersist(review, s.chain.fixtures());
+  assert.ok(
+    reads > previousReads,
+    'Signing performs fresh reads rather than reusing review-time liveness',
+  );
+});
+
+test('Operator conflict hints require independent canonical proof and restore reservations on reorg', async () => {
+  for (const mode of ['valid', 'unrelated', 'shallow']) {
+    const s = await setup();
+    const review = await s.client.prepare(picks(s.chain.fixtures(), 1));
+    const record = await s.client.signAndPersist(review, s.chain.fixtures());
+    const conflict = ccc.Transaction.fromBytes(record.ownerSignedBytes);
+    conflict.outputs.at(-1).capacity -= 1n;
+    if (mode === 'unrelated')
+      conflict.inputs.forEach((input, index) => {
+        input.previousOutput = ccc.OutPoint.from({ txHash: '0x' + '99'.repeat(32), index });
+      });
+    s.chain.commit(conflict);
+    s.transport.status = async (identity) => ({
+      ...s.chain.status(identity),
+      state: 'cancelled',
+      conflictHash: conflict.hash(),
+    });
+    if (mode === 'shallow') {
+      const tip = s.rpc.getTipHeader.bind(s.rpc);
+      s.rpc.getTipHeader = async () => ({ ...(await tip()), number: 4n });
+    }
+    const result = await s.client.recover(record);
+    if (mode === 'valid') {
+      assert.equal(result.status, 'resolved');
+      assert.equal(result.record.conflictProof.hash, conflict.hash());
+      s.chain.transactions.delete(conflict.hash());
+      assert.equal((await s.client.recover(result.record)).status, 'reorg');
+    } else {
+      assert.notEqual(result.status, 'resolved');
+      assert.equal(result.record.conflictProof, undefined);
+    }
+    assert.equal(s.chain.submissions.length, 0, 'Recovery does not send a replacement payment');
+  }
+});
+test('Expired unsigned offers discover a spent sponsor input without another signature or broadcast', async () => {
+  for (const state of ['expired', 'cancelled']) {
+    const s = await setup();
+    const review = await s.client.prepare(picks(s.chain.fixtures(), 1));
+    const record = await s.client.signAndPersist(review, s.chain.fixtures());
+    const conflict = ccc.Transaction.fromBytes(record.ownerSignedBytes);
+    conflict.outputs.at(-1).capacity -= 1n;
+    s.chain.commit(conflict);
+    s.transport.status = async (identity) => ({ ...s.chain.status(identity), state });
+    let searches = 0,
+      resolutions = 0;
+    s.transport.resolve = async (identity) => {
+      resolutions++;
+      assert.equal(identity.offerId, record.offer.offerId);
+      assert.equal(identity.rawHash, record.hash);
+      assert.equal(identity.conflictingTxHash, conflict.hash());
+      return { ...s.chain.status(identity), state: 'cancelled', unsignedCancellation: true };
+    };
+    s.rpc.findTransactionsPaged = async (search, order, limit) => {
+      searches++;
+      assert.ok(ccc.Script.from(search.script).eq(record.offer.sponsorLock));
+      assert.deepEqual(search.filter.blockRange, [2n, 11n]);
+      assert.equal(order, 'asc');
+      assert.equal(limit, 32);
+      return {
+        transactions: [
+          ...Array.from({ length: 8 }, (_, i) => ({
+            isInput: true,
+            txHash: '0x9999' + i.toString(16).padStart(60, '0'),
+          })),
+          { isInput: true, txHash: conflict.hash() },
+        ],
+        lastCursor: '0x',
+      };
+    };
+    const result = await s.client.recover(record);
+    assert.equal(result.status, 'resolved');
+    assert.equal(searches, 1);
+    assert.equal(
+      resolutions,
+      1,
+      'The operator acknowledges recovery before local reservations are released',
+    );
+    assert.equal(result.record.conflictProof.hash, conflict.hash());
+    assert.equal(s.chain.submissions.length, 0);
+    s.chain.transactions.delete(conflict.hash());
+    assert.equal((await s.client.recover(result.record)).status, 'reorg');
+  }
+});
+
+test('A missing operator recovery acknowledgement keeps the original reservation until retry succeeds', async () => {
+  const s = await setup();
+  const review = await s.client.prepare(picks(s.chain.fixtures(), 1));
+  const record = await s.client.signAndPersist(review, s.chain.fixtures());
+  const conflict = ccc.Transaction.fromBytes(record.ownerSignedBytes);
+  conflict.outputs.at(-1).capacity -= 1n;
+  s.chain.commit(conflict);
+  s.transport.status = async (identity) => ({
+    ...s.chain.status(identity),
+    state: 'cancelled',
+    conflictHash: conflict.hash(),
+  });
+  s.transport.resolve = async () => {
+    throw Error('Synthetic unavailable operator');
+  };
+  assert.equal((await s.client.recover(record)).status, 'conflict');
+  assert.equal(s.records.get(record.hash).conflictProof, undefined);
+  s.transport.resolve = async (identity) => s.chain.status(identity);
+  assert.equal(
+    (await s.client.recover(record)).status,
+    'conflict',
+    'An unexpected response state is not recovery acknowledgement',
+  );
+  s.transport.resolve = async (identity) => ({ ...s.chain.status(identity), state: 'cancelled' });
+  assert.equal((await s.client.recover(record)).status, 'resolved');
+  assert.equal(s.chain.submissions.length, 0);
+});
+
+test('Unproven expired-offer history is bounded, throttled and never releases reservations', async () => {
+  const s = await setup();
+  const review = await s.client.prepare(picks(s.chain.fixtures(), 1));
+  const record = await s.client.signAndPersist(review, s.chain.fixtures());
+  s.chain.live.delete(pointKey(record.offer.sponsorInput));
+  s.transport.status = async (identity) => ({ ...s.chain.status(identity), state: 'expired' });
+  let searches = 0,
+    candidateReads = 0;
+  const read = s.rpc.getTransactionNoCache.bind(s.rpc);
+  s.rpc.getTransactionNoCache = async (hash) => {
+    if (hash.startsWith('0x9999')) candidateReads++;
+    return read(hash);
+  };
+  s.rpc.findTransactionsPaged = async () => {
+    searches++;
+    return {
+      transactions: Array.from({ length: 32 }, (_, i) => ({
+        isInput: true,
+        txHash: '0x9999' + i.toString(16).padStart(60, '0'),
+      })),
+      lastCursor: '0x',
+    };
+  };
+  assert.equal((await s.client.recover(record)).status, 'conflict');
+  assert.equal((await s.client.recover(record)).status, 'conflict');
+  assert.equal(searches, 1);
+  assert.equal(candidateReads, 32);
+  assert.equal(s.records.get(record.hash).conflictProof, undefined);
+  s.advance(60_001);
+  assert.equal((await s.client.recover(record)).status, 'conflict');
+  assert.equal(searches, 2);
+  assert.equal(candidateReads, 64);
+  assert.equal(s.chain.submissions.length, 0);
+});
+
 test('Independent verification rejects altered money, ticket, genesis, dependencies, headers, foreign input and witnesses', async () => {
   const mutations = [
     (tx) => {

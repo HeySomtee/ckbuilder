@@ -12,6 +12,7 @@ import type { CampaignStorage } from './modules/campaigns/storage';
 import { CampaignService } from './modules/campaigns/service';
 import { FiveService } from './modules/five/service';
 import { MemoryFiveProfiles } from './test-support/five-profiles';
+import { campaignEntryHttp } from './test-support/campaign-entry-http';
 
 /** Actual HTTP/auth/origin handlers with an isolated synthetic campaign repository.
  * Database transactions and source-chain evidence have separate PostgreSQL/chain suites. */
@@ -588,7 +589,7 @@ async function main() {
     );
     assert.equal(
       (JSON.parse(publicText) as CampaignPage).detail!.predictionEntryPolicy,
-      'first-admitted-v2',
+      'explicit-entry-v3',
     );
     assert.deepEqual(
       (JSON.parse(publicText) as CampaignPage).detail!.leaderboard.map((row) => row.name).sort(),
@@ -665,6 +666,7 @@ async function main() {
     console.log(
       'Campaign HTTP: actual auth/origin guards, administrator routes, ranked registration, public privacy, labelled exports and archival passed.',
     );
+    await campaignEntryHttp(base, cookies[1], wallets[1]);
   } finally {
     runtime.campaignService = originalService;
     runtime.reconcileCampaigns = originalReconcile;

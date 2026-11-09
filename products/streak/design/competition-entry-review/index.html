@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Streak · Competition entry preview</title>
+    <link rel="stylesheet" href="/preview.css" />
+    <link rel="icon" href="/brand/on-form-favicon.svg" />
+    <script src="/preview.js" defer></script>
+  </head>
+  <body>
+    <svg class="symbols" aria-hidden="true">
+      <defs>
+        <symbol id="chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></symbol>
+        <symbol id="close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
+        <symbol id="trophy" viewBox="0 0 24 24">
+          <path
+            d="M8 3h8v7a4 4 0 0 1-8 0V3ZM8 5H4v3a4 4 0 0 0 4 4m8-7h4v3a4 4 0 0 1-4 4m-4 2v6m-4 0h8"
+          />
+        </symbol>
+        <symbol id="lock" viewBox="0 0 24 24">
+          <rect x="5" y="10" width="14" height="11" rx="3" />
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+        </symbol>
+      </defs>
+    </svg>
+    <header class="brand">
+      <img src="/brand/on-form-wordmark.svg" alt="Streak" /><span
+        >Design preview · Sample data</span
+      >
+    </header>
+    <main>
+      <aside class="review-notes">
+        <p class="eyebrow">YOUR PICK. YOUR CHOICE.</p>
+        <h1>One prediction.<br />You choose where<br />it counts.</h1>
+        <p class="intro">
+          Keep it regular, or put it towards competitions you have joined. Your payment and returns
+          work the same way.
+        </p>
+        <details class="state-menu">
+          <summary>
+            <span><small>Preview state</small><b id="state-label">Multiple competitions</b></span
+            ><svg><use href="#chevron" /></svg>
+          </summary>
+          <div id="scenarios" role="group" aria-label="Preview states">
+            <button data-state="multiple">Multiple competitions</button>
+            <button data-state="regular">Regular by choice</button>
+            <button data-state="single">One eligible competition</button>
+            <button data-state="used">Already entered · second bet</button>
+            <button data-state="mixed">One used, one available</button>
+            <button data-state="pending">Earlier entry confirming</button>
+            <button data-state="funding">Shared funding confirming</button>
+          </div>
+        </details>
+        <div class="explanation">
+          <span id="state-number">01</span>
+          <p id="state-description"></p>
+        </div>
+        <p class="scope-note">Interactive proposal only. No wallet, payments or scoring changes.</p>
+      </aside>
+      <section class="phone-stage" aria-label="Prediction slip preview">
+        <button id="reopen" hidden>Open your saved slip</button>
+        <article class="slip" id="slip">
+          <header class="slip-heading">
+            <div>
+              <p class="eyebrow">YOUR PREDICTION SLIP</p>
+              <h2>Your slip <span class="count">2</span></h2>
+            </div>
+            <button class="icon-button" id="close-slip" aria-label="Close slip">
+              <svg><use href="#close" /></svg>
+            </button>
+          </header>
+          <div class="slip-tabs">
+            <span class="active">Picks <small>2</small></span
+            ><span>Activity</span><span class="add-context">Your saved picks</span>
+          </div>
+          <div class="slip-content">
+            <div class="list-caption">
+              <span>2 independent predictions</span><span>tCKB testnet</span>
+            </div>
+            <article class="pick">
+              <header class="fixture">
+                <div class="crests" aria-hidden="true"><span>LEE</span><span>TOT</span></div>
+                <div>
+                  <h3>Leeds vs Tottenham</h3>
+                  <p>Sat · 13:30</p>
+                </div>
+              </header>
+              <p class="outcome">Draw</p>
+              <div class="stake"><span>100</span><small>tCKB</small></div>
+              <div id="entry-area"></div>
+            </article>
+            <article class="pick secondary">
+              <header class="fixture">
+                <div class="crests coral" aria-hidden="true"><span>NFO</span><span>MCI</span></div>
+                <div>
+                  <h3>Nottingham Forest vs Man City</h3>
+                  <p>Sat · 18:30</p>
+                </div>
+              </header>
+              <p class="outcome">Manchester City to win</p>
+              <div class="stake"><span>100</span><small>tCKB</small></div>
+              <div class="regular-row">
+                <span class="regular-dot"></span><span>Regular prediction</span>
+              </div>
+              <p class="hint">Your competition pick for this match is already recorded.</p>
+            </article>
+          </div>
+          <footer class="slip-footer">
+            <div id="funding-state" hidden>
+              <div class="cells" aria-hidden="true"><i></i><i></i><i></i></div>
+              <div>
+                <b>Another payment is confirming</b>
+                <p>Your picks are saved. Try again shortly.</p>
+              </div>
+              <button id="check-funding">Check again</button>
+            </div>
+            <div class="total">
+              <span>Stakes <b>200 tCKB</b></span
+              ><small>Storage &amp; network fee at review</small>
+            </div>
+            <button class="primary" id="review">
+              Review predictions <svg><use href="#chevron" /></svg>
+            </button>
+            <p class="footer-note" id="selection-summary"></p>
+          </footer>
+        </article>
+      </section>
+    </main>
+    <dialog id="entry-dialog" aria-labelledby="entry-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <header class="sheet-heading">
+        <div>
+          <p class="eyebrow">LEEDS VS TOTTENHAM · DRAW</p>
+          <h2 id="entry-title">Where should it count?</h2>
+        </div>
+        <button
+          class="icon-button"
+          data-close="entry-dialog"
+          aria-label="Close competition selector"
+        >
+          <svg><use href="#close" /></svg>
+        </button>
+      </header>
+      <p class="sheet-intro">One payment. Choose which competitions this prediction enters.</p>
+      <div class="choices" id="choices"></div>
+      <p class="rule-note">
+        Only your first accepted entry counts in each competition. Regular predictions do not use
+        that entry.
+      </p>
+      <footer class="sheet-footer">
+        <button class="primary" id="apply">Save choice</button>
+        <p>Every prediction still settles normally.</p>
+      </footer>
+    </dialog>
+    <dialog id="review-dialog" aria-labelledby="review-title">
+      <header class="sheet-heading">
+        <div>
+          <p class="eyebrow">DESIGN PREVIEW</p>
+          <h2 id="review-title">Your choices, at a glance</h2>
+        </div>
+        <button class="icon-button" data-close="review-dialog" aria-label="Close review">
+          <svg><use href="#close" /></svg>
+        </button>
+      </header>
+      <div id="review-content"></div>
+      <p class="rule-note">
+        The live payment review would also show the exact wallet total. This preview does not send a
+        payment.
+      </p>
+      <footer class="sheet-footer">
+        <button class="primary" data-close="review-dialog">Back to your slip</button>
+      </footer>
+    </dialog>
+    <div class="toast" id="toast" role="status" hidden></div>
+  </body>
+</html>

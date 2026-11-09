@@ -1,8 +1,10 @@
 export class ApiError extends Error {
   readonly status: number;
-  constructor(message: string, status: number) {
+  readonly reviewWait?: { position: number };
+  constructor(message: string, status: number, reviewWait?: { position: number }) {
     super(message);
     this.status = status;
+    this.reviewWait = reviewWait;
   }
 }
 
@@ -27,6 +29,16 @@ export async function request(
         ? data.error
         : 'The request failed. Please try again.',
       response.status,
+      response.status === 429 &&
+        path === '/direct/batch/offer' &&
+        isRecord(data) &&
+        isRecord(data.reviewWait) &&
+        typeof data.reviewWait.position === 'number' &&
+        Number.isInteger(data.reviewWait.position) &&
+        data.reviewWait.position >= 0 &&
+        data.reviewWait.position <= 128
+        ? { position: data.reviewWait.position }
+        : undefined,
     );
   return data;
 }

@@ -26,7 +26,8 @@ import { survivorService, tickSurvivor } from './modules/survivor/runtime';
 import { SurvivorError } from './modules/survivor/domain';
 import { fiveService, startFiveProgression } from './modules/five/runtime';
 import { FiveError } from './modules/five/domain';
-import { campaignService, reconcileCampaigns, startCampaigns } from './modules/campaigns/runtime';
+import { campaignService, campaignEntryPayments, campaignPaymentsEnabled, reconcileCampaigns, startCampaigns } from './modules/campaigns/runtime';
+import { entryPaymentOffer } from './modules/campaigns/entry-payments';
 import { CampaignError, identifier as campaignId, object as campaignObject } from './modules/campaigns/domain';
 import { campaignEvidenceExport, campaignEvidenceCsv } from './modules/campaigns/evidence';
 import { verifyCampaignPayout } from './modules/campaigns/payout-proof';
@@ -1358,13 +1359,17 @@ async function handleDemand(req:IncomingMessage,res:ServerResponse,url:URL,atomi
   }
   catch {atomic?sendJson(res,200,envelope([],false,'Atomic sponsorship is temporarily unavailable. Existing signed payments remain recoverable.')):sendJson(res,503,{error:'Sponsored market creation is temporarily unavailable. Existing positions remain recoverable.'});}
 }
-async function handleSponsor(req:IncomingMessage,res:ServerResponse,url:URL,action:'offer'|'submit'|'resume'|'resolve'|'status',atomic=false):Promise<void> {
+async function handleSponsor(req:IncomingMessage,res:ServerResponse,url:URL,action:'offer'|'submit'|'resume'|'resolve'|'status'|'release'|'cancel-review',atomic=false):Promise<void> {
   const prefix=atomic?'/batch':'';
   if(action==='status') {
     const offerId=url.searchParams.get('offerId'),rawHash=url.searchParams.get('rawHash');
     if(!offerId||!/^[0-9a-f-]{36}$/.test(offerId)||!rawHash||!/^0x[0-9a-f]{64}$/.test(rawHash))return sendJson(res,400,{error:'Invalid sponsor recovery identity.'});
     if(!sponsorRate(`status:${req.socket.remoteAddress}`,60))return sendJson(res,429,{error:'Please wait before refreshing transaction status.'});
-    try {sendJson(res,200,await sponsorProxy(`${prefix}/status?offerId=${encodeURIComponent(offerId)}&rawHash=${rawHash}`)); activityService()?.wake();}
+    try {
+      const result = await sponsorProxy(`${prefix}/status?offerId=${encodeURIComponent(offerId)}&rawHash=${rawHash}`);
+      if (atomic && campaignPaymentsEnabled()) await campaignEntryPayments().observe(result);
+      sendJson(res,200,result); activityService()?.wake();
+    }
     catch {sendJson(res,503,{error:'Sponsor status is unavailable. Keep the saved transaction and try recovery again.'});}
     return;
   }
@@ -1375,8 +1380,21 @@ async function handleSponsor(req:IncomingMessage,res:ServerResponse,url:URL,acti
   const body=await readJson(req);
   if(!body||typeof body!=='object'||Array.isArray(body)||JSON.stringify(body).length>210_000)return sendJson(res,400,{error:'Invalid sponsored request.'});
   if(action==='offer'&&(await canonicalWalletAddress(body.ownerAddress))!==address)return sendJson(res,403,{error:'Use the wallet linked to the signed-in account.'});
-  try {sendJson(res,200,await sponsorProxy(`${prefix}/${action}`,body,address)); activityService()?.wake();}
-  catch(error) {sendJson(res,error instanceof SponsorProxyError?error.status:409,{error:error instanceof SponsorProxyError?error.message:'Sponsored operation could not complete. Preserve any signed transaction and check its status before retrying.'});}
+  try {
+    const selection = body.competitionSelection;
+    const { competitionSelection: _selection, ...request } = body;
+    if (atomic && action === 'cancel-review') return sendJson(res,200,await sponsorProxy('/batch/cancel-review',request,address));
+    const payments = atomic && campaignPaymentsEnabled() ? campaignEntryPayments() : undefined;
+    if (atomic && selection !== undefined && !payments) throw new CampaignError('Competition entry is temporarily unavailable. Your picks are saved.', 503);
+    const actor = payments ? { id: user.id, name: user.username || 'Player', wallet: address, ownerHash: (await activityOwner(address)).ownerHash } : undefined;
+    if (action === 'release') return sendJson(res,200,{ released: payments && actor ? await payments.release(actor, request) : true });
+    if (payments && actor && (action === 'submit' || action === 'resume')) await payments.start(actor, request);
+    const result = await sponsorProxy(`${prefix}/${action}`, request, address);
+    if (payments && actor && action === 'offer') await payments.reserve(actor, entryPaymentOffer(result), selection);
+    else if (payments) await payments.observe(result);
+    sendJson(res,200,result); activityService()?.wake();
+  }
+  catch(error) {sendJson(res,error instanceof SponsorProxyError || error instanceof CampaignError ?error.status:409,{error:error instanceof SponsorProxyError || error instanceof CampaignError ?error.message:'Sponsored operation could not complete. Preserve any signed transaction and check its status before retrying.',...(error instanceof SponsorProxyError && error.reviewWait ? {reviewWait:error.reviewWait} : {})});}
 }
 async function handleDirectMarkets(res: ServerResponse, url: URL): Promise<void> {
   const fixtureId = url.searchParams.get('matchId') ?? undefined;
@@ -1454,6 +1472,8 @@ const staticRoutes: Record<string, Handler> = {
   "GET /api/direct/batch/config": async (_req,res) => sendJson(res,200,V4_DIRECT_CONFIG),
   "GET /api/direct/batch/demand": (req,res,url)=>handleDemand(req,res,url,true),
   "POST /api/direct/batch/offer": (req,res,url)=>handleSponsor(req,res,url,'offer',true),
+  "POST /api/direct/batch/release": (req,res,url)=>handleSponsor(req,res,url,'release',true),
+  "POST /api/direct/batch/cancel-review": (req,res,url)=>handleSponsor(req,res,url,'cancel-review',true),
   "POST /api/direct/batch/submit": (req,res,url)=>handleSponsor(req,res,url,'submit',true),
   "POST /api/direct/batch/resume": (req,res,url)=>handleSponsor(req,res,url,'resume',true),
   "POST /api/direct/batch/resolve": (req,res,url)=>handleSponsor(req,res,url,'resolve',true),

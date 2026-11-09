@@ -27,6 +27,8 @@ import {
   type DirectMarketRecord,
 } from './registry';
 import { sponsoredOriginDescendant } from './sponsor-lineage';
+import { ReviewQueue, ReviewWaitingError } from './review-queue';
+import { readBatch } from './read-batch';
 
 const CKB = 100_000_000n,
   RESERVE = 3050n * CKB,
@@ -234,6 +236,21 @@ export class BatchService extends SponsorService {
     }
     return false;
   }
+  async cancelReview(requestId: string, ownerAddress: string): Promise<void> {
+    await this.options.journal.exclusive(async () => {
+      new ReviewQueue(this.options.journal.directory, () => this.now()).cancel(
+        requestId,
+        ownerAddress,
+      );
+      const entry = this.store
+        .all()
+        .find((e) => e.requestId === requestId && e.ownerAddress === ownerAddress);
+      if (entry?.state === 'offered' && !entry.userSignedBytes && !entry.signedBytes) {
+        entry.state = 'cancelled';
+        this.store.save(entry);
+      }
+    });
+  }
   async prepareOffer(value: unknown): Promise<BatchOffer> {
     const request = parseBatchRequest(value),
       digest = `0x${createHash('sha256').update(JSON.stringify(request)).digest('hex')}`;
@@ -243,373 +260,391 @@ export class BatchService extends SponsorService {
         if (prior.requestDigest !== digest) throw Error('Request identity belongs to another slip');
         return atomicOffer(prior.offer);
       }
-      this.options.journal.assertAvailableSlot();
-      if (
-        this.options.config.protocolHash !== V4_DIRECT_CONFIG.protocolHash ||
-        this.options.config.codeDeps.length !== 2
-      )
-        throw Error('Sponsored contract deployment is not ready');
-      await this.refreshConflicts();
-      for (const store of sponsorStores(this.options.journal.directory))
-        for (const entry of store.active(this.now()))
-          if (
-            entry.state === 'offered' &&
-            !entry.userSignedBytes &&
-            entry.ownerAddress === request.ownerAddress
-          ) {
-            entry.state = 'cancelled';
-            store.save(entry);
-          }
-      const barrier = await operatorFundingBarrier(
-        this.options.client,
-        this.options.journal,
-        this.options.registry,
-      );
-      if (!barrier.clear)
-        throw Error('Sponsor funding is awaiting canonical confirmation or recovery');
-      const conflicts = await canonicalSponsorConflicts(
-        this.options.client,
-        this.options.journal.directory,
-      );
-      if (conflicts.uncertain)
-        throw Error('Sponsor funding is awaiting canonical confirmation or recovery');
-      const matching = this.store
-        .all()
-        .filter(
-          (entry) =>
-            entry.signedBytes &&
-            atomicOffer(entry.offer).lines.some(
-              (line) =>
-                request.picks.some((pick) => pick.fixtureId === line.fixture.fixtureId) &&
-                line.mode === 'create',
-            ),
-        );
-      const attempts = matching.filter((entry) => conflicts.resolved.has(entry.offer.rawHash));
-      if (attempts.filter((entry) => entry.createdAtMs > this.now() - 60_000).length >= 3)
-        throw Error('This fixture has reached its sponsored retry window. Retry after one minute.');
-      const origins = [
-        ...new Map(
-          attempts.map((entry) => {
-            const p = ccc.OutPoint.from(entry.offer.sponsorInput);
-            return [p.toHex(), p] as const;
-          }),
-        ).values(),
-      ];
-      if (origins.length > 64) throw Error('Atomic funding lineage needs bounded manual recovery');
-      const owner = (await ccc.Address.fromString(request.ownerAddress, this.options.client))
-          .script,
-        sponsor = (await this.options.signer.getRecommendedAddressObj()).script;
-      if (owner.eq(sponsor) || ccc.bytesFrom(sponsor.args).length > 59)
-        throw Error('Invalid separate sponsor and owner wallet groups');
-      const mode = await sponsoredWalletMode(this.options.client, owner);
-      const userCells: ccc.Cell[] = [];
-      for (const input of request.userInputs) {
-        const cell = await this.options.client.getCellLiveNoCache(input, true, true);
+      const queue = new ReviewQueue(this.options.journal.directory, () => this.now());
+      const position = queue.touch(request.requestId, request.ownerAddress, digest);
+      if (position > 1) throw new ReviewWaitingError(position);
+      try {
+        this.options.journal.assertAvailableSlot();
         if (
-          !cell ||
-          cell.cellOutput.type ||
-          cell.outputData !== '0x' ||
-          !cell.cellOutput.lock.eq(owner)
+          this.options.config.protocolHash !== V4_DIRECT_CONFIG.protocolHash ||
+          this.options.config.codeDeps.length !== 2
         )
-          throw Error('Owner input must be live plain capacity controlled by the connected wallet');
-        userCells.push(cell);
-      }
-      const preparedLines: {
-        match: Match;
-        fixture: DemandFixture;
-        record?: DirectMarketRecord;
-        cell?: ccc.Cell;
-        header?: ccc.ClientBlockHeader;
-        control?: ccc.Cell;
-      }[] = [];
-      const fixtures = await this.readFixtures(request.picks.map((pick) => pick.fixtureId));
-      for (const [index, pick] of request.picks.entries()) {
-        const match = fixtures[index],
-          fixture = await this.describeMatch(match),
-          selected = this.options.registry.get(pick.fixtureId);
-        const record =
-          selected && !conflicts.resolved.has(selected.creationTxHash) ? selected : undefined;
-        if (fixture.termsHash !== pick.termsHash)
-          throw Error('Fixture terms changed. Review the complete slip again.');
-        if (record) {
-          if (
-            record.type.codeHash !== this.options.config.protocolHash ||
-            record.termsHash !== pick.termsHash
-          )
-            throw Error('This fixture belongs to another funded pool');
-          const market = await loadOperatorMarket(this.options.client, record, this.options.config);
-          if (!market.market || market.market.cell.outputData !== '0x0000ff' || market.closed)
-            throw Error('This fixture is closed to new predictions');
-          const shard = market.shards.find((entry) => {
-            if (!entry) return false;
-            const data = raw(entry.cell.outputData);
-            return (
-              data[2] + data[3] < 8 &&
-              (!data[3] || entry.header.timestamp < BigInt(record.cutoffMs))
-            );
-          });
-          if (!shard) throw Error('This fixture has no available prediction slot');
-          preparedLines.push({
-            match,
-            fixture,
-            record,
-            cell: shard.cell,
-            header: shard.header,
-            control: market.market.cell,
-          });
-        } else {
-          if (
-            matching.some(
-              (entry) =>
-                !conflicts.resolved.has(entry.offer.rawHash) &&
-                atomicOffer(entry.offer).lines.some(
-                  (line) => line.fixture.fixtureId === pick.fixtureId && line.mode === 'create',
-                ),
-            )
-          )
-            throw Error('A previous atomic creation still requires recovery');
-          if (await this.oldPoolHasPositions(pick.fixtureId))
-            throw Error(
-              'This fixture has positions in an earlier pool. Its original claims remain available.',
-            );
-          preparedLines.push({ match, fixture });
-        }
-      }
-      const creations = preparedLines.filter((line) => !line.record).length;
-      const newFiles = preparedLines.filter(
-        (line) => !line.record && !this.options.registry.get(line.fixture.fixtureId),
-      ).length;
-      if (this.options.registry.all().length + newFiles > 256)
-        throw Error(
-          'Streak is at its current testnet market limit. Existing claims remain available.',
+          throw Error('Sponsored contract deployment is not ready');
+        await this.refreshConflicts();
+        for (const store of sponsorStores(this.options.journal.directory))
+          for (const entry of store.active(this.now()))
+            if (
+              entry.state === 'offered' &&
+              !entry.userSignedBytes &&
+              entry.ownerAddress === request.ownerAddress
+            ) {
+              entry.state = 'cancelled';
+              store.save(entry);
+            }
+        const barrier = await operatorFundingBarrier(
+          this.options.client,
+          this.options.journal,
+          this.options.registry,
         );
-      const reserve = BigInt(creations) * RESERVE;
-      const page = await this.options.client.findCellsPagedNoCache(
-        {
-          script: sponsor,
-          scriptType: 'lock',
-          scriptSearchMode: 'exact',
-          withData: true,
-          filter: { scriptLenRange: [0, 1], outputDataLenRange: [0, 1] },
-        },
-        'desc',
-        64,
-      );
-      if (page.cells.length > 64) throw Error('Sponsor funding page exceeded its bound');
-      const candidates = [
-        ...origins.slice(-1),
-        ...page.cells
+        if (!barrier.clear) throw new ReviewWaitingError(1);
+        const conflicts = await canonicalSponsorConflicts(
+          this.options.client,
+          this.options.journal.directory,
+        );
+        if (conflicts.uncertain) throw new ReviewWaitingError(1);
+        const matching = this.store
+          .all()
           .filter(
-            (cell) =>
-              !cell.cellOutput.type &&
-              cell.outputData === '0x' &&
-              cell.cellOutput.capacity >= reserve + minChange(sponsor),
-          )
-          .sort((a, b) => (a.cellOutput.capacity > b.cellOutput.capacity ? -1 : 1))
-          .slice(0, 4)
-          .map((cell) => cell.outPoint),
-      ];
-      let fund: ccc.Cell | undefined;
-      for (const candidate of candidates) {
-        const live = await this.options.client.getCellLiveNoCache(candidate, true, true);
-        if (
-          live &&
-          !live.cellOutput.type &&
-          live.outputData === '0x' &&
-          live.cellOutput.lock.eq(sponsor) &&
-          live.cellOutput.capacity >= reserve + minChange(sponsor) &&
-          (await sponsoredOriginDescendant(this.options.client, live.outPoint, origins))
-        ) {
-          fund = live;
-          break;
-        }
-      }
-      if (!fund)
-        throw Error('Streak needs additional testnet capacity to sponsor the complete slip');
-      const cells = [fund, ...userCells],
-        tx = ccc.Transaction.from({
-          inputs: cells.map((cell) => ({ previousOutput: cell.outPoint, since: 0n })),
-          cellDeps: this.options.config.codeDeps,
-        }),
-        lines: BatchLine[] = [];
-      const principal = request.picks.reduce(
-          (sum, pick) => sum + BigInt(pick.principalShannons),
-          0n,
-        ),
-        storage = BigInt(request.picks.length) * STORAGE;
-      for (const [index, source] of preparedLines.entries()) {
-        const pick = request.picks[index],
-          amount = BigInt(pick.principalShannons),
-          base = tx.outputs.length;
-        if (!source.record) {
-          const outputBase = Buffer.alloc(4);
-          outputBase.writeUInt32LE(base);
-          const args = hex(
-            Buffer.concat([
-              raw(ccc.hashCkb(fund.outPoint.toBytes())),
-              outputBase,
-              raw(sponsor.hash()),
-              le(BigInt(source.fixture.cutoffMs)),
-              raw(this.options.config.guardHash),
-              raw(sponsor.hash()),
-              raw(sponsor.hash()),
-            ]),
+            (entry) =>
+              entry.signedBytes &&
+              atomicOffer(entry.offer).lines.some(
+                (line) =>
+                  request.picks.some((pick) => pick.fixtureId === line.fixture.fixtureId) &&
+                  line.mode === 'create',
+              ),
           );
-          const type = ccc.Script.from({
-              codeHash: this.options.config.protocolHash,
-              hashType: 'data2',
-              args,
+        const attempts = matching.filter((entry) => conflicts.resolved.has(entry.offer.rawHash));
+        if (attempts.filter((entry) => entry.createdAtMs > this.now() - 60_000).length >= 3)
+          throw Error(
+            'This fixture has reached its sponsored retry window. Retry after one minute.',
+          );
+        const origins = [
+          ...new Map(
+            attempts.map((entry) => {
+              const p = ccc.OutPoint.from(entry.offer.sponsorInput);
+              return [p.toHex(), p] as const;
             }),
-            guard = {
-              codeHash: this.options.config.guardHash,
-              hashType: 'data2' as const,
-              args: type.hash(),
-            };
-          for (let shard = -1; shard < 4; shard++) {
+          ).values(),
+        ];
+        if (origins.length > 64)
+          throw Error('Atomic funding lineage needs bounded manual recovery');
+        const owner = (await ccc.Address.fromString(request.ownerAddress, this.options.client))
+            .script,
+          sponsor = (await this.options.signer.getRecommendedAddressObj()).script;
+        if (owner.eq(sponsor) || ccc.bytesFrom(sponsor.args).length > 59)
+          throw Error('Invalid separate sponsor and owner wallet groups');
+        const mode = await sponsoredWalletMode(this.options.client, owner);
+        const userCells = await readBatch(request.userInputs, async (input) => {
+          const cell = await this.options.client.getCellLiveNoCache(input, true, true);
+          if (
+            !cell ||
+            cell.cellOutput.type ||
+            cell.outputData !== '0x' ||
+            !cell.cellOutput.lock.eq(owner)
+          )
+            throw Error(
+              'Owner input must be live plain capacity controlled by the connected wallet',
+            );
+          return cell;
+        });
+        const preparedLines: {
+          match: Match;
+          fixture: DemandFixture;
+          record?: DirectMarketRecord;
+          cell?: ccc.Cell;
+          header?: ccc.ClientBlockHeader;
+          control?: ccc.Cell;
+        }[] = [];
+        const fixtures = await this.readFixtures(request.picks.map((pick) => pick.fixtureId));
+        for (const [index, pick] of request.picks.entries()) {
+          const match = fixtures[index],
+            fixture = await this.describeMatch(match),
+            selected = this.options.registry.get(pick.fixtureId);
+          const record =
+            selected && !conflicts.resolved.has(selected.creationTxHash) ? selected : undefined;
+          if (fixture.termsHash !== pick.termsHash)
+            throw Error('Fixture terms changed. Review the complete slip again.');
+          if (record) {
+            if (
+              record.type.codeHash !== this.options.config.protocolHash ||
+              record.termsHash !== pick.termsHash
+            )
+              throw Error('This fixture belongs to another funded pool');
+            const market = await loadOperatorMarket(
+              this.options.client,
+              record,
+              this.options.config,
+            );
+            if (!market.market || market.market.cell.outputData !== '0x0000ff' || market.closed)
+              throw Error('This fixture is closed to new predictions');
+            const shard = market.shards.find((entry) => {
+              if (!entry) return false;
+              const data = raw(entry.cell.outputData);
+              return (
+                data[2] + data[3] < 8 &&
+                (!data[3] || entry.header.timestamp < BigInt(record.cutoffMs))
+              );
+            });
+            if (!shard) throw Error('This fixture has no available prediction slot');
+            preparedLines.push({
+              match,
+              fixture,
+              record,
+              cell: shard.cell,
+              header: shard.header,
+              control: market.market.cell,
+            });
+          } else {
+            if (
+              matching.some(
+                (entry) =>
+                  !conflicts.resolved.has(entry.offer.rawHash) &&
+                  atomicOffer(entry.offer).lines.some(
+                    (line) => line.fixture.fixtureId === pick.fixtureId && line.mode === 'create',
+                  ),
+              )
+            )
+              throw Error('A previous atomic creation still requires recovery');
+            if (await this.oldPoolHasPositions(pick.fixtureId))
+              throw Error(
+                'This fixture has positions in an earlier pool. Its original claims remain available.',
+              );
+            preparedLines.push({ match, fixture });
+          }
+        }
+        const creations = preparedLines.filter((line) => !line.record).length;
+        const newFiles = preparedLines.filter(
+          (line) => !line.record && !this.options.registry.get(line.fixture.fixtureId),
+        ).length;
+        if (this.options.registry.all().length + newFiles > 256)
+          throw Error(
+            'Streak is at its current testnet market limit. Existing claims remain available.',
+          );
+        const reserve = BigInt(creations) * RESERVE;
+        const page = await this.options.client.findCellsPagedNoCache(
+          {
+            script: sponsor,
+            scriptType: 'lock',
+            scriptSearchMode: 'exact',
+            withData: true,
+            filter: { scriptLenRange: [0, 1], outputDataLenRange: [0, 1] },
+          },
+          'desc',
+          64,
+        );
+        if (page.cells.length > 64) throw Error('Sponsor funding page exceeded its bound');
+        const candidates = [
+          ...origins.slice(-1),
+          ...page.cells
+            .filter(
+              (cell) =>
+                !cell.cellOutput.type &&
+                cell.outputData === '0x' &&
+                cell.cellOutput.capacity >= reserve + minChange(sponsor),
+            )
+            .sort((a, b) => (a.cellOutput.capacity > b.cellOutput.capacity ? -1 : 1))
+            .slice(0, 4)
+            .map((cell) => cell.outPoint),
+        ];
+        let fund: ccc.Cell | undefined;
+        for (const candidate of candidates) {
+          const live = await this.options.client.getCellLiveNoCache(candidate, true, true);
+          if (
+            live &&
+            !live.cellOutput.type &&
+            live.outputData === '0x' &&
+            live.cellOutput.lock.eq(sponsor) &&
+            live.cellOutput.capacity >= reserve + minChange(sponsor) &&
+            (await sponsoredOriginDescendant(this.options.client, live.outPoint, origins))
+          ) {
+            fund = live;
+            break;
+          }
+        }
+        if (!fund)
+          throw Error('Streak needs additional testnet capacity to sponsor the complete slip');
+        const cells = [fund, ...userCells],
+          tx = ccc.Transaction.from({
+            inputs: cells.map((cell) => ({ previousOutput: cell.outPoint, since: 0n })),
+            cellDeps: this.options.config.codeDeps,
+          }),
+          lines: BatchLine[] = [];
+        const principal = request.picks.reduce(
+            (sum, pick) => sum + BigInt(pick.principalShannons),
+            0n,
+          ),
+          storage = BigInt(request.picks.length) * STORAGE;
+        for (const [index, source] of preparedLines.entries()) {
+          const pick = request.picks[index],
+            amount = BigInt(pick.principalShannons),
+            base = tx.outputs.length;
+          if (!source.record) {
+            const outputBase = Buffer.alloc(4);
+            outputBase.writeUInt32LE(base);
+            const args = hex(
+              Buffer.concat([
+                raw(ccc.hashCkb(fund.outPoint.toBytes())),
+                outputBase,
+                raw(sponsor.hash()),
+                le(BigInt(source.fixture.cutoffMs)),
+                raw(this.options.config.guardHash),
+                raw(sponsor.hash()),
+                raw(sponsor.hash()),
+              ]),
+            );
+            const type = ccc.Script.from({
+                codeHash: this.options.config.protocolHash,
+                hashType: 'data2',
+                args,
+              }),
+              guard = {
+                codeHash: this.options.config.guardHash,
+                hashType: 'data2' as const,
+                args: type.hash(),
+              };
+            for (let shard = -1; shard < 4; shard++) {
+              tx.outputs.push(
+                ccc.CellOutput.from({
+                  capacity: SHARD + (shard === 0 ? amount + STORAGE : 0n),
+                  type,
+                  lock: guard,
+                }),
+              );
+              tx.outputsData.push(
+                shard < 0
+                  ? '0x0000ff'
+                  : shard === 0
+                    ? hex(
+                        Buffer.concat([
+                          Buffer.from([1, 0, 0, 1]),
+                          ticket(owner, pick.outcome, amount),
+                        ]),
+                      )
+                    : hex(Buffer.from([1, shard, 0, 0])),
+              );
+            }
+            lines.push({
+              fixture: source.fixture,
+              descriptor: {
+                ...createRecord(
+                  source.match,
+                  { codeHash: type.codeHash, hashType: 'data2', args },
+                  `0x${'00'.repeat(32)}`,
+                  this.options.config,
+                ),
+                entryEnabled: true,
+              },
+              mode: 'create',
+              outcome: pick.outcome,
+              principalShannons: pick.principalShannons,
+              shard: 0,
+              outputIndex: base,
+              outputCount: 5,
+            });
+          } else {
+            const cell = source.cell!,
+              data = raw(cell.outputData),
+              inputIndex = cells.length;
+            cells.push(cell);
+            tx.inputs.push(ccc.CellInput.from({ previousOutput: cell.outPoint, since: 0n }));
             tx.outputs.push(
               ccc.CellOutput.from({
-                capacity: SHARD + (shard === 0 ? amount + STORAGE : 0n),
-                type,
-                lock: guard,
+                capacity: cell.cellOutput.capacity + amount + STORAGE,
+                type: cell.cellOutput.type!,
+                lock: cell.cellOutput.lock,
               }),
             );
             tx.outputsData.push(
-              shard < 0
-                ? '0x0000ff'
-                : shard === 0
-                  ? hex(
-                      Buffer.concat([
-                        Buffer.from([1, 0, 0, 1]),
-                        ticket(owner, pick.outcome, amount),
-                      ]),
-                    )
-                  : hex(Buffer.from([1, shard, 0, 0])),
-            );
-          }
-          lines.push({
-            fixture: source.fixture,
-            descriptor: {
-              ...createRecord(
-                source.match,
-                { codeHash: type.codeHash, hashType: 'data2', args },
-                `0x${'00'.repeat(32)}`,
-                this.options.config,
+              hex(
+                Buffer.concat([
+                  Buffer.from([1, data[1], data[2] + data[3], 1]),
+                  data.subarray(4),
+                  ticket(owner, pick.outcome, amount),
+                ]),
               ),
-              entryEnabled: true,
-            },
-            mode: 'create',
-            outcome: pick.outcome,
-            principalShannons: pick.principalShannons,
-            shard: 0,
-            outputIndex: base,
-            outputCount: 5,
-          });
-        } else {
-          const cell = source.cell!,
-            data = raw(cell.outputData),
-            inputIndex = cells.length;
-          cells.push(cell);
-          tx.inputs.push(ccc.CellInput.from({ previousOutput: cell.outPoint, since: 0n }));
-          tx.outputs.push(
-            ccc.CellOutput.from({
-              capacity: cell.cellOutput.capacity + amount + STORAGE,
-              type: cell.cellOutput.type!,
-              lock: cell.cellOutput.lock,
-            }),
-          );
-          tx.outputsData.push(
-            hex(
-              Buffer.concat([
-                Buffer.from([1, data[1], data[2] + data[3], 1]),
-                data.subarray(4),
-                ticket(owner, pick.outcome, amount),
-              ]),
-            ),
-          );
-          tx.cellDeps.push(
-            ccc.CellDep.from({ outPoint: source.control!.outPoint, depType: 'code' }),
-          );
-          if (!tx.headerDeps.includes(source.header!.hash)) tx.headerDeps.push(source.header!.hash);
-          lines.push({
-            fixture: source.fixture,
-            descriptor: { ...source.record, entryEnabled: true },
-            mode: 'deposit',
-            outcome: pick.outcome,
-            principalShannons: pick.principalShannons,
-            shard: data[1],
-            outputIndex: base,
-            outputCount: 1,
-            shardInputIndex: inputIndex,
-            controlDep: point(source.control!.outPoint),
-            headerHash: source.header!.hash,
-          });
+            );
+            tx.cellDeps.push(
+              ccc.CellDep.from({ outPoint: source.control!.outPoint, depType: 'code' }),
+            );
+            if (!tx.headerDeps.includes(source.header!.hash))
+              tx.headerDeps.push(source.header!.hash);
+            lines.push({
+              fixture: source.fixture,
+              descriptor: { ...source.record, entryEnabled: true },
+              mode: 'deposit',
+              outcome: pick.outcome,
+              principalShannons: pick.principalShannons,
+              shard: data[1],
+              outputIndex: base,
+              outputCount: 1,
+              shardInputIndex: inputIndex,
+              controlDep: point(source.control!.outPoint),
+              headerHash: source.header!.hash,
+            });
+          }
         }
+        const sponsorChangeOutputIndex = tx.outputs.length,
+          ownerChangeOutputIndex = sponsorChangeOutputIndex + 1;
+        const ownerCapacity = userCells.reduce((sum, cell) => sum + cell.cellOutput.capacity, 0n);
+        if (ownerCapacity < principal + storage + minChange(owner) + CKB)
+          throw Error(
+            'Owner needs principal, 321 CKB per prediction, fee and valid change capacity',
+          );
+        tx.outputs.push(
+          ccc.CellOutput.from({ capacity: fund.cellOutput.capacity - reserve, lock: sponsor }),
+          ccc.CellOutput.from({ capacity: ownerCapacity - principal - storage, lock: owner }),
+        );
+        tx.outputsData.push('0x', '0x');
+        const prepared = await this.options.signer.prepareTransaction(tx);
+        await prepared.addCellDepsOfKnownScripts(
+          this.options.client,
+          mode === 'native' ? ccc.KnownScript.Secp256k1Blake160 : ccc.KnownScript.OmniLock,
+        );
+        await prepared.prepareSighashAllWitness(
+          owner,
+          mode === 'native' ? 65 : 85,
+          this.options.client,
+        );
+        while (prepared.witnesses.length < prepared.inputs.length) prepared.witnesses.push('0x');
+        const fee = prepared.estimateFee(1000n);
+        if (fee > 10_000_000n || prepared.toBytes().length > 100_000)
+          throw Error('Atomic payment fee or size exceeds its reviewed bound');
+        prepared.outputs[ownerChangeOutputIndex].capacity -= fee;
+        for (const line of lines)
+          if (line.mode === 'create') line.descriptor.creationTxHash = prepared.hash();
+        const offer: BatchOffer = {
+          version: 'atomic-predictions-v1',
+          offerId: randomUUID(),
+          expiresAt: Math.min(
+            this.now() + 90_000,
+            ...lines.map((line) => line.fixture.cutoffMs - 120_000),
+          ),
+          rawHash: prepared.hash(),
+          unsignedBytes: hex(prepared.toBytes()),
+          sponsorLock: script(sponsor),
+          ownerLock: script(owner),
+          sponsorInput: point(fund.outPoint),
+          userInputIndexes: userCells.map((_, index) => index + 1),
+          inputs: cells.map(snapshot),
+          lines,
+          reserveShannons: reserve.toString(),
+          principalShannons: principal.toString(),
+          storageShannons: storage.toString(),
+          feeShannons: fee.toString(),
+          sponsorChangeOutputIndex,
+          ownerChangeOutputIndex,
+          fixture: lines[0].fixture,
+          descriptor: lines[0].descriptor,
+          outcome: lines[0].outcome,
+        };
+        assertFreshOperatorInputs(this.options.journal, prepared);
+        await this.validateFrozen(offer);
+        this.store.save({
+          version: 1,
+          requestId: request.requestId,
+          requestDigest: digest,
+          ownerAddress: request.ownerAddress,
+          createdAtMs: this.now(),
+          lineageOrigins: origins.map((origin) => origin.toHex()),
+          offer,
+          state: 'offered',
+        });
+        queue.leave(request.requestId);
+        return offer;
+      } catch (error) {
+        if (!(error instanceof ReviewWaitingError)) queue.leave(request.requestId);
+        throw error;
       }
-      const sponsorChangeOutputIndex = tx.outputs.length,
-        ownerChangeOutputIndex = sponsorChangeOutputIndex + 1;
-      const ownerCapacity = userCells.reduce((sum, cell) => sum + cell.cellOutput.capacity, 0n);
-      if (ownerCapacity < principal + storage + minChange(owner) + CKB)
-        throw Error('Owner needs principal, 321 CKB per prediction, fee and valid change capacity');
-      tx.outputs.push(
-        ccc.CellOutput.from({ capacity: fund.cellOutput.capacity - reserve, lock: sponsor }),
-        ccc.CellOutput.from({ capacity: ownerCapacity - principal - storage, lock: owner }),
-      );
-      tx.outputsData.push('0x', '0x');
-      const prepared = await this.options.signer.prepareTransaction(tx);
-      await prepared.addCellDepsOfKnownScripts(
-        this.options.client,
-        mode === 'native' ? ccc.KnownScript.Secp256k1Blake160 : ccc.KnownScript.OmniLock,
-      );
-      await prepared.prepareSighashAllWitness(
-        owner,
-        mode === 'native' ? 65 : 85,
-        this.options.client,
-      );
-      while (prepared.witnesses.length < prepared.inputs.length) prepared.witnesses.push('0x');
-      const fee = prepared.estimateFee(1000n);
-      if (fee > 10_000_000n || prepared.toBytes().length > 100_000)
-        throw Error('Atomic payment fee or size exceeds its reviewed bound');
-      prepared.outputs[ownerChangeOutputIndex].capacity -= fee;
-      for (const line of lines)
-        if (line.mode === 'create') line.descriptor.creationTxHash = prepared.hash();
-      const offer: BatchOffer = {
-        version: 'atomic-predictions-v1',
-        offerId: randomUUID(),
-        expiresAt: Math.min(
-          this.now() + 90_000,
-          ...lines.map((line) => line.fixture.cutoffMs - 120_000),
-        ),
-        rawHash: prepared.hash(),
-        unsignedBytes: hex(prepared.toBytes()),
-        sponsorLock: script(sponsor),
-        ownerLock: script(owner),
-        sponsorInput: point(fund.outPoint),
-        userInputIndexes: userCells.map((_, index) => index + 1),
-        inputs: cells.map(snapshot),
-        lines,
-        reserveShannons: reserve.toString(),
-        principalShannons: principal.toString(),
-        storageShannons: storage.toString(),
-        feeShannons: fee.toString(),
-        sponsorChangeOutputIndex,
-        ownerChangeOutputIndex,
-        fixture: lines[0].fixture,
-        descriptor: lines[0].descriptor,
-        outcome: lines[0].outcome,
-      };
-      assertFreshOperatorInputs(this.options.journal, prepared);
-      await this.validateFrozen(offer);
-      this.store.save({
-        version: 1,
-        requestId: request.requestId,
-        requestDigest: digest,
-        ownerAddress: request.ownerAddress,
-        createdAtMs: this.now(),
-        lineageOrigins: origins.map((origin) => origin.toHex()),
-        offer,
-        state: 'offered',
-      });
-      return offer;
     });
   }
   protected async validateFrozen(value: SponsorOffer): Promise<void> {
@@ -632,12 +667,10 @@ export class BatchService extends SponsorService {
       new Set(tx.inputs.map((input) => input.previousOutput.toHex())).size !== tx.inputs.length
     )
       throw Error('Invalid frozen atomic input layout');
-    const live: ccc.Cell[] = [];
-    for (const [index, input] of tx.inputs.entries()) {
+    const live = await readBatch(tx.inputs, async (input, index) => {
       const cell = await this.options.client.getCellLiveNoCache(input.previousOutput, true, true);
       if (!cell || JSON.stringify(snapshot(cell)) !== JSON.stringify(offer.inputs[index]))
         throw Error('Atomic input changed from its reviewed output');
-      live.push(cell);
       if (
         index <= offer.userInputIndexes.length &&
         (cell.cellOutput.type ||
@@ -645,7 +678,30 @@ export class BatchService extends SponsorService {
           !cell.cellOutput.lock.eq(index === 0 ? sponsor : owner))
       )
         throw Error('Atomic funding input is not the required plain wallet capacity');
-    }
+      return cell;
+    });
+    const deposits = new Map(
+      await readBatch(
+        offer.lines.filter((line) => line.mode === 'deposit'),
+        async (line) => {
+          if (
+            line.shardInputIndex === undefined ||
+            !live[line.shardInputIndex] ||
+            !line.controlDep ||
+            !line.headerHash
+          )
+            throw Error('Atomic deposit references are missing');
+          const input = live[line.shardInputIndex];
+          const control = await this.options.client.getCellLiveNoCache(line.controlDep, true, true);
+          const creation = await this.options.client.getTransactionNoCache(input.outPoint.txHash);
+          const header =
+            creation?.blockNumber !== undefined
+              ? await this.options.client.getHeaderByNumberNoCache(creation.blockNumber)
+              : undefined;
+          return [line.fixture.fixtureId, { control, creation, header }] as const;
+        },
+      ),
+    );
     let next = 0,
       principal = 0n,
       reserve = 0n;
@@ -728,8 +784,8 @@ export class BatchService extends SponsorService {
         )
           throw Error('Atomic deposit references are missing');
         const input = live[line.shardInputIndex],
-          data = raw(input.outputData),
-          control = await this.options.client.getCellLiveNoCache(line.controlDep, true, true);
+          data = raw(input.outputData);
+        const { control, creation, header } = deposits.get(line.fixture.fixtureId)!;
         if (
           !input.cellOutput.type?.eq(type) ||
           !input.cellOutput.lock.eq(guard) ||
@@ -744,11 +800,6 @@ export class BatchService extends SponsorService {
           !tx.cellDeps.some((dep) => dep.depType === 'code' && dep.outPoint.eq(line.controlDep!))
         )
           throw Error('Atomic deposit market is not open or has changed');
-        const creation = await this.options.client.getTransactionNoCache(input.outPoint.txHash),
-          header =
-            creation?.blockNumber !== undefined
-              ? await this.options.client.getHeaderByNumberNoCache(creation.blockNumber)
-              : undefined;
         if (
           creation?.status !== 'committed' ||
           creation.transaction.hash() !== input.outPoint.txHash ||

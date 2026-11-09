@@ -1,4 +1,5 @@
 import * as ccc from '@ckb-ccc/core';
+import { readBatch } from './read-batch';
 import type { Match } from '../../types';
 import {
   createRecord,
@@ -58,7 +59,8 @@ export async function loadOperatorMarket(
   // Outputs from one funding transaction share its immutable bytes. Keep this
   // lookup inside this invocation; live cells and canonical headers stay fresh.
   const creations = new Map<string, Promise<ccc.ClientTransactionResponse | undefined>>();
-  for (const indexed of page.cells) {
+  const headers = new Map<string, Promise<ccc.ClientBlockHeader | undefined>>();
+  const observations = await readBatch(page.cells, async (indexed) => {
     const cell = await client.getCellLiveNoCache(indexed.outPoint, true, false);
     if (!cell) throw Error('Market changed during lookup; reconcile before building');
     let lookup = creations.get(cell.outPoint.txHash);
@@ -80,9 +82,18 @@ export async function loadOperatorMarket(
       creation.transaction.outputsData[outputIndex] !== cell.outputData
     )
       throw Error('Market creation transaction does not match its live cell');
-    const header = await client.getHeaderByNumberNoCache(creation.blockNumber);
+    const key = creation.blockNumber.toString();
+    let headerRead = headers.get(key);
+    if (!headerRead) {
+      headerRead = client.getHeaderByNumberNoCache(creation.blockNumber);
+      headers.set(key, headerRead);
+    }
+    const header = await headerRead;
     if (!header || header.hash !== creation.blockHash)
       throw Error('Market header is no longer canonical');
+    return { cell, header };
+  });
+  for (const { cell, header } of observations) {
     if (
       !cell.cellOutput.type?.eq(type) ||
       cell.cellOutput.lock.codeHash !== config.guardHash ||

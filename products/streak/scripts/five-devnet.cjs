@@ -59,11 +59,12 @@ async function main() {
       cost: 80,
       fixtureId: `f${i}`,
     }));
+    const now = await store.clock();
     const terms = parseTerms({
       name: 'Signed local Five',
       players,
-      lockAt: new Date(Date.now() + 3600000).toISOString(),
-      finalizeAfter: new Date(Date.now() + 7200000).toISOString(),
+      lockAt: new Date(now + 3600000).toISOString(),
+      finalizeAfter: new Date(now + 7200000).toISOString(),
       limit: 10,
       qualifyingBps: 500,
       sponsorship: true,
@@ -328,9 +329,10 @@ async function main() {
     assert.ok(r.sponsors.every((s) => s.confirmedAt));
     await funding.settleAuction('auction');
     assert.equal((await store.load('auction')).auction, undefined, 'Never settle early');
-    // Advance only this synthetic round's clock boundary; never real gameweek data.
-    await store.change('auction', (r) => {
-      r.terms.lockAt = new Date(Date.now() - 1000).toISOString();
+    // Use the admission database's clock, not the Windows/WSL host clock.
+    // Advance only this synthetic round's boundary; never real gameweek data.
+    await store.change('auction', (r, now) => {
+      r.terms.lockAt = new Date(now - 1000).toISOString();
     });
     await assert.rejects(
       () => funding.intent(actor, 'auction', { ...intent, sponsorId: 'too-late' }),

@@ -7,15 +7,21 @@ import './payment-progress.css';
 
 export type PaymentStage =
   | 'preparing'
+  | 'waiting'
   | 'ready'
   | 'authorizing'
   | 'sending'
   | 'checking'
   | 'confirming'
   | 'confirmed'
+  | 'resolved'
   | 'attention'
   | 'not-sent';
 const copy: Record<PaymentStage, [string, string]> = {
+  waiting: [
+    'Waiting for your payment review',
+    'Your picks are saved. Open your slip to check or leave the queue.',
+  ],
   preparing: ['Preparing your payment', 'Checking funds and market availability.'],
   ready: ['Your payment is ready', 'Open your slip to check the total.'],
   authorizing: ['Preparing wallet approval', 'Checking the payment before your wallet signs.'],
@@ -24,6 +30,7 @@ const copy: Record<PaymentStage, [string, string]> = {
   confirming: ['Predictions on the network', 'Waiting for confirmation. Keep exploring.'],
   confirmed: ['Payment confirmed. You’re all set.', 'Follow your predictions in My activity.'],
   attention: ['Your payment needs attention', 'Open for the saved status and recovery options.'],
+  resolved: ['Payment resolved', 'This payment did not complete. You can review your saved picks.'],
   'not-sent': ['Payment not sent', 'Your picks are saved. Open for details.'],
 };
 export function PaymentProgress({
@@ -49,7 +56,14 @@ export function PaymentProgress({
   const [dismissed, setDismissed] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
   const [title, description] = copy[stage];
-  const moving = ['preparing', 'authorizing', 'sending', 'checking', 'confirming'].includes(stage);
+  const moving = [
+    'preparing',
+    'waiting',
+    'authorizing',
+    'sending',
+    'checking',
+    'confirming',
+  ].includes(stage);
   const pending = moving || (stage === 'attention' && !terminal);
   useEffect(() => setExpanded(false), [operationKey]);
   // Dismiss presentation only. A new operation or status can surface again;

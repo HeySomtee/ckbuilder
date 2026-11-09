@@ -5,6 +5,7 @@ export interface Pick {
   matchId: string;
   outcome: Outcome;
   amountCkb: string;
+  competition?: { accountId: string; ids: string[] };
 }
 export interface Draft {
   v: 1;
@@ -51,12 +52,27 @@ export function parseDraft(raw: string | null): Draft {
       pick.amountCkb.length > 32
     )
       throw Error('Saved prediction is invalid.');
+    let competition: Pick['competition'];
+    if (pick.competition !== undefined) {
+      const value = pick.competition;
+      if (
+        !record(value) ||
+        !identifier(value.accountId) ||
+        !Array.isArray(value.ids) ||
+        value.ids.length > 20 ||
+        value.ids.some((id) => !identifier(id)) ||
+        new Set(value.ids).size !== value.ids.length
+      )
+        throw Error('Saved competition choices are invalid.');
+      competition = { accountId: value.accountId, ids: value.ids as string[] };
+    }
     return {
       lineId: pick.lineId,
       marketId: pick.marketId,
       matchId: pick.matchId,
       outcome: pick.outcome,
       amountCkb: pick.amountCkb,
+      ...(competition ? { competition } : {}),
     };
   });
   if (
@@ -201,6 +217,7 @@ export class DraftStore {
       matchId,
       outcome,
       amountCkb: existing?.amountCkb ?? '100',
+      ...(existing?.competition ? { competition: existing.competition } : {}),
     };
     return this.write({
       v: 1,
@@ -220,6 +237,19 @@ export class DraftStore {
       ),
     });
   }
+  competitions(lineId: string, accountId: string, ids: string[]) {
+    if (!identifier(accountId) || ids.length > 20 || ids.some((id) => !identifier(id)))
+      return false;
+    return this.write({
+      ...this.state.draft,
+      revision: crypto.randomUUID(),
+      picks: this.state.draft.picks.map((pick) =>
+        pick.lineId === lineId
+          ? { ...pick, competition: { accountId, ids: [...new Set(ids)].sort() } }
+          : pick,
+      ),
+    });
+  }
   remove(lineId: string) {
     this.write({
       ...this.state.draft,
@@ -234,7 +264,8 @@ export class DraftStore {
       a.marketId === b.marketId &&
       a.matchId === b.matchId &&
       a.outcome === b.outcome &&
-      a.amountCkb === b.amountCkb;
+      a.amountCkb === b.amountCkb &&
+      JSON.stringify(a.competition) === JSON.stringify(b.competition);
     if (!this.state.draft.picks.some((pick) => submitted.some((row) => same(pick, row))))
       return true;
     return this.write({

@@ -76,6 +76,7 @@ export interface CampaignSources {
   validateReceivingAddress?(address: string, amountShannons?: string): Promise<string>;
 }
 export interface CampaignEntry {
+  predictionSlots?: PredictionSlot[];
   accountId: string;
   publicId: string;
   ownerHash: string;
@@ -91,6 +92,16 @@ export interface CampaignEntry {
   evidence: PredictionEvidence[];
   five: FiveEvidence | null;
   receivingAddress: string | null;
+}
+export interface PredictionSlot {
+  fixtureId: string;
+  offerId: string;
+  rawHash: string;
+  outputIndex: number;
+  outcome: 0 | 1 | 2;
+  principalShannons: string;
+  expiresAt: number;
+  state: 'reserved' | 'started';
 }
 export interface PayoutProof {
   transactionHash: string;
@@ -261,17 +272,19 @@ export function editCampaign(c: Campaign, draft: CampaignDraftInput, revision: u
 export function predictionEntryPolicy(c: Campaign): CampaignPredictionEntryPolicy | null {
   if (c.draft.kind !== 'predictions') return null;
   return c.state === 'draft'
-    ? 'first-admitted-v2'
+    ? 'explicit-entry-v3'
     : (c.predictionEntryPolicy ?? 'after-registration-v1');
 }
 function publishedTermsHash(c: Campaign): string {
   const policy = predictionEntryPolicy(c);
   return hash({
-    version: policy === 'first-admitted-v2' ? 2 : 1,
+    version: policy === 'explicit-entry-v3' ? 3 : policy === 'first-admitted-v2' ? 2 : 1,
     draft: c.draft,
     fixtures: c.fixtures.map(({ occupied: _o, updatedAt: _u, ...f }) => f),
     gameweek: c.gameweek,
-    ...(policy === 'first-admitted-v2' ? { predictionEntryPolicy: policy } : {}),
+    ...(policy === 'first-admitted-v2' || policy === 'explicit-entry-v3'
+      ? { predictionEntryPolicy: policy }
+      : {}),
   });
 }
 export function publishCampaign(c: Campaign, options: CampaignOptions, now: number): void {
@@ -324,7 +337,7 @@ export function publishCampaign(c: Campaign, options: CampaignOptions, now: numb
       throw new CampaignError('Registration must close by the Five deadline.', 409);
     c.gameweek = w;
   }
-  if (d.kind === 'predictions') c.predictionEntryPolicy = 'first-admitted-v2';
+  if (d.kind === 'predictions') c.predictionEntryPolicy = 'explicit-entry-v3';
   c.termsHash = publishedTermsHash(c);
   c.publishedAt = iso(now);
   c.state = 'published';
@@ -502,6 +515,16 @@ export function reconcileCampaign(c: Campaign, evidence: CampaignEvidence, now: 
               p.marketKey === ownValue(bindings, f.fixtureId) &&
               (policy === 'first-admitted-v2' ||
                 Date.parse(p.committedAt) >= Date.parse(entry.joinedAt)) &&
+              (policy !== 'explicit-entry-v3' ||
+                entry.predictionSlots?.some(
+                  (slot) =>
+                    slot.state === 'started' &&
+                    slot.fixtureId === p.fixtureId &&
+                    slot.rawHash === p.transactionHash &&
+                    slot.outputIndex === p.outputIndex &&
+                    slot.outcome === p.outcome &&
+                    slot.principalShannons === p.principalShannons,
+                )) &&
               Date.parse(p.committedAt) < Date.parse(f.cutoffAt),
           )
           .sort(predictionOrder);
@@ -724,10 +747,18 @@ export function summary(c: Campaign, actor: CampaignActor, now: number): Campaig
       .toString(),
     prizePlaces: c.draft.prizes.length,
     joined: !!ownEntry,
+    predictionEntryPolicy: predictionEntryPolicy(c),
     ...(ownEntry && c.draft.kind === 'predictions'
       ? {
           joinedFixtureIds: c.fixtures.map((fixture) => fixture.fixtureId),
           qualifyingFixtureIds: [...new Set(ownEntry.calls.map((call) => call.fixtureId))],
+          pendingFixtureIds: (ownEntry.predictionSlots ?? [])
+            .filter(
+              (slot) =>
+                (slot.state === 'started' || slot.expiresAt > now) &&
+                !ownEntry.calls.some((call) => call.fixtureId === slot.fixtureId),
+            )
+            .map((slot) => slot.fixtureId),
         }
       : {}),
   };

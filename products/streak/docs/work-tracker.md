@@ -1,5 +1,175 @@
 # Streak work tracker
 
+9 November owner authorized commit and push of the completed release. Revalidate
+the 62 runtime/test hashes against the fresh combined 98-stage evidence, run scoped
+checks for publication notes and preserve the owner's checklist byte-for-byte.
+Include the already approved Home and competition-entry work. Keep hosted CI
+paused and private correspondence out of Git. After publication, verify the remote
+commit; hosted recovery and the three-wallet queue rehearsal remain acceptance work.
+
+9 November final recovery verification: implementation and independent review are
+complete. The final major run passed 87 stages, including every browser journey,
+then Windows denied WSL startup. All 11 remaining contract/local-chain stages
+passed with WSL access at 10:44 UTC. Required coverage is 98 passing stages across
+two runs; do not describe the interrupted major command as passed. The PowerShell
+wrapper surfaced Rust stderr as NativeCommandError, while the contract runner
+records all 11 child stages passed. Evidence: `review-major-wsl-permission.json`,
+`review-final-contracts.json`, `review-final-coverage.json` and the matching
+62-file `review-runtime-manifest.json`. Owner checklist bytes are preserved.
+No commit, push, deployment or production recovery action. Next: publish when
+authorized, confirm the owner's tracker clears on the deployed version, rehearse
+three wallets waiting/paying in turn and complete hosted competition finalization.
+Earlier incomplete checkpoints below are historical.
+
+9 November verification checkpoint: the complete run passed full checkout but
+stopped at combined-slip timeout instrumentation. The test recorder now follows
+combined cancellation signals without changing its timeout assertions. All four
+focused Chromium/WebKit combined-slip journeys pass. Application code is unchanged;
+the complete gate is rerunning with the corrected test. The failed report is retained
+as `review-major-timeout-recorder-failed.json`. Owner checklist bytes are preserved.
+
+9 November confirmed recovery gap: the owner's Render diagnostic found cancelled
+and expired offers for the supplied hash, with neither signature accepted. Public
+chain reads prove sponsor input `0xfa5f4661d89a9c4b5d9962c0f519c1c12f782b51332e7db72b56f878930ecc7f:1`
+was spent by canonical transaction
+`0xd38b803da946a1a3d606ecd621c1a8ddaf895ee67390c9ba0db03b2fd99274f0`.
+Both owner inputs were live at 08:36 UTC. Supplied the existing Verify conflict
+recovery path, without moving funds. Owner explicitly requested closing this gap.
+Added bounded browser discovery for expired/cancelled unsigned offers, authenticated
+operator acknowledgement, fresh canonical proof and neutral terminal UI. Only an
+operator-confirmed cancellation that never accepted either signature can release
+a started competition slot; signed conflicts retain the reorg safeguard.
+The major gate caught a changed legacy busy response; restored that response and
+its focused regression passes. Final independent review and complete gate pending.
+
+Final focused checkpoint: independent review found no concrete blocker in recovery
+acknowledgement or unsigned cancellation lifetime after reorg. Disposable PostgreSQL
+checks pass, as do all six Chromium/WebKit checkout cases at 390/900/1440px. Public
+read-only validation found the actual sponsor conflict as the ninth candidate;
+discovery now examines up to 32 candidates in its single bounded 32-row page.
+Synthetic recovery fixtures include a ninth-candidate conflict and enforce the
+one-minute throttle. Full gate must cover the final runtime tree before delivery.
+
+9 November payment-speed steering: the owner reports one minute to prepare and
+two minutes to confirm, asks about new picks while queued, and supplies transaction
+`0x8810f1278cc17062af11b251fd14c4142671403ff4f703eeaec2efdbb5263109`.
+Public RPC reports unknown and explorer API returns 404; neither establishes a safe
+retry. Added bounded independent input/market reads and per-observation canonical
+header deduplication. Signing still rechecks fresh authority. Operator-discovered
+conflicts now reach the browser as hints, independently proven against exact inputs
+and four canonical confirmations before clearing reservations. Reorg recovery remains.
+Focused backend and 18 web checks pass; independent recovery review found no blocker.
+The earlier full gate was intentionally stopped to include these changes; a fresh
+complete gate is required. One active slip per wallet remains, not multiple queued
+payments. No production payment was resolved, signed or resent by this work.
+
+9 November announcement readiness: owner requests at least two or three concurrent
+predictions, or a graceful queue while current funding remains serialized, plus
+polished waiting/recovery and investigation of rehearsals still showing live.
+Implement the bounded queued-review increment first, retaining the existing money
+guard and explicit wallet approval. Never describe queued reviews as parallel chain
+payments. Preserve the verified but unpublished Home/explicit-entry work below.
+Read-only hosted evidence: Predictions rehearsal is finalizing with final scores;
+Five rehearsal is live with provisional scores. Investigate Five source finality;
+do not fabricate results or finalize production awards. Independent recovery review
+and runtime gates remain required before delivery.
+
+7 November implementation checkpoint: explicit-entry-v3 now binds per-pick choices
+to the exact unsigned payment before review, reserves all selected competitions
+atomically and guards submit/resume. Regular bets cannot later backfill. Shared
+slip choices, dock labels, account-bound drafts, review and used/pending cards are
+wired. Focused domain/client/HTTP/disposable-PG tests and responsive browser
+journeys pass. Independent review is complete; cutoff-lock timing and unsigned
+cleanup gaps were fixed with regressions. Full checkout caught an oversized footer;
+the frozen choices now scroll with the picks and all six checkout cases pass.
+All 96 stages of the final major gate passed on 7 November at 20:14 UTC. Evidence:
+`.quality-artifacts/entry-final-major.json`, `entry-final-major.log` and
+`entry-runtime-manifest.json` (43 matching runtime/test files). The owner's hosted
+checklist is preserved byte-for-byte, along with earlier Home work. Implementation
+and local verification are complete. No commit, push or deployment; hosted
+acceptance remains separate and shared funding remains deferred.
+
+7 November owner approved the competition-entry preview for implementation.
+Build explicit per-pick regular/multi-competition intent through the existing
+payment flow, durable reservation/recovery and versioned scoring. Preserve used
+entries and published legacy rules; regular predictions must never consume an
+explicit-entry slot. Update slip, dock, fixture cards and review together. Require
+independent review for payment binding/recovery and the full major gate. The
+shared sponsor-funding concurrency refactor remains deferred until after the grant.
+
+7 November owner deferred the pending-payment/global sponsor-funding bottleneck
+to the **post-grant refactor**. Record independent funding cells, atomic per-input
+reservations, same-market lane allocation and isolated signed recovery in
+`docs/architecture/concurrent-payments.md`. Retain current safety checks and
+market limits until that work is implemented and independently reviewed. The
+competition-selector preview remains separate; it does not fix this bottleneck.
+
+7 November final verification: the Home split layout passed all 96 stages of
+`npm run quality:major`, including the corrected WebKit navigation/artwork
+journeys, PostgreSQL, browser checkout and signed disposable-chain lifecycles.
+The final runtime/test hashes match `.quality-artifacts/home-runtime-manifest.json`;
+full evidence is archived as `home-final-major.json` and `home-final-major.log`.
+The owner checklist was restored to its original bytes. Earlier failed attempts
+below remain part of the record. Home is verified locally, not committed or pushed.
+
+Owner asked whether pending confirmation blocking another user is fixed: **no**.
+The shared sponsor-funding guard remains in production code. This increment
+investigates it and previews clearer feedback, but does not implement per-input
+reservations or independent funding capacity. Keep the payment-concurrency work
+open and do not describe the preview or passing regression gate as that fix.
+
+7 November competition-entry proposal is ready at
+`design/competition-entry-review/`, served locally on port 4205. It previews
+per-pick regular/multiple-competition selection, already-used automatic regular
+bets, mixed eligibility, reserved pending entries and a compact shared-funding
+wait. Six local Chromium/WebKit journeys at 320/390/1440px passed choice, cancel,
+focus, close/reopen, review and pending-state checks. Screenshots are under
+`.quality-artifacts/competition-entry-preview/`; all data is synthetic. No live
+scoring or payment change has been made. The README records durable intent,
+atomic slot reservation, late-join opt-out and versioned rule migration before
+implementation approval.
+
+7 November payment/competition steering: investigate the shared sponsor-funding
+warning and misleading competition badges on repeat predictions. Prepare an
+isolated proposal preview for explicit per-pick scoring choices across multiple
+competitions. Already-used slots must be regular-only for that competition;
+preserve ordinary settlement and describe durable opt-out, pending reservation,
+late-join and published-rule migration boundaries before implementation approval.
+No scoring/payment implementation is authorized by this preview request.
+
+Home split layout is implemented and passes focused carousel and navigation
+checks. Its final major run stopped on a WebKit sidebar focus/visibility assertion
+at `account-navigation-browser.cjs:326`; the focused suite passed earlier. Diagnose
+and verify this separately rather than reporting a complete gate. Owner checklist
+bytes were restored. Nothing from this Home increment has been pushed.
+
+The focus assertion now waits for WebKit's actual scroll position before retaining
+the same visibility bounds; all six focused navigation cases passed. The next full
+gate stopped on WebKit intercepted campaign refreshes during a forced document
+navigation. The fixture now waits for in-flight API reads before its explicit
+reloads; browser errors are still fatal. Focused verification is running, and a
+successful full gate is still required. Both failed runs are archived under
+`.quality-artifacts/home-major-split-first.*` and `home-major-split-second.*`.
+
+The next full attempt reproduced the refresh failure in the nested artwork
+journey, which still called raw `page.goto`/`page.reload`. Its navigation now uses
+the same in-flight read helper. The third failure is archived as
+`home-major-split-third.*`; another focused run and full verification remain open.
+
+7 November follow-up: split Home into two distinct carousel sections, one for
+Predictions/Five/Survivor and one for active competitions. With no active events,
+show "Watch out for competitions coming soon." Keep loading/outage states
+distinct from that confirmed empty state. The earlier mixed-carousel full gate
+was stopped after this steering; rerun verification for the final layout.
+
+7 November Home request: rename the visible Overview navigation/breadcrumb to
+Home while preserving existing URLs. Replace the Five-only hero with a compact,
+manually navigated carousel for active competitions, Predictions, Five and
+Survivor. Reuse the app's account-scoped competition query; preserve normal
+navigation and payment flows. Keep mobile swipe/keyboard access, reduced motion,
+optional artwork/fallbacks and clear loading/error behavior. Verify responsive
+states, existing navigation and the required major gate before completion.
+
 7 November banner correction implemented locally: competition title, status,
 description and prize overlay dimmed artwork in one compact header. Cards also
 overlay their artwork without added height. The owner then selected the Streak

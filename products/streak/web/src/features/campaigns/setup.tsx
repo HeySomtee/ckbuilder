@@ -680,7 +680,7 @@ export function CampaignSetup({
               >
                 {five
                   ? 'Players use the existing squad editor. Earlier final squad saves break a points tie.'
-                  : 'Only the first qualifying paid prediction per fixture counts, including an earlier valid prediction if you join before registration closes. Correct calls earn 3 points; wrong or missed calls earn 0. Stake size does not affect competition points. Earlier confirmed final qualifying prediction wins; ties in one block follow transaction/output order.'}
+                  : 'Join first, then select this competition in your slip before paying. One selected, qualifying prediction per fixture counts. Regular predictions never consume an entry. Correct calls earn 3 points; wrong or missed calls earn 0. Stake size does not affect points. Earlier confirmed final qualifying prediction wins; ties in one block follow transaction/output order.'}
               </Notice>
               <p className="campaign-small">
                 Every registration creates a ranked entry. Non-participants stay at the bottom.

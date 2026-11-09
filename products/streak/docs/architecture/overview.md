@@ -1,5 +1,16 @@
 # Architecture and migration
 
+9 November [queued payment reviews](../delivery/queued-payment-reviews.md) add
+bounded FIFO admission on the existing operator disk/lease. Waiting metadata never
+owns money and expires independently of signed reservations. Browsers retry only
+acknowledged unsigned waits, retain explicit wallet approval and pause hidden-tab
+checks. The global funding barrier remains; this is waiting UX, not parallel spending.
+
+7 November [Home carousels](../delivery/home-products.md) consume the existing
+account-scoped competition list in a separate row from static product links. They add no data
+store, endpoint or timer. Core products stay available if the list fails; existing
+viewer validation and navigation/payment ownership remain unchanged.
+
 6 November [optional competition artwork](../delivery/competition-artwork-navigation.md)
 stores presentation metadata outside frozen entry terms. Authenticated admin
 uploads produce bounded, immutable image files on the existing persistent disk;

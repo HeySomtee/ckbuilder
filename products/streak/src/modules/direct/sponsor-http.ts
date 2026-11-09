@@ -21,6 +21,7 @@ import { createFixtureReader } from './fixture-reader';
 import { startHostedRecovery } from './hosted-drain';
 import { ActivityEventOutbox } from '../activity/outbox';
 import { readCampaignAbsence } from './campaign-absence';
+import { ReviewWaitingError } from './review-queue';
 
 function secret(value: string | undefined): string {
   if (!value || !/^[0-9a-f]{64}$/.test(value))
@@ -78,6 +79,7 @@ export function createSponsorServer(
     if (active >= 4)
       return reply(res, 429, {
         error: 'Sponsor queue is busy. Retry with the same request identity.',
+        ...(req.url === '/batch/offer' ? { reviewWait: { position: 0 } } : {}),
       });
     active++;
     const startedAt = performance.now();
@@ -117,6 +119,7 @@ export function createSponsorServer(
           '/submit',
           '/resolve',
           '/resume',
+          '/cancel-review',
         ].includes(url.pathname)
       )
         operation = url.pathname.slice(1);
@@ -141,13 +144,18 @@ export function createSponsorServer(
         );
       if (
         req.method !== 'POST' ||
-        !['/offer', '/submit', '/resolve', '/resume'].includes(url.pathname)
+        !['/offer', '/submit', '/resolve', '/resume', '/cancel-review'].includes(url.pathname)
       )
         return reply(res, 404, { error: 'Unknown sponsor operation.' });
       const payload = await body(req);
       const authenticated = payload.authenticatedOwnerAddress;
       if (typeof authenticated !== 'string' || authenticated.length > 300)
         throw Error('Authenticated wallet address required');
+      if (url.pathname === '/cancel-review' && atomic && batch) {
+        const request = object(payload.request, 'review cancellation');
+        await batch.cancelReview(sponsorId(request.requestId), authenticated);
+        return reply(res, 200, { cancelled: true });
+      }
       if (url.pathname === '/offer') {
         if (!atomic && batch)
           return reply(res, 409, {
@@ -190,6 +198,15 @@ export function createSponsorServer(
         } satisfies SponsorSubmitRequest),
       );
     } catch (error) {
+      if (
+        error instanceof ReviewWaitingError ||
+        (error instanceof OperatorBusyError && operation === 'offer' && req.url === '/batch/offer')
+      ) {
+        return reply(res, 429, {
+          error: 'Your payment review is waiting. No payment has been sent.',
+          reviewWait: { position: error instanceof ReviewWaitingError ? error.position : 0 },
+        });
+      }
       // Do not return provider payloads, RPC errors, file paths or signing context.
       const message = error instanceof Error ? error.message : '';
       const busy = error instanceof OperatorBusyError;

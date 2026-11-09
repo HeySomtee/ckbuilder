@@ -6,6 +6,7 @@ const http = require('node:http');
 const { chromium, webkit } = require('playwright');
 const { chooseOption } = require('./browser-select.cjs');
 const { artworkJourney } = require('./campaigns-artwork-browser.cjs');
+const { homeProductsJourney } = require('./home-products-browser.cjs');
 
 const publicRoot = path.resolve(__dirname, '../public');
 const output = path.resolve(__dirname, '../../../.quality-artifacts/campaigns-runtime');
@@ -193,7 +194,53 @@ async function main() {
           const availableGameweeks = gameweeks.map((week) => ({ ...week }));
           let optionsReads = 0;
           const campaigns = [createCampaign(), createCampaign('five', 'five')];
-          page.on('pageerror', (error) => errors.push(error.message));
+          page.on('pageerror', (error) => {
+            errors.push(error.message);
+            console.error('Browser error at', page.url(), error.stack);
+          });
+          // Mutations publish their returned data before their invalidation reads
+          // finish. Let those intercepted responses complete before a test-only
+          // document reload destroys WebKit's request context. Errors remain fatal.
+          const fixtureReads = new Map();
+          page.on('request', (request) => {
+            if (request.method() === 'GET' && request.url().startsWith(base + '/api/'))
+              fixtureReads.set(request, Promise.withResolvers());
+          });
+          const finishRead = (request) => {
+            fixtureReads.get(request)?.resolve();
+            fixtureReads.delete(request);
+          };
+          page.on('requestfinished', finishRead);
+          page.on('requestfailed', finishRead);
+          async function settleFixtureReads() {
+            let timeout;
+            try {
+              await Promise.race([
+                (async () => {
+                  while (fixtureReads.size)
+                    await Promise.all([...fixtureReads.values()].map((read) => read.promise));
+                })(),
+                new Promise((_, reject) => {
+                  timeout = setTimeout(() => reject(Error('Fixture reads did not finish')), 15000);
+                }),
+              ]);
+            } finally {
+              clearTimeout(timeout);
+            }
+          }
+          async function navigate(url) {
+            await settleFixtureReads();
+            // React mutation completion can enqueue invalidations after the last
+            // intercepted response finishes. Wait for the browser's network quiet
+            // state before a test-only document teardown; all errors remain fatal.
+            await page.waitForLoadState('networkidle');
+            await page.goto(url);
+          }
+          async function reload() {
+            await settleFixtureReads();
+            await page.waitForLoadState('networkidle');
+            await page.reload();
+          }
           await context.route('**/*', async (route) => {
             const req = route.request(),
               url = new URL(req.url());
@@ -402,7 +449,16 @@ async function main() {
             );
           });
           try {
-            await page.goto(base + '/season/?view=competitions&campaign=calls');
+            await homeProductsJourney({
+              page,
+              base,
+              campaigns,
+              artworkState,
+              width,
+              engineName,
+              output,
+            });
+            await navigate(base + '/season/?view=competitions&campaign=calls');
             await page.getByRole('heading', { name: 'Fixture Challenge', exact: true }).waitFor();
             await page.getByRole('button', { name: 'Join competition', exact: true }).click();
             await page.locator('.campaign-join-dialog').waitFor();
@@ -577,7 +633,7 @@ async function main() {
               'true',
               'Returning from the slip reopens playable fixtures rather than leaving the rules tab selected.',
             );
-            await page.goto(base + '/season/?market=market-2');
+            await navigate(base + '/season/?market=market-2');
             await page.locator('.detail-outcomes button[data-outcome="home"]').click();
             await page.locator('.prediction-dock').click();
             await page.locator('dialog[open] #slip-title').waitFor();
@@ -589,8 +645,7 @@ async function main() {
             await page
               .locator('.slip-pick')
               .filter({ hasText: 'Home 1 vs Away 1' })
-              .getByRole('button', {
-                name: 'Open competition: Fixture Challenge',
+              .getByText('Automatic entry: Fixture Challenge. Its published rules apply.', {
                 exact: true,
               })
               .waitFor();
@@ -610,7 +665,7 @@ async function main() {
             await page.screenshot({
               path: path.join(output, `${engineName}-${width}-mixed-dock.png`),
             });
-            await page.reload();
+            await reload();
             await page
               .locator('.prediction-dock')
               .getByText('Fixture Challenge + 1 regular', { exact: true })
@@ -639,7 +694,7 @@ async function main() {
             ];
             campaigns[0].leaderboard[0].participated = true;
             campaigns[0].leaderboard[0].qualifyingEntries = 1;
-            await page.reload();
+            await reload();
             await firstMatch.getByText('Your competition pick', { exact: true }).waitFor();
             await firstMatch.getByText('Entered', { exact: true }).waitFor();
             assert.equal(await firstMatch.locator('.campaign-outcomes button:disabled').count(), 3);
@@ -661,9 +716,18 @@ async function main() {
             const existingCallSlip = page
               .locator('.slip-pick')
               .filter({ hasText: 'Home 1 vs Away 1' });
-            await existingCallSlip.getByText('Already entered', { exact: true }).waitFor();
-            await existingCallSlip.getByText('Normal prediction', { exact: true }).waitFor();
+            await existingCallSlip
+              .getByText('Competition entry already used', { exact: true })
+              .waitFor();
+            await existingCallSlip.getByText('Regular prediction', { exact: false }).waitFor();
+            assert.equal(
+              await existingCallSlip.locator('.slip-pick-campaign').count(),
+              0,
+              'A repeat bet has no competition badge.',
+            );
             await page.getByRole('button', { name: 'Add matches', exact: true }).click();
+            await page.getByRole('heading', { name: 'You know the game.', exact: true }).waitFor();
+            await navigate(base + '/season/?view=competitions&campaign=calls');
             await firstMatch.getByText('Your competition pick', { exact: true }).waitFor();
             assert.equal(
               await firstMatch
@@ -855,7 +919,7 @@ async function main() {
                 .count(),
               0,
             );
-            await page.goto(base + '/season/?view=competitions&campaign=five');
+            await navigate(base + '/season/?view=competitions&campaign=five');
             await page.getByRole('button', { name: 'Join competition', exact: true }).click();
             await page.getByLabel('Your FPL name', { exact: false }).waitFor();
             const joinFive = page.getByRole('button', {
@@ -911,7 +975,7 @@ async function main() {
                 transactionHash: null,
               })),
             ];
-            await page.goto(base + '/season/?view=competitions&campaign=calls');
+            await navigate(base + '/season/?view=competitions&campaign=calls');
             await page
               .getByRole('heading', { name: 'A place among the best.', exact: true })
               .waitFor();
@@ -962,7 +1026,7 @@ async function main() {
             );
             await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
             admin = true;
-            await page.reload();
+            await reload();
             await page.getByRole('button', { name: 'Manage competitions', exact: true }).click();
             assert.match(
               await page
@@ -992,11 +1056,11 @@ async function main() {
             finished.state = 'deleted';
             finished.deletedAt = iso();
             admin = false;
-            await page.reload();
+            await reload();
             await page.getByText('Competition archived', { exact: true }).waitFor();
             await page.getByText('Prize paid', { exact: true }).waitFor();
             admin = true;
-            await page.goto(base + '/season/?view=competitions');
+            await navigate(base + '/season/?view=competitions');
             await page.getByRole('button', { name: 'Create competition', exact: true }).click();
             await page.getByLabel('Competition name', { exact: true }).fill('Unfinished challenge');
             const longDescription = 'A thoughtful invitation. '.repeat(150);
@@ -1010,7 +1074,7 @@ async function main() {
             assert.equal(savedDraft.prizes.length, 0);
             assert.equal(savedDraft.fixtureIds.length, 0);
             assert.equal(savedDraft.description, longDescription.trim());
-            await page.reload();
+            await reload();
             await page.getByRole('button', { name: 'Continue setup', exact: true }).click();
             assert.equal(
               await page.getByLabel('Registration deadline', { exact: true }).inputValue(),
@@ -1027,7 +1091,7 @@ async function main() {
             finished.awards[0].transactionHash = null;
             delete finished.awards[0].receivingAddress;
             admin = false;
-            await page.goto(base + '/season/?view=competitions&campaign=calls');
+            await navigate(base + '/season/?view=competitions&campaign=calls');
             await page.getByText('Rehearsal award', { exact: true }).waitFor();
             assert.equal(
               await page
@@ -1051,9 +1115,24 @@ async function main() {
               width,
               engineName,
               output,
+              navigate,
+              reload,
+            });
+            await require('./competition-entry-browser.cjs')({
+              page,
+              base,
+              campaigns,
+              createCampaign,
+              account,
+              fixtures,
+              navigate,
+              reload,
+              width,
+              engineName,
+              output,
             });
             viewerId = 'different-account';
-            await page.reload();
+            await navigate(base + '/season/?view=competitions&campaign=calls');
             await page.getByText('Competitions could not be loaded', { exact: true }).waitFor();
             assert.equal(
               await page.getByText('A place among the best.', { exact: true }).count(),

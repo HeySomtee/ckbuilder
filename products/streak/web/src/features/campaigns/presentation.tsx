@@ -37,7 +37,7 @@ export function label(state: CampaignState): string {
     draft: 'Draft',
     open: 'Open for entries',
     live: 'Live',
-    finalizing: 'Finalizing',
+    finalizing: 'Results under review',
     finished: 'Finished',
     deleted: 'Archived',
   }[state];

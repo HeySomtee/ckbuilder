@@ -254,6 +254,12 @@ async function main(): Promise<void> {
       'cancelled',
       'operator discovers an abandoned bettor conflict without a session',
     );
+    assert.equal(
+      (await restarted.status({ offerId: offer.offerId, rawHash: offer.rawHash }))
+        .unsignedCancellation,
+      undefined,
+      'A previously accepted signature must never be labelled unsigned cancellation',
+    );
     assert.equal((await operatorFundingBarrier(client, journal, registry)).clear, true);
     assertFreshOperatorInputs(
       journal,

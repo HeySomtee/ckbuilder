@@ -241,11 +241,20 @@ export async function parseBatchStatus(value: unknown): Promise<BatchStatus> {
     row.transactionHash !== offer.rawHash
   )
     throw Error('Combined payment status could not be verified. Keep the original transaction.');
+  if (
+    row.unsignedCancellation !== undefined &&
+    (row.unsignedCancellation !== true ||
+      row.state !== 'cancelled' ||
+      row.signedBytes !== undefined)
+  )
+    throw Error('Unsigned cancellation status could not be verified.');
   return freeze({
     offer,
     state: row.state as BatchStatus['state'],
     transactionHash: offer.rawHash,
     ...(row.signedBytes === undefined ? {} : { signedBytes: transactionBytes(row.signedBytes) }),
     ...(row.message === undefined ? {} : { message: text(row.message, 400) }),
+    ...(row.conflictHash === undefined ? {} : { conflictHash: hex(row.conflictHash, 32) }),
+    ...(row.unsignedCancellation === true ? { unsignedCancellation: true as const } : {}),
   });
 }

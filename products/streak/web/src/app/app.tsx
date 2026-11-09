@@ -240,6 +240,17 @@ export function App() {
     const selectedPicks = draftStore.getSnapshot().draft.picks;
     const selectedPick = selectedPicks.find((row) => row.matchId === market.matchId);
     if (added && selectedPick) {
+      const source = navCampaigns?.find((item) => item.id === campaignId);
+      if (
+        !existing?.competition &&
+        account.data &&
+        source?.joined &&
+        source.predictionEntryPolicy === 'explicit-entry-v3' &&
+        source.joinedFixtureIds?.includes(market.matchId) &&
+        !source.qualifyingFixtureIds?.includes(market.matchId) &&
+        !source.pendingFixtureIds?.includes(market.matchId)
+      )
+        draftStore.competitions(selectedPick.lineId, account.data.id, [source.id]);
       slipSource.selected(
         navigationScope,
         campaignId,
@@ -385,7 +396,11 @@ export function App() {
     !campaignList.isError && campaignList.data?.viewerId === (account.data?.id ?? null)
       ? campaignList.data?.campaigns
       : [];
-  const campaignLabels = slipCampaignLabels(draftState.draft.picks, navCampaigns ?? []);
+  const campaignLabels = slipCampaignLabels(
+    draftState.draft.picks,
+    navCampaigns ?? [],
+    account.data?.id,
+  );
   function openSlipCampaign(id: string) {
     setSlipOpen(false);
     setCampaignReturnRevision((revision) => revision + 1);
@@ -490,7 +505,7 @@ export function App() {
         <a
           href={sectionHref('overview')}
           className="wordmark"
-          aria-label="Streak overview"
+          aria-label="Streak home"
           onClick={(event) => followSection(event, 'overview')}
         >
           <Brand />
@@ -506,7 +521,7 @@ export function App() {
           <a
             className="mobile-brand"
             href={sectionHref('overview')}
-            aria-label="Streak overview"
+            aria-label="Streak home"
             onClick={(event) => followSection(event, 'overview')}
           >
             <Brand />
@@ -521,7 +536,7 @@ export function App() {
                   : directRoute
                     ? 'Prediction'
                     : section === 'overview'
-                      ? 'Overview'
+                      ? 'Home'
                       : section === 'five'
                         ? 'Streak Five'
                         : section === 'survivor'
@@ -589,7 +604,15 @@ export function App() {
             section !== 'competitions' &&
             !directRoute &&
             !marketId && (
-              <SectionPage section={section} onPick={pick} picks={draftState.draft.picks} />
+              <SectionPage
+                section={section}
+                onPick={pick}
+                picks={draftState.draft.picks}
+                campaigns={navCampaigns ?? []}
+                competitionsLoading={account.isPending || campaignList.isPending}
+                competitionsError={campaignList.isError}
+                onRetryCompetitions={() => void campaignList.refetch()}
+              />
             )}
           {section === 'survivor' && !directRoute && !marketId && (
             <Suspense fallback={<BusyState label="Opening Survivor" />}>
@@ -955,6 +978,10 @@ export function App() {
         onDismiss={() => setSlipOpen(false)}
         onAddMatches={addMatches}
         campaignLabels={campaignLabels}
+        availableCampaigns={navCampaigns ?? []}
+        campaignsReady={!!navCampaigns}
+        campaignsLoading={campaignList.isPending || campaignList.isFetching}
+        onRetryCampaigns={() => void campaignList.refetch()}
         onOpenCampaign={openSlipCampaign}
         account={account.data ?? null}
         accountReady={!account.isPending}

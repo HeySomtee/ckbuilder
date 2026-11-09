@@ -872,6 +872,10 @@ async function main() {
       }, walletAddress);
       await page.getByRole('button', { name: 'Disconnect', exact: true }).waitFor();
       assert.equal(await page.locator('ccc-connector').count(), 0);
+      // Finish sign-in-triggered reads before advancing the stale timer. Otherwise
+      // a late successful read can legitimately make the account fresh again.
+      await recoveryReads.settled();
+      await page.waitForLoadState('networkidle');
       let releaseAccount;
       let accountStarted;
       const accountPending = new Promise((done) => {

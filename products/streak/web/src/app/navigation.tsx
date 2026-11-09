@@ -18,7 +18,7 @@ const entries = [
   },
   {
     id: 'overview',
-    label: 'Overview',
+    label: 'Home',
     icon: 'home',
     href: sectionHref('overview'),
     follow: (e: MouseEvent<HTMLAnchorElement>) => followSection(e, 'overview'),

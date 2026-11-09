@@ -55,6 +55,10 @@ export interface BatchOfferRequest {
   ownerAddress: string;
   userInputs: BatchPoint[];
   picks: BatchPick[];
+  competitionSelection?: {
+    accountId: string;
+    lines: Array<{ fixtureId: string; campaignIds: string[] }>;
+  };
 }
 export interface BatchLine {
   fixture: BatchFixture;
@@ -107,6 +111,10 @@ export interface BatchStatus {
   signedBytes?: string;
   transactionHash: string;
   message?: string;
+  /** A discovery hint only. The browser independently verifies its canonical input conflict. */
+  conflictHash?: string;
+  /** Private operator confirms cancellation without an accepted owner or sponsor signature. */
+  unsignedCancellation?: true;
 }
 export interface BatchIdentity {
   offerId: string;
@@ -116,9 +124,16 @@ export interface BatchSubmit extends BatchIdentity {
   userSignedBytes: string;
 }
 export interface BatchTransport {
-  offer(request: BatchOfferRequest): Promise<BatchOffer>;
+  cancelReview?(requestId: string): Promise<void>;
+  release?(identity: BatchIdentity): Promise<boolean>;
+  offer(request: BatchOfferRequest, waiting?: BatchWaiting): Promise<BatchOffer>;
   submit(request: BatchSubmit): Promise<BatchStatus>;
   status(identity: BatchIdentity): Promise<BatchStatus>;
   resume(identity: BatchIdentity): Promise<BatchStatus>;
   resolve(request: BatchIdentity & { conflictingTxHash: string }): Promise<BatchStatus>;
+}
+export interface BatchWaiting {
+  signal: AbortSignal;
+  beforeAttempt(): void | Promise<void>;
+  onWait(position: number): void;
 }

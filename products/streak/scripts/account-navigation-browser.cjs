@@ -5,7 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { chromium, webkit } = require('playwright');
 const expectedNavigation = [
-  ['Overview', '/season/?view=overview'],
+  ['Home', '/season/?view=overview'],
   ['Markets', '/season/'],
   ['Matchday', '/season/?view=matchday'],
   ['Streak Five', '/season/?view=five'],
@@ -322,6 +322,16 @@ async function main() {
                 `/season/?view=competitions&campaign=${campaign.id}`,
               );
               await link.focus();
+              await page.waitForFunction((href) => {
+                const nav = document.querySelector('.rail nav');
+                const item = nav?.querySelector(`a[href="${href}"]`);
+                if (!nav || !item) return false;
+                const boundary = nav.getBoundingClientRect(),
+                  box = item.getBoundingClientRect();
+                return (
+                  box.height >= 44 && box.top >= boundary.top && box.bottom <= boundary.bottom + 1
+                );
+              }, `/season/?view=competitions&campaign=${campaign.id}`);
               const bounds = await link.boundingBox();
               assert.ok(
                 bounds.height >= 44 &&
@@ -392,7 +402,7 @@ async function main() {
           await page.waitForFunction(
             () => document.querySelector('.network-strip img')?.naturalWidth > 0,
           );
-          assert.equal(await page.locator('.shirt-ckb-mark').count(), 3);
+          assert.equal(await page.locator('.home-product').count(), 3);
           await page.locator('.overview-fixture').first().waitFor();
           assert.equal(await page.locator('.overview-fixture').count(), 6);
           assert.equal(
@@ -408,13 +418,10 @@ async function main() {
             exact: true,
           });
           assert.equal(
-            await nav
-              .getByRole('link', { name: width < 700 ? 'Home' : 'Overview', exact: true })
-              .getAttribute('aria-current'),
+            await nav.getByRole('link', { name: 'Home', exact: true }).getAttribute('aria-current'),
             'page',
           );
           async function section(label) {
-            if (width < 700 && label === 'Overview') label = 'Home';
             if (
               width < 700 &&
               ['Streak Five', 'Matchday', 'Clubhouse', 'My Account'].includes(label)
@@ -468,7 +475,7 @@ async function main() {
           await section(width < 700 ? 'Activity' : 'My activity');
           await page.waitForURL('**/?view=activity');
           assert.equal(await page.locator('.wallet-overview').count(), 0);
-          await section('Overview');
+          await section('Home');
           await page
             .getByRole('button', { name: /Add Home for/ })
             .first()
@@ -583,7 +590,7 @@ async function main() {
           await page
             .getByRole('button', { name: 'Add Home for Home 0 vs Away 0', exact: true })
             .click();
-          await section('Overview');
+          await section('Home');
           await page.getByRole('link', { name: 'All markets', exact: true }).click();
           assert.equal(
             await page.evaluate(() => window.accountNavigationSentinel),
@@ -597,7 +604,7 @@ async function main() {
             'still-mounted',
           );
           assert.match(await dock.innerText(), /8 predictions/);
-          await section('Overview');
+          await section('Home');
           await page.clock.setSystemTime(new Date('2030-01-07T23:59:50Z'));
           const rolled = page.waitForRequest((request) => {
             const url = new URL(request.url());

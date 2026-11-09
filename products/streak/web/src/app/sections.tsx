@@ -12,6 +12,8 @@ import { followMarket, marketHref } from '../lib/market-route';
 import { followSection, sectionHref } from '../lib/section-route';
 import type { Section } from '../lib/section-route';
 import { activityHref, followActivity, directHref, followDirect } from '../lib/direct-route';
+import { HomeProducts } from './home-products';
+import type { HomeProductsProps } from './home-products';
 import './sections.css';
 
 function FiveArtwork() {
@@ -78,7 +80,8 @@ function FiveHero({ full = false }: { full?: boolean }) {
 function Overview({
   onPick,
   picks,
-}: {
+  ...products
+}: HomeProductsProps & {
   onPick: (market: Market, outcome: Outcome) => void;
   picks: readonly Pick[];
 }) {
@@ -111,7 +114,7 @@ function Overview({
           <p>A new matchweek. A few good calls to make.</p>
         </div>
       </div>
-      <FiveHero />
+      <HomeProducts {...products} />
       <div className="overview-grid">
         <section>
           <header className="overview-section-heading">
@@ -259,12 +262,13 @@ export function SectionPage({
   section,
   onPick,
   picks,
-}: {
+  ...products
+}: HomeProductsProps & {
   section: Section;
   onPick: (market: Market, outcome: Outcome) => void;
   picks: readonly Pick[];
 }) {
-  if (section === 'overview') return <Overview onPick={onPick} picks={picks} />;
+  if (section === 'overview') return <Overview onPick={onPick} picks={picks} {...products} />;
   if (section === 'five')
     return (
       <section className="feature-page">

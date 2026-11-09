@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Account } from '../account/api';
 import { amountShannons, displayShannons, totalShannons } from '../predictions/draft';
 import type { DraftStore, Pick } from '../predictions/draft';
+import type { CampaignSummary } from '../../../../shared/campaign-wire';
 import {
   assertActiveWallet,
   assertWalletAccount,
@@ -19,11 +20,29 @@ import type { BatchRecord } from './batch-journal';
 import { Notice } from '../../components/notice';
 import { PaymentSummary } from './payment-invoice';
 import { PaymentProgress, PaymentButtonState, type PaymentStage } from './payment-progress';
+import { waitForReviewRetry } from './review-wait';
 
 const money = (value: string | bigint) => `${displayShannons(value)} tCKB`;
 const explorer = (hash: string) => `https://pudge.explorer.nervos.org/transaction/${hash}`;
 const names = ['Home', 'Draw', 'Away'];
 const outcomes = { home: 0, draw: 1, away: 2 } as const;
+function entryReviewLabel(pick: Pick, campaigns: readonly CampaignSummary[]): string {
+  const selected = (pick.competition?.ids ?? []).map(
+    (id) => campaigns.find((item) => item.id === id)?.name ?? 'Selected competition',
+  );
+  const automatic = campaigns
+    .filter(
+      (item) =>
+        item.joined &&
+        item.kind === 'predictions' &&
+        item.predictionEntryPolicy !== 'explicit-entry-v3' &&
+        ['open', 'live'].includes(item.state) &&
+        item.joinedFixtureIds?.includes(pick.matchId) &&
+        !item.qualifyingFixtureIds?.includes(pick.matchId),
+    )
+    .map((item) => `Automatic: ${item.name}`);
+  return [...selected, ...automatic].join(' · ') || 'Regular prediction';
+}
 
 export function BatchTransaction({
   record,
@@ -261,6 +280,7 @@ export function BatchCheckout({
   feedbackTarget,
   view = 'picks',
   onActivity,
+  campaigns = [],
 }: {
   store: DraftStore;
   account: Account | null;
@@ -277,6 +297,7 @@ export function BatchCheckout({
   feedbackTarget?: HTMLElement | null;
   view?: 'picks' | 'activity';
   onActivity?: () => void;
+  campaigns?: readonly CampaignSummary[];
 }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const wallet = useSyncExternalStore(subscribeWallet, getWalletState);
@@ -299,6 +320,9 @@ export function BatchCheckout({
     setDismissedHash('');
   }, [identityKey]);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
+  const reviewController = useRef<AbortController | null>(null);
+  const [waitingPosition, setWaitingPosition] = useState<number | null>(null);
+  useEffect(() => () => reviewController.current?.abort(), [identityKey]);
   const now = useNow(active);
   const config = useQuery({
     queryKey: ['batch-config'],
@@ -372,6 +396,7 @@ export function BatchCheckout({
     }
   }, [history.data, saved, identityKey]);
   const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['private', 'campaigns'] });
     void queryClient.invalidateQueries({ queryKey: ['direct-private'] });
     void queryClient.invalidateQueries({ queryKey: ['private', 'wallet-balance'] });
     void queryClient.invalidateQueries({ queryKey: ['batch-config'] });
@@ -391,6 +416,7 @@ export function BatchCheckout({
   };
   const prepare = useMutation({
     onMutate: () => {
+      setWaitingPosition(null);
       submit.reset();
       setSaved(null);
       setReceipt(null);
@@ -398,40 +424,106 @@ export function BatchCheckout({
       queryClient.setQueryData(['direct-private', identityKey, 'batch-background-history'], null);
     },
     mutationFn: async (input: { stamp: string; identityKey: string }) => {
-      if (!connection || !linked.data || !account)
-        throw Error('Sign in with your wallet to continue.');
-      await assertWalletAccount(connection, account.walletAddress);
-      assertDraft(input.stamp);
-      const latest = await getBatchConfig();
-      if (!latest.enabled)
-        throw Error(
-          latest.unavailableReason ?? 'Payments are temporarily unavailable. Your picks are saved.',
+      const controller = new AbortController();
+      reviewController.current = controller;
+      const started = Date.now();
+      const beforeAttempt = () => {
+        controller.signal.throwIfAborted();
+        assertDraft(input.stamp);
+        assertAccount();
+        if (Date.now() - started >= 10 * 60_000)
+          throw Error(
+            'Payments are taking longer than usual. Your picks are saved. Try reviewing again shortly.',
+          );
+      };
+      try {
+        if (!connection || !linked.data || !account)
+          throw Error('Sign in with your wallet to continue.');
+        await assertWalletAccount(connection, account.walletAddress);
+        assertDraft(input.stamp);
+        let latest = await getBatchConfig(controller.signal);
+        while (
+          latest.enabled &&
+          store
+            .getSnapshot()
+            .draft.picks.some((pick) =>
+              ['reserved', 'confirming'].includes(
+                latest.fixtures.find((f) => f.fixtureId === pick.matchId)?.state ?? '',
+              ),
+            )
+        ) {
+          beforeAttempt();
+          const selected = latest.fixtures.filter((f) =>
+            store.getSnapshot().draft.picks.some((p) => p.matchId === f.fixtureId),
+          );
+          if (selected.some((f) => Date.now() + 120_000 >= f.cutoffMs))
+            throw Error(
+              'A selected match is too close to kickoff. No payment was sent. Your picks are saved.',
+            );
+          setWaitingPosition(0);
+          await waitForReviewRetry(controller.signal);
+          latest = await getBatchConfig(controller.signal);
+        }
+        beforeAttempt();
+        if (!latest.enabled)
+          throw Error(
+            latest.unavailableReason ??
+              'Payments are temporarily unavailable. Your picks are saved.',
+          );
+        assertDraft(input.stamp);
+        assertAccount();
+        const picks = structuredClone(store.getSnapshot().draft.picks);
+        const lines = picks.map((pick) => {
+          const fixture = latest.fixtures.find((row) => row.fixtureId === pick.matchId);
+          const principal = amountShannons(pick.amountCkb);
+          if (!fixture || !['available', 'funded'].includes(fixture.state))
+            throw Error(
+              fixture?.state === 'reserved'
+                ? `A payment is being prepared for ${fixture.label}. Your picks are saved. Please try reviewing again shortly.`
+                : fixture?.state === 'confirming'
+                  ? `The first payment for ${fixture.label} is confirming on CKB. Your picks are saved. Please try reviewing again shortly.`
+                  : `We couldn't confirm that ${fixture?.label ?? 'a selected match'} is open for predictions right now. Your picks are saved. Try reviewing again, or choose another match.`,
+            );
+          if (principal === null || principal < BigInt(latest.manifest.limits.minPrincipalShannons))
+            throw Error(
+              `Enter at least ${money(latest.manifest.limits.minPrincipalShannons)} for ${fixture.label}.`,
+            );
+          return { fixture, outcome: outcomes[pick.outcome], principal };
+        });
+        if (picks.some((pick) => pick.competition && pick.competition.accountId !== account.id))
+          throw Error(
+            'These competition choices belong to another account. Choose where each pick counts before reviewing.',
+          );
+        const hasSelection = picks.some((pick) => pick.competition);
+        const review = await linked.data.prepare(
+          lines,
+          hasSelection
+            ? {
+                accountId: account.id,
+                lines: picks.map((pick) => ({
+                  fixtureId: pick.matchId,
+                  campaignIds: pick.competition?.ids ?? [],
+                })),
+              }
+            : undefined,
+          { signal: controller.signal, beforeAttempt, onWait: setWaitingPosition },
         );
-      assertDraft(input.stamp);
-      assertAccount();
-      const picks = structuredClone(store.getSnapshot().draft.picks);
-      const lines = picks.map((pick) => {
-        const fixture = latest.fixtures.find((row) => row.fixtureId === pick.matchId);
-        const principal = amountShannons(pick.amountCkb);
-        if (!fixture || !['available', 'funded'].includes(fixture.state))
-          throw Error(
-            fixture?.state === 'reserved'
-              ? `A payment is being prepared for ${fixture.label}. Your picks are saved. Please try reviewing again shortly.`
-              : fixture?.state === 'confirming'
-                ? `The first payment for ${fixture.label} is confirming on CKB. Your picks are saved. Please try reviewing again shortly.`
-                : `We couldn't confirm that ${fixture?.label ?? 'a selected match'} is open for predictions right now. Your picks are saved. Try reviewing again, or choose another match.`,
-          );
-        if (principal === null || principal < BigInt(latest.manifest.limits.minPrincipalShannons))
-          throw Error(
-            `Enter at least ${money(latest.manifest.limits.minPrincipalShannons)} for ${fixture.label}.`,
-          );
-        return { fixture, outcome: outcomes[pick.outcome], principal };
-      });
-      const review = await linked.data.prepare(lines);
-      await assertActiveWallet(connection);
-      assertDraft(input.stamp);
-      assertAccount();
-      return { ...input, review, picks };
+        try {
+          await assertActiveWallet(connection);
+          controller.signal.throwIfAborted();
+          assertDraft(input.stamp);
+          assertAccount();
+        } catch (error) {
+          await linked.data.releaseReview(review);
+          throw error;
+        }
+        return { ...input, review, picks };
+      } finally {
+        if (reviewController.current === controller) {
+          reviewController.current = null;
+          setWaitingPosition(null);
+        }
+      }
     },
     retry: false,
   });
@@ -509,8 +601,20 @@ export function BatchCheckout({
     },
   });
   const working = prepare.isPending || submit.isPending;
+  const release = useMutation({
+    mutationFn: async () => {
+      if (review && linked.data) await linked.data.releaseReview(review);
+    },
+    onSuccess: () => {
+      prepare.reset();
+      void queryClient.invalidateQueries({ queryKey: ['private', 'campaigns'] });
+    },
+    retry: false,
+  });
   const editingLocked =
-    prepare.isPending || (submit.isPending && saved?.identityKey !== identityKey);
+    prepare.isPending ||
+    release.isPending ||
+    (submit.isPending && saved?.identityKey !== identityKey);
   useEffect(() => {
     onBusy(editingLocked);
     return () => onBusy(false);
@@ -536,7 +640,9 @@ export function BatchCheckout({
     !!recovered && ['submitted', 'committed', 'confirmed'].includes(recovered.status);
   const error =
     (!acknowledged && submit.variables?.identityKey === identityKey ? submit.error : null) ??
-    (prepare.variables?.identityKey === identityKey ? prepare.error : null) ??
+    (prepare.variables?.identityKey === identityKey && prepare.error?.name !== 'AbortError'
+      ? prepare.error
+      : null) ??
     linked.error ??
     reconnect.error;
   useEffect(() => {
@@ -578,17 +684,21 @@ export function BatchCheckout({
       : currentRecord
         ? recovered?.status === 'confirmed'
           ? 'confirmed'
-          : recovered?.status === 'submitted' || recovered?.status === 'committed'
-            ? 'confirming'
-            : recovered?.status === 'unknown' ||
-                recovered?.status === 'reorg' ||
-                (recovered?.status === 'awaiting-sponsor' &&
-                  !!recovered.record.submissionAttemptedAt) ||
-                !recovered
-              ? 'checking'
-              : 'attention'
+          : recovered?.status === 'resolved' || recovered?.status === 'discarded'
+            ? 'resolved'
+            : recovered?.status === 'submitted' || recovered?.status === 'committed'
+              ? 'confirming'
+              : recovered?.status === 'unknown' ||
+                  recovered?.status === 'reorg' ||
+                  (recovered?.status === 'awaiting-sponsor' &&
+                    !!recovered.record.submissionAttemptedAt) ||
+                  !recovered
+                ? 'checking'
+                : 'attention'
         : prepare.isPending && prepare.variables?.identityKey === identityKey
-          ? 'preparing'
+          ? waitingPosition !== null
+            ? 'waiting'
+            : 'preparing'
           : review
             ? 'ready'
             : error
@@ -749,10 +859,37 @@ export function BatchCheckout({
               {now >= review.expiresAt && (
                 <p className="pick-error">This quote expired. Review again for current amounts.</p>
               )}
+              {(() => {
+                const choices = (
+                  <ul
+                    className="batch-entry-review"
+                    aria-label="Competition choices for this payment"
+                  >
+                    {reviewed.picks.map((pick) => (
+                      <li key={pick.lineId}>
+                        <span>
+                          {
+                            review.offer.lines.find(
+                              (line) => line.fixture.fixtureId === pick.matchId,
+                            )?.fixture.label
+                          }
+                        </span>
+                        <small>{entryReviewLabel(pick, campaigns)}</small>
+                      </li>
+                    ))}
+                  </ul>
+                );
+                return feedbackTarget ? createPortal(choices, feedbackTarget) : choices;
+              })()}
+              {release.error && (
+                <p className="pick-error" role="alert">
+                  {release.error.message}
+                </p>
+              )}
               <button
                 className="review-button"
                 aria-busy={submit.isPending}
-                disabled={working || disabled || now >= review.expiresAt}
+                disabled={working || release.isPending || disabled || now >= review.expiresAt}
                 onClick={() => submit.mutate(reviewed)}
               >
                 {submit.isPending ? (
@@ -771,8 +908,16 @@ export function BatchCheckout({
                   `Pay ${money(review.totalShannons)}`
                 )}
               </button>
-              <button className="quiet" disabled={working} onClick={() => prepare.reset()}>
-                Back to picks
+              <button
+                className="quiet"
+                disabled={working || release.isPending}
+                onClick={() => release.mutate()}
+              >
+                {release.isPending ? (
+                  <PaymentButtonState label="Returning to picks" />
+                ) : (
+                  'Back to picks'
+                )}
               </button>
             </div>
           ) : (
@@ -783,7 +928,11 @@ export function BatchCheckout({
               onClick={() => prepare.mutate({ stamp, identityKey })}
             >
               {prepare.isPending ? (
-                <PaymentButtonState label="Preparing your payment" />
+                <PaymentButtonState
+                  label={
+                    waitingPosition !== null ? 'Waiting for your review' : 'Preparing your payment'
+                  }
+                />
               ) : pendingSaved ? (
                 <PaymentButtonState label="Checking your saved payment" />
               ) : history.isFetching ? (
@@ -804,6 +953,25 @@ export function BatchCheckout({
           {(() => {
             const notices = (
               <>
+                {prepare.isPending && waitingPosition !== null && (
+                  <div className="review-wait" role="status">
+                    <PaymentButtonState
+                      variant="wave"
+                      label={
+                        waitingPosition > 0
+                          ? `Review queue · ${waitingPosition === 1 ? 'You are next' : `${waitingPosition - 1} ahead`}`
+                          : 'Waiting for payment availability'
+                      }
+                    />
+                    <p>
+                      Your picks are saved. We will open your review when it is ready. No payment
+                      has been sent.
+                    </p>
+                    <button className="quiet" onClick={() => reviewController.current?.abort()}>
+                      Leave queue
+                    </button>
+                  </div>
+                )}
                 {history.isError && (
                   <Notice title="Check saved payments first" tone="attention">
                     Your previous payment status could not be checked.{' '}

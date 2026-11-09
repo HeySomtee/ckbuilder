@@ -179,12 +179,13 @@ function FixtureCard({
 }) {
   const [pendingOutcome, setPendingOutcome] = useState<Outcome | null>(null);
   const own = detail.own?.calls.find((call) => call.fixtureId === fixture.fixtureId);
+  const reserved = detail.pendingFixtureIds?.includes(fixture.fixtureId);
   const selectedOutcome = own ? (['home', 'draw', 'away'] as const)[own.outcome] : selected;
   const full = fixture.occupied !== null && fixture.occupied >= fixture.capacity;
   const locked =
     now >= Date.parse(fixture.cutoffAt) ||
     ['draft', 'finished', 'finalizing', 'deleted'].includes(detail.state);
-  const unavailable = full || locked || pending !== null || !!selectedOutcome;
+  const unavailable = full || locked || pending !== null || !!selectedOutcome || !!reserved;
   const selectedLabel =
     selectedOutcome === 'home'
       ? `${fixture.home} to win`
@@ -196,7 +197,17 @@ function FixtureCard({
       <div className="campaign-card-meta">
         <span>{fixture.league}</span>
         <Badge tone={own ? 'mint' : ''}>
-          {own ? 'Entered' : selected ? 'In your slip' : full ? 'Full' : locked ? 'Locked' : 'Open'}
+          {own
+            ? 'Entered'
+            : reserved
+              ? 'Entry pending'
+              : selected
+                ? 'In your slip'
+                : full
+                  ? 'Full'
+                  : locked
+                    ? 'Locked'
+                    : 'Open'}
         </Badge>
       </div>
       <time dateTime={fixture.kickoffAt}>{dateTime(fixture.kickoffAt)}</time>
@@ -258,6 +269,11 @@ function FixtureCard({
           )}
           {!own && <p>Not entered yet. Complete payment in your slip for verification.</p>}
         </div>
+      )}
+      {reserved && !own && (
+        <p className="campaign-form-order">
+          Your entry is reserved. Check the payment in your slip before trying again.
+        </p>
       )}
       <div className="campaign-capacity">
         <span>
@@ -668,7 +684,12 @@ export function CampaignPlay({
                         onOpenMarket={onOpenMarket}
                         onOpenSlip={onOpenSlip}
                         selected={
-                          selectedPicks.find((pick) => pick.matchId === fixture.fixtureId)?.outcome
+                          selectedPicks.find(
+                            (pick) =>
+                              pick.matchId === fixture.fixtureId &&
+                              (detail.predictionEntryPolicy !== 'explicit-entry-v3' ||
+                                pick.competition?.ids.includes(detail.id)),
+                          )?.outcome
                         }
                       />
                     ))}
@@ -769,9 +790,11 @@ export function CampaignPlay({
               Registration is free. Join before {dateTime(detail.registrationClosesAt)}. You get a
               ranked entry immediately.
               {detail.kind === 'predictions' &&
-                (detail.predictionEntryPolicy === 'first-admitted-v2'
-                  ? ' Earlier valid predictions for these fixtures can count when you join before registration closes.'
-                  : ' Only predictions admitted after you register count for this competition.')}
+                (detail.predictionEntryPolicy === 'explicit-entry-v3'
+                  ? ' Select this competition in your slip before paying. Regular predictions and earlier unselected bets do not count, even if you join later.'
+                  : detail.predictionEntryPolicy === 'first-admitted-v2'
+                    ? ' Earlier valid predictions for these fixtures can count when you join before registration closes.'
+                    : ' Only predictions admitted after you register count for this competition.')}
             </p>
             <h3>2. Make your picks</h3>
             <p>

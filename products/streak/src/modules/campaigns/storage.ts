@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import { assertGameScope } from '../games-test/scope';
 import { CampaignError, type Campaign, type CampaignEntry } from './domain';
+import { CampaignEntryPayments } from './entry-payments';
 
 export interface CampaignAudit {
   actorId: string;
@@ -80,7 +81,14 @@ export function campaignCheckDelay(campaign: Campaign, now: number): number {
 export class PgCampaignStorage implements CampaignStorage {
   private ready?: Promise<void>;
   private readonly listeners = new Set<() => void>();
-  constructor(private readonly pool: Pool) {}
+  readonly entryPayments: CampaignEntryPayments;
+  constructor(private readonly pool: Pool) {
+    this.entryPayments = new CampaignEntryPayments(
+      pool,
+      () => this.init(),
+      () => this.changed(),
+    );
+  }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

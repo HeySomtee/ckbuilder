@@ -51,9 +51,11 @@ export function CampaignJoinDialog({
             <>
               <li>Only your first qualifying paid prediction per fixture counts.</li>
               <li>
-                {detail.predictionEntryPolicy === 'first-admitted-v2'
-                  ? 'Earlier valid predictions on these fixtures count when you join before registration closes.'
-                  : 'For this competition, only predictions admitted after registration count.'}
+                {detail.predictionEntryPolicy === 'explicit-entry-v3'
+                  ? 'Select this competition in your slip before paying. Regular predictions never use your competition entry.'
+                  : detail.predictionEntryPolicy === 'first-admitted-v2'
+                    ? 'Earlier valid predictions on these fixtures count when you join before registration closes.'
+                    : 'For this competition, only predictions admitted after registration count.'}
               </li>
               <li>Correct result: 3 points. Stake size does not affect points.</li>
               <li>Tied on points? The earlier final qualifying prediction wins.</li>

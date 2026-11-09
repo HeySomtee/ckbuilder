@@ -72,6 +72,9 @@ export interface SponsorStatus {
   signedBytes?: string;
   transactionHash: string;
   message?: string;
+  conflictHash?: string;
+  /** Cancelled before either signature was ever accepted into the immutable journal. */
+  unsignedCancellation?: true;
 }
 export interface SponsorOfferRequest {
   fixtureId: string;
@@ -795,6 +798,12 @@ export class SponsorService {
       state: entry.state,
       transactionHash: entry.offer.rawHash,
       ...(entry.signedBytes ? { signedBytes: entry.signedBytes } : {}),
+      ...(entry.state === 'cancelled' && !entry.userSignedBytes && !entry.signedBytes
+        ? { unsignedCancellation: true as const }
+        : {}),
+      ...(entry.state === 'cancelled' && entry.conflictHash
+        ? { conflictHash: entry.conflictHash }
+        : {}),
       ...(message ? { message } : {}),
     };
   }

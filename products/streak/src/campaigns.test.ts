@@ -62,9 +62,11 @@ const draft = (kind: 'predictions' | 'five' = 'predictions'): CampaignDraftInput
   ],
   rehearsal: false,
 });
-function campaign(kind: 'predictions' | 'five' = 'predictions'): Campaign {
+function campaign(kind: 'predictions' | 'five' = 'predictions', explicit = false): Campaign {
   const c = newCampaign(`test-${kind}`, actor(99), parseDraft(draft(kind)), start);
   publishCampaign(c, options, start);
+  // Retain the historical automatic-entry regression cases alongside v3 below.
+  if (kind === 'predictions' && !explicit) c.predictionEntryPolicy = 'first-admitted-v2';
   for (const id of [1, 2, 3]) joinCampaign(c, actor(id), c.termsHash, start + id * 1000);
   return c;
 }
@@ -130,6 +132,43 @@ function check(name: string, run: () => void) {
   checks++;
   console.log(`ok ${checks} - ${name}`);
 }
+check(
+  'new publications use explicit entries; regular payments never backfill or shift ties',
+  () => {
+    const c = campaign('predictions', true);
+    assert.equal(c.predictionEntryPolicy, 'explicit-entry-v3');
+    const regular = prediction(1, 0, 1),
+      selected = prediction(1, 0, 2);
+    reconcileCampaign(c, evidence([regular, selected], 'unselected', false), start + 500_000);
+    assert.equal(c.entries[0].participated, false);
+    c.entries[0].predictionSlots = [
+      {
+        fixtureId: selected.fixtureId,
+        offerId: 'synthetic-offer',
+        rawHash: selected.transactionHash,
+        outputIndex: selected.outputIndex,
+        outcome: selected.outcome,
+        principalShannons: selected.principalShannons,
+        expiresAt: start + 10_000,
+        state: 'started',
+      },
+    ];
+    reconcileCampaign(c, evidence([regular, selected], 'selected', false), start + 500_000);
+    assert.equal(c.entries[0].evidence[0].transactionHash, selected.transactionHash);
+    const tie = c.entries[0].tieBreakAt;
+    reconcileCampaign(
+      c,
+      evidence([regular, selected, prediction(1, 0, 9)], 'later-regular', false),
+      start + 500_000,
+    );
+    assert.equal(c.entries[0].tieBreakAt, tie);
+    const before = structuredClone(c.entries[0].predictionSlots);
+    reconcileCampaign(c, evidence([regular], 'reorg', false), start + 500_000);
+    assert.equal(c.entries[0].participated, false);
+    assert.deepEqual(c.entries[0].predictionSlots, before);
+    assert.deepEqual(summary(c, actor(1), start + 100_000).pendingFixtureIds, ['fixture-0']);
+  },
+);
 check('configuration validates exact money and ordered dynamic prize places', () => {
   assert.throws(() => parseDraft({ ...draft(), fixtureIds: ['same', 'same'] }), /once/);
   for (const reserved of ['__proto__', 'constructor', 'prototype'])

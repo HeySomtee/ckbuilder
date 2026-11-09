@@ -14,6 +14,8 @@ async function artworkJourney({
   width,
   engineName,
   output,
+  navigate,
+  reload,
 }) {
   const finished = campaigns[0];
   // The preceding archive journey is complete. Inspect an editable finished
@@ -26,7 +28,7 @@ async function artworkJourney({
     leaderboard: finished.leaderboard,
     awards: finished.awards,
   });
-  await page.goto(base + '/season/?view=competitions&campaign=calls');
+  await navigate(base + '/season/?view=competitions&campaign=calls');
   await page.getByRole('heading', { name: finished.name, exact: true, level: 1 }).waitFor();
   assert.equal(
     await page.locator('img[src*="/media/competitions/"]').count(),
@@ -89,7 +91,7 @@ async function artworkJourney({
     () => document.querySelector('.campaign-art-save button')?.disabled === true,
   );
   assert.notEqual(finished.artwork.icon.url, before, 'Existing artwork can be replaced');
-  await page.goto(base + '/season/?view=competitions&campaign=calls');
+  await navigate(base + '/season/?view=competitions&campaign=calls');
   await page.locator('.campaign-detail-banner img').waitFor();
   assert.equal(
     await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
@@ -100,7 +102,7 @@ async function artworkJourney({
     fullPage: true,
   });
   artworkState.broken = true;
-  await page.reload();
+  await reload();
   await page.waitForFunction(
     () =>
       document.querySelector('h1')?.textContent === 'Fixture Challenge' &&
@@ -113,7 +115,7 @@ async function artworkJourney({
   await page.getByRole('button', { name: 'Save artwork', exact: true }).click();
   await page.getByText('Competition artwork saved.', { exact: true }).waitFor();
   assert.deepEqual(finished.artwork, { icon: null, banner: null });
-  await page.reload();
+  await reload();
   assert.equal(await page.locator('img[src*="/media/competitions/"]').count(), 0);
 
   // Switching competition during the first upload must not start a second upload
@@ -154,7 +156,7 @@ async function artworkJourney({
   assert.equal(campaigns[1].artwork, undefined);
   assert.equal(await page.locator('.campaign-detail-banner').count(), 0);
 
-  await page.goto(base + '/season/?view=competitions');
+  await navigate(base + '/season/?view=competitions');
   await page.getByRole('button', { name: 'Create competition', exact: true }).click();
   await page.getByLabel('Competition name', { exact: true }).fill('Optional artwork retry');
   await page.getByLabel('Competition icon', { exact: true }).setInputFiles(image);

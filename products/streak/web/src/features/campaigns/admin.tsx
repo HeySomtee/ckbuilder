@@ -494,14 +494,34 @@ export function CampaignAdmin({
             )}
           </section>
           <div className="campaign-action-row">
+            {detail.state === 'finalizing' && (
+              <p className="campaign-muted">
+                Scores are final. Review the standings, then finish this competition to publish its
+                winners.
+              </p>
+            )}
+            {detail.state === 'live' && detail.kind === 'five' && (
+              <p className="campaign-muted">
+                Five is waiting for complete, verified gameweek scores and its correction window.
+                Registration closing does not finalize the standings.
+              </p>
+            )}
             {detail.state === 'draft' && (
               <button className="btn primary" type="button" onClick={onEdit}>
                 Continue setup <Icon name="arrow" />
               </button>
             )}
             {['live', 'finalizing'].includes(detail.state) && (
-              <button className="btn primary" type="button" disabled={pending} onClick={onFinalize}>
-                Review final standings <Icon name="arrow" />
+              <button
+                className="btn primary"
+                type="button"
+                disabled={pending || detail.scoreStatus !== 'final'}
+                onClick={onFinalize}
+              >
+                {detail.scoreStatus === 'final'
+                  ? 'Review final standings'
+                  : 'Waiting for final scores'}{' '}
+                <Icon name="arrow" />
               </button>
             )}
           </div>

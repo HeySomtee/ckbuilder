@@ -22,6 +22,7 @@ import type { Identity } from './client.ts';
 import { IndexedJournal } from './journal.ts';
 import type { Journal } from './journal.ts';
 import { loadMarket, confirmedHeader } from './discovery.ts';
+import { mapConcurrent, readSession } from './read-session.ts';
 import { canonicalConflict, parseReservation, reservationReleased } from './reservations.ts';
 import type { Reservation } from './reservations.ts';
 import { assertOwnerSigned, assertSponsorSigned } from './sponsored-journal.ts';
@@ -63,7 +64,12 @@ export type BatchRecovery = Readonly<{
   message: string;
 }>;
 export type BatchOptions = SponsoredOptions;
-type Intent = { tx: ccc.Transaction; identity: Identity; preparedAt: number };
+type Intent = {
+  tx: ccc.Transaction;
+  identity: Identity;
+  preparedAt: number;
+  selection?: import('../../../../shared/batch-wire').BatchOfferRequest['competitionSelection'];
+};
 const intents = new WeakMap<BatchReview, Intent>();
 const devnet = new WeakMap<BatchClient, { identity: DirectClient; deps: ccc.CellDep[] }>();
 const minChange = (lock: ccc.Script) =>
@@ -114,6 +120,9 @@ export class BatchClient {
   private readonly base: DirectClient;
   private readonly now: () => number;
   private readonly lock: NonNullable<BatchOptions['exclusive']>;
+  private unsignedReview?: BatchReview;
+  private unsignedOffer?: { offerId: string; rawHash: string; requestId: string };
+  private readonly conflictLookups = new Map<string, { until: number; hash?: string }>();
   constructor(
     signer: ccc.Signer,
     transport: BatchTransport,
@@ -176,7 +185,13 @@ export class BatchClient {
         'This review expired or a match is too close to kickoff. No new payment was submitted.',
       );
   }
-  async prepare(raw: readonly BatchPick[]): Promise<BatchReview> {
+  async prepare(
+    raw: readonly BatchPick[],
+    competitionSelection?: import('../../../../shared/batch-wire').BatchOfferRequest['competitionSelection'],
+    waiting?: import('../../../../shared/batch-wire').BatchWaiting,
+  ): Promise<BatchReview> {
+    const selection = structuredClone(competitionSelection);
+    if (this.unsignedOffer) await this.releaseUnsigned();
     if (
       raw.length < 1 ||
       raw.length > 8 ||
@@ -236,62 +251,111 @@ export class BatchClient {
       throw Error(
         'Insufficient unreserved CKB for this slip, 321 CKB storage per prediction, fee and wallet change.',
       );
-    const offer = await parseBatchOffer(
-      await this.transport.offer({
-        requestId: crypto.randomUUID(),
+    const requestId = crypto.randomUUID();
+    const offered = await this.transport.offer(
+      {
+        requestId,
         ownerAddress: identity.address,
         userInputs: selected,
+        ...(selection ? { competitionSelection: structuredClone(selection) } : {}),
         picks: picks.map((pick) => ({
           fixtureId: pick.fixture.fixtureId,
           termsHash: pick.fixture.termsHash,
           outcome: pick.outcome,
           principalShannons: pick.principal.toString(),
         })),
-      }),
+      },
+      waiting
+        ? {
+            ...waiting,
+            beforeAttempt: async () => {
+              await waiting.beforeAttempt();
+              await this.time(picks.map((pick) => pick.fixture));
+            },
+          }
+        : undefined,
     );
-    if (
-      offer.lines.length !== picks.length ||
-      !owner.eq(offer.ownerLock) ||
-      JSON.stringify(offer.inputs.slice(1, 1 + selected.length).map((input) => input.outPoint)) !==
-        JSON.stringify(selected) ||
-      offer.userInputIndexes.length !== selected.length
-    )
-      throw Error('The offer changed the complete slip or its funding inputs.');
-    for (const [index, pick] of picks.entries()) {
-      const line = offer.lines[index];
-      sameFixture(pick.fixture, line.fixture);
-      if (line.outcome !== pick.outcome || line.principalShannons !== pick.principal.toString())
-        throw Error('A prediction changed while preparing payment.');
-      if (pick.fixture.descriptor) assertSameTerms(pick.fixture.descriptor, line.descriptor);
+    if (/^[0-9a-f-]{36}$/.test(offered.offerId) && /^0x[0-9a-f]{64}$/.test(offered.rawHash))
+      this.unsignedOffer = { offerId: offered.offerId, rawHash: offered.rawHash, requestId };
+    try {
+      waiting?.signal.throwIfAborted();
+      await waiting?.beforeAttempt();
+      const offer = await parseBatchOffer(offered);
+      if (
+        offer.lines.length !== picks.length ||
+        !owner.eq(offer.ownerLock) ||
+        JSON.stringify(
+          offer.inputs.slice(1, 1 + selected.length).map((input) => input.outPoint),
+        ) !== JSON.stringify(selected) ||
+        offer.userInputIndexes.length !== selected.length
+      )
+        throw Error('The offer changed the complete slip or its funding inputs.');
+      for (const [index, pick] of picks.entries()) {
+        const line = offer.lines[index];
+        sameFixture(pick.fixture, line.fixture);
+        if (line.outcome !== pick.outcome || line.principalShannons !== pick.principal.toString())
+          throw Error('A prediction changed while preparing payment.');
+        if (pick.fixture.descriptor) assertSameTerms(pick.fixture.descriptor, line.descriptor);
+      }
+      const tx = await this.verify(offer),
+        prepared = await this.signer.prepareTransaction(tx.clone());
+      if (prepared.toHex() !== tx.toHex())
+        throw Error('This wallet needs a different transaction format. Nothing was signed.');
+      await this.time(
+        picks.map((pick) => pick.fixture),
+        offer.expiresAt,
+      );
+      waiting?.signal.throwIfAborted();
+      await waiting?.beforeAttempt();
+      const review: BatchReview = Object.freeze({
+        kind: 'batch-deposit',
+        offer,
+        ownerHash: identity.ownerHash,
+        hash: offer.rawHash,
+        principalShannons: offer.principalShannons,
+        storageShannons: offer.storageShannons,
+        feeShannons: offer.feeShannons,
+        totalShannons: (
+          BigInt(offer.principalShannons) +
+          BigInt(offer.storageShannons) +
+          BigInt(offer.feeShannons)
+        ).toString(),
+        sponsorReserveShannons: offer.reserveShannons,
+        expiresAt: Math.min(offer.expiresAt, this.now() + 60_000),
+      });
+      intents.set(review, { tx: tx.clone(), identity, preparedAt: this.now(), selection });
+      this.unsignedReview = review;
+      return review;
+    } catch (error) {
+      try {
+        await this.releaseUnsigned();
+      } catch {
+        console.warn(
+          'Unsigned competition review could not be released; retry or expiry will recover it.',
+        );
+      }
+      throw error;
     }
-    const tx = await this.verify(offer),
-      prepared = await this.signer.prepareTransaction(tx.clone());
-    if (prepared.toHex() !== tx.toHex())
-      throw Error('This wallet needs a different transaction format. Nothing was signed.');
-    await this.time(
-      picks.map((pick) => pick.fixture),
-      offer.expiresAt,
-    );
-    const review: BatchReview = Object.freeze({
-      kind: 'batch-deposit',
-      offer,
-      ownerHash: identity.ownerHash,
-      hash: offer.rawHash,
-      principalShannons: offer.principalShannons,
-      storageShannons: offer.storageShannons,
-      feeShannons: offer.feeShannons,
-      totalShannons: (
-        BigInt(offer.principalShannons) +
-        BigInt(offer.storageShannons) +
-        BigInt(offer.feeShannons)
-      ).toString(),
-      sponsorReserveShannons: offer.reserveShannons,
-      expiresAt: Math.min(offer.expiresAt, this.now() + 60_000),
-    });
-    intents.set(review, { tx: tx.clone(), identity, preparedAt: this.now() });
-    return review;
+  }
+  async releaseReview(review: BatchReview): Promise<void> {
+    if (this.unsignedReview !== review) return;
+    await this.releaseUnsigned();
+  }
+  private async releaseUnsigned(): Promise<void> {
+    if (!this.unsignedOffer) return;
+    const { offerId, rawHash } = this.unsignedOffer;
+    if (this.transport.release && !(await this.transport.release({ offerId, rawHash })))
+      throw Error(
+        'This payment has already started. Check its saved status before changing entries.',
+      );
+    await this.transport.cancelReview?.(this.unsignedOffer.requestId);
+    if (this.unsignedReview) intents.delete(this.unsignedReview);
+    this.unsignedReview = undefined;
+    this.unsignedOffer = undefined;
   }
   private async verify(offer: BatchOffer): Promise<ccc.Transaction> {
+    // One observation only. A later signing check creates a new session and fresh reads.
+    const client = readSession(this.signer.client);
     const tx = ccc.Transaction.fromBytes(offer.unsignedBytes),
       owner = ccc.Script.from(offer.ownerLock),
       sponsor = ccc.Script.from(offer.sponsorLock);
@@ -319,9 +383,8 @@ export class BatchClient {
     }
     if (tx.witnesses.slice(2).some((value) => value !== '0x'))
       throw Error('Unexpected additional signing group.');
-    const live: ccc.Cell[] = [];
-    for (const [index, input] of tx.inputs.entries()) {
-      const cell = await this.signer.client.getCellLiveNoCache(input.previousOutput, true, true),
+    const live = await mapConcurrent(tx.inputs, 4, async (input, index) => {
+      const cell = await client.getCellLiveNoCache(input.previousOutput, true, true),
         snapshot = offer.inputs[index];
       if (
         !cell ||
@@ -341,8 +404,15 @@ export class BatchClient {
           !cell.cellOutput.lock.eq(index === 0 ? sponsor : owner))
       )
         throw Error('Funding inputs must be plain CKB controlled by their exact contributor.');
-      live.push(cell);
-    }
+      return cell;
+    });
+    const markets = new Map(
+      await mapConcurrent(deposits, 2, async (line) => {
+        const market = await loadMarket(client, line.descriptor as Descriptor);
+        const header = await confirmedHeader(client, live[line.shardInputIndex!].outPoint.txHash);
+        return [line.fixture.fixtureId, { market, header }] as const;
+      }),
+    );
     const expectedDeps = ccc.Transaction.from({ cellDeps: this.dependencies() }),
       headers: string[] = [];
     let depositIndex = 1 + owners;
@@ -396,8 +466,8 @@ export class BatchClient {
           throw Error('Existing market input order changed.');
         const selected = live[line.shardInputIndex],
           state = checkCell(selected, line.descriptor as Descriptor);
-        const market = await loadMarket(this.signer.client, line.descriptor as Descriptor),
-          control = market.find((row) => row.state.kind === 'market' && row.state.phase === 0);
+        const { market, header } = markets.get(line.fixture.fixtureId)!;
+        const control = market.find((row) => row.state.kind === 'market' && row.state.phase === 0);
         if (
           !control ||
           !control.cell.outPoint.eq(line.controlDep) ||
@@ -409,7 +479,6 @@ export class BatchClient {
           throw Error(
             'The selected market or prediction slot changed. Review the whole slip again.',
           );
-        const header = await confirmedHeader(this.signer.client, selected.outPoint.txHash);
         if (
           !header ||
           header.hash !== line.headerHash ||
@@ -484,6 +553,21 @@ export class BatchClient {
         );
       const savedPicks = parseBatchSourcePicks(sourcePicks, review.offer);
       if (
+        intent.selection &&
+        (!savedPicks ||
+          savedPicks.some((pick) => {
+            const selected =
+              intent.selection!.lines.find((line) => line.fixtureId === pick.matchId)
+                ?.campaignIds ?? [];
+            return (
+              (pick.competition && pick.competition.accountId !== intent.selection!.accountId) ||
+              JSON.stringify([...(pick.competition?.ids ?? [])].sort()) !==
+                JSON.stringify([...selected].sort())
+            );
+          }))
+      )
+        throw Error('Competition choices changed after review. Review the slip again.');
+      if (
         new Set(currentFixtures.map((fixture) => fixture.fixtureId)).size !== currentFixtures.length
       )
         throw Error('Duplicate current fixture identities.');
@@ -515,6 +599,9 @@ export class BatchClient {
       await this.verify(review.offer);
       onStage?.('wallet');
       const signed = await this.signer.signTransaction(intent.tx.clone());
+      // Wallet rejection preserves the unsigned handle; a returned signature uses recovery.
+      this.unsignedReview = undefined;
+      this.unsignedOffer = undefined;
       onStage?.('saving');
       assertOwnerSigned(intent.tx, signed);
       if (signed.estimateFee(1000n) > BigInt(review.feeShannons))
@@ -640,6 +727,55 @@ export class BatchClient {
     const identity = await this.identity();
     return this.lock(`streak-direct:${identity.ownerHash}`, () => this.recoverUnlocked(raw));
   }
+  /** Old unsigned offers can outlive a spent sponsor cell without reaching server recovery.
+   * Search one bounded page near its creation, at most once a minute per saved payment.
+   * A cached hash is only a hint; the caller always proves it afresh before release. */
+  private async expiredSponsorConflict(record: BatchRecord): Promise<string | undefined> {
+    const cached = this.conflictLookups.get(record.hash);
+    if (cached && cached.until > this.now()) return cached.hash;
+    if (this.conflictLookups.size >= 32)
+      this.conflictLookups.delete(this.conflictLookups.keys().next().value!);
+    const lookup: { until: number; hash?: string } = { until: this.now() + 60_000 };
+    this.conflictLookups.set(record.hash, lookup);
+    const client = this.signer.client;
+    const point = record.offer.sponsorInput;
+    if (await client.getCellLiveNoCache(point, false, true)) return;
+    const creation = await client.getTransactionNoCache(point.txHash);
+    if (
+      creation?.status !== 'committed' ||
+      creation.blockNumber === undefined ||
+      creation.transaction.hash() !== point.txHash
+    )
+      return;
+    const tip = await client.getTipHeader();
+    if (tip.number < creation.blockNumber) return;
+    const page = await client.findTransactionsPaged(
+      {
+        script: record.offer.sponsorLock,
+        scriptType: 'lock',
+        scriptSearchMode: 'exact',
+        groupByTransaction: false,
+        filter: { blockRange: [creation.blockNumber, tip.number + 1n] },
+      },
+      'asc',
+      32,
+    );
+    if (page.transactions.length > 32) throw Error('Conflict history exceeds its requested bound.');
+    const hashes = [
+      ...new Set(
+        page.transactions
+          .filter((row) => row.isInput && row.txHash !== record.hash)
+          .map((row) => row.txHash),
+      ),
+    ].slice(0, 32);
+    for (const hash of hashes) {
+      const proof = await canonicalConflict(client, record, hash);
+      if (proof && (await client.getTipHeader()).number >= BigInt(proof.blockNumber) + 3n) {
+        lookup.hash = hash;
+        return hash;
+      }
+    }
+  }
   private async recoverUnlocked(raw: BatchRecord): Promise<BatchRecovery> {
     let record = await this.saved(raw);
     if (record.status === 'discarded')
@@ -680,7 +816,7 @@ export class BatchClient {
           confirmations: 0,
           inputsLive: false,
           message:
-            'A confirmed conflicting spend invalidates this transaction. A fresh review may use available inputs.',
+            'This payment did not go through. Return to your slip to review available picks. Your saved payment record is kept for reference.',
         };
       }
       record = { ...record, status: 'unknown' };
@@ -728,12 +864,24 @@ export class BatchClient {
       }
     } else {
       try {
-        record = await this.acceptStatus(
-          record,
-          await parseBatchStatus(
-            await this.transport.status({ offerId: record.offer.offerId, rawHash: record.hash }),
-          ),
+        const sponsorStatus = await parseBatchStatus(
+          await this.transport.status({ offerId: record.offer.offerId, rawHash: record.hash }),
         );
+        record = await this.acceptStatus(record, sponsorStatus);
+        // The operator may have already found the spend. Its hash is only a hint:
+        // independently prove exact shared input, canonical block and four confirmations.
+        const conflictHint =
+          sponsorStatus.state === 'cancelled' && sponsorStatus.conflictHash
+            ? sponsorStatus.conflictHash
+            : !sponsorStatus.signedBytes && ['expired', 'cancelled'].includes(sponsorStatus.state)
+              ? await this.expiredSponsorConflict(record)
+              : undefined;
+        if (conflictHint) {
+          const proof = await canonicalConflict(client, record, conflictHint);
+          if (proof && (await client.getTipHeader()).number >= BigInt(proof.blockNumber) + 3n) {
+            return await this.resolveConflictUnlocked(record, conflictHint);
+          }
+        }
       } catch {
         message =
           'Sponsorship status is unavailable. Your exact signed prediction remains saved and its inputs stay reserved.';
@@ -753,7 +901,7 @@ export class BatchClient {
       if (!inputsLive && status !== 'reorg') {
         status = 'conflict';
         message =
-          'An input is spent but this transaction is unconfirmed. Keep the original record and verify the conflicting transaction.';
+          'We could not confirm this payment yet. We are checking a possible conflicting transaction. Your saved payment is protected; do not pay for these picks again until it is resolved.';
       }
     }
     record = {
@@ -778,49 +926,57 @@ export class BatchClient {
   }
   async resolveConflict(raw: BatchRecord, spendingHash: string): Promise<BatchRecovery> {
     const identity = await this.identity();
-    return this.lock(`streak-direct:${identity.ownerHash}`, async () => {
-      const record = await this.saved(raw),
-        original = await this.signer.client.getTransactionNoCache(record.hash);
-      if (
-        original?.status === 'committed' &&
-        original.blockNumber !== undefined &&
-        original.blockHash &&
-        (await this.signer.client.getHeaderByNumberNoCache(original.blockNumber))?.hash ===
-          original.blockHash
-      )
-        throw Error('The original transaction is committed. Follow its existing position instead.');
-      const proof = await canonicalConflict(
-        this.signer.client,
-        record,
-        hex(spendingHash.toLowerCase(), 32),
+    return this.lock(`streak-direct:${identity.ownerHash}`, async () =>
+      this.resolveConflictUnlocked(await this.saved(raw), spendingHash),
+    );
+  }
+  private async resolveConflictUnlocked(
+    record: BatchRecord,
+    spendingHash: string,
+  ): Promise<BatchRecovery> {
+    const original = await this.signer.client.getTransactionNoCache(record.hash);
+    if (original && original.transaction.hash() !== record.hash)
+      throw Error('RPC transaction identity mismatch.');
+    if (
+      original?.status === 'committed' &&
+      original.blockNumber !== undefined &&
+      original.blockHash &&
+      (await this.signer.client.getHeaderByNumberNoCache(original.blockNumber))?.hash ===
+        original.blockHash
+    )
+      throw Error('The original transaction is committed. Follow its existing position instead.');
+    const proof = await canonicalConflict(
+      this.signer.client,
+      record,
+      hex(spendingHash.toLowerCase(), 32),
+    );
+    if (!proof)
+      throw Error(
+        'The supplied hash does not prove a conflicting spend with three canonical confirmations.',
       );
-      if (!proof)
+    if (this.transport.resolve) {
+      if ((await this.signer.client.getTipHeader()).number < BigInt(proof.blockNumber) + 3n)
         throw Error(
-          'The supplied hash does not prove a conflicting spend with three canonical confirmations.',
+          'Wait for four canonical confirmations before releasing the sponsorship reservation.',
         );
-      if (this.transport.resolve) {
-        if ((await this.signer.client.getTipHeader()).number < BigInt(proof.blockNumber) + 3n)
-          throw Error(
-            'Wait for four canonical confirmations before releasing the sponsorship reservation.',
-          );
-        const status = await parseBatchStatus(
-          await this.transport.resolve({
-            offerId: record.offer.offerId,
-            rawHash: record.hash,
-            conflictingTxHash: proof.hash,
-          }),
+      const status = await parseBatchStatus(
+        await this.transport.resolve({
+          offerId: record.offer.offerId,
+          rawHash: record.hash,
+          conflictingTxHash: proof.hash,
+        }),
+      );
+      if (
+        JSON.stringify(status.offer) !== JSON.stringify(record.offer) ||
+        status.transactionHash !== record.hash ||
+        status.state !== 'cancelled'
+      )
+        throw Error(
+          'The operator returned a different recovery identity. Keep the original input reservations.',
         );
-        if (
-          JSON.stringify(status.offer) !== JSON.stringify(record.offer) ||
-          status.transactionHash !== record.hash
-        )
-          throw Error(
-            'The operator returned a different recovery identity. Keep the original input reservations.',
-          );
-      }
-      await this.journal.put({ ...record, status: 'resolved', conflictProof: proof });
-      return this.recoverUnlocked(record);
-    });
+    }
+    await this.journal.put({ ...record, status: 'resolved', conflictProof: proof });
+    return this.recoverUnlocked(record);
   }
   async discardUnsubmitted(raw: BatchRecord): Promise<BatchRecovery> {
     const identity = await this.identity();

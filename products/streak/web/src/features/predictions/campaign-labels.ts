@@ -6,6 +6,7 @@ import type { SlipCampaignLabel } from './slip-source';
 export function slipCampaignLabels(
   picks: readonly Pick[],
   campaigns: readonly CampaignSummary[],
+  accountId?: string,
 ): SlipCampaignLabel[] {
   return campaigns.flatMap((campaign) => {
     if (
@@ -16,7 +17,14 @@ export function slipCampaignLabels(
       return [];
     const fixtures = new Set(campaign.joinedFixtureIds ?? []);
     const counted = new Set(campaign.qualifyingFixtureIds ?? []);
-    const matches = picks.filter((pick) => fixtures.has(pick.matchId));
+    const matches = picks.filter(
+      (pick) =>
+        fixtures.has(pick.matchId) &&
+        !counted.has(pick.matchId) &&
+        (campaign.predictionEntryPolicy !== 'explicit-entry-v3' ||
+          (pick.competition?.accountId === accountId &&
+            pick.competition?.ids.includes(campaign.id))),
+    );
     return matches.length
       ? [
           {

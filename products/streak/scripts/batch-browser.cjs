@@ -98,11 +98,18 @@ async function main() {
         await context.addInitScript(() => {
           const timeouts = new WeakMap(),
             originalTimeout = AbortSignal.timeout.bind(AbortSignal),
+            originalAny = AbortSignal.any.bind(AbortSignal),
             originalFetch = window.fetch.bind(window);
           window.syntheticTimeouts = [];
           AbortSignal.timeout = (ms) => {
             const signal = originalTimeout(ms);
             timeouts.set(signal, ms);
+            return signal;
+          };
+          AbortSignal.any = (signals) => {
+            const signal = originalAny(signals);
+            const deadlines = signals.map((child) => timeouts.get(child)).filter(Number.isFinite);
+            if (deadlines.length) timeouts.set(signal, Math.min(...deadlines));
             return signal;
           };
           window.fetch = (input, init) => {
@@ -163,6 +170,21 @@ async function main() {
           if (url.pathname === '/api/direct/batch/offer') {
             offers++;
             return json(await chain.prepare(req.postDataJSON()));
+          }
+          if (url.pathname === '/api/direct/batch/release') {
+            const identity = req.postDataJSON();
+            const saved = chain.status(identity);
+            assert.equal(saved.offer.rawHash, identity.rawHash);
+            assert.equal(
+              saved.state,
+              'offered',
+              'Only unsigned test reviews can release their entry metadata.',
+            );
+            return json({ released: true });
+          }
+          if (url.pathname === '/api/direct/batch/cancel-review') {
+            assert.match(req.postDataJSON().requestId, /^[0-9a-f-]{36}$/);
+            return json({ cancelled: true });
           }
           if (url.pathname === '/api/direct/batch/status')
             return json(

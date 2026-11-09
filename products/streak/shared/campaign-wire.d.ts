@@ -1,6 +1,7 @@
 /** Public campaign transport. Chain evidence, wallet links and private squads stay server-side. */
 export type CampaignKind = 'predictions' | 'five';
-export type CampaignPredictionEntryPolicy = 'after-registration-v1' | 'first-admitted-v2';
+export type CampaignPredictionEntryPolicy =
+  'after-registration-v1' | 'first-admitted-v2' | 'explicit-entry-v3';
 export type CampaignState = 'draft' | 'open' | 'live' | 'finalizing' | 'finished' | 'deleted';
 export type CampaignArtworkSlot = 'icon' | 'banner';
 export interface CampaignArtworkAsset {
@@ -104,6 +105,8 @@ export interface CampaignSummary {
   joinedFixtureIds?: string[];
   /** Subset already represented by a verified qualifying call for this entrant. */
   qualifyingFixtureIds?: string[];
+  predictionEntryPolicy?: CampaignPredictionEntryPolicy | null;
+  pendingFixtureIds?: string[];
 }
 export interface CampaignOwnEntry {
   publicId: string;

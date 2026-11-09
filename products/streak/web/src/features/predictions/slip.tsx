@@ -3,6 +3,8 @@ import { useQueries } from '@tanstack/react-query';
 import { getPublicMarket } from './api';
 import { DRAFT_KEY, displayShannons, totalShannons } from './draft';
 import type { DraftStore } from './draft';
+import type { CampaignSummary } from '../../../../shared/campaign-wire';
+import { CompetitionChoice } from './competition-choice';
 import type { SlipCampaignLabel } from './slip-source';
 import type { Account } from '../account/api';
 import { useNow } from '../../lib/use-now';
@@ -29,7 +31,10 @@ export function PredictionSlip({
   signInError,
   onAddMatches,
   campaignLabels = [],
-  onOpenCampaign,
+  availableCampaigns = [],
+  campaignsReady = true,
+  campaignsLoading = false,
+  onRetryCampaigns,
 }: {
   store: DraftStore;
   open: boolean;
@@ -45,6 +50,10 @@ export function PredictionSlip({
   onAddMatches?: () => void;
   campaignLabels?: readonly SlipCampaignLabel[];
   onOpenCampaign?: (id: string) => void;
+  availableCampaigns?: readonly CampaignSummary[];
+  campaignsReady?: boolean;
+  campaignsLoading?: boolean;
+  onRetryCampaigns?: () => void;
 }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { draft } = snapshot;
@@ -354,14 +363,6 @@ export function PredictionSlip({
               const invalidAmount = totalShannons([pick]) === null;
               const errorId = `pick-errors-${pick.lineId}`;
               const allowedPresets = ['100', '200', '500'];
-              const pickCampaigns = campaigns.filter((campaign) =>
-                campaign.lineIds.includes(pick.lineId),
-              );
-              const alreadyEntered =
-                pickCampaigns.length > 0 &&
-                pickCampaigns.every((campaign) =>
-                  campaign.alreadyCountedLineIds?.includes(pick.lineId),
-                );
               return (
                 <article key={pick.lineId} className="slip-pick">
                   <div className="slip-pick-heading">
@@ -413,34 +414,17 @@ export function PredictionSlip({
                       </svg>
                     </button>
                   </div>
-                  {pickCampaigns.length > 0 ? (
-                    <div className="slip-pick-campaigns" aria-label={`Competitions for ${label}`}>
-                      {pickCampaigns.map((campaign) => (
-                        <button
-                          type="button"
-                          key={campaign.id}
-                          className="slip-pick-campaign"
-                          disabled={!onOpenCampaign}
-                          title={campaign.name}
-                          aria-label={`Open competition: ${campaign.name}`}
-                          onClick={() => {
-                            dismiss();
-                            onOpenCampaign?.(campaign.id);
-                          }}
-                        >
-                          <span>{campaign.name}</span>
-                          {campaign.alreadyCountedLineIds?.includes(pick.lineId) && (
-                            <small>Already entered</small>
-                          )}
-                        </button>
-                      ))}
-                      {alreadyEntered && (
-                        <small className="slip-regular-label">Normal prediction</small>
-                      )}
-                    </div>
-                  ) : campaigns.length > 0 ? (
-                    <small className="slip-regular-label">Regular prediction</small>
-                  ) : null}
+                  <CompetitionChoice
+                    pick={pick}
+                    campaigns={availableCampaigns}
+                    ready={campaignsReady}
+                    loading={campaignsLoading}
+                    onRetry={onRetryCampaigns}
+                    accountId={account?.id}
+                    store={store}
+                    disabled={editingDisabled}
+                    label={label}
+                  />
                   {query.isPending && (
                     <p className="slip-loading" role="status">
                       <CellLoader variant="wave" />
@@ -535,6 +519,7 @@ export function PredictionSlip({
           >
             {checkoutOpened && (
               <BatchCheckout
+                campaigns={availableCampaigns}
                 onDismiss={dismiss}
                 onOpen={onOpen}
                 store={store}

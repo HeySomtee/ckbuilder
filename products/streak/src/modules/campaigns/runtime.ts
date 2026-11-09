@@ -21,6 +21,22 @@ let storage: PgCampaignStorage | undefined;
 let reconciling: Promise<void> | undefined;
 let lastDrainFailed = false;
 
+export function campaignEntryPayments() {
+  campaignService();
+  if (!storage) throw new CampaignError('Competition payment storage is unavailable.', 503);
+  return storage.entryPayments;
+}
+
+export function campaignPaymentsEnabled(): boolean {
+  return (
+    !!(
+      process.env.STREAK_CAMPAIGNS_DATABASE_URL ??
+      process.env.STREAK_FIVE_DATABASE_URL ??
+      process.env.STREAK_SURVIVOR_DATABASE_URL
+    ) || pgEnabled()
+  );
+}
+
 /** Uses the same real fixture catalogue and Five rounds as the ordinary game pages. */
 export async function campaignOptions(): Promise<CampaignOptions> {
   const now = Date.now();

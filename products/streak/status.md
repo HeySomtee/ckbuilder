@@ -1,5 +1,61 @@
 # Streak status
 
+9 November publication authorized: the release combines Home carousels, explicit
+competition entry, queued payment review, faster verification and stale-payment
+recovery. The tested runtime hashes are being revalidated for commit and push;
+hosted deployment and real-wallet acceptance remain separate. No private drafts
+or owner acceptance-checklist edits belong to this release.
+
+9 November [queued payment reviews](docs/delivery/queued-payment-reviews.md), bounded
+parallel verification and automatic stale-offer recovery are verified locally.
+The owner accepted graceful waiting as the immediate
+alternative to multi-payment concurrency. This retains the shared funding guard;
+it does not implement parallel on-chain payments. Hosted rehearsals were inspected
+read-only: Predictions awaits admin finalization; Five still has provisional scores
+and a published correction window ending at 23:30 Lagos on 9 November. No production
+competition was changed. Earlier Home and explicit-entry work remains unpublished.
+
+The reported stuck transaction never received either signature on the server.
+Public chain evidence identifies its spent sponsor input while both owner inputs
+remain live. Automatic recovery now covers expired/cancelled unsigned offers;
+competition slots release only on operator-confirmed never-accepted cancellation.
+Focused recovery, disposable PostgreSQL and responsive Chromium/WebKit checkout
+checks pass. Independent final review found no concrete blocker. The final major
+run passed 87 stages before a Windows WSL permission failure; the remaining 11
+contract/local-chain stages passed with WSL access at 10:44 UTC. All 98 required
+stages have passing evidence on the same runtime tree, across those two runs.
+No successful uninterrupted major run, push or deployment is claimed.
+
+7 November [explicit competition entry](docs/delivery/competition-entry-selection.md)
+is implemented locally after preview approval. New competitions use explicit
+per-pick choices; published automatic-entry rules are preserved. Durable intent,
+reservation, canonical scoring and recovery checks pass in focused isolated tests.
+Responsive browser checks, full checkout and independent final review pass.
+All 96 stages of the final major gate passed on 7 November at 20:14 UTC, including
+signed disposable-chain lifecycles. Runtime/test hashes match the archived
+`entry-runtime-manifest.json`; the owner's checklist is preserved. No commit, push
+or deployment. The earlier preview-only entry below is historical.
+
+7 November owner deferred the shared sponsor-funding bottleneck to the
+[post-grant payment refactor](docs/architecture/concurrent-payments.md#post-grant-priority-pending-payments-blocking-other-users-7-november).
+Pending confirmation can still block another user's prediction. Independent
+funding inputs and per-cell reservations are planned, not implemented; the current
+safety guard remains in place.
+
+7 November [competition entry preview](design/competition-entry-review/README.md)
+is ready locally on port 4205. It supports reviewing regular, multiple-competition,
+used and pending-entry states. Six isolated Chromium/WebKit journeys passed.
+This is a proposal; existing payment and scoring rules remain in place.
+
+7 November [Home carousels](docs/delivery/home-products.md) are implemented
+locally. Home replaces the visible Overview label. Explore Streak shows Predictions,
+Five and Survivor; a separate row shows active competitions or a coming-soon state.
+Both retain existing routes. Home reuses the
+account-scoped list without another polling loop. Responsive browser checks and
+all 96 stages of the required major gate passed locally. Not pushed or deployed.
+The shared sponsor-funding concurrency restriction remains unchanged;
+competition-entry selection does not fix payment concurrency.
+
 7 November banner refinement is implemented locally: titles, details and prizes
 overlay dimmed imagery instead of following a separate image block. Missing
 banners use the owner-selected Streak logo, without changing saved artwork.

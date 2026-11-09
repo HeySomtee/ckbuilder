@@ -157,6 +157,16 @@ function summary(v: unknown): CampaignSummary {
     prizeTotalShannons: amount(x.prizeTotalShannons),
     prizePlaces: integer(x.prizePlaces),
     joined: boolean(x.joined),
+    predictionEntryPolicy:
+      x.predictionEntryPolicy == null
+        ? null
+        : choice(x.predictionEntryPolicy, [
+            'after-registration-v1',
+            'first-admitted-v2',
+            'explicit-entry-v3',
+          ] as const),
+    pendingFixtureIds:
+      x.pendingFixtureIds === undefined ? [] : list(x.pendingFixtureIds).map((id) => string(id)),
     artwork: {
       icon: artworkAsset(isRecord(x.artwork) ? x.artwork.icon : null),
       banner: artworkAsset(isRecord(x.artwork) ? x.artwork.banner : null),
@@ -225,6 +235,7 @@ function detail(v: unknown): CampaignDetail {
           : choice(x.predictionEntryPolicy, [
               'after-registration-v1',
               'first-admitted-v2',
+              'explicit-entry-v3',
             ] as const),
     fixtures: list(x.fixtures).map(fixture),
     gameweek: x.gameweek === null ? null : gameweek(x.gameweek),

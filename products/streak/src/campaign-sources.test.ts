@@ -309,6 +309,8 @@ async function main() {
     positions: [position(99)],
   };
   const historicalCampaign = campaign();
+  // Published v2 rules allow pre-registration history; new v3 entries require saved intent.
+  historicalCampaign.predictionEntryPolicy = 'first-admitted-v2';
   joinCampaign(historicalCampaign, actor, historicalCampaign.termsHash, now + 10_000);
   const historicalAdapter = createCampaignSources({
     activity: () => ({

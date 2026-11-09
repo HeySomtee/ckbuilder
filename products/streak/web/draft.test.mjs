@@ -11,6 +11,31 @@ function storage() {
   const data = new Map();
   return { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
 }
+test('Competition choices survive edits and reload; submitted snapshots cannot erase later choices', () => {
+  const memory = storage(),
+    store = new DraftStore(memory);
+  store.select('market', 'fixture', 'home');
+  const id = store.getSnapshot().draft.picks[0].lineId;
+  store.competitions(id, 'alice', ['cup-b', 'cup-a']);
+  store.select('market', 'fixture', 'away');
+  const saved = new DraftStore(memory).getSnapshot().draft.picks;
+  assert.deepEqual(saved[0].competition, { accountId: 'alice', ids: ['cup-a', 'cup-b'] });
+  store.competitions(id, 'alice', []);
+  store.retireSubmitted(saved);
+  assert.equal(store.getSnapshot().draft.picks.length, 1);
+  assert.deepEqual(new DraftStore(memory).getSnapshot().draft.picks[0].competition.ids, []);
+  assert.throws(
+    () =>
+      parseDraft(
+        JSON.stringify({
+          v: 1,
+          revision: 'test',
+          picks: [{ ...saved[0], competition: { accountId: 'alice', ids: ['cup', 'cup'] } }],
+        }),
+      ),
+    /competition choices/,
+  );
+});
 test('Submitted picks retire atomically without deleting later edits or another tab draft', () => {
   const memory = storage(),
     store = new DraftStore(memory);

@@ -101,6 +101,7 @@ async function main() {
           sponsorOffline = false;
         let signedIn = false,
           authAttempts = 0,
+          releaseVerification,
           failNonce = true;
         const poolReady = new Promise((resolve) => {
           releasePools = resolve;
@@ -207,7 +208,8 @@ async function main() {
             authAttempts++;
             if (authAttempts === 1)
               return json({ error: 'Synthetic sign-in could not be verified.' }, 400);
-            await new Promise((resolve) => setTimeout(resolve, 350));
+            if (authAttempts === 3) await new Promise((resolve) => { releaseVerification = resolve; });
+            else await new Promise((resolve) => setTimeout(resolve, 350));
             // A successful verify response alone cannot establish a usable session.
             signedIn = authAttempts >= 3;
             return json({ ok: true });
@@ -346,11 +348,16 @@ async function main() {
                 {
                   error:
                     'Sponsor queue is busy. Your picks and any saved payment are safe. Try again shortly.',
+                  reviewWait: { position: 2 },
                 },
                 429,
               );
             }
             return json(await chain.prepare(req.postDataJSON()));
+          }
+          if (url.pathname === '/api/direct/batch/cancel-review') {
+            assert.match(req.postDataJSON().requestId, /^[0-9a-f-]{36}$/);
+            return json({ cancelled: true });
           }
           if (url.pathname === '/api/direct/batch/submit') {
             await new Promise((resolve) => {
@@ -402,12 +409,13 @@ async function main() {
           await page.locator('ccc-connector').waitFor({ state: 'detached' });
           assert.equal(page.url(), before, 'Reconnect stays on the current page.');
         }
-        async function pay(count) {
+        async function pay(count, reviewStarted = false) {
           console.log(`Starting payment ${name} ${width} ${count}`);
           const review = page.getByRole('button', {
             name: count === 1 ? 'Review payment' : 'Review all predictions',
             exact: true,
           });
+          if (!reviewStarted) {
           await page
             .waitForFunction(() => {
               const button = document.querySelector('.batch-checkout > button.review-button');
@@ -418,6 +426,7 @@ async function main() {
               throw error;
             });
           await review.click();
+          }
           await page
             .getByRole('heading', {
               name: `One payment. ${count} ${count === 1 ? 'prediction' : 'predictions'}.`,
@@ -445,6 +454,11 @@ async function main() {
             list: el.querySelector('#slip-picks-panel').getBoundingClientRect().height,
           }));
           assert.ok(dimensions.footer < 220 && dimensions.list > 300, JSON.stringify(dimensions));
+          assert.equal(
+            await page.locator('#slip-picks-panel .batch-entry-review li').count(),
+            count,
+            'Reviewed entry choices stay in the scrollable picks area, outside the fixed footer.',
+          );
           assert.equal(await page.locator('#slip-picks-panel .batch-transaction').count(), 0);
           await page.screenshot({
             path: path.join(evidence, `compact-slip-${name}-${width}-${count}.png`),
@@ -819,6 +833,8 @@ async function main() {
         );
         await page.getByRole('button', { name: 'Sign in to continue', exact: true }).click();
         await slip.getByRole('button', { name: /Verifying sign-in/ }).waitFor();
+        assert.ok(releaseVerification, 'The verification response stays held while its progress is asserted.');
+        releaseVerification();
         await page.getByRole('button', { name: 'Review payment', exact: true }).waitFor();
         assert.equal(authAttempts, 3);
         assert.equal(
@@ -828,13 +844,15 @@ async function main() {
         );
         assert.equal(signatures, 0, 'Signing in never signs a payment.');
         await page.getByRole('button', { name: 'Review payment', exact: true }).click();
-        await page.getByText(/Sponsor queue is busy/).waitFor();
+        await page.getByText('Review queue · 1 ahead', { exact: true }).waitFor();
+        assert.equal(await page.getByRole('button', { name: 'Leave queue', exact: true }).count(), 1);
+        await page.screenshot({ path: path.join(evidence, `queued-review-${name}-${width}.png`) });
         assert.equal(
           signatures,
           0,
           'An unsigned busy review cannot ask for a signature or claim money moved.',
         );
-        await pay(1);
+        await pay(1, true);
         assert.equal(chain.fixtures()[0].state, 'funded', 'The first payment creates the market.');
         assert.equal(chain.submissions.length, 1);
         assert.equal(signatures, 1);
@@ -960,6 +978,8 @@ async function main() {
               '/api/auth/verify',
               '/api/direct/batch/offer',
               '/api/direct/batch/submit',
+              '/api/direct/batch/cancel-review',
+              '/api/direct/batch/release',
             ].includes(url),
           ),
         );

@@ -3,6 +3,7 @@ export class SponsorProxyError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly reviewWait?: { position: number },
   ) {
     super(message);
   }
@@ -29,7 +30,7 @@ export async function sponsorProxy(
   )
     throw Error('Sponsor service must use an explicit loopback HTTP port');
   if (
-    !/^\/(?:batch\/)?(?:configuration|fixture|status|offer|submit|resolve|resume)(?:\?.*)?$/.test(
+    !/^\/(?:batch\/)?(?:configuration|fixture|status|offer|submit|resolve|resume|cancel-review)(?:\?.*)?$/.test(
       path,
     ) &&
     !/^\/activity\/(?:events|ack)$/.test(path) &&
@@ -62,6 +63,25 @@ export async function sponsorProxy(
   }
   const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   if (!response.ok) {
+    if (
+      path === '/batch/offer' &&
+      response.status === 429 &&
+      value &&
+      typeof value === 'object' &&
+      'reviewWait' in value &&
+      value.reviewWait &&
+      typeof value.reviewWait === 'object' &&
+      'position' in value.reviewWait &&
+      typeof value.reviewWait.position === 'number' &&
+      Number.isInteger(value.reviewWait.position) &&
+      value.reviewWait.position >= 0 &&
+      value.reviewWait.position <= 128
+    )
+      throw new SponsorProxyError(
+        429,
+        'Your payment review is waiting. No payment has been sent.',
+        { position: value.reviewWait.position },
+      );
     const message =
       value && typeof value === 'object' && 'error' in value && typeof value.error === 'string'
         ? value.error

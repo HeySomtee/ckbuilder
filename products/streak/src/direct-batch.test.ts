@@ -21,6 +21,7 @@ import {
   createRecord,
 } from './modules/direct/registry';
 import { operatorFundingBarrier } from './modules/direct/cli';
+import { ReviewWaitingError } from './modules/direct/review-queue';
 import { loadOperatorMarket } from './modules/direct/operator';
 import type { Match } from './types';
 import type { BatchPick } from '../shared/batch-wire';
@@ -171,7 +172,45 @@ async function main() {
     );
     assert.deepEqual(await service.prepareOffer(request), offer);
     assert.equal(sponsorFundingBlocked(journal.directory, NOW), true);
+    const waiting = await Promise.all(
+      ['03', '04', '05'].map(async (key) => ({
+        ...request,
+        requestId: randomUUID(),
+        ownerAddress: await new ccc.SignerCkbPrivateKey(
+          client,
+          `0x${key.repeat(32)}`,
+        ).getRecommendedAddress(),
+      })),
+    );
+    for (const [index, queued] of waiting.entries())
+      await assert.rejects(
+        service.prepareOffer(queued),
+        (error) => error instanceof ReviewWaitingError && error.position === index + 1,
+      );
+    await service.cancelReview(waiting[0].requestId, waiting[1].ownerAddress);
+    await assert.rejects(
+      service.prepareOffer(waiting[1]),
+      (error) => error instanceof ReviewWaitingError && error.position === 2,
+    );
+    await service.cancelReview(waiting[0].requestId, waiting[0].ownerAddress);
+    await assert.rejects(
+      service.prepareOffer(waiting[1]),
+      (error) => error instanceof ReviewWaitingError && error.position === 1,
+    );
+    for (const queued of waiting) await service.cancelReview(queued.requestId, queued.ownerAddress);
+    assert.equal(
+      service.store.load(offer.offerId)?.state,
+      'offered',
+      'queue cancellation cannot alter another owner offer',
+    );
+    assert.equal(broadcasts, 0, 'queue never signs or broadcasts');
+    console.log('PASS three waiting wallets, FIFO and owner-scoped immediate cancellation');
     assert.equal(cancelUnsignedSponsorOffers(journal.directory), 1);
+    assert.equal(
+      (await service.status({ offerId: offer.offerId, rawHash: offer.rawHash }))
+        .unsignedCancellation,
+      true,
+    );
     assert.equal(sponsorFundingBlocked(journal.directory, NOW), false);
     await assert.rejects(
       () =>
@@ -292,14 +331,22 @@ async function main() {
     const originalHeaderRead = client.getHeaderByNumberNoCache;
     let creationReads = 0,
       liveReads = 0,
-      headerReads = 0;
+      headerReads = 0,
+      activeReads = 0,
+      maxReads = 0;
     client.getTransactionNoCache = async (...args) => {
       creationReads++;
       return originalCreationRead(...args);
     };
     client.getCellLiveNoCache = async (...args) => {
       liveReads++;
-      return originalLiveRead(...args);
+      maxReads = Math.max(maxReads, ++activeReads);
+      try {
+        await new Promise((done) => setTimeout(done, 15));
+        return await originalLiveRead(...args);
+      } finally {
+        activeReads--;
+      }
     };
     client.getHeaderByNumberNoCache = async (...args) => {
       headerReads++;
@@ -308,9 +355,16 @@ async function main() {
     await loadOperatorMarket(client, registry.all()[0], config);
     assert.equal(creationReads, 1, 'One immutable transaction read for shared creation outputs');
     assert.equal(liveReads, 5);
-    assert.equal(headerReads, 5, 'Every cell retains a fresh canonical-header check');
+    assert.equal(
+      headerReads,
+      1,
+      'Cells committed in the same block share one fresh canonical-header observation',
+    );
+    assert.equal(maxReads, 4, 'Five fresh live-cell reads overlap in bounded batches');
+    assert.equal(activeReads, 0, 'Started reads are drained before returning');
     await loadOperatorMarket(client, registry.all()[0], config);
     assert.equal(creationReads, 2, 'Creation lookup is not cached between operations');
+    assert.equal(headerReads, 2, 'A new operation rechecks the canonical block');
     client.getHeaderByNumberNoCache = async () => header(H('9'), 10);
     await assert.rejects(
       () => loadOperatorMarket(client, registry.all()[0], config),

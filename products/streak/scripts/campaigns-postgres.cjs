@@ -82,10 +82,18 @@ async function main() {
       await storage.create(id, actor(99).id, (now) =>
         newCampaign(id, actor(99), draft(deadline), now),
       );
-      return storage.change(id, (c, now) => publishCampaign(c, options(deadline), now), {
-        actorId: actor(99).id,
-        action: 'publish',
-      });
+      return storage.change(
+        id,
+        (c, now) => {
+          publishCampaign(c, options(deadline), now);
+          // Historical automatic-entry competitions retain their payout regression coverage.
+          c.predictionEntryPolicy = 'first-admitted-v2';
+        },
+        {
+          actorId: actor(99).id,
+          action: 'publish',
+        },
+      );
     }
     const c = await create('concurrent');
     const legacyRehearsal = await create('legacy-rehearsal');
@@ -588,6 +596,7 @@ async function main() {
     console.log(
       'Campaign PostgreSQL checks passed: concurrent/idempotent joins, cutoff lock, rollback, archive, authorization, output reuse, audited rehearsal policy upgrade and reconciliation paging.',
     );
+    await require('./campaign-entry-postgres.cjs')(pool);
   } finally {
     if (pool) await pool.end();
     await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);

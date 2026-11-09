@@ -1,5 +1,27 @@
 # Streak documentation
 
+9 November [queued payment reviews and announcement readiness](delivery/queued-payment-reviews.md):
+bounded unsigned waiting, cancellation and existing payment progress, with a hosted
+rehearsal diagnosis and automatic proven stale-payment recovery. All 98 required
+local stages pass across the main run and WSL contract rerun. Not pushed or deployed;
+concurrent chain spending remains separate work.
+
+7 November [explicit competition entry](delivery/competition-entry-selection.md):
+approved selector integrated with durable payment choices, atomic entry reservations,
+versioned scoring and existing checkout. Focused local checks, responsive browser
+journeys and independent review pass. All 96 stages of the final major gate passed
+on 7 November. Not committed, published or deployed.
+
+7 November [competition entry proposal](../design/competition-entry-review/README.md):
+interactive per-pick choices for regular bets and multiple competitions, including
+used/pending slots and shared funding waits. The isolated preview is retained;
+its approved runtime implementation is tracked above.
+
+7 November [Home carousels](delivery/home-products.md): separate, compact rows
+for the three core products and active competitions, with a coming-soon empty state.
+Existing routes and shared competition reads remain in use. All 96 major-gate
+stages passed locally; publication remains separate.
+
 7 November [banner refinement](delivery/competition-artwork-navigation.md#compact-banner-refinement-7-november):
 compact dimmed artwork behind titles, descriptions and prizes; Streak logo
 fallback when no custom banner is selected. Verified locally across mobile and

@@ -10,6 +10,28 @@ the proposed throughput or new scripts have been verified.
 
 ## The decision in plain language
 
+### Post-grant priority: pending payments blocking other users, 7 November
+
+Owner deferred this refactor to after the grant. It remains **unimplemented**.
+The current shared sponsor-funding guard can block a new prediction while an
+earlier payment awaits confirmation or recovery, including across different
+users and markets. The competition-selector preview and clearer messages do not
+remove this restriction.
+
+Scope the refactor around independent sponsor funding cells, durable atomic
+reservations for each selected input, and isolation of pending/recovery work to
+the affected cells. For the same market, allocate distinct available deposit
+lanes while retaining the current four-lane/32-position limits until a separately
+reviewed protocol change. Apply the resource-isolation approach to sponsorship
+and other payment paths where they share spendable inputs.
+
+Acceptance must prove that unrelated payments can proceed while one remains
+pending, conflicting inputs cannot be allocated twice, same-market deposits use
+available lanes safely, and restart/reorg/cancellation recovery preserves signed
+transactions. Keep the funding-selection fix and post-grant monitoring below in
+the coordinated backlog. This deferral does not authorize removing the current
+safety guard or moving funds now.
+
 ### Deferred funding-selection fix, 3 November
 
 Owner requested recording this for later implementation with payment concurrency:
