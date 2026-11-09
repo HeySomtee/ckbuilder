@@ -1,5 +1,11 @@
 # Architecture and migration
 
+9 November [bounded concurrency](../delivery/three-payment-concurrency.md) admits up
+to three independent atomic-v4 payments using existing durable offers and the shared
+operator lease. Pending outputs, original signed inputs and unproven ancestors remain
+reserved. Legacy/lifecycle operations retain their strict barrier. This supersedes
+the all-payment barrier described in the earlier queued-review checkpoint below.
+
 9 November [queued payment reviews](../delivery/queued-payment-reviews.md) add
 bounded FIFO admission on the existing operator disk/lease. Waiting metadata never
 owns money and expires independently of signed reservations. Browsers retry only

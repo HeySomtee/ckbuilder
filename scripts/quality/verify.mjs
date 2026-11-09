@@ -383,6 +383,11 @@ try {
         { timeout: 600_000 },
       );
       run(
+        'Three simultaneous predictions signed devnet acceptance',
+        [join(product, 'scripts/batch-devnet-run.cjs'), '--concurrency-only'],
+        { timeout: 600_000 },
+      );
+      run(
         'Five sponsorship and reward signed devnet lifecycle',
         [join(product, 'scripts/five-devnet-run.cjs')],
         { timeout: 600_000 },

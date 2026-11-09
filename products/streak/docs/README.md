@@ -1,10 +1,15 @@
 # Streak documentation
 
+9 November [three-payment concurrency](delivery/three-payment-concurrency.md): local
+implementation, safety boundaries, verification and hosted funding prerequisites.
+All 100 required local stages pass across the interrupted major run and its
+completed continuation. Hosted activation and physical-wallet acceptance remain.
+
 9 November [queued payment reviews and announcement readiness](delivery/queued-payment-reviews.md):
 bounded unsigned waiting, cancellation and existing payment progress, with a hosted
 rehearsal diagnosis and automatic proven stale-payment recovery. All 98 required
-local stages pass across the main run and WSL contract rerun. Not pushed or deployed;
-concurrent chain spending remains separate work.
+local stages pass across the main run and WSL contract rerun. Published as `bb152d2`;
+deployment remains separate. The bounded concurrency increment is tracked above.
 
 7 November [explicit competition entry](delivery/competition-entry-selection.md):
 approved selector integrated with durable payment choices, atomic entry reservations,

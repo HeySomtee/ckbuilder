@@ -62,6 +62,7 @@ export async function confirmedHeader(
 export async function loadMarket(
   client: ccc.Client,
   descriptor: Descriptor,
+  view: 'spendable' | 'committed-verification' = 'spendable',
 ): Promise<LoadedCell[]> {
   const creation = await client.getTransactionNoCache(descriptor.creationTxHash);
   if (
@@ -114,7 +115,7 @@ export async function loadMarket(
   );
   if (page.cells.length >= 40) throw Error('Market index exceeded the protocol cell bound.');
   const liveCells = await mapConcurrent(page.cells, 4, (candidate) =>
-    client.getCellLiveNoCache(candidate.outPoint, true, true),
+    client.getCellLiveNoCache(candidate.outPoint, true, view === 'spendable'),
   );
   for (const cell of liveCells) {
     if (cells.length >= 37) throw Error('Market discovery exceeded the protocol cell bound.');

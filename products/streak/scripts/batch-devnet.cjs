@@ -30,7 +30,7 @@ const {
   validateFootballEvidence,
   confirmFootballEvidence,
 } = require('../src/modules/direct/oracle.ts');
-const artifacts = path.join(root, '.quality-artifacts/batch-chain');
+const artifacts = path.join(root, '.quality-artifacts', process.argv[3] === '--concurrency-only' ? 'concurrency-chain' : 'batch-chain');
 const evidence = {
   kind: 'isolated-local-devnet',
   source: 'actual BatchService and product wallet adapters',
@@ -236,6 +236,71 @@ async function main() {
   record('Pinned v4 and genuine OmniLock binaries deployed on a fresh isolated chain', {
     omniHash: OMNI_PIN.dataHash,
   });
+  // Real signatures and real mempool overlap. Mining is deliberately paused while
+  // three independent users submit, first across markets and then within one market.
+  async function concurrentPayments() {
+    const actors = await Promise.all(['31', '32', '33', '34'].map(async (key) => {
+      const signer = new ccc.SignerCkbPrivateKey(client, `0x${key.repeat(32)}`);
+      return { signer, lock: (await signer.getRecommendedAddressObj()).script };
+    }));
+    const outputs = [
+      ...Array.from({ length: 3 }, () => ({ capacity: 30_000n * h.CKB, lock: h.admin.lock })),
+      ...actors.map((actor) => ({ capacity: 20_000n * h.CKB, lock: actor.lock })),
+    ];
+    const split = await h.build(h.admin, [], outputs, outputs.map(() => '0x'));
+    const funded = await h.commit(h.admin, split);
+    await h.mine(3);
+    await syncIndex();
+    actors.forEach((actor, index) => { actor.fund = funded[index + 3]; });
+    const cutoff = (Math.ceil(h.getClock() / 1000) + 1200) * 1000;
+    const matches = Array.from({ length: 4 }, (_, index) => fixture(995000 + index, cutoff));
+    for (const match of matches) fixtures.set(match.id, match);
+    for (const sameMarket of [false, true]) {
+      const offers = [], states = [];
+      const before = await h.rpc('get_tip_header');
+      for (let index = 0; index < 4; index++) {
+        const actor = actors[index], match = matches[sameMarket ? 0 : index];
+        const request = {
+          requestId: randomUUID(), ownerAddress: await actor.signer.getRecommendedAddress(),
+          userInputs: [{ txHash: actor.fund.outPoint.txHash, index: Number(actor.fund.outPoint.index) }],
+          picks: [{ fixtureId: match.id, termsHash: (await service.describe(match.id)).termsHash,
+            outcome: index % 3, principalShannons: (100n * h.CKB).toString() }],
+        };
+        if (index === 3) {
+          await assert.rejects(() => service.prepareOffer(request), /queued/);
+          await service.cancelReview(request.requestId, request.ownerAddress);
+          continue;
+        }
+        const offer = await service.prepareOffer(request);
+        const partial = await actor.signer.signOnlyTransaction(ccc.Transaction.fromBytes(offer.unsignedBytes));
+        const state = await service.submit({ offerId: offer.offerId, rawHash: offer.rawHash, userSignedBytes: partial.toHex() });
+        assert.equal(state.state, 'confirming', state.message);
+        offers.push(offer); states.push(state);
+        service = new BatchService(options);
+      }
+      assert.equal((await h.rpc('get_tip_header')).hash, before.hash, 'all three submitted before any block was mined');
+      assert.equal(new Set(offers.map((offer) => ccc.OutPoint.from(offer.sponsorInput).toHex())).size, 3);
+      if (sameMarket) assert.equal(new Set(offers.map((offer) => offer.lines[0].shard)).size, 3);
+      for (const offer of offers) {
+        const observed = await client.getTransactionNoCache(offer.rawHash);
+        assert(['pending', 'proposed', 'sent'].includes(observed?.status));
+      }
+      for (let index = 0; index < offers.length; index++)
+        await confirm(actors[index], ccc.Transaction.fromBytes(states[index].signedBytes), offers[index]);
+      record(`Three ${sameMarket ? 'same-market' : 'different-market'} payments coexist in the real mempool; fourth queues`, {
+        transactions: offers.map((offer) => offer.rawHash), sameMarket,
+      });
+    }
+  }
+  if (process.argv[3] === '--concurrency-only') {
+    await concurrentPayments();
+    await h.finish();
+    evidence.status = 'passed';
+    evidence.finishedAt = new Date().toISOString();
+    evidence.harnessChecks = h.evidence.checks.length;
+    save();
+    return;
+  }
   const baskets = [];
   for (const [kind, actor, base] of [
     ['native', h.owner, 992100],

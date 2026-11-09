@@ -215,6 +215,16 @@ Each financial operation has an immutable signed entry. After a timeout or resta
 
 The funding barrier applies to creation, reporting, closure and the deployment sentinel. It derives dependency links from actual signed input outpoints and verifies the last transaction on every independent branch. A canonical descendant proves its referenced ancestors; a later timestamp alone proves nothing about an unrelated wallet spend. All unresolved operations are reconciled too. Reads run in batches of at most four, with sequential journal and catalogue writes and an overall 1,536-operation bound. Every independent branch is checked before the barrier clears, so many independent funding cells can increase a cycle's duration.
 
+The 9 November [bounded atomic-payment increment](../delivery/three-payment-concurrency.md)
+allows three verified atomic-v4 reservations to overlap. A pending descendant never
+proves its ancestor: missing proof triggers recursive ancestor reconciliation.
+Each concurrent payment requires its own confirmed sponsor cell. Lifecycle and
+legacy builders keep the strict barrier. A ready report/close writes the bounded
+`payment-admission-drain.json` scheduling lease; it expires after five minutes
+without releasing any signed reservation. Fresh readiness renews it. If the pause
+persists, inspect the lifecycle logs and original operation instead of deleting
+payment records. No additional signer process or database worker is required.
+
 Before a new signature, every proposed input is also compared against immutable signed entries in all configured generations. An input that belonged to another signed operation cannot be silently reused after a reorg, even if an older observation had called that operation committed. This policy can require manual recovery review; it deliberately avoids automatic replacement signatures.
 
 A signed creation that remains unconfirmed after its pinned kickoff, or a signed report that remains unconfirmed after the six-hour reporting window, needs manual intervention. Expiry does not cancel signed bytes or release their input reservations. Automatic creation/report resubmission stops when the applicable window closes; the worker cannot silently discard the operation or issue another signature using its funds. Preserve the journal, inspect the canonical original and consuming transactions, and resolve the case before resuming operator funding. An independent keeper can still use the permissionless closure path with its own wallet and journal.

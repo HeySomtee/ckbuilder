@@ -29,6 +29,8 @@ import {
 import { sponsoredOriginDescendant } from './sponsor-lineage';
 import { ReviewQueue, ReviewWaitingError } from './review-queue';
 import { readBatch } from './read-batch';
+import { atomicReservations, ATOMIC_PAYMENT_LIMIT, confirmedFunding } from './atomic-reservations';
+import { admissionDrain, completeAdmissionDrain } from './admission-drain';
 
 const CKB = 100_000_000n,
   RESERVE = 3050n * CKB,
@@ -183,10 +185,12 @@ export class BatchService extends SponsorService {
             !conflicts.resolved.has(entry.offer.rawHash),
         )
         .flatMap((entry) =>
-          atomicOffer(entry.offer).lines.map((line) => ({
-            fixtureId: line.fixture.fixtureId,
-            state: entry.signedBytes ? ('confirming' as const) : ('reserved' as const),
-          })),
+          atomicOffer(entry.offer)
+            .lines.filter((line) => line.mode === 'create')
+            .map((line) => ({
+              fixtureId: line.fixture.fixtureId,
+              state: entry.signedBytes ? ('confirming' as const) : ('reserved' as const),
+            })),
         ),
     };
   }
@@ -281,17 +285,33 @@ export class BatchService extends SponsorService {
               entry.state = 'cancelled';
               store.save(entry);
             }
-        const barrier = await operatorFundingBarrier(
-          this.options.client,
-          this.options.journal,
-          this.options.registry,
-        );
-        if (!barrier.clear) throw new ReviewWaitingError(1);
+        const drain = admissionDrain(this.options.journal.directory);
+        if (drain) {
+          if (this.options.journal.load(drain))
+            completeAdmissionDrain(this.options.journal.directory, drain);
+          else throw new ReviewWaitingError(1);
+        }
         const conflicts = await canonicalSponsorConflicts(
           this.options.client,
           this.options.journal.directory,
         );
         if (conflicts.uncertain) throw new ReviewWaitingError(1);
+        const reservations = atomicReservations(
+          this.options.journal,
+          this.now(),
+          conflicts.resolved,
+        );
+        const barrier = await operatorFundingBarrier(
+          this.options.client,
+          this.options.journal,
+          this.options.registry,
+          reservations.allowed,
+        );
+        if (!barrier.clear) throw new ReviewWaitingError(1);
+        const allocation = reservations.pending(
+          new Set(barrier.pending.map((row) => row.transactionHash)),
+        );
+        if (allocation.count >= ATOMIC_PAYMENT_LIMIT) throw new ReviewWaitingError(1);
         const matching = this.store
           .all()
           .filter(
@@ -323,6 +343,11 @@ export class BatchService extends SponsorService {
           sponsor = (await this.options.signer.getRecommendedAddressObj()).script;
         if (owner.eq(sponsor) || ccc.bytesFrom(sponsor.args).length > 59)
           throw Error('Invalid separate sponsor and owner wallet groups');
+        if (
+          allocation.owners.has(owner.hash()) ||
+          request.userInputs.some((point) => allocation.unavailable(ccc.OutPoint.from(point)))
+        )
+          throw new ReviewWaitingError(0);
         const mode = await sponsoredWalletMode(this.options.client, owner);
         const userCells = await readBatch(request.userInputs, async (input) => {
           const cell = await this.options.client.getCellLiveNoCache(input, true, true);
@@ -347,6 +372,7 @@ export class BatchService extends SponsorService {
         }[] = [];
         const fixtures = await this.readFixtures(request.picks.map((pick) => pick.fixtureId));
         for (const [index, pick] of request.picks.entries()) {
+          if (allocation.creations.has(pick.fixtureId)) throw new ReviewWaitingError(0);
           const match = fixtures[index],
             fixture = await this.describeMatch(match),
             selected = this.options.registry.get(pick.fixtureId);
@@ -367,15 +393,31 @@ export class BatchService extends SponsorService {
             );
             if (!market.market || market.market.cell.outputData !== '0x0000ff' || market.closed)
               throw Error('This fixture is closed to new predictions');
+            if (allocation.unavailable(market.market.cell.outPoint))
+              throw new ReviewWaitingError(0);
+            const tip = await this.options.client.getTipHeader();
             const shard = market.shards.find((entry) => {
               if (!entry) return false;
               const data = raw(entry.cell.outputData);
               return (
+                !allocation.unavailable(entry.cell.outPoint) &&
+                tip.number >= entry.header.number + 3n &&
                 data[2] + data[3] < 8 &&
                 (!data[3] || entry.header.timestamp < BigInt(record.cutoffMs))
               );
             });
-            if (!shard) throw Error('This fixture has no available prediction slot');
+            if (!shard) {
+              if (
+                market.shards.some(
+                  (entry) =>
+                    entry &&
+                    (allocation.unavailable(entry.cell.outPoint) ||
+                      tip.number < entry.header.number + 3n),
+                )
+              )
+                throw new ReviewWaitingError(0);
+              throw Error('This fixture has no available prediction slot');
+            }
             preparedLines.push({
               match,
               fixture,
@@ -403,10 +445,12 @@ export class BatchService extends SponsorService {
           }
         }
         const creations = preparedLines.filter((line) => !line.record).length;
-        const newFiles = preparedLines.filter(
-          (line) => !line.record && !this.options.registry.get(line.fixture.fixtureId),
-        ).length;
-        if (this.options.registry.all().length + newFiles > 256)
+        const reservedFixtures = new Set([
+          ...this.options.registry.all().map((record) => record.fixtureId),
+          ...allocation.creations,
+          ...preparedLines.filter((line) => !line.record).map((line) => line.fixture.fixtureId),
+        ]);
+        if (reservedFixtures.size > 256)
           throw Error(
             'Streak is at its current testnet market limit. Existing claims remain available.',
           );
@@ -424,10 +468,11 @@ export class BatchService extends SponsorService {
         );
         if (page.cells.length > 64) throw Error('Sponsor funding page exceeded its bound');
         const candidates = [
-          ...origins.slice(-1),
+          ...origins.slice(-1).filter((origin) => !allocation.unavailable(origin)),
           ...page.cells
             .filter(
               (cell) =>
+                !allocation.unavailable(cell.outPoint) &&
                 !cell.cellOutput.type &&
                 cell.outputData === '0x' &&
                 cell.cellOutput.capacity >= reserve + minChange(sponsor),
@@ -445,12 +490,14 @@ export class BatchService extends SponsorService {
             live.outputData === '0x' &&
             live.cellOutput.lock.eq(sponsor) &&
             live.cellOutput.capacity >= reserve + minChange(sponsor) &&
+            (await confirmedFunding(this.options.client, live)) &&
             (await sponsoredOriginDescendant(this.options.client, live.outPoint, origins))
           ) {
             fund = live;
             break;
           }
         }
+        if (!fund && allocation.count > 0) throw new ReviewWaitingError(1);
         if (!fund)
           throw Error('Streak needs additional testnet capacity to sponsor the complete slip');
         const cells = [fund, ...userCells],
@@ -642,7 +689,8 @@ export class BatchService extends SponsorService {
         queue.leave(request.requestId);
         return offer;
       } catch (error) {
-        if (!(error instanceof ReviewWaitingError)) queue.leave(request.requestId);
+        if (!(error instanceof ReviewWaitingError) || error.position === 0)
+          queue.leave(request.requestId);
         throw error;
       }
     });
@@ -680,6 +728,8 @@ export class BatchService extends SponsorService {
         throw Error('Atomic funding input is not the required plain wallet capacity');
       return cell;
     });
+    if (!(await confirmedFunding(this.options.client, live[0])))
+      throw Error('Sponsor funding is awaiting canonical confirmation or recovery');
     const deposits = new Map(
       await readBatch(
         offer.lines.filter((line) => line.mode === 'deposit'),

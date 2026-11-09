@@ -131,12 +131,19 @@ export function sponsorFundingBlocked(
   operatorDirectory: string,
   now = Date.now(),
   resolved = new Set<string>(),
+  independentAtomic: ReadonlySet<string> = new Set(),
 ): boolean {
   return sponsorStores(operatorDirectory)
     .flatMap((store) => store.active(now))
     .some(
       (entry) =>
-        !resolved.has(entry.offer.rawHash) && !entry.signedBytes && entry.state !== 'cancelled',
+        !resolved.has(entry.offer.rawHash) &&
+        !(
+          entry.offer.version === 'atomic-predictions-v1' &&
+          independentAtomic.has(entry.offer.rawHash)
+        ) &&
+        !entry.signedBytes &&
+        (entry.state !== 'cancelled' || !!entry.userSignedBytes),
     );
 }
 
@@ -163,7 +170,7 @@ export function assertSponsorInputsAvailable(
   for (const entry of sponsorStores(operatorDirectory).flatMap((store) => store.active(now))) {
     if (
       entry.offer.rawHash === tx.hash() ||
-      entry.state === 'cancelled' ||
+      (entry.state === 'cancelled' && !entry.userSignedBytes && !entry.signedBytes) ||
       resolved.has(entry.offer.rawHash)
     )
       continue;

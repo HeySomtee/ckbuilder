@@ -32,6 +32,7 @@ import {
   canonicalSponsorConflicts,
   cancelUnsignedSponsorOffers,
 } from './sponsor-journal';
+import { requestAdmissionDrain, completeAdmissionDrain } from './admission-drain';
 import {
   confirmFootballEvidence,
   parseFootballObservation,
@@ -221,11 +222,12 @@ export async function operatorFundingBarrier(
   client: ccc.Client,
   journal: OperatorJournal,
   registry: DirectRegistry,
+  independentAtomic: ReadonlySet<string> = new Set(),
 ): Promise<ProvisionBarrier> {
   const conflicts = await canonicalSponsorConflicts(client, journal.directory);
   freshResolvedSponsors.set(journal, { observedAt: Date.now(), hashes: conflicts.resolved });
   if (conflicts.uncertain) return { clear: false, pending: [] };
-  if (sponsorFundingBlocked(journal.directory, Date.now(), conflicts.resolved))
+  if (sponsorFundingBlocked(journal.directory, Date.now(), conflicts.resolved, independentAtomic))
     return { clear: false, pending: [] };
   for (const deployment of [
     loadOperatorDeployment(journal),
@@ -288,8 +290,11 @@ export async function operatorFundingBarrier(
     (a, b) => a.createdAtMs - b.createdAtMs || a.operationId.localeCompare(b.operationId),
   );
   const pending: ProvisionBarrier['pending'] = [];
-  for (let offset = 0; offset < candidates.length; offset += 4) {
+  const byHash = new Map(operations.map((operation) => [operation.transactionHash, operation]));
+  const scheduled = new Set(candidates.map((operation) => operation.transactionHash));
+  for (let offset = 0; offset < candidates.length;) {
     const batch = candidates.slice(offset, offset + 4);
+    offset += batch.length;
     const results = await Promise.allSettled(
       batch.map((operation) => reconcileOperation(client, operation)),
     );
@@ -302,7 +307,7 @@ export async function operatorFundingBarrier(
       }
       const operation = batch[index];
       const state = await recordReconciliation(client, journal, registry, operation, result.value);
-      if (state.status !== 'committed' || (state.confirmations ?? 0) < 4)
+      if (state.status !== 'committed' || (state.confirmations ?? 0) < 4) {
         pending.push({
           fixtureId: operation.fixtureId,
           action: operation.action,
@@ -312,10 +317,27 @@ export async function operatorFundingBarrier(
           status: state.status,
           confirmations: state.confirmations,
         });
+        // A pending descendant proves nothing about an old committed observation.
+        // Inspect its ancestors until a freshly canonical transaction proves the branch.
+        if (independentAtomic.size)
+          for (const input of ccc.Transaction.fromBytes(operation.signedTransaction).inputs) {
+            const parent = byHash.get(input.previousOutput.txHash);
+            if (parent && !scheduled.has(parent.transactionHash)) {
+              scheduled.add(parent.transactionHash);
+              candidates.push(parent);
+            }
+          }
+      }
     }
     if (failure !== undefined) throw failure;
   }
-  return { clear: pending.length === 0, pending };
+  return {
+    clear: pending.every(
+      (operation) =>
+        operation.action === 'batch' && independentAtomic.has(operation.transactionHash),
+    ),
+    pending,
+  };
 }
 
 const freshResolvedSponsors = new WeakMap<
@@ -525,6 +547,7 @@ export async function runOperator(
           throw Error(
             'First result observation saved. Run report again after at least 30 seconds.',
           );
+        requestAdmissionDrain(journal.directory, keyFor(action));
         cancelUnsignedSponsorOffers(journal.directory);
       } else if (action === 'close') {
         if (!record) throw Error('Create and reconcile this fixture market first');
@@ -543,6 +566,7 @@ export async function runOperator(
           (!eligible && Date.now() < record.terms.deadlineMs)
         )
           throw Error('Market is not ready for this closure action');
+        requestAdmissionDrain(journal.directory, keyFor(action));
         cancelUnsignedSponsorOffers(journal.directory);
       }
       const barrier = await operatorFundingBarrier(client, journal, registry);
@@ -586,6 +610,7 @@ export async function runOperator(
         throw Error('Signing changed the reviewed market transaction');
       operation = journal.persist(action, record!, signed);
     }
+    if (action !== 'create') completeAdmissionDrain(journal.directory, operation.operationId);
     if (shouldBroadcast && action === 'create' && options_.expectedFixture) {
       if (
         operation.descriptor.type.codeHash !== PUBLIC_DIRECT_CONFIG.protocolHash ||

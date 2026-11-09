@@ -278,6 +278,47 @@ test('Independent market reads overlap while every later signing pass rechecks l
   );
 });
 
+test('A different pending shard does not block verification, but selected shard and control still must be spendable', async () => {
+  for (const target of ['unrelated', 'selected', 'control']) {
+    const s = await setup();
+    const first = await s.client.prepare(picks(s.chain.fixtures(), 1));
+    await s.client.submit(await s.client.signAndPersist(first, s.chain.fixtures()));
+    const read = s.rpc.getCellLiveNoCache.bind(s.rpc);
+    let blocked;
+    const prepare = s.transport.offer;
+    s.transport.offer = async (request) => {
+      const offer = await prepare(request),
+        line = offer.lines[0];
+      const selected = offer.inputs[line.shardInputIndex].outPoint;
+      blocked =
+        target === 'control'
+          ? pointKey(line.controlDep)
+          : target === 'selected'
+            ? pointKey(selected)
+            : pointKey(
+                [...s.chain.live.values()].find(
+                  (cell) =>
+                    cell.cellOutput.type?.args === line.descriptor.type.args &&
+                    ccc.bytesFrom(cell.outputData)[0] === 1 &&
+                    pointKey(cell.outPoint) !== pointKey(selected),
+                ).outPoint,
+              );
+      return offer;
+    };
+    s.rpc.getCellLiveNoCache = async (point, data, includePool) =>
+      includePool && pointKey(point) === blocked ? undefined : read(point, data, includePool);
+    if (target === 'unrelated') {
+      const review = await s.client.prepare(picks(s.chain.fixtures(), 1));
+      assert.ok(await s.client.signAndPersist(review, s.chain.fixtures()));
+    } else {
+      await assert.rejects(
+        s.client.prepare(picks(s.chain.fixtures(), 1)),
+        /input changed|control changed/,
+      );
+    }
+  }
+});
+
 test('Operator conflict hints require independent canonical proof and restore reservations on reorg', async () => {
   for (const mode of ['valid', 'unrelated', 'shallow']) {
     const s = await setup();

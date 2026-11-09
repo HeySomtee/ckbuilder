@@ -1,5 +1,15 @@
 # Streak status
 
+9 November verified [three-payment concurrency release](docs/delivery/three-payment-concurrency.md):
+durable independent inputs, existing-market lane allocation, queued overflow and
+lifecycle priority. All 100 required local stages have passing evidence: 80 completed
+before the major process was interrupted, then eight browser and twelve contract
+stages completed on continuation. Application runtime hashes match; independent
+money/recovery review found no remaining blocker. This is combined evidence, not an
+uninterrupted major run or hosted acceptance. Activation needs three suitable
+confirmed sponsor cells. No production funds were moved; owner checklist edits
+remain excluded from publication.
+
 9 November published to GitHub `main` as `bb152d2`: the release combines Home carousels, explicit
 competition entry, queued payment review, faster verification and stale-payment
 recovery. The tested runtime hashes were revalidated, both Git hooks accepted the

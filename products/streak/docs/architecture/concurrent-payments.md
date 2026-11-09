@@ -10,10 +10,33 @@ the proposed throughput or new scripts have been verified.
 
 ## The decision in plain language
 
+### Bounded concurrency brought forward, 9 November
+
+The owner now wants up to three prediction payments in flight during the experience
+polish sprint. This supersedes the earlier deferral only for that bounded increment.
+The [local implementation and evidence](../delivery/three-payment-concurrency.md)
+retain the existing queue for overflow. All 100 required local stages now have
+passing evidence across the interrupted major run and its continuation; this is
+not a claim about hosted capacity.
+
+Use separate confirmed sponsor inputs and durable reservations of exact owner,
+sponsor and market inputs. Retain short atomic allocation/signing sections without
+making unrelated transactions wait for confirmation. Coordinate lifecycle builders
+and recovery with the same reservations. Existing-market deposits may use separate
+available v4 lanes; the same uncreated fixture still needs one canonical creation.
+Retain confirmation depth, signed recovery and one active slip per wallet. Funding
+preparation is an activation prerequisite, not an authorization in this note to move
+production funds. No new scripts or larger position limits are part of this increment.
+
+Prove three independent pending payments, queued overflow, same-market lane isolation,
+insufficient funding, cancellation, restart, reorg and settlement races before release.
+The broader funding aggregation, large-market and monitoring work remains deferred.
+
 ### Post-grant priority: pending payments blocking other users, 7 November
 
-Owner deferred this refactor to after the grant. It remains **unimplemented**.
-The current shared sponsor-funding guard can block a new prediction while an
+Historical decision: the owner deferred this refactor to after the grant. The bounded
+exception above is now implemented locally for the current sprint. The broader
+refactor remains deferred. The deployed shared sponsor-funding guard can block a new prediction while an
 earlier payment awaits confirmation or recovery, including across different
 users and markets. The competition-selector preview and clearer messages do not
 remove this restriction.

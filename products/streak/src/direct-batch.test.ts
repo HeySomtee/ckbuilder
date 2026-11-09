@@ -54,8 +54,13 @@ async function main() {
     const sponsorLock = (await sponsor.getRecommendedAddressObj()).script,
       ownerLock = (await owner.getRecommendedAddressObj()).script,
       ownerAddress = await owner.getRecommendedAddress();
+    const fundingTx = ccc.Transaction.from({
+      inputs: [{ previousOutput: { txHash: H('1'), index: 0 } }],
+      outputs: [{ capacity: 30_000n * CKB, lock: sponsorLock }],
+      outputsData: ['0x'],
+    });
     const fund = ccc.Cell.from({
-        outPoint: { txHash: H('1'), index: 0 },
+        outPoint: { txHash: fundingTx.hash(), index: 0 },
         cellOutput: { capacity: 30_000n * CKB, lock: sponsorLock },
         outputData: '0x',
       }),
@@ -66,6 +71,15 @@ async function main() {
       });
     const cells = new Map([fund, user].map((cell) => [cell.outPoint.toHex(), cell])),
       history = new Map<string, ccc.ClientTransactionResponse>();
+    history.set(
+      fundingTx.hash(),
+      ccc.ClientTransactionResponse.from({
+        transaction: fundingTx,
+        status: 'committed',
+        blockHash: H('6'),
+        blockNumber: 10,
+      }),
+    );
     client.getCellLiveNoCache = async (point) => cells.get(ccc.OutPoint.from(point).toHex());
     client.getCell = async (point) => cells.get(ccc.OutPoint.from(point).toHex());
     client.findCellsPagedNoCache = async (key) => ({
@@ -182,20 +196,20 @@ async function main() {
         ).getRecommendedAddress(),
       })),
     );
-    for (const [index, queued] of waiting.entries())
+    for (const queued of waiting)
       await assert.rejects(
         service.prepareOffer(queued),
-        (error) => error instanceof ReviewWaitingError && error.position === index + 1,
+        (error) => error instanceof ReviewWaitingError && error.position === 0,
       );
     await service.cancelReview(waiting[0].requestId, waiting[1].ownerAddress);
     await assert.rejects(
       service.prepareOffer(waiting[1]),
-      (error) => error instanceof ReviewWaitingError && error.position === 2,
+      (error) => error instanceof ReviewWaitingError && error.position === 0,
     );
     await service.cancelReview(waiting[0].requestId, waiting[0].ownerAddress);
     await assert.rejects(
       service.prepareOffer(waiting[1]),
-      (error) => error instanceof ReviewWaitingError && error.position === 1,
+      (error) => error instanceof ReviewWaitingError && error.position === 0,
     );
     for (const queued of waiting) await service.cancelReview(queued.requestId, queued.ownerAddress);
     assert.equal(
@@ -204,7 +218,9 @@ async function main() {
       'queue cancellation cannot alter another owner offer',
     );
     assert.equal(broadcasts, 0, 'queue never signs or broadcasts');
-    console.log('PASS three waiting wallets, FIFO and owner-scoped immediate cancellation');
+    console.log(
+      'PASS local input waits yield queue priority and preserve owner-scoped cancellation',
+    );
     assert.equal(cancelUnsignedSponsorOffers(journal.directory), 1);
     assert.equal(
       (await service.status({ offerId: offer.offerId, rawHash: offer.rawHash }))
@@ -461,7 +477,7 @@ async function main() {
         }),
         configuration = (await response.json()) as { reservations: unknown[] };
       assert.equal(response.status, 200);
-      assert.equal(configuration.reservations.length, 2);
+      assert.equal(configuration.reservations.length, 1, 'only new creation holds a whole fixture');
       assert.deepEqual(Object.keys(configuration).sort(), ['reservations', 'sponsorLock']);
       const before = broadcasts;
       await fetch(`${endpoint}/batch/status?offerId=${mixed.offerId}&rawHash=${mixed.rawHash}`, {
@@ -586,7 +602,11 @@ async function main() {
     cancelUnsignedSponsorOffers(journal.directory);
     const actualAll = registry.all.bind(registry),
       publicCount = actualAll().length;
-    registry.all = () => Array.from({ length: 255 }, () => actualAll()[0]);
+    registry.all = () =>
+      Array.from({ length: 255 }, (_, index) => ({
+        ...actualAll()[0],
+        fixtureId: `api-football-${100_000 + index}`,
+      }));
     const overLimitPicks = [];
     for (const id of ['api-football-9030', 'api-football-9031']) {
       const demand = await service.describe(id);
@@ -648,6 +668,15 @@ async function main() {
         Number(ccc.numFrom(number)),
       );
     client.getTipHeader = async () => header(H('b'), 15);
+    history.set(
+      fundingTx.hash(),
+      ccc.ClientTransactionResponse.from({
+        transaction: fundingTx,
+        status: 'committed',
+        blockHash: H('8'),
+        blockNumber: 10,
+      }),
+    );
     await service.resolveConflict({
       offerId: current.offerId,
       rawHash: current.rawHash,

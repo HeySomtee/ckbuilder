@@ -4,6 +4,9 @@ const { spawnSync } = require('node:child_process');
 
 const root = path.resolve(__dirname, '../../..');
 const script = path.join(__dirname, 'batch-devnet.py');
+const flags = process.argv.slice(2);
+if (flags.length > 1 || (flags.length === 1 && flags[0] !== '--concurrency-only'))
+  throw Error('Usage: batch-devnet-run.cjs [--concurrency-only]');
 const env = { ...process.env, NODE_ENV: 'test', STREAK_SKIP_ENV_FILE: '1' };
 for (const name of Object.keys(env)) {
   if (
@@ -16,7 +19,7 @@ for (const name of Object.keys(env)) {
 delete env.NODE_OPTIONS;
 delete env.STREAK_PUBLIC_ORIGIN;
 let command = 'python3',
-  args = [script];
+  args = [script, ...flags];
 if (process.platform === 'win32') {
   if (!/^[A-Za-z]:\\/.test(script))
     throw Error('The local devnet requires a local Windows drive path.');
@@ -25,6 +28,7 @@ if (process.platform === 'win32') {
     '--',
     'python3',
     `/mnt/${script[0].toLowerCase()}${script.slice(2).replaceAll('\\', '/')}`,
+    ...flags,
   ];
 }
 const result = spawnSync(command, args, {

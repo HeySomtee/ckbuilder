@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import socket
 import subprocess
+import sys
 import time
 import urllib.request
 
@@ -13,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[3]
 LAB = ROOT / 'src/week20/contract-lab'
 BINARY = LAB / '.tools/ckb_v0.210.0_x86_64-unknown-linux-gnu/ckb'
 RPC = 'http://127.0.0.1:8218'
+flags = sys.argv[1:]
+if flags not in ([], ['--concurrency-only']):
+    raise RuntimeError('Expected only the optional --concurrency-only mode.')
 if not BINARY.is_file():
     raise RuntimeError('The pinned CKB 0.210.0 binary is missing. Prepare the Week 20 devnet tools before running this local gate.')
 for port in (8218, 8219):
@@ -64,7 +68,7 @@ with (RUN / 'node.log').open('w') as log:
         if node.endswith('.exe'):
             runner = subprocess.check_output(['wslpath', '-w', runner], text=True).strip()
             preload = subprocess.check_output(['wslpath', '-w', preload], text=True).strip()
-        subprocess.run([node, '--require', preload, runner, RPC], cwd=ROOT, env=env, check=True, timeout=480)
+        subprocess.run([node, '--require', preload, runner, RPC, *flags], cwd=ROOT, env=env, check=True, timeout=480)
     finally:
         process.terminate()
         try:

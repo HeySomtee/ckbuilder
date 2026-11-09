@@ -408,7 +408,26 @@ export class BatchClient {
     });
     const markets = new Map(
       await mapConcurrent(deposits, 2, async (line) => {
-        const market = await loadMarket(client, line.descriptor as Descriptor);
+        // Unrelated shards may be in another payment's mempool transaction. Our
+        // selected inputs were checked against the pool above; check the control
+        // dependency separately below so this snapshot cannot authorize a stale spend.
+        const market = await loadMarket(
+          client,
+          line.descriptor as Descriptor,
+          'committed-verification',
+        );
+        const control =
+          line.controlDep && (await client.getCellLiveNoCache(line.controlDep, true, true));
+        if (
+          !control ||
+          !market.some(
+            (row) =>
+              row.cell.outPoint.eq(control.outPoint) &&
+              row.cell.cellOutput.toHex() === control.cellOutput.toHex() &&
+              row.cell.outputData === control.outputData,
+          )
+        )
+          throw Error('The market control changed. Review the whole slip again.');
         const header = await confirmedHeader(client, live[line.shardInputIndex!].outPoint.txHash);
         return [line.fixture.fixtureId, { market, header }] as const;
       }),

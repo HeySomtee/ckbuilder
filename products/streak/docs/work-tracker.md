@@ -1,5 +1,63 @@
 # Streak work tracker
 
+9 November release checkpoint: bounded three-payment allocation and required
+verification are complete. Owner requested commit and push with hosted CI skipped.
+All 100 required stages have passing evidence across the interrupted major command
+and its completed browser/contract continuation; application runtime hashes match.
+Independent money/recovery review found no remaining blocker. Real isolated CKB
+mempool checks accepted three simultaneous payments across fixtures and within one
+fixture, with the fourth queued. See [delivery and activation](delivery/three-payment-concurrency.md).
+Remaining acceptance: hosted deployment, adequate separate sponsor funding cells,
+physical-wallet rehearsal and checkout timing. No production funding split was
+performed. Preserve the owner's checklist and all polish/rehearsal commitments below.
+
+9 November owner addition to the polish sprint: bring bounded prediction-payment
+concurrency forward from the post-grant backlog. Target up to three independent
+payments in flight across users, with the existing queue for overflow or unavailable
+resources. This is a scoped exception to the feature freeze, not approval for a new
+market protocol or unlimited concurrency. Local delivery verification is recorded above.
+
+The first technical priority is now durable allocation of separate sponsor cells,
+owner inputs and available market lanes. Keep short atomic allocation/signing
+sections; do not hold unrelated payments behind confirmation. All shared operator
+builders, settlement and recovery must honor reservations. Preserve the existing
+four-confirmation rule, immutable signed transactions and one active slip per wallet.
+For an existing market, use distinct available lanes; for the same uncreated market,
+retain one canonical creation and a wait specific to that fixture. Prepare adequate
+independent sponsor capacity before activation; do not move hosted funds from this
+planning update. Extra operator processes alone do not satisfy this requirement.
+
+Acceptance: three wallets can obtain distinct reviews and submit while earlier
+payments remain pending; a fourth waits gracefully. Cover both different markets
+and one existing market, insufficient independent funding, cancellation, restart,
+reorg, conflicting spends and settlement races. Require independent money/recovery
+review and the major runtime gate before delivery. Retain the rest of the polish
+sprint below. Larger-market capacity and general treasury scaling remain deferred.
+
+9 November owner steering: use the additional time before the campaign for an
+experience-polish sprint. Pause new feature additions. Keep existing unfinished
+payment and hosted acceptance commitments below; do not expand protocol scope.
+Work through complete journeys in this order:
+
+1. Measure checkout preparation, wallet approval, submission and confirmation
+   separately. Verify the deployed queue and stale-payment fix before attributing
+   delays to CKB or making further performance changes.
+2. Remove confusing transitions across connection, picks, review, queued payment,
+   confirmation and recovery. Preserve drafts, account boundaries and explicit
+   signatures; make the next safe action clear in every state.
+3. Audit mobile navigation, keyboard/viewport behavior, modal stacking, payment
+   bubble placement, readable loading states and unnecessary layout shifts.
+4. Check continuity through competition entry, Five teams/points, Activity and
+   claims. Retain truthful saved data during refresh and avoid repeated full-page
+   loaders or unnecessary reads. No new analytics/worker system in this sprint.
+5. Finish with the existing multi-wallet rehearsal, wallet switching, reload,
+   rejection, slow/offline reads and recovery. Track before/after timings and
+   distinguish synthetic checks from physical-wallet and hosted acceptance.
+
+The checkout friction audit remains part of this sprint, with the bounded concurrency
+increment above taking first technical priority. These steering notes make no runtime
+change or new deployment.
+
 9 November release published as `bb152d242be6d788a0bbe9ba7a71ec3b3a88e77a` on
 GitHub `main`; the remote hash is verified. Revalidated all 62 runtime/test hashes
 against the combined 98-stage evidence and passed scoped publication-doc checks.
